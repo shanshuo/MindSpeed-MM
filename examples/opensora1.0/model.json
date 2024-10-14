@@ -7,14 +7,14 @@
     "allow_internal_format": false,
     "ae": {
         "model_id": "vae",
-        "from_pretrained": "your model path",
+        "from_pretrained": "stabilityai/sd-vae-ft-ema",
         "dtype": "bf16",
         "enable_sequence_parallelism": true
     },
     "text_encoder": {
         "hub_backend": "hf",
         "model_id": "T5",
-        "from_pretrained": "your model path",
+        "from_pretrained": "DeepFloyd/t5-v1_1-xxl",
         "dtype": "fp32",
         "low_cpu_mem_usage": true
     },
@@ -29,7 +29,7 @@
         "time_scale": 1.0,
         "enable_flashattn": true,
         "enable_sequence_parallelism": true,
-        "from_pretrained": "your model path"
+        "from_pretrained": "PixArt-XL-2-512x512.pth"
     },
     "diffusion": {
         "timestep_respacing": "",
