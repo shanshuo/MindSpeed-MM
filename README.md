@@ -114,7 +114,7 @@ MindSpeed-MM已发布版本维护策略：
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensoraplan1.2">OpenSoraPlan 1.2</a></td>
-      <td><a href="https://huggingface.co/hpcaitech/Open-Sora/tree/v1.2.0">10.8B</a></td>
+      <td><a href="https://huggingface.co/hpcaitech/Open-Sora/tree/v1.2.0">8.7B</a></td>
       <td>预训练</td>
       <td> 1x8</td>
       <td> BF16 </td>
