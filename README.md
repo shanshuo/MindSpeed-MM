@@ -25,10 +25,10 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 * [理解类多模态大模型](#jump1) 【昇腾】【NAIE】【GTS】
 * [预训练/全参微调/低参微调/在线推理](./examples/) 【昇腾】【NAIE】
 * 数据工程： 多模数据预处理及加载/数据分桶策略 【昇腾】
+* 分布式训练： TP/PP/CP/DSP/分布式优化器/重计算 【昇腾】
 * [昇腾工具链](#jump2): [Profiling采集](#jump2.1)【昇腾】
 
 更多多模态模型持续研发中....
-
 
 ---
 
@@ -44,7 +44,6 @@ MindSpeed-MM版本有以下五个维护阶段：
 | 无维护              | 0—3 个月 | 合入所有已解决的问题，无专职维护人员，无版本发布                                             |
 | 生命周期终止（EOL） | N/A      | 分支不再接受任何修改                                                           |
 
-
 MindSpeed-MM已发布版本维护策略：
 
 | **MindSpeed-MM版本** | **维护策略** | **当前状态** | **发布时间**   | **后续状态**         | **EOL日期** |
@@ -53,19 +52,18 @@ MindSpeed-MM已发布版本维护策略：
 
 ---
 
-
 ## 配套版本与支持模型
 
 【版本配套环境】
 
 |           软件            | [版本](https://www.hiascend.com/zh/) |
 | :-----------------------: |:----------------------------------:|
-|          Python           |                3.8                 |
-|          Driver           |         RC3 商发版本          |
-|         Firmware          |         RC3 商发版本          |
-|           CANN            |             RC3 商发版本             |
+|          Python           |                3.8, 3.10                  |
+|          Driver           |         Ascend HDK 24.1.RC3          |
+|         Firmware          |         Ascend HDK 24.1.RC3          |
+|           CANN            |             CANN 8.0.RC3             |
 |           Torch           |            2.1.0            |
-|         Torch_npu         |           2.1.0           |
+|         Torch_npu         |           release v6.0.RC3           |
 
 【现版本实测性能（硬件信息：Atlas 900 A2 PODc）】
 
@@ -147,7 +145,7 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/eda36c4c286d281f216dfeb79e64adad3f85d37a">2B</a></td>
       <td>全参微调</td>
       <td> 1x8</td>
@@ -168,16 +166,6 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://github.com/huggingface/diffusers/tree/eda36c4c286d281f216dfeb79e64adad3f85d37a">2B</a></td>
-      <td>Lora微调</td>
-      <td> 1x8</td>
-      <td> FP16 </td>
-      <td> 122.47 (FPS)</td>
-      <td> 120.32 (FPS)</td>
-      <td> 【昇腾】【NAIE】 </td>
-      <td>【Pass】</td>
-    </tr>
-    <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
       <td><a href="https://github.com/Kwai-Kolors/Kolors">2.6B</a></td>
       <td>推理</td>
@@ -192,10 +180,10 @@ MindSpeed-MM已发布版本维护策略：
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/llava1.5">LLaVA 1.5</a></td>
       <td><a href="https://github.com/haotian-liu/LLaVA">7B</a></td>
       <td>预训练</td>
-      <td> 1x1 </td>
+      <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 5.93 </td>
-      <td> 6.50 </td>
+      <td> 48.30 (FPS) </td>
+      <td> 49.49 (FPS) </td>
       <td> 【昇腾】【NAIE】 </td>
       <td>【Pass】</td>
     </tr>
@@ -304,7 +292,7 @@ MindSpeed-MM已发布版本维护策略：
 
 ### 昇腾Profiling采集工具
 
-MindSpeed-MM集成了昇腾profiling采集工具，以提供对模型运行情况的分析。该工具能够依照配置采集模型的算子、显存等关键信息，同时支持动静态两种采集方式，协助开发者分析模型瓶，并可根据实际场景需求选择使用。
+MindSpeed-MM集成了昇腾profiling采集工具，以提供对模型运行情况的分析。该工具能够依照配置采集模型的算子、显存等关键信息，同时支持动静态两种采集方式，协助开发者分析模型瓶颈，并可根据实际场景需求选择使用。
 
   具体方法见 [README](./mindspeed_mm/tools/README.md) 的profiling章节
 
