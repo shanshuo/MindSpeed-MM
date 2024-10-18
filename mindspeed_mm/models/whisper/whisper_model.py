@@ -390,6 +390,10 @@ class WhisperForConditionalGeneration_mm(MultiModalModule):
         self.pad_token_id = config.pad_token_id
         self.decoder_start_token_id = config.decoder_start_token_id
         self.vocab_size = config.vocab_size
+        if hasattr(config, "ckpt_path"):
+            self.load_checkpoint(config.ckpt_path)
+        else:
+            print("Warning: no checkpoint found at ckpt_path, skipping loading ckpt.")
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -435,3 +439,10 @@ class WhisperForConditionalGeneration_mm(MultiModalModule):
         label = label.to(output.device)
         loss = loss_fct(output.view(-1, self.vocab_size), label.reshape(-1))
         return loss
+
+    def load_checkpoint(self, ckpt_path):
+        if ckpt_path and len(ckpt_path) > 0:
+            load_params = torch.load(ckpt_path, map_location="cpu")
+            print(self.load_state_dict(load_params, strict=False))
+        else:
+            print("Warning: ckpt path is None or empty, skipping loading ckpt.")

@@ -1,6 +1,6 @@
 {
     "model_id": "whisper",
-    "_name_or_path": "openai/whisper-large-v3",
+    "ckpt_path": "your pretrined ckpt path",
     "activation_dropout": 0.0,
     "activation_function": "gelu",
     "apply_spec_augment": false,

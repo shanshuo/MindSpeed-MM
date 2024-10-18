@@ -8,12 +8,15 @@
 - [环境安装](#jump1)
   - [仓库拉取](#jump1.1)
   - [环境搭建](#jump1.2)
-- [数据集准备及处理](#jump2)
-  - [数据集下载](#jump2.1)
-- [预训练](#jump3)
-  - [准备工作](#jump3.1)
-  - [配置参数](#jump3.2)
-  - [启动预训练](#jump3.3)
+- [权重下载及转换](#jump2)
+  - [权重下载](#jump2.1)
+  - [权重转换](#jump2.2)
+- [数据集准备](#jump3)
+  - [数据集与权重下载](#jump3.1)
+- [预训练](#jump4)
+  - [准备工作](#jump4.1)
+  - [配置参数](#jump4.2)
+  - [启动预训练](#jump4.3)
 
 ---
 
@@ -82,13 +85,58 @@
 
 <a id="jump2"></a>
 
-## 数据集准备及处理
+## 权重下载及转换
 
 <a id="jump2.1"></a>
 
-#### 1. 数据集与权重下载
+#### 1. 权重下载
 
-用户需自行获取mozilla-foundation/common_voice_11_0数据集与openai/whisper-large-v3权重，
+从Huggingface等网站下载开源模型权重
+
+- [openai/whisper-large-v3](https://huggingface.co/openai/whisper-large-v3/tree/main)：Whisper large-v3模型；
+
+获取权重结构如下：
+
+   ```
+   $whisper-large-v3
+   ├── config.json
+   ├── pytorch_model.bin
+   ├── tokenizer.json
+   └── ...
+   ```
+
+<a id="jump2.2"></a>
+
+#### 2. 权重转换
+
+MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。
+
+```python
+import torch
+
+pretrained_checkpoint = torch.load("your pretrained ckpt path", map_location="cpu")
+new_checkpoint = {}
+for key in pretrained_checkpoint.keys():
+    model_key = key.replace("q_proj", "proj_q")
+    model_key = model_key.replace("k_proj", "proj_k")
+    model_key = model_key.replace("v_proj", "proj_v")
+    model_key = model_key.replace("out_proj", "proj_out")
+    new_checkpoint[model_key] = pretrained_checkpoint[key]
+
+torch.save(new_checkpoint, "whisper.pth")
+```
+
+---
+
+<a id="jump3"></a>
+
+## 数据集准备
+
+<a id="jump3.1"></a>
+
+#### 1. 数据集下载
+
+用户需自行获取mozilla-foundation/common_voice_11_0数据集，
 获取数据结构如下：
 
    ```
@@ -113,33 +161,23 @@
    └── ...
    ```
 
-获取权重结构如下：
-
-   ```
-   $whisper-large-v3
-   ├── config.json
-   ├── pytorch_model.bin
-   ├── tokenizer.json
-   └── ...
-   ```
-
 ---
 
-<a id="jump3"></a>
+<a id="jump4"></a>
 
 ## 预训练
 
-<a id="jump3.1"></a>
+<a id="jump4.1"></a>
 
 #### 1. 准备工作
 
-配置脚本前需要完成前置准备工作，包括：**环境安装**、**数据集准备及处理**，详情可查看对应章节
+配置脚本前需要完成前置准备工作，包括：**环境安装**、**权重下载及转换**、**数据集准备**等，详情可查看对应章节
 
- <a id="jump3.2"></a>
+<a id="jump4.2"></a>
 
 #### 2. 配置参数
 
-需根据实际情况修改`model.json`和`data.json`中的权重和数据集路径，包括`dataset_name_or_path`、`processor_name_or_path`等字段
+需根据实际情况修改`model.json`和`data.json`中的权重和数据集路径，包括`ckpt_path`、`dataset_name_or_path`、`processor_name_or_path`等字段
 
 【单机运行】
 
@@ -164,7 +202,7 @@
     WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 ```
 
-<a id="jump3.3"></a>
+<a id="jump4.3"></a>
 
 #### 3. 启动预训练
 
