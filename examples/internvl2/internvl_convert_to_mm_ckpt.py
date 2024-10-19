@@ -19,7 +19,7 @@ def convert_hg_to_mm(_state_dict, _num_layers):
         new_key = None
         # 权重映射
         if key.startswith('vision_model'):
-            new_key = key.replace('vison_model', 'image_encoder.encoder')
+            new_key = key.replace('vision_model', 'image_encoder.encoder')
             new_key = new_key.replace('embeddings', 'embeddings')
             new_key = new_key.replace('norm1', 'input_layernorm')
             new_key = new_key.replace('norm2', 'pre_mlp_layernorm')
@@ -78,7 +78,7 @@ def convert_hg_to_mm(_state_dict, _num_layers):
 
 def split_by_pp(_state_dict, _num_layers, _pipeline_layer_index=None):
     if _pipeline_layer_index is None:
-        return [_state_dict, ], _
+        return [_state_dict, ], None
     return_dicts = []
     copy_dict = deepcopy(_state_dict)
     for pp_rank, _ in enumerate(_pipeline_layer_index):
@@ -145,12 +145,21 @@ def save_by_pp(_state_dicts, _save_dir, _latest_checkpointed_iteration='release'
     else:
         directory = 'iter_{:07d}'.format(_latest_checkpointed_iteration)
 
-    for pp_rank, state_dic in enumerate(_state_dicts):
+    if len(_state_dicts) > 1:
+        for pp_rank, _state_dict in enumerate(_state_dicts):
+            tp_rank = 0
+            os.makedirs(os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}'))
+            save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}', 'model_optim_rng.pt')
+            save_dict = {}
+            save_dict['model'] = _state_dict
+            torch.save(save_dict, save_path)
+    else:
+        _state_dict = _state_dicts[0]
         tp_rank = 0
-        os.makedirs(os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}'))
-        save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}', 'model_optim_rng.pt')
+        os.makedirs(os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}'))
+        save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}', 'model_optim_rng.pt')
         save_dict = {}
-        save_dict['model'] = state_dic
+        save_dict['model'] = _state_dict
         torch.save(save_dict, save_path)
 
 
