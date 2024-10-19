@@ -1,6 +1,5 @@
 #!/bin/bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
-export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
 export TASK_QUEUE_ENABLE=1
@@ -16,7 +15,7 @@ NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
 MBS=1
-GRAD_ACC_STEP=8
+GRAD_ACC_STEP=64
 TP=1
 PP=4
 CP=1
@@ -60,12 +59,12 @@ GPT_ARGS="
     --rotary-base 100000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 2e-5 \
-    --min-lr 2e-5 \
+    --lr 4e-5 \
+    --min-lr 0.0 \
     --train-iters 2500 \
     --lr-decay-style cosine \
     --weight-decay 0.05 \
-    --clip-grad 0.0 \
+    --clip-grad 1.0 \
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
     --no-gradient-accumulation-fusion \

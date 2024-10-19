@@ -36,7 +36,7 @@
         "dynamic_image_size": true,
         "use_thumbnail": true,
         "min_dynamic_patch": 1,
-        "max_dynamic_patch": 12
+        "max_dynamic_patch": 6
     },
     "dataloader_param": {
         "dataloader_mode": "sampler",
