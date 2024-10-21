@@ -7,8 +7,6 @@ mixed_precision="fp16"
 resolution=1024
 gradient_accumulation_steps=1
 
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-
 cur_path=$(pwd)
 cur_path_last_dirname=${cur_path##*/}
 if [ x"${cur_path_last_dirname}" == x"test" ]; then
