@@ -14,8 +14,6 @@ mixed_precision="fp16"
 resolution=1024
 config_file="${scripts_path}/${mixed_precision}_accelerate_config.yaml"
 
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-
 #如果使用 input_dir="dog"，请修改dataset_name为input_dir
 for para in $*; do
   if [[ $para == --model_name* ]]; then
@@ -74,7 +72,7 @@ accelerate launch --config_file ${config_file} \
   --validation_epochs=25 \
   --mixed_precision=$mixed_precision \
   --checkpointing_steps=500 \
-  --output_dir=${output_path} > ${output_path}train_${mixed_precision}.log 2>&1 &
+  --output_dir=${output_path} > ${output_path}train_${mixed_precision}_sd3_dreambooth_deepspeed.log 2>&1 &
 wait
 
 #训练结束时间，不需要修改
@@ -85,7 +83,7 @@ e2e_time=$(($end_time - $start_time))
 echo "------------------ Final result ------------------"
 
 #输出性能FPS，需要模型审视修改
-FPS=$(grep "FPS: " ${output_path}/train_${mixed_precision}_sd3_dreambooth.log | awk '{print $NF}' | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+FPS=$(grep "FPS: " ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | awk '{print $NF}' | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
 
 #获取性能数据，不需要修改
 # - 吞吐量
@@ -95,7 +93,7 @@ ActualFPS=$(awk 'BEGIN{printf "%.2f\n", '${FPS}'}')
 echo "Final Performance images/sec : $ActualFPS"
 
 # - loss值，不需要修改
-ActualLoss=$(grep -o "loss=[0-9.]*" ${output_path}/train_${mixed_precision}_sd3_dreambooth.log | awk 'END {print $NF}')
+ActualLoss=$(grep -o "loss=[0-9.]*" ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | awk 'END {print $NF}')
 
 # - 打印，不需要修改
 echo "Final Train Loss : ${ActualLoss}"

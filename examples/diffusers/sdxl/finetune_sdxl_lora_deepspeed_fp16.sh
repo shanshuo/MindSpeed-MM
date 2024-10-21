@@ -9,8 +9,6 @@ validation_epochs=5
 mixed_precision="fp16"
 resolution=1024
 
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-
 for para in $*; do
   if [[ $para == --batch_size* ]]; then
     batch_size=$(echo ${para#*=})
