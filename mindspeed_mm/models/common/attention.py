@@ -12,8 +12,9 @@ from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
 
 from mindspeed_mm.utils.utils import video_to_image
-from .embeddings.rope import RoPE3D, PositionGetter3D
-from .conv import CausalConv3d
+from mindspeed_mm.models.common.normalize import normalize
+from mindspeed_mm.models.common.embeddings.rope import RoPE3D, PositionGetter3D
+from mindspeed_mm.models.common.conv import CausalConv3d, WfCausalConv3d
 
 # TODO: 使用megatron通信接口替换
 from .communications import (
@@ -978,6 +979,61 @@ class CausalConv3dAttnBlock(nn.Module):
         y = self.proj_out(y)
 
         return x + y
+
+
+class WfCausalConv3dAttnBlock(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=1,
+        stride=1,
+        num_groups=32,
+        eps=1e-6,
+        affine=True,
+        norm_type="groupnorm",
+    ):
+        super().__init__()
+        self.norm = normalize(in_channels, num_groups, eps, affine, norm_type=norm_type)
+        self.q = WfCausalConv3d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride
+        )
+        self.k = WfCausalConv3d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride
+        )
+        self.v = WfCausalConv3d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride
+        )
+        self.proj_out = WfCausalConv3d(
+            in_channels, out_channels, kernel_size=kernel_size, stride=stride
+        )
+
+    def forward(self, x):
+        h_ = x
+        h_ = self.norm(h_)
+        q = self.q(h_)
+        k = self.k(h_)
+        v = self.v(h_)
+
+        b, c, t, h, w = q.shape
+        q = q.permute(0, 2, 3, 4, 1).reshape(b * t, h * w, c).contiguous()
+        k = k.permute(0, 2, 3, 4, 1).reshape(b * t, h * w, c).contiguous()
+        v = v.permute(0, 2, 3, 4, 1).reshape(b * t, h * w, c).contiguous()
+
+        attn_output = torch_npu.npu_fusion_attention(
+            q,
+            k,
+            v,
+            head_num=1,
+            atten_mask=None,
+            input_layout="BSH",
+            scale=1 / math.sqrt(c)
+        )[0]
+
+        attn_output = attn_output.reshape(b, t, h, w, c).permute(0, 4, 1, 2, 3)
+        h_ = self.proj_out(attn_output)
+
+        return x + h_
 
 
 class WhisperAttention(nn.Module):
