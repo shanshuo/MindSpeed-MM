@@ -2,9 +2,14 @@ from typing import Tuple, Optional
 import math
 
 import torch
+import torch.nn.functional as F
 import torch.nn as nn
 import torch_npu
-from megatron.core import mpu
+from einops import rearrange, repeat
+from megatron import core
+from megatron.core import mpu, tensor_parallel
+from megatron.training import get_args
+from megatron.training.arguments import core_transformer_config_from_args
 
 from mindspeed_mm.utils.utils import video_to_image
 from .embeddings.rope import RoPE3D, PositionGetter3D
@@ -16,7 +21,226 @@ from .communications import (
     all_to_all_SBH,
     split_forward_gather_backward,
 )
-        
+
+
+class MultiHeadSparseAttentionSBH(nn.Module):
+    """
+    A multi-head attention layer for both self-atten and cross-atten, layout "SBH".
+
+    Args:
+        query_dim: The number of channels in the query.
+        key_dim: The number of channels in the key, defaults to `query_dim`.
+        num_heads: The number of heads to use for multi-head attention.
+        head_dim: The number of channels in each head.
+        dropout: The dropout probability to use.
+        proj_qkv_bias: Whether to use bias in qkv projection.
+        proj_out_bias: Whether to use bias in out projection.
+        interpolation_scale: The scale of interpolation.
+    """
+
+    def __init__(
+        self,
+        query_dim: int,
+        key_dim: int,
+        num_heads: int,
+        head_dim: int,
+        dropout: float = 0.0,
+        proj_qkv_bias: bool = False,
+        proj_out_bias: bool = True,
+        interpolation_scale: Tuple[int] = (1, 1, 1),
+        sparse1d=False,
+        sparse_n=None,
+        sparse_group=None,
+        is_cross_attn=False,
+    ):
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.inner_dim = self.num_heads * self.head_dim
+        self.sparse1d = sparse1d
+        self.sparse_n = sparse_n
+        self.sparse_group = sparse_group
+        self.is_cross_attn = is_cross_attn
+        if not self.is_cross_attn:
+            self.rope = RoPE3D(interpolation_scale=interpolation_scale)
+            self.position_getter = PositionGetter3D(atten_layout="SBH")
+
+        args = get_args()
+        config = core_transformer_config_from_args(args)
+        self.sp_size = mpu.get_context_parallel_world_size()
+        self.tp_size = mpu.get_tensor_model_parallel_world_size()
+
+        self.num_attention_heads_per_partition = core.utils.divide(num_heads, self.tp_size)
+        self.num_attention_heads_per_partition_per_cp = core.utils.divide(self.num_attention_heads_per_partition,
+                                                                          self.sp_size)
+
+        key_dim = key_dim if key_dim is not None else query_dim
+
+        self.proj_q = tensor_parallel.ColumnParallelLinear(
+            self.inner_dim,
+            query_dim,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_qkv_bias,
+            gather_output=False
+        )
+        self.proj_k = tensor_parallel.ColumnParallelLinear(
+            self.inner_dim,
+            key_dim,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_qkv_bias,
+            gather_output=False
+        )
+        self.proj_v = tensor_parallel.ColumnParallelLinear(
+            self.inner_dim,
+            key_dim,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_qkv_bias,
+            gather_output=False
+        )
+
+        self.proj_out = tensor_parallel.RowParallelLinear(
+            query_dim,
+            self.inner_dim,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_out_bias,
+            input_is_parallel=True,
+            skip_bias_add=False
+        )
+
+        self.dropout = nn.Dropout(dropout)
+
+    def _sparse_1d(self, x, frame, height, width):
+        """
+        require the shape of (ntokens x batch_size x dim)
+        """
+        _len = x.shape[0]
+        if _len != frame * height * width:
+            raise ValueError("shape mismatched.")
+        pad_len = 0
+        if _len % (self.sparse_n * self.sparse_n) != 0:
+            pad_len = self.sparse_n * self.sparse_n - _len % (self.sparse_n * self.sparse_n)
+        if pad_len != 0:
+            x = F.pad(x, (0, 0, 0, 0, 0, pad_len))
+        if not self.sparse_group:
+            x = rearrange(x, '(g k) b d -> g (k b) d', k=self.sparse_n)
+        else:
+            x = rearrange(x, '(n m k) b d -> (n k) (m b) d', m=self.sparse_n, k=self.sparse_n)
+        return x, pad_len
+
+    def _reverse_sparse_1d(self, x, frame, height, width, pad_len):
+        """
+        require the shape of (ntokens x batch_size x dim)
+        """
+        if x.shape[0] != (frame * height * width + pad_len) // self.sparse_n:
+            raise ValueError("shape mismatched.")
+        if not self.sparse_group:
+            x = rearrange(x, 'g (k b) d -> (g k) b d', k=self.sparse_n)
+        else:
+            x = rearrange(x, '(n k) (m b) d -> (n m k) b d', m=self.sparse_n, k=self.sparse_n)
+        x = x[:frame * height * width, :, :]
+        return x
+
+    def _sparse_1d_kv(self, x):
+        """
+        require the shape of (ntokens x batch_size x dim)
+        """
+        x = repeat(x, 's b d -> s (k b) d', k=self.sparse_n)
+        return x
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None,
+        frames: int = 8,
+        height: int = 16,
+        width: int = 16,
+    ) -> torch.Tensor:
+        """
+        Args:
+            query: The hidden states of the query.
+            key: The hidden states of the key.
+            mask: The attention mask to use.
+            **kwargs: Additional keyword arguments to pass along
+        """
+
+        sequence_length, batch_size, _ = query.shape
+        q, _ = self.proj_q(query)
+
+        if key is None:
+            key = query
+
+        k, _ = self.proj_k(key)
+        v, _ = self.proj_v(key)
+
+        total_frames = frames
+
+        if self.sp_size > 1:
+            q = q.view(-1, self.num_attention_heads_per_partition, self.head_dim)
+            k = k.view(-1, self.num_attention_heads_per_partition, self.head_dim)
+            v = v.view(-1, self.num_attention_heads_per_partition, self.head_dim)
+            total_frames = frames * self.sp_size
+            sp_group = mpu.get_context_parallel_group()
+
+            # apply all_to_all to gather sequence and split attention heads [s // sp * b, h, d] -> [s * b, h // sp, d]
+            q = all_to_all_SBH(q, sp_group, scatter_dim=1, gather_dim=0)
+            k = all_to_all_SBH(k, sp_group, scatter_dim=1, gather_dim=0)
+            v = all_to_all_SBH(v, sp_group, scatter_dim=1, gather_dim=0)
+        q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+
+        if not self.is_cross_attn:
+            # require the shape of (ntokens x batch_size x nheads x dim)
+            pos_thw = self.position_getter(batch_size, t=total_frames, h=height, w=width, device=q.device)
+            q = self.rope(q, pos_thw)
+            k = self.rope(k, pos_thw)
+
+        q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        v = v.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        if self.sparse1d:
+            q, pad_len = self._sparse_1d(q, total_frames, height, width)
+            if self.is_cross_attn:
+                k = self._sparse_1d_kv(k)
+                v = self._sparse_1d_kv(v)
+            else:
+                k, pad_len = self._sparse_1d(k, total_frames, height, width)
+                v, pad_len = self._sparse_1d(v, total_frames, height, width)
+
+        out = torch_npu.npu_fusion_attention(
+            q,
+            k,
+            v,
+            head_num=self.num_attention_heads_per_partition_per_cp,
+            atten_mask=mask,
+            input_layout="SBH",
+            scale=1 / math.sqrt(self.head_dim)
+        )[0]
+
+        if self.sparse1d:
+            out = self._reverse_sparse_1d(out, total_frames, height, width, pad_len)
+
+        # [s, b, h // sp * d] -> [s // sp * b, h, d] -> [s // sp, b, h * d]
+        if self.sp_size > 1:
+            sp_group = mpu.get_context_parallel_group()
+            out = all_to_all_SBH(
+                out.reshape(-1, self.num_attention_heads_per_partition_per_cp, self.head_dim),
+                sp_group, scatter_dim=0, gather_dim=1)
+            out = out.view(sequence_length, batch_size, -1)
+
+        out = out.to(query.dtype)
+
+        # linear proj
+        out, _ = self.proj_out(out)
+        # dropout
+        out = self.dropout(out)
+
+        return out
+
 
 class MultiHeadAttentionBSH(nn.Module):
     """
@@ -54,7 +278,7 @@ class MultiHeadAttentionBSH(nn.Module):
         self.use_rope = use_rope
         if self.use_rope:
             self.rope = RoPE3D(interpolation_scale=interpolation_scale)
-            self.position_getter = PositionGetter3D()
+            self.position_getter = PositionGetter3D(atten_layout="BSH")
 
         key_dim = key_dim if key_dim is not None else query_dim
 
@@ -165,7 +389,7 @@ class ParallelMultiHeadAttentionSBH(nn.Module):
         self.use_rope = use_rope
         if self.use_rope:
             self.rope = RoPE3D(interpolation_scale=interpolation_scale)
-            self.position_getter = PositionGetter3D()
+            self.position_getter = PositionGetter3D(atten_layout="SBH")
 
         key_dim = key_dim if key_dim is not None else query_dim
 
@@ -310,7 +534,7 @@ class Attention(nn.Module):
             scale=self.scale,
             pre_tockens=65536,
             next_tockens=65536,
-            keep_prob=1. - self.attn_drop.p if self.training else 1., 
+            keep_prob=1. - self.attn_drop.p if self.training else 1.,
             sync=False,
             inner_precise=0
         )[0]
@@ -379,7 +603,7 @@ class Attention(nn.Module):
             if self.rope:
                 q = self.rotary_emb(q)
                 k = self.rotary_emb(k)
-    
+
         dtype = q.dtype
         q = q * self.scale
         attn = q @ k.transpose(-2, -1)  # translate attn to float32
@@ -388,7 +612,7 @@ class Attention(nn.Module):
         attn = attn.to(dtype)  # cast back attn to original dtype
         attn = self.attn_drop(attn)
         x = attn @ v
-    
+
         x_output_shape = (B, N, C)
         if not enable_flashattn:
             x = x.transpose(1, 2)
@@ -788,7 +1012,6 @@ class WhisperAttention(nn.Module):
         self.num_heads = num_heads
         self.head_dim = head_dim
         self.inner_dim = self.num_heads * self.head_dim
-
 
         key_dim = key_dim if key_dim is not None else query_dim
 

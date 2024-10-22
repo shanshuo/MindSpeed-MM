@@ -54,7 +54,7 @@ class DiffusersScheduler:
         self.do_classifier_free_guidance = self.guidance_scale > 1.0
         self.num_train_steps = config.pop("num_train_steps", 1000)
         self.num_inference_steps = config.pop("num_inference_steps", None)
-        self.prediction_type = config.pop("prediction_type", "epsilon")
+        self.prediction_type = config.get("prediction_type", "epsilon")
         self.noise_offset = config.pop("noise_offset", 0)
         self.snr_gamma = config.pop("snr_gamma", 5.0)
         self.device = get_device(config.pop("device", "npu"))
@@ -99,8 +99,6 @@ class DiffusersScheduler:
             raise ValueError(f"Unknown prediction type {self.prediction_type}")
 
         b, c, _, _, _ = model_output.shape
-        if torch.all(mask.bool()):
-            mask = None
         if mask is not None:
             mask = mask.unsqueeze(1).repeat(1, c, 1, 1, 1).float()  # b t h w -> b c t h w
             mask = mask.reshape(b, -1)

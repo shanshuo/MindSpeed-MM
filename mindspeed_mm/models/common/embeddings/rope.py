@@ -1,25 +1,37 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-from megatron.core import mpu
 
 
 class PositionGetter3D:
     """return positions of patches"""
 
-    def __init__(self):
+    def __init__(self, atten_layout="BSH"):
         self.cache_positions = {}
+        self.atten_layout = atten_layout
+
+    def check_type(self, param):
+        if isinstance(param, torch.Tensor):
+            param = param.item()
+        return param
 
     def __call__(self, b, t, h, w, device):
+        b = self.check_type(b)
+        t = self.check_type(t)
+        h = self.check_type(h)
+        w = self.check_type(w)
+
         if not (b, t, h, w) in self.cache_positions:
             x = torch.arange(w, device=device)
             y = torch.arange(h, device=device)
             z = torch.arange(t, device=device)
             pos = torch.cartesian_prod(z, y, x)
-            if mpu.get_context_parallel_world_size() > 1:
+            if self.atten_layout == "SBH":
                 pos = pos.reshape(t * h * w, 3).transpose(0, 1).reshape(3, -1, 1).contiguous().expand(3, -1, b).clone()
-            else:
+            elif self.atten_layout == "BSH":
                 pos = pos.reshape(t * h * w, 3).transpose(0, 1).reshape(3, 1, -1).contiguous().expand(3, b, -1).clone()
+            else:
+                raise ValueError(f"Unsupported layout type: {self.atten_layout}")
             poses = (pos[0].contiguous(), pos[1].contiguous(), pos[2].contiguous())
             max_poses = (int(poses[0].max()), int(poses[1].max()), int(poses[2].max()))
 
