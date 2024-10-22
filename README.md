@@ -3,7 +3,7 @@
 <p align="center">
     <a href="https://gitee.com/ascend/MindSpeed/blob/master/LICENSE">
     <a href="https://gitee.com/ascend/MindSpeed/blob/master/LICENSE">
-        <img alt="GitHub" src="https://img.shields.io/github/license/huggingface/transformers.svg?color=blue">
+        <img alt="Badge" src="https://img.shields.io/badge/License-MIT-blue.svg">
     </a>
     <a href="https://gitee.com/ascend/MindSpeed">
         <img alt="Documentation" src="https://img.shields.io/website/http/huggingface.co/docs/transformers/index.svg?down_color=red&down_message=offline&up_message=online">
@@ -324,7 +324,7 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm/MiniCPM-V">miniCPM 2.5</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm/MiniCPM-V">miniCPM-V 2.5</a></td>
       <td><a href="https://github.com/OpenBMB/MiniCPM-V">8B</a></td>
       <td>全参微调</td>
       <td> 1x8</td>

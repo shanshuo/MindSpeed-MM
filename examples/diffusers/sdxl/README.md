@@ -203,8 +203,8 @@
 
         ```python
         from patch_sdxl import TorchPatcher, compute_vae_encode, config_gc
-        TorchPathcer.apply_patch()
-        config_gic()
+        TorchPatcher.apply_patch()
+        config_gc()
         ```
 
     3. 在文件918行修改`compute_vae_encodings_fn`
