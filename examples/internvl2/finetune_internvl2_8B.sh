@@ -48,7 +48,7 @@ GPT_ARGS="
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
     --num-layers 24 \
-    --hidden-size 2048 \
+    --hidden-size 4096 \
     --num-attention-heads 16 \
     --seq-length 4096 \
     --max-position-embeddings 4096 \

@@ -1,3 +1,6 @@
+import copy
+
+from torch.utils.data import ConcatDataset
 from mindspeed_mm.data.dataloader.dataloader import (
     prepare_base_dataloader,
     prepare_sampler_dataloader,
@@ -39,7 +42,15 @@ def build_mm_dataset(dataset_param):
     elif dataset_type == "video":
         return VideoDataset(basic_param, preprocess_param, **dataset_param)
     elif dataset_type == "image":
-        return ImageDataset(basic_param, preprocess_param, **dataset_param)
+        if not isinstance(basic_param, list):
+            basic_param = [basic_param]
+        datasets = []
+        for single_param in basic_param:
+            dataset_param["repeat_time"] = single_param.get("repeat_time", 1)
+            dataset_param_copy = copy.deepcopy(dataset_param)
+            dataset = ImageDataset(single_param, preprocess_param, **dataset_param_copy)
+            datasets.append(dataset)
+        return ConcatDataset(datasets)
     else:
         raise NotImplementedError(dataset_type)
 
