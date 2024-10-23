@@ -17,11 +17,13 @@ import torch.nn as nn
 
 from .vae import VideoAutoencoderKL, VideoAutoencoder3D, VideoAutoencoderKLCogVideoX
 from .casualvae import CausalVAE
+from .wfvae import WFVAE
 
 AE_MODEL_MAPPINGS = {"vae": VideoAutoencoderKL,
                      "vae3D": VideoAutoencoder3D,
                      "casualvae": CausalVAE,
-                     "cogvideox": VideoAutoencoderKLCogVideoX}
+                     "cogvideox": VideoAutoencoderKLCogVideoX,
+                     "wfvae": WFVAE}
 
 
 class AEModel(nn.Module):
