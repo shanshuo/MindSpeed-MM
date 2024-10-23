@@ -75,12 +75,23 @@ def get_batch_on_this_tp_rank(data_iterator):
 
 def get_batch(data_iterator):
     """Generate a batch."""
-    if mpu.is_pipeline_first_stage() or mpu.is_pipeline_last_stage():
-        batch = get_batch_on_this_tp_rank(data_iterator)
-        batch = get_batch_on_this_cp_rank(batch)
-        return batch['input_ids'], batch['labels'], batch['attention_mask'], batch['image'], batch['image_flags']
+    if data_iterator is not None:
+        batch = next(data_iterator)
     else:
-        return None, None, None, None, None
+        raise ValueError("Data iterator is None. Unable to retrieve batch.")
+    input_ids = batch['input_ids'].to(torch.cuda.current_device())
+    labels = batch['labels'].to(torch.cuda.current_device())
+    attention_mask = batch['attention_mask'].to(torch.cuda.current_device())
+    image = batch['pixel_values'].to(torch.cuda.current_device())
+    image_flags = batch['image_flags'].to(torch.cuda.current_device())
+    batch = {
+        'input_ids': input_ids,
+        'labels': labels,
+        'attention_mask': attention_mask,
+        'image': image,
+        'image_flags': image_flags
+    }
+    return batch['input_ids'], batch['labels'], batch['attention_mask'], batch['image'], batch['image_flags']
 
 
 def loss_func(output_tensor):
@@ -114,7 +125,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     train_dataset = build_mm_dataset(data_config.dataset_param)
     train_dataloader = build_mm_dataloader(
         train_dataset,
-        data_config.dataloader_param
+        data_config.dataloader_param,
+        process_group=mpu.get_data_parallel_group()
     )
     train_dataloader, val_dataloader, test_dataloader = build_iterations(train_dataloader)
     return train_dataloader, val_dataloader, test_dataloader
