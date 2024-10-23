@@ -115,28 +115,32 @@ def dot_product_attention_forward_wrapper(fn):
 - [InternVL2-2B](https://huggingface.co/OpenGVLab/InternVL2-2B/tree/main)；
 - [InternVL2-8B](https://huggingface.co/OpenGVLab/InternVL2-8B/tree/main)；
 
+将模型权重保存在`row_ckpt/InternVL2-2B`目录。
+
 <a id="jump2.2"></a>
 
 #### 2. 权重转换
 
-MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/inernvl_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。
+MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
 
-以InternVL2-2b为例，修改`inernvl_convert_to_mm_ckpt.py`中的`load_dir`和`save_dir`如下
+以InternVL2-2B为例，修改`inernvl_convert_to_mm_ckpt.py`中的`load_dir`、`save_dir`、`pipeline_layer_index`、`num_layers`如下：
 
 ```python
-  hg_ckpt_dir = 'OpenGVLab/InternVL2-2B' # huggingface权重目录
+  hg_ckpt_dir = 'row_ckpt/InternVL2-2B' # huggingface权重目录
   mm_save_dir = 'ckpt/InternVL2-2B'  # 转换后保存目录
-  pipeline_layer_index = None
-  num_layers=24
+  pipeline_layer_index = None     # None表示不进行pp切分；若要进行pp切分，则需要传入一个列表，例如[0, 3, 13, 23]
+  num_layers=24                   # 模型结构层数
 ```
 
 启动脚本
 
 ```shell
-  python examples/internvl2/inernvl_convert_to_mm_ckpt.py
+  # 根据实际情况修改 ascend-toolkit 路径
+  source /usr/local/Ascend/ascend-toolkit/set_env.sh
+  python examples/internvl2/internvl_convert_to_mm_ckpt.py
 ```
 
-同步修改`examples/internvl2/finetune_internvl2_2b.sh`中的`--load`参数.
+同步修改`examples/internvl2/finetune_internvl2_2b.sh`中的`--load`参数，该路径为转换后或者切分后的权重，注意与原始权重`row_ckpt/InternVL2-2B`进行区分。
 
 ```shell
   --load ckpt/InternVL2-2B
@@ -184,7 +188,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
 
 根据实际情况修改`data.json`中的数据集路径，包括`from_pretrained`、`data_path`、`data_folder`等字段。
 
-以InternVL2-2B为例，`data.json`进行以下修改
+以InternVL2-2B为例，`data.json`进行以下修改，注意`tokenizer_config`的权重路径为转换前的权重路径。
 
 ```json
 {
@@ -197,7 +201,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
       ...
       "tokenizer_config": {
           ...
-          "from_pretrained": "OpenGVLab/InternVL2-2B",
+          "from_pretrained": "row_ckpt/InternVL2-2B",
           ...
       },
       ...
@@ -225,7 +229,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
 
 #### 3. 启动微调
 
-以InternVL2-2B为例，启动微调。
+以InternVL2-2B为例，启动微调训练任务。
 
 ```shell
     bash examples/internvl2/finetune_internvl2_2B.sh
