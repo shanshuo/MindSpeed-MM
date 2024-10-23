@@ -294,7 +294,6 @@ class InternVLModel(MultiModalModule):
             vit_embeds = vit_embeds[image_flags == 1]
             vit_batch_size = image.shape[0]
             B = input_ids.shape[0]
-            print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}')
             if not self.add_text_decoder:
                 return vit_embeds
 
@@ -305,7 +304,6 @@ class InternVLModel(MultiModalModule):
                 input_embeds = input_embeds.transpose(0, 1)
                 B, N, C = input_embeds.shape
                 input_embeds = input_embeds.reshape(B * N, C)
-                print(f'dynamic token length: {N}')
                 input_ids = input_ids.reshape(B * N)
                 selected = (input_ids == self.img_context_token_id)
                 input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
