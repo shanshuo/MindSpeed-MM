@@ -1,6 +1,8 @@
+import os
 from typing import Union, Tuple, List, Callable
 
 import torch
+import torch.distributed as dist
 from torch import Tensor
 from tqdm.auto import tqdm
 import torch.nn.functional as F
@@ -16,8 +18,11 @@ from diffusers.schedulers import (
     KDPM2AncestralDiscreteScheduler
 )
 from diffusers.training_utils import compute_snr
+from megatron.core import mpu
 
+from mindspeed_mm.models.diffusion.diffusion_utils import explicit_uniform_sampling
 from mindspeed_mm.utils.utils import get_device
+
 DIFFUSERS_SCHEDULE_MAPPINGS = {
     "DDIM": DDIMScheduler,
     "EulerDiscrete": EulerDiscreteScheduler,
@@ -57,6 +62,7 @@ class DiffusersScheduler:
         self.prediction_type = config.get("prediction_type", "epsilon")
         self.noise_offset = config.pop("noise_offset", 0)
         self.snr_gamma = config.pop("snr_gamma", 5.0)
+        self.t_sample_method = config.pop("t_sample_method", "random")
         self.device = get_device(config.pop("device", "npu"))
         model_id = config.pop("model_id")
 
@@ -130,7 +136,7 @@ class DiffusersScheduler:
             else:
                 loss = (loss * mse_loss_weights).mean()
         return loss
-    
+
     def q_sample(
         self,
         x_start: Tensor,
@@ -152,7 +158,17 @@ class DiffusersScheduler:
         if noise.shape != x_start.shape:
             raise ValueError("The shape of noise and x_start must be equal.")
         if t is None:
-            t = torch.randint(0, self.num_train_steps, (b,), device=x_start.device)
+            if self.t_sample_method == "random":
+                t = torch.randint(0, self.num_train_steps, (b,), device=x_start.device)
+            elif self.t_sample_method == "explicit_uniform":
+                t = explicit_uniform_sampling(
+                    T=self.num_train_steps,
+                    n=dist.get_world_size(),
+                    rank=dist.get_rank(),
+                    bsz=b, device=x_start.device,
+                )
+        if mpu.get_context_parallel_world_size() > 1:
+            self.broadcast_timesteps(t)
         if self.noise_offset:
             # https://www.crosslabs.org//blog/diffusion-with-offset-noise
             noise += self.noise_offset * torch.randn((b, c, 1, 1, 1), device=x_start.device)
@@ -235,3 +251,8 @@ class DiffusersScheduler:
                         step_idx = i // getattr(self.diffusion, "order", 1)
                         callback(step_idx, t, latents)
         return latents
+
+    def broadcast_timesteps(self, input_: torch.Tensor):
+        sp_size = mpu.get_context_parallel_world_size()
+        src = int(os.getenv(("RANK", "0"))) // sp_size * sp_size
+        dist.broadcast(input_, src=src, group=mpu.get_context_parallel_group())

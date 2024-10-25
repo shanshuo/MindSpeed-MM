@@ -3,7 +3,6 @@ from collections import deque
 
 import torch.nn as nn
 import torch
-from einops import rearrange
 
 from mindspeed_mm.models.common.checkpoint import load_checkpoint
 from mindspeed_mm.models.common.module import MultiModalModule
@@ -69,10 +68,10 @@ class Encoder(MultiModalModule):
             Spatial2xTime2x3DDownsample(base_channels * 2, base_channels * 2, conv_type="WfCausalConv3d"),
         )
         # Connection
-        self.connect_l2 = Conv2d(
+        self.connect_l1 = Conv2d(
             12, energy_flow_hidden_size, kernel_size=3, stride=1, padding=1
         )
-        self.connect_l3 = Conv2d(
+        self.connect_l2 = Conv2d(
             24, energy_flow_hidden_size, kernel_size=3, stride=1, padding=1
         )
         # Mid
@@ -106,24 +105,22 @@ class Encoder(MultiModalModule):
             base_channels * 4, latent_dim * 2, kernel_size=3, stride=1, padding=1
         )
 
-        self.wavelet_tranform_3d = HaarWaveletTransform3D()
-        self.wavelet_tranform_2d = HaarWaveletTransform2D()
+        self.wavelet_tranform_l1 = HaarWaveletTransform2D()
+        self.wavelet_tranform_l2 = HaarWaveletTransform3D()
 
     def forward(self, coeffs):
-        l2_coeffs = coeffs[:, :3]
-        t = l2_coeffs.shape[2]
-        l2_coeffs = rearrange(l2_coeffs, "b c t h w -> (b t) c h w")
-        l2_coeffs = self.wavelet_tranform_2d(l2_coeffs)
-        l2_coeffs = rearrange(l2_coeffs, "(b t) c h w -> b c t h w", t=t)
+        l1_coeffs = coeffs[:, :3]
+        l1_coeffs = self.wavelet_tranform_l1(l1_coeffs)
+        l1 = self.connect_l1(l1_coeffs)
+        l2_coeffs = self.wavelet_tranform_l2(l1_coeffs[:, :3])
         l2 = self.connect_l2(l2_coeffs)
-        l3_coeffs = self.wavelet_tranform_3d(l2_coeffs[:, :3])
-        l3 = self.connect_l3(l3_coeffs)
 
         h = self.down1(coeffs)
-        h = torch.concat([h, l2], dim=1)
+        h = torch.concat([h, l1], dim=1)
         h = self.down2(h)
-        h = torch.concat([h, l3], dim=1)
+        h = torch.concat([h, l2], dim=1)
         h = self.mid(h)
+
         h = self.norm_out(h)
         h = self.activation(h)
         h = self.conv_out(h)
@@ -230,7 +227,7 @@ class Decoder(MultiModalModule):
             ],
         )
         # Connection
-        self.connect_l2 = nn.Sequential(
+        self.connect_l1 = nn.Sequential(
             *[
                 ResnetBlock3D(
                     in_channels=base_channels,
@@ -243,7 +240,7 @@ class Decoder(MultiModalModule):
             ],
             Conv2d(base_channels, 12, kernel_size=3, stride=1, padding=1),
         )
-        self.connect_l3 = nn.Sequential(
+        self.connect_l2 = nn.Sequential(
             *[
                 ResnetBlock3D(
                     in_channels=base_channels,
@@ -260,31 +257,27 @@ class Decoder(MultiModalModule):
         self.norm_out = normalize(base_channels, norm_type=norm_type)
         self.conv_out = Conv2d(base_channels, 24, kernel_size=3, stride=1, padding=1)
 
-        self.inverse_wavelet_tranform_3d = InverseHaarWaveletTransform3D()
-        self.inverse_wavelet_tranform_2d = InverseHaarWaveletTransform2D()
+        self.inverse_wavelet_tranform_l1 = InverseHaarWaveletTransform2D()
+        self.inverse_wavelet_tranform_l2 = InverseHaarWaveletTransform3D()
 
     def forward(self, z):
         h = self.conv_in(z)
         h = self.mid(h)
-        l3_coeffs = self.connect_l3(h[:, -self.energy_flow_hidden_size:])
-        l3 = self.inverse_wavelet_tranform_3d(l3_coeffs)
+        l2_coeffs = self.connect_l2(h[:, -self.energy_flow_hidden_size :])
+        l2 = self.inverse_wavelet_tranform_l2(l2_coeffs)
         h = self.up2(h[:, : -self.energy_flow_hidden_size])
-        l2_coeffs = h[:, -self.energy_flow_hidden_size:]
-        l2_coeffs = self.connect_l2(l2_coeffs)
-        l2_coeffs[:, :3] = l2_coeffs[:, :3] + l3
 
-        t = l2_coeffs.shape[2]
-        l2_coeffs = rearrange(l2_coeffs, "b c t h w -> (b t) c h w")
-        l2 = self.inverse_wavelet_tranform_2d(l2_coeffs)
-        l2 = rearrange(l2, "(b t) c h w -> b c t h w", t=t)
+        l1_coeffs = h[:, -self.energy_flow_hidden_size :]
+        l1_coeffs = self.connect_l1(l1_coeffs)
+        l1_coeffs[:, :3] = l1_coeffs[:, :3] + l2
+        l1 = self.inverse_wavelet_tranform_l1(l1_coeffs)
 
         h = self.up1(h[:, : -self.energy_flow_hidden_size])
-
         h = self.layer(h)
         h = self.norm_out(h)
         h = self.activation(h)
         h = self.conv_out(h)
-        h[:, :3] = h[:, :3] + l2
+        h[:, :3] = h[:, :3] + l1
         return h
 
 
@@ -305,11 +298,16 @@ class WFVAE(MultiModalModule):
             t_interpolation: str = "nearest",
             vae_scale_factor: list = None,
             use_tiling: bool = False,
+            connect_res_layer_num: int = 2,
             **kwargs
     ) -> None:
         super().__init__(config=None)
+
+        self.register_buffer("scale", torch.tensor([0.18215] * 8)[None, :, None, None, None])
+        self.register_buffer("shift", torch.zeros(1, 8, 1, 1, 1))
+
         # Hardcode for now
-        self.t_chunk_enc = 8
+        self.t_chunk_enc = 16
         self.t_upsample_times = 4 // 2
         self.t_chunk_dec = 4
         self.use_quant_layer = False
@@ -333,12 +331,12 @@ class WFVAE(MultiModalModule):
             use_attention=use_attention,
             norm_type=norm_type,
             t_interpolation=t_interpolation,
+            connect_res_layer_num=connect_res_layer_num
         )
 
         # Set cache offset for trilinear lossless upsample.
-        self._set_cache_offset([self.decoder.up2, self.decoder.connect_l3, self.decoder.conv_in, self.decoder.mid], 1)
-        self._set_cache_offset([self.decoder.up2[-2:], self.decoder.up1, self.decoder.connect_l2, self.decoder.layer],
-                               self.t_upsample_times)
+        self._set_cache_offset([self.decoder.up2, self.decoder.connect_l2, self.decoder.conv_in, self.decoder.mid], 1)
+        self._set_cache_offset([self.decoder.up2[-2:], self.decoder.up1, self.decoder.connect_l1, self.decoder.layer], self.t_upsample_times)
 
         if from_pretrained is not None:
             load_checkpoint(self, from_pretrained)
@@ -390,7 +388,7 @@ class WFVAE(MultiModalModule):
 
     def encode(self, x):
         self._empty_causal_cached(self.encoder)
-
+        dtype = x.dtype
         wt = HaarWaveletTransform3D().to(x.device, dtype=x.dtype)
         coeffs = wt(x)
 
@@ -402,25 +400,24 @@ class WFVAE(MultiModalModule):
                 h = self.quant_conv(h)
 
         posterior = DiagonalGaussianDistribution(h)
-        return posterior.sample().mul_(0.18215)
+        return (posterior.sample() - self.shift.to(x.device, dtype=dtype)) * self.scale.to(x.device, dtype)
 
     def tile_encode(self, x):
         b, c, t, h, w = x.shape
 
         start_end = self.build_chunk_start_end(t)
         result = []
-        for idx, (start, end) in enumerate(start_end):
-            self._set_first_chunk(idx == 0)
+        for start, end in start_end:
             chunk = x[:, :, start:end, :, :]
             chunk = self.encoder(chunk)
             if self.use_quant_layer:
-                chunk = self.quant_conv(chunk)
+                chunk = self.encoder(chunk)
             result.append(chunk)
 
         return torch.cat(result, dim=2)
 
     def decode(self, z):
-        z /= 0.18215
+        z /= z / self.scale.to(z.device, dtype=z.dtype) + self.shift.to(z.device, dtype=z.dtype)
         self._empty_causal_cached(self.decoder)
 
         if self.use_tiling:
@@ -444,9 +441,7 @@ class WFVAE(MultiModalModule):
         start_end = self.build_chunk_start_end(t, decoder_mode=True)
 
         result = []
-        for idx, (start, end) in enumerate(start_end):
-            self._set_first_chunk(idx == 0)
-
+        for start, end in start_end:
             if end + 1 < t:
                 chunk = x[:, :, start:end + 1, :, :]
             else:
@@ -479,7 +474,7 @@ class WFVAE(MultiModalModule):
         else:
             return self.decoder.conv_out.weight
 
-    def enable_tiling(self, use_tiling: bool = True):
+    def enable_tiling(self, use_tiling: bool = False):
         self.use_tiling = use_tiling
         self._set_causal_cached(use_tiling)
 

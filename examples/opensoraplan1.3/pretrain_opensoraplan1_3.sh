@@ -52,14 +52,14 @@ GPT_ARGS="
     --rotary-base 500000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 1e-4 \
-    --min-lr 1e-4 \
+    --lr 1e-5 \
+    --min-lr 1e-5 \
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
     --adam-eps 1e-8 \
     --lr-decay-style constant \
     --weight-decay 1e-2 \
-    --lr-warmup-init 1e-4 \
+    --lr-warmup-init 1e-5 \
     --lr-warmup-iters 500 \
     --clip-grad 1.0 \
     --train-iters 5000 \
