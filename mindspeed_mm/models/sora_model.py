@@ -13,6 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Mapping, Any
+from logging import getLogger
+
 import torch
 from torch import nn
 from megatron.training.arguments import core_transformer_config_from_args
@@ -22,6 +25,8 @@ from mindspeed_mm.models.predictor import PredictModel
 from mindspeed_mm.models.diffusion import DiffusionModel
 from mindspeed_mm.models.ae import AEModel
 from mindspeed_mm.models.text_encoder import TextEncoder
+
+logger = getLogger(__name__)
 
 
 class SoRAModel(nn.Module):
@@ -110,3 +115,19 @@ class SoRAModel(nn.Module):
     
     def train(self, mode=True):
         self.predictor.train()
+
+    def state_dict_for_save_checkpoint(self, prefix="", keep_vars=False):
+        """Customized state_dict"""
+        return self.predictor.state_dict(prefix=prefix, keep_vars=keep_vars)
+    
+    def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True):
+        """Customized load."""
+        if not isinstance(state_dict, Mapping):
+            raise TypeError(f"Expected state_dict to be dict-like, got {type(state_dict)}.")
+        
+        missing_keys, unexpected_keys = self.predictor.load_state_dict(state_dict, strict)
+
+        if missing_keys is not None:
+            logger.info(f"Missing keys in state_dict: {missing_keys}.")
+        if unexpected_keys is not None:
+            logger.info(f"Unexpected key(s) in state_dict: {unexpected_keys}.")

@@ -30,7 +30,6 @@ def auto_grad_checkpoint(module, *args, **kwargs):
 
 
 def load_checkpoint(model, ckpt_path):
-    # TODO: 使用统一的接口进行模型保存/加载管理
     if not os.path.isfile(ckpt_path):
         raise FileNotFoundError(f"Could not find checkpoint at {ckpt_path}")
 
@@ -40,13 +39,6 @@ def load_checkpoint(model, ckpt_path):
         ckpt_dict = safetensors.torch.load_file(ckpt_path)
     else:
         raise ValueError(f"Invalid checkpoint path: {ckpt_path}")
-
-    if "pos_embed_temporal" in ckpt_dict:
-        del ckpt_dict["pos_embed_temporal"]
-    if "pos_embed" in ckpt_dict:
-        del ckpt_dict["pos_embed"]
-    if "ema" in ckpt_dict:  # supports checkpoints from train.py
-        ckpt_dict = ckpt_dict["ema"]
 
     missing_keys, unexpected_keys = model.load_state_dict(ckpt_dict, strict=False)
     print(f"Missing keys: {missing_keys}")
