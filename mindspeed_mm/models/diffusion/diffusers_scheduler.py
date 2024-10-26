@@ -1,3 +1,4 @@
+import math
 import os
 from typing import Union, Tuple, List, Callable
 
@@ -15,7 +16,9 @@ from diffusers.schedulers import (
     HeunDiscreteScheduler,
     EulerAncestralDiscreteScheduler,
     DEISMultistepScheduler,
-    KDPM2AncestralDiscreteScheduler
+    KDPM2AncestralDiscreteScheduler,
+    CogVideoXDPMScheduler,
+    CogVideoXDDIMScheduler
 )
 from diffusers.training_utils import compute_snr
 from megatron.core import mpu
@@ -32,7 +35,9 @@ DIFFUSERS_SCHEDULE_MAPPINGS = {
     "HeunDiscrete": HeunDiscreteScheduler,
     "EulerAncestralDiscrete": EulerAncestralDiscreteScheduler,
     "DEISMultistep": DEISMultistepScheduler,
-    "KDPM2AncestralDiscrete": KDPM2AncestralDiscreteScheduler
+    "KDPM2AncestralDiscrete": KDPM2AncestralDiscreteScheduler,
+    "cogvideox_5b": CogVideoXDPMScheduler,
+    "cogvideox_2b": CogVideoXDDIMScheduler
 }
 
 
@@ -214,22 +219,41 @@ class DiffusersScheduler:
         self.diffusion.set_timesteps(self.num_inference_steps, device=self.device)
         self.timesteps = self.diffusion.timesteps
 
+        use_dynamic_cfg = hasattr(self, "use_dynamic_cfg") and self.use_dynamic_cfg
+        guidance_scale = self.guidance_scale
+
         # for loop denoising to get latents
         with tqdm(total=self.num_inference_steps) as progress_bar:
+            old_pred_original_sample = None
             for i, t in enumerate(self.timesteps):
                 # timestep = torch.tensor([i] * shape[0], device=self.device)
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
                 latent_model_input = self.diffusion.scale_model_input(latent_model_input, t)
                 current_timestep = t
                 current_timestep = current_timestep.expand(latent_model_input.shape[0])
-                model_kwargs["latents"] = latent_model_input
-                video_mask = torch.ones_like(latent_model_input)[:, 0]
-                world_size = model_kwargs.get("world_size", 1)
-                video_mask = video_mask.repeat(1, world_size, 1, 1)
-                model_kwargs["video_mask"] = video_mask
+                if "hidden_states" in model_kwargs:
+                    # 待切换到公共组件
+                    model_kwargs["hidden_states"] = latent_model_input
+                else:
+                    model_kwargs["latents"] = latent_model_input
+                    video_mask = torch.ones_like(latent_model_input)[:, 0]
+                    world_size = model_kwargs.get("world_size", 1)
+                    video_mask = video_mask.repeat(1, world_size, 1, 1)
+                    model_kwargs["video_mask"] = video_mask
 
                 with torch.no_grad():
                     noise_pred = model(timestep=current_timestep, **model_kwargs)
+
+                if isinstance(noise_pred, tuple):
+                    noise_pred = noise_pred[0]
+
+                # perform guidance
+                if use_dynamic_cfg:
+                    noise_pred = noise_pred.float()
+                    self.guidance_scale = 1 + guidance_scale * (
+                            (1 - math.cos(
+                                math.pi * ((self.num_inference_steps - t.item()) / self.num_inference_steps) ** 5.0)) / 2
+                    )
 
                 # perform guidance
                 if self.do_classifier_free_guidance:
@@ -241,7 +265,19 @@ class DiffusersScheduler:
                     noise_pred = noise_pred.chunk(2, dim=1)[0]
 
                 # compute previous image: x_t -> x_t-1
-                latents = self.diffusion.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+                if use_dynamic_cfg:
+                    latents, old_pred_original_sample = self.diffusion.step(
+                        noise_pred,
+                        old_pred_original_sample,
+                        t,
+                        self.timesteps[i - 1] if i > 0 else None,
+                        latents,
+                        **extra_step_kwargs,
+                        return_dict=False,
+                    )
+                    latents = latents.to(latent_model_input.dtype)
+                else:
+                    latents = self.diffusion.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
 
                 # call the callback, if provided
                 if i == len(self.timesteps) - 1 or (

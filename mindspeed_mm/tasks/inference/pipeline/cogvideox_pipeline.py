@@ -14,12 +14,10 @@
 # limitations under the License.
 
 from typing import Optional, List, Union, Tuple
-import math
 import inspect
 
 import torch
 
-from diffusers import CogVideoXDPMScheduler
 from diffusers.models.embeddings import get_3d_rotary_pos_embed
 
 from mindspeed_mm.tasks.inference.pipeline.pipeline_base import MMPipeline
@@ -55,23 +53,22 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
     def __init__(self, vae, text_encoder, tokenizer, scheduler, predict_model, config=None):
         self.register_modules(
             tokenizer=tokenizer, text_encoder=text_encoder, vae=vae.module,
-            transformer=predict_model.module, scheduler=scheduler.model
+            predict_model=predict_model.module, scheduler=scheduler
         )
 
         self.vae = vae.module
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
-        self.scheduler = scheduler.model
-        self.transformer = predict_model.module
+        self.scheduler = scheduler
+        self.predict_model = predict_model.module
 
         config = config.to_dict()
         self.num_frames, self.height, self.width = config.get("input_size", [49, 480, 720])
-        self.num_inference_steps = config.get("num_inference_steps", 50)
-        self._guidance_scale = config.get("guidance_scale", 6.0)
-        self.use_dynamic_cfg = config.get("use_dynamic_cfg", False)
-        self.generator = torch.Generator(device=config.get("device", "npu")).manual_seed(config.get("seed", 42))
+        self.generator = torch.Generator().manual_seed(config.get("seed", 42))
         self.num_videos_per_prompt = 1
         self.max_sequence_length = 226
+
+        self.scheduler.use_dynamic_cfg = config.get("use_dynamic_cfg", True)
 
         self.vae_scale_factor_spatial = (
             2 ** (len(self.vae.config.block_out_channels) - 1) if hasattr(self, "vae") and self.vae is not None else 8
@@ -79,11 +76,6 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.vae_scale_factor_temporal = (
             self.vae.config.temporal_compression_ratio if hasattr(self, "vae") and self.vae is not None else 4
         )
-
-
-    @property
-    def guidance_scale(self):
-        return self._guidance_scale
 
     @property
     def num_timesteps(self):
@@ -100,16 +92,16 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         num_frames: int,
         device: torch.device,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        grid_height = height // (self.vae_scale_factor_spatial * self.transformer.config.patch_size)
-        grid_width = width // (self.vae_scale_factor_spatial * self.transformer.config.patch_size)
-        base_size_width = 720 // (self.vae_scale_factor_spatial * self.transformer.config.patch_size)
-        base_size_height = 480 // (self.vae_scale_factor_spatial * self.transformer.config.patch_size)
+        grid_height = height // (self.vae_scale_factor_spatial * self.predict_model.config.patch_size)
+        grid_width = width // (self.vae_scale_factor_spatial * self.predict_model.config.patch_size)
+        base_size_width = 720 // (self.vae_scale_factor_spatial * self.predict_model.config.patch_size)
+        base_size_height = 480 // (self.vae_scale_factor_spatial * self.predict_model.config.patch_size)
 
         grid_crops_coords = get_resize_crop_region_for_grid(
             (grid_height, grid_width), base_size_width, base_size_height
         )
         freqs_cos, freqs_sin = get_3d_rotary_pos_embed(
-            embed_dim=self.transformer.config.attention_head_dim,
+            embed_dim=self.predict_model.config.attention_head_dim,
             crops_coords=grid_crops_coords,
             grid_size=(grid_height, grid_width),
             temporal_size=num_frames,
@@ -135,8 +127,8 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
                 "The number of frames must be less than 49 for now due to static positional embeddings. This will be updated in the future to remove this limitation."
             )
 
-        height = self.height or self.transformer.config.sample_size * self.vae_scale_factor_spatial
-        width = self.width or self.transformer.config.sample_size * self.vae_scale_factor_spatial
+        height = self.height or self.predict_model.config.sample_size * self.vae_scale_factor_spatial
+        width = self.width or self.predict_model.config.sample_size * self.vae_scale_factor_spatial
 
         # 1. Check inputs.
         self.text_prompt_checks(
@@ -158,14 +150,12 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         device = self.text_encoder.device or self._execution_device
 
-        do_classifier_free_guidance = self.guidance_scale > 1.0
-
         # 3. Encode input prompt
         prompt_embeds, prompt_embeds_attention_mask, negative_prompt_embeds, negative_prompt_attention_mask = self.encode_texts(
             prompt=prompt,
             negative_prompt=negative_prompt,
             device=device,
-            do_classifier_free_guidance=do_classifier_free_guidance,
+            do_classifier_free_guidance=True,
             prompt_embeds=prompt_embeds,
             negative_prompt_embeds=negative_prompt_embeds,
             max_length=self.max_sequence_length,
@@ -173,16 +163,10 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             prompt_to_lower=False
         )
 
-        if do_classifier_free_guidance:
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
-
-        # 4. Prepare timesteps
-        self.scheduler.set_timesteps(self.num_inference_steps, device=device)
-        timesteps = self.scheduler.timesteps
-        self._num_timesteps = len(timesteps)
+        prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
 
         # 5. Prepare latents
-        latent_channels = self.transformer.config.in_channels
+        latent_channels = self.predict_model.config.in_channels
         batch_size = batch_size * self.num_videos_per_prompt
         shape = (
             batch_size,
@@ -199,65 +183,22 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         # 7. Create rotary embeds if required
         image_rotary_emb = (
             self._prepare_rotary_positional_embeddings(height, width, latents.size(1), device)
-            if self.transformer.config.use_rotary_positional_embeddings
+            if self.predict_model.config.use_rotary_positional_embeddings
             else None
         )
 
-        # 8. Denoising loop
-        num_warmup_steps = max(len(timesteps) - self.num_inference_steps * self.scheduler.order, 0)
+        model_kwargs = {"encoder_hidden_states": prompt_embeds,
+                        "image_rotary_emb": image_rotary_emb,
+                        "return_dict": False,
+                        "hidden_states": True}
 
-        with self.progress_bar(total=self.num_inference_steps) as progress_bar:
-            # for DPM-solver++
-            old_pred_original_sample = None
-            for i, t in enumerate(timesteps):
-                if self.interrupt:
-                    continue
+        latents = self.scheduler.sample(model=self.predict_model, shape=shape, latents=latents,
+                                        model_kwargs=model_kwargs,
+                                        extra_step_kwargs=extra_step_kwargs)
 
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                # broadcast to batch dimension in a way that's compatible with ONNX/Core ML
-                timestep = t.expand(latent_model_input.shape[0])
-
-                # predict noise model_output
-                noise_pred = self.transformer(
-                    hidden_states=latent_model_input,
-                    encoder_hidden_states=prompt_embeds,
-                    timestep=timestep,
-                    image_rotary_emb=image_rotary_emb,
-                    return_dict=False,
-                )[0]
-                noise_pred = noise_pred.float()
-
-                # perform guidance
-                if self.use_dynamic_cfg:
-                    self._guidance_scale = 1 + self.guidance_scale * (
-                            (1 - math.cos(
-                                math.pi * ((self.num_inference_steps - t.item()) / self.num_inference_steps) ** 5.0)) / 2
-                    )
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                if not isinstance(self.scheduler, CogVideoXDPMScheduler):
-                    latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
-                else:
-                    latents, old_pred_original_sample = self.scheduler.step(
-                        noise_pred,
-                        old_pred_original_sample,
-                        t,
-                        timesteps[i - 1] if i > 0 else None,
-                        latents,
-                        **extra_step_kwargs,
-                        return_dict=False,
-                    )
-                latents = latents.to(prompt_embeds.dtype)
-
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-
-        video = self.decode_latents(latents)
+        latents = latents.permute(0, 2, 1, 3, 4)  # [batch_size, num_channels, num_frames, height, width]
+        latents = 1 / self.vae.config.scaling_factor * latents
+        video = self.decode_latents(latents).sample
         return video
 
     def callback_on_step_end_tensor_inputs_checks(self, callback_on_step_end_tensor_inputs):
@@ -267,13 +208,6 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             raise ValueError(
                 f"`callback_on_step_end_tensor_inputs` has to be in {self._callback_tensor_inputs}, but found {[k for k in callback_on_step_end_tensor_inputs if k not in self._callback_tensor_inputs]}"
             )
-
-    def decode_latents(self, latents: torch.Tensor) -> torch.Tensor:
-        latents = latents.permute(0, 2, 1, 3, 4)  # [batch_size, num_channels, num_frames, height, width]
-        latents = 1 / self.vae.config.scaling_factor * latents
-
-        frames = self.vae.decode(latents).sample
-        return frames
 
     def prepare_extra_step_kwargs(self, generator, eta):
         # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
