@@ -118,8 +118,9 @@ Coming Soon
 | 配置文件 |               修改字段               |                修改说明                 |
 |------|:--------------------------------:|:-----------------------------------:|
 |  examples/cogvideox/inference_model.json    |         from_pretrained          |            修改为下载的权重所对应路径            |
-|  examples/cogvideox/inference_model.json    |          model_version           | 5B：cogvideox_5b<br/>2B：cogvideox_2b |
+|  examples/cogvideox/inference_model.json    |         diffusion下的model_id          |        5B：cogvideox_5b<br/>2B：cogvideox_2b         |
 |  examples/cogvideox/inference_model.json    |         use_dynamic_cfg          |        5B：true<br/>2B：false         |
+|  examples/cogvideox/inference_model.json    |         snr_shift_scale          |        5B：1.0<br/>2B：3.0         |
 |   examples/cogvideox/samples_prompts.txt   |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
 
 #### <span id="jump5.3"> 启动推理

@@ -18,25 +18,34 @@
     "predictor": {
         "dtype": "float16",
         "model_id": "cogvideox",
-        "model_version": "cogvideox_5b",
         "from_pretrained": "CogVideoX-5b/transformer"
     },
     "diffusion": {
-        "model_id": "cogvideox",
-        "model_version": "cogvideox_5b",
-        "from_pretrained": "CogVideoX-5b/scheduler",
+        "model_id": "cogvideox_5b",
+        "guidance_scale": 6.0,
+        "num_inference_steps": 50,
+
+        "beta_end": 0.012,
+        "beta_schedule": "scaled_linear",
+        "beta_start": 0.00085,
         "clip_sample": false,
+        "clip_sample_range": 1.0,
+        "num_train_timesteps": 1000,
         "prediction_type": "v_prediction",
         "rescale_betas_zero_snr": true,
-        "timestep_spacing": "trailing"
+        "sample_max_value": 1.0,
+        "set_alpha_to_one": true,
+        "steps_offset": 0,
+        "timestep_spacing": "trailing",
+        "trained_betas": null,
+
+        "snr_shift_scale": 1.0
     },
 
     "pipeline_config": {
         "use_dynamic_cfg": true,
         "seed": 42,
-        "input_size": [49, 480, 720],
-        "guidance_scale": 6.0,
-        "num_inference_steps": 50
+        "input_size": [49, 480, 720]
     },
 
     "frame_interval": 1,
