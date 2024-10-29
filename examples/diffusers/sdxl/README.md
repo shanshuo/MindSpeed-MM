@@ -207,7 +207,7 @@
         config_gc()
         ```
 
-    3. 在文件918行修改`compute_vae_encodings_fn`
+    3. 【Optional】在文件918行左右将`compute_vae_encodings_fn`进行修改
 
         ```python
         compute_vae_encodings_fn = functools.partial(compute_vae_encode, accelerator=accelerator, vae=vae)
