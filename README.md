@@ -125,14 +125,14 @@ MindSpeed-MM已发布版本维护策略：
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensoraplan1.3">OpenSoraPlan 1.3</a></td>
-      <td><a href="https://huggingface.co/hpcaitech/Open-Sora/tree/v1.3.0"> 8.6B </a></td>
+      <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.3.0"> 8.6B </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 0.71 (Samples per Second) </td>
       <td> 0.73 (Samples per Second) </td>
       <td> 【昇腾】 </td>
-      <td>【Coming Soon】</td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sdxl">SDXL</a></td>

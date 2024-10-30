@@ -1,0 +1,230 @@
+# OpenSoraPlan1.3.1 使用指南
+
+<p align="left">
+</p>
+
+## 目录
+
+- [环境安装](#jump1)
+  - [仓库拉取](#jump1.1)
+  - [环境搭建](#jump1.2)
+- [权重下载及转换](#jump2)
+  - [权重下载](#jump2.1)
+- [数据集准备及处理](#jump3)
+  - [数据集下载](#jump3.1)
+- [预训练](#jump4)
+  - [准备工作](#jump4.1)
+  - [配置参数](#jump4.2)
+  - [启动预训练](#jump4.3)
+- [推理](#jump5)
+  - [准备工作](#jump5.1)
+  - [配置参数](#jump5.2)
+  - [启动推理](#jump5.3)
+
+---
+<a id="jump1"></a>
+
+## 环境安装
+
+【模型开发时推荐使用配套的环境版本】
+
+|           软件            | [版本](https://www.hiascend.com/zh/) |
+| :-----------------------: |:----------------------------------:|
+|          Python           |                3.8                 |
+|          Driver           |         在研版本          |
+|         Firmware          |         在研版本          |
+|           CANN            |             在研版本             |
+|           Torch           |            2.1.0            |
+|         Torch_npu         |           2.1.0           |
+
+<a id="jump1.1"></a>
+
+#### 1. 仓库拉取
+
+```shell
+    git clone https://gitee.com/ascend/MindSpeed-MM.git 
+    git clone https://github.com/NVIDIA/Megatron-LM.git
+    cd Megatron-LM
+    git checkout core_r0.6.0
+    cp -r megatron ../MindSpeed-MM/
+    cd ..
+    cd MindSpeed-MM
+```
+
+<a id="jump1.2"></a>
+
+#### 2. 环境搭建
+
+```bash
+    # python3.8
+    conda create -n test python=3.8
+    conda activate test
+
+    # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
+    pip install torch-2.1.0-cp38-cp38m-manylinux2014_aarch64.whl 
+    pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
+    
+    # apex for Ascend 参考 https://gitee.com/ascend/apex
+    pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
+
+    # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+
+    # 安装加速库
+    git clone https://gitee.com/ascend/MindSpeed.git
+    cd MindSpeed
+    git checkout 5dc1e83b
+    pip install -r requirements.txt 
+    pip3 install -e .
+    cd ..
+
+    # 安装其余依赖库
+    pip install -e .
+```
+
+#### 3. Decord搭建
+
+【X86版安装】
+
+```bash
+pip install decord==0.6.0
+```
+
+【ARM版安装】
+
+`apt`方式安装请[参考链接](https://github.com/dmlc/decord)
+
+`yum`方式安装请[参考脚本](https://github.com/dmlc/decord/blob/master/tools/build_manylinux2010.sh)
+
+---
+
+<a id="jump2"></a>
+
+## 权重下载及转换
+
+<a id="jump2.1"></a>
+
+#### 1. 权重下载
+
+从Huggingface等网站下载开源模型权重
+
+- [LanguageBind/Open-Sora-Plan-v1.3.1](https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.3.0/tree/main)：WFVAE模型和SparseVideoDiT模型；
+
+- [DeepFloyd/mt5-xxl](https://huggingface.co/google/mt5-xxl/)： MT5模型；
+
+<a id="jump2.2"></a>
+
+#### 2. 权重转换
+
+MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用open_sora_plan_convert_to_mm_ckpt.py脚本进行转换，该脚本实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分。
+
+首先修改 examples/opensoraplan1.3/open_sora_plan_convert_to_mm_ckpt.py 参数
+
+    TP_SIZE = 1  # TP（Tensor Parallel）size，需要和训练脚本的CP保持一致
+    dit_hg_weight_path = "raw_ckpt/open-sora-plan/any93x640x640/" #huggingface下载的dit预训练权重路径
+    dit_mm_save_dir = "mm_ckpt/open-sora-plan/checkpoint" #转换到MindSpeed-MM的dit权重存放路径
+
+    vae_hg_weight_path = "raw_ckpt/vae/wfvae.ckpt"  #huggingface下载的vae预训练权重路径
+    vae_mm_save_dir = "mm_ckpt/open-sora-plan/checkpoint/wfvae" #转换到MindSpeed-MM的vae权重存放路径
+---
+
+启动脚本
+
+    # 根据实际情况修改 ascend-toolkit 路径
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
+    python examples/opensoraplan1.3/open_sora_plan_convert_to_mm_ckpt.py
+---
+
+同步修改examples/opensoraplan1.3/pretrain_opensoraplan1_3.sh中的--load参数，该路径为转换后或者切分后的权重，注意--load配置的是转换到MindSpeed-MM后的dit权重路径，vae权重路径在model_opensoraplan1_3.json中配置
+
+    --load "mm_ckpt/open-sora-plan/checkpoint"
+
+---
+
+<a id="jump3"></a>
+
+## 数据集准备及处理
+
+<a id="jump3.1"></a>
+
+#### 1. 数据集下载
+
+用户需自行获取并解压[pixabay_v2](https://huggingface.co/datasets/LanguageBind/Open-Sora-Plan-v1.1.0/tree/main/pixabay_v2_tar)数据集，获取数据结构如下：
+
+   ```
+   $pixabay_v2
+   ├── annotation.json
+   ├── folder_01
+   ├── ├── video0.mp4
+   ├── ├── video1.mp4
+   ├── ├── ...
+   ├── ├── annotation.json
+   ├── folder_02
+   ├── folder_03
+   └── ...
+   ```
+
+---
+
+<a id="jump4"></a>
+
+## 预训练
+
+<a id="jump4.1"></a>
+
+#### 1. 准备工作
+
+配置脚本前需要完成前置准备工作，包括：**环境安装**、**权重下载及转换**、**数据集准备及处理**，详情可查看对应章节。
+
+<a id="jump4.2"></a>
+
+#### 2. 配置参数
+
+需根据实际情况修改`model_opensoraplan1_3.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
+
+【单机运行】
+
+```shell
+    GPUS_PER_NODE=8
+    MASTER_ADDR=locahost
+    MASTER_PORT=29501
+    NNODES=1  
+    NODE_RANK=0  
+    WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+```
+
+【多机运行】
+
+```shell
+    # 根据分布式集群实际情况配置分布式参数
+    GPUS_PER_NODE=8  #每个节点的卡数
+    MASTER_ADDR="your master node IP"  #都需要修改为主节点的IP地址（不能为localhost）
+    MASTER_PORT=29501
+    NNODES=2  #集群里的节点数，以实际情况填写,
+    NODE_RANK="current node id"  #当前节点的RANK，多个节点不能重复，主节点为0, 其他节点可以是1,2..
+    WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+```
+
+<a id="jump4.3"></a>
+
+#### 3. 启动预训练
+
+```shell
+    bash examples/opensoraplan1.2/pretrain_opensoraplan1_2.sh
+```
+
+**注意**：
+
+- 多机训练需在多个终端同时启动预训练脚本(每个终端的预训练脚本只有NODE_RANK参数不同，其他参数均相同)
+- 如果使用多机训练，需要在每个节点准备训练数据和模型权重
+
+---
+
+<a id="jump5"></a>
+
+## 推理
+
+<a id="jump5.1"></a>
+
+即将推出
+

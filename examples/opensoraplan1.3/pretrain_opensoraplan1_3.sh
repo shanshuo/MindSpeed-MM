@@ -56,11 +56,11 @@ GPT_ARGS="
     --min-lr 1e-5 \
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
-    --adam-eps 1e-8 \
+    --adam-eps 1e-15 \
     --lr-decay-style constant \
     --weight-decay 1e-2 \
     --lr-warmup-init 1e-5 \
-    --lr-warmup-iters 500 \
+    --lr-warmup-iters 0 \
     --clip-grad 1.0 \
     --train-iters 5000 \
     --no-gradient-accumulation-fusion \
