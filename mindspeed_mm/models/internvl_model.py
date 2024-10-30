@@ -199,7 +199,8 @@ class InternVLModel(MultiModalModule):
         if freeze_text_decoder and self.text_decoder is not None:
             for param in self.text_decoder.parameters():
                 param.requires_grad = False
-        self.image_encoder.freeze(freeze_image_encoder, freeze_image_projection)
+        if self.add_image_encoder:
+            self.image_encoder.freeze(freeze_image_encoder, freeze_image_projection)
 
     def _prepare_decoder_attention_mask(self, attention_mask, dtype=torch.float32, device=torch.device("npu"), past_key_values_length=0):
         # create causal mask
