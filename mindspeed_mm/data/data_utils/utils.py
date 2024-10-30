@@ -47,7 +47,13 @@ from transformers.trainer_pt_utils import LabelSmoother
 from packaging import version
 import tokenizers
 
-from mindspeed_mm.data.data_utils.data_transform import TemporalRandomCrop, Expand2Square
+from mindspeed_mm.data.data_utils.data_transform import (
+    TemporalRandomCrop, 
+    Expand2Square,
+    get_params,
+    calculate_statistics,
+    maxhwresize
+)
 from mindspeed_mm.data.data_utils.transform_pipeline import get_transforms
 from mindspeed_mm.data.data_utils.conversation import get_conv_template
 from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
@@ -286,6 +292,18 @@ class VideoProcesser:
             drop_short_ratio=1.0,
             max_height=480,
             max_width=640,
+            max_hxw=None,
+            min_hxw=None,
+            force_resolution=True,
+            seed=42,
+            hw_stride=32,
+            hw_aspect_thr=1.5,
+            ae_stride_t=4,
+            sp_size=1,
+            train_sp_batch_size=1,
+            gradient_accumulation_size=1,
+            batch_size=1,
+            min_num_frames=29,
             **kwargs,
     ):
         self.num_frames = num_frames
@@ -299,6 +317,20 @@ class VideoProcesser:
             self.drop_short_ratio = drop_short_ratio
             self.max_height = max_height
             self.max_width = max_width
+            self.max_hxw = max_hxw
+            self.min_hxw = min_hxw
+            self.force_resolution = force_resolution
+            self.seed = seed
+            self.generator = torch.Generator().manual_seed(self.seed) 
+            self.hw_stride = hw_stride
+            self.hw_aspect_thr = hw_aspect_thr
+            self.ae_stride_t = ae_stride_t
+            self.sp_size = sp_size
+            self.train_sp_batch_size = train_sp_batch_size
+            self.gradient_accumulation_size = gradient_accumulation_size
+            self.batch_size = batch_size
+            self.min_num_frames = min_num_frames
+
 
     def __call__(self, vframes, num_frames=None, frame_interval=None, image_size=None, is_decord_read=False,
                  predefine_num_frames=13):
@@ -403,13 +435,20 @@ class VideoProcesser:
     def define_frame_index(self, cap_list):
         new_cap_list = []
         sample_num_frames = []
+        sample_size = []
+        aesthetic_score = []
         cnt_too_long = 0
         cnt_too_short = 0
         cnt_no_cap = 0
         cnt_no_resolution = 0
+        cnt_no_aesthetic = 0
         cnt_resolution_mismatch = 0
+        cnt_aspect_mismath = 0
+        cnt_resolution_too_small = 0
         cnt_movie = 0
         cnt_img = 0
+
+
         for i in cap_list:
             path = i["path"]
             cap = i.get("cap", None)
@@ -417,6 +456,66 @@ class VideoProcesser:
             if cap is None:
                 cnt_no_cap += 1
                 continue
+
+            # ======no aesthetic=====
+            if i.get("aesthetic", None) is None or i.get("aes", None) is None:
+                cnt_no_aesthetic += 1
+            else:
+                aesthetic_score.append(i.get("aesthetic", None) or i.get("aes", None))
+
+            # ======resolution mismatch=====
+            if i.get("resolution", None) is None:
+                cnt_no_resolution += 1
+                continue
+            else:
+                if i["resolution"].get("height", None) is None or i["resolution"].get("width", None) is None:
+                    cnt_no_resolution += 1
+                    continue
+                else:
+                    height, width = i["resolution"]["height"], i["resolution"]["width"]
+                    if not self.force_resolution:
+                        if height <= 0 or width <= 0:
+                            cnt_no_resolution += 1
+                            continue
+                        
+                        tr_h, tr_w = maxhwresize(height, width, self.max_hxw)
+                        _, _, sample_h, sample_w = get_params(tr_h, tr_w, self.hw_stride)
+
+                        if sample_h <= 0 or sample_w <= 0:
+                            cnt_resolution_mismatch += 1
+                            continue
+                        if sample_h * sample_w < self.min_hxw:
+                            cnt_resolution_too_small += 1
+                            continue
+                        # filter aspect
+                        is_pick = filter_resolution(
+                            sample_h, 
+                            sample_w, 
+                            max_h_div_w_ratio=self.hw_aspect_thr, 
+                            min_h_div_w_ratio=1 / self.hw_aspect_thr
+                        )
+                        if not is_pick:
+                            cnt_aspect_mismath += 1
+                            continue
+                        i["resolution"].update(dict(sample_height=sample_h, sample_width=sample_w))
+
+                    else:
+                        aspect = self.max_height / self.max_width
+                        is_pick = filter_resolution(
+                            height, 
+                            width, 
+                            max_h_div_w_ratio=self.hw_aspect_thr * aspect, 
+                            min_h_div_w_ratio=1 / self.hw_aspect_thr * aspect
+                        )
+                        if not is_pick:
+                            cnt_aspect_mismath == 1
+                            continue
+                        sample_h, sample_w = self.max_height, self.max_width
+
+                        i["resolution"].update(dict(sample_height=sample_h, sample_width=sample_w))
+
+
+
             if path.endswith(".mp4"):
                 # ======no fps and duration=====
                 duration = i.get("duration", None)
@@ -424,47 +523,21 @@ class VideoProcesser:
                 if fps is None or duration is None:
                     continue
 
-                # ======resolution mismatch=====
-                resolution = i.get("resolution", None)
-                if resolution is None:
-                    cnt_no_resolution += 1
-                    continue
-                else:
-                    if (
-                            resolution.get("height", None) is None
-                            or resolution.get("width", None) is None
-                    ):
-                        cnt_no_resolution += 1
-                        continue
-                    height, width = i["resolution"]["height"], i["resolution"]["width"]
-                    aspect = self.max_height / self.max_width
-                    hw_aspect_thr = 1.5
-                    max_h_div_w_ratio = hw_aspect_thr * aspect
-                    min_h_div_w_ratio = 1 / hw_aspect_thr * aspect
-                    is_pick = (
-                            height / width <= max_h_div_w_ratio
-                            and height / width >= min_h_div_w_ratio
-                    )
-                    if not is_pick:
-                        cnt_resolution_mismatch += 1
-                        continue
-
                 i["num_frames"] = int(fps * duration)
 
                 # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
-                frame_interval = fps / self.train_fps
-                start_frame_idx = (
-                    8 if "/storage/dataset/movie" in i["path"] else 0
-                )  # special video
+                frame_interval = 1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
+                start_frame_idx = i.get("cut", [0])[0]
+                i["start_frame_idx"] = start_frame_idx
                 frame_indices = np.arange(
-                    start_frame_idx, i["num_frames"], frame_interval
+                    start_frame_idx, start_frame_idx + i["num_frames"], frame_interval
                 ).astype(int)
-                frame_indices = frame_indices[frame_indices < i["num_frames"]]
+                frame_indices = frame_indices[frame_indices < start_frame_idx + i["num_frames"]]
 
                 # comment out it to enable dynamic frames training
                 if (
                         len(frame_indices) < self.num_frames
-                        and random.random() < self.drop_short_ratio
+                        and torch.rand(1, generator=self.generator).item() < self.drop_short_ratio
                 ):
                     cnt_too_short += 1
                     continue
@@ -475,7 +548,7 @@ class VideoProcesser:
                     frame_indices = frame_indices[begin_index:end_index]
                 # to find a suitable end_frame_idx, to ensure we do not need pad video
                 end_frame_idx = self.find_closest_y(
-                    len(frame_indices), vae_stride_t=4, model_ds_t=4
+                    len(frame_indices), vae_stride_t=self.ae_stride_t, model_ds_t=self.sp_size
                 )
                 if (
                         end_frame_idx == -1
@@ -486,37 +559,61 @@ class VideoProcesser:
 
                 if "/storage/dataset/movie" in i["path"]:
                     cnt_movie += 1
+
                 i["sample_frame_index"] = frame_indices.tolist()
+                i["sample_num_frames"] = len(i["sample_frame_index"])
+
                 new_cap_list.append(i)
-                i["sample_num_frames"] = len(
-                    i["sample_frame_index"]
-                )  # will use in dataloader(group sampler)
-                sample_num_frames.append(i["sample_num_frames"])
             elif path.endswith(".jpg"):  # image
                 cnt_img += 1
-                new_cap_list.append(i)
+
+                i["sample_frame_index"] = [0]
                 i["sample_num_frames"] = 1
-                sample_num_frames.append(i["sample_num_frames"])
+                new_cap_list.append(i)
             else:
                 raise NameError(
                     f"Unknown file extention {path.split('.')[-1]}, only support .mp4 for video and .jpg for image"
                 )
+            
+            sample_num_frames.append(i["sample_num_frames"])
+            sample_size.append(f"{len(i['sample_frame_index'])}x{sample_h}x{sample_w}")
+
+        counter = Counter(sample_size)
+        total_batch_size = self.batch_size * torch.distributed.get_world_size() * self.gradient_accumulation_size
+        filter_major_num = 4 * total_batch_size
+        new_cap_list, sample_size = zip(*[[i, j] for i, j in zip(new_cap_list, sample_size) if counter[j] >= filter_major_num])
 
         print(
             f"no_cap: {cnt_no_cap}, too_long: {cnt_too_long}, too_short: {cnt_too_short}, "
             f"no_resolution: {cnt_no_resolution}, resolution_mismatch: {cnt_resolution_mismatch}, "
-            f"Counter(sample_num_frames): {Counter(sample_num_frames)}, cnt_movie: {cnt_movie}, cnt_img: {cnt_img}, "
+            f"cnt_resolution_too_small: {cnt_resolution_too_small}, cnt_aspect_mismath: {cnt_aspect_mismath}, "
+            f"Counter(sample_num_frames): {Counter(sample_num_frames)}, Counter(sample_size): {sample_size}, "
+            f"cnt_movie: {cnt_movie}, cnt_img: {cnt_img}, "
             f"before filter: {len(cap_list)}, after filter: {len(new_cap_list)}"
         )
-        return new_cap_list, sample_num_frames
 
-    def find_closest_y(self, x, vae_stride_t=4, model_ds_t=4):
-        for y in range(x, 12, -1):
-            if (y - 1) % vae_stride_t == 0 and (
-                    (y - 1) // vae_stride_t + 1
-            ) % model_ds_t == 0:
+        if len(aesthetic_score) > 0:
+            stats_aesthetic = calculate_statistics(aesthetic_score)
+            print(
+                f"aesthetic_score: {len(aesthetic_score)}, cnt_no_aesthetic: {cnt_no_aesthetic}\n"
+                f"{len([i for i in aesthetic_score if i>=5.75])} > 5.75, 4.5 > {len([i for i in aesthetic_score if i<=4.5])}\n"
+                f"Mean: {stats_aesthetic.get('mean')}, Var: {stats_aesthetic.get('variance')}, Std: {stats_aesthetic.get('std_dev')}\n"
+                f"Min: {stats_aesthetic.get('min')}, Max: {stats_aesthetic.get('max')}"
+            )
+            
+        return new_cap_list, sample_num_frames, sample_size
+
+    def find_closest_y(self, x, vae_stride_t=4, model_ds_t=1):
+        if x < self.min_num_frames:
+            return -1  
+        for y in range(x, self.min_num_frames - 1, -1):
+            if (y - 1) % vae_stride_t == 0 and ((y - 1) // vae_stride_t + 1) % model_ds_t == 0:
                 # 4, 8: y in [29, 61, 93, 125, 157, 189, 221, 253, 285, 317, 349, 381, 413, 445, 477, 509, ...]
                 # 4, 4: y in [29, 45, 61, 77, 93, 109, 125, 141, 157, 173, 189, 205, 221, 237, 253, 269, 285, 301, 317, 333, 349, 365, 381, 397, 413, 429, 445, 461, 477, 493, 509, ...]
+                # 8, 1: y in [33, 41, 49, 57, 65, 73, 81, 89, 97, 105]
+                # 8, 2: y in [41, 57, 73, 89, 105]
+                # 8, 4: y in [57, 89]
+                # 8, 8: y in [57]
                 return y
         return -1
 
@@ -642,6 +739,7 @@ class TextProcesser:
             self,
             model_max_length=120,
             tokenizer=None,
+            tokenizer_2=None,
             use_clean_caption=True,
             enable_text_preprocessing=True,
             padding_type="max_length",
@@ -651,6 +749,7 @@ class TextProcesser:
         self.model_max_length = model_max_length
         self.padding = padding_type
         self.tokenizer = tokenizer
+        self.tokenizer_2 = tokenizer_2
         self.use_clean_caption = use_clean_caption
         self.support_chinese = support_chinese
         self.cfg = cfg
@@ -677,7 +776,20 @@ class TextProcesser:
         )
         prompt_ids = text_tokens_and_mask["input_ids"]
         prompt_mask = text_tokens_and_mask["attention_mask"]
-        return prompt_ids, prompt_mask
+        prompt_ids_2, prompt_mask_2 = None, None
+        if self.tokenizer_2 is not None:
+            text_tokens_and_mask_2 = self.tokenizer_2(
+                texts_info,
+                max_length=self.tokenizer_2.model_max_length,
+                padding='max_length',
+                truncation=True,
+                return_attention_mask=True,
+                add_special_tokens=True,
+                return_tensors='pt'
+            )
+            prompt_ids_2 = text_tokens_and_mask_2['input_ids']  # 1, l
+            prompt_mask_2 = text_tokens_and_mask_2['attention_mask']  # 1, l
+        return (prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2)
 
     @staticmethod
     def text_preprocessing(text, use_clean_caption=True, support_chinese=False):
@@ -865,15 +977,7 @@ class DataSetProg(metaclass=SingletonMeta):
         self.cap_list = cap_list
         self.n_elements = n_elements
         self.elements = list(range(n_elements))
-        random.shuffle(self.elements)
         print(f"n_elements: {len(self.elements)}", flush=True)
-
-        for i in range(self.num_workers):
-            self.n_used_elements[i] = 0
-            per_worker = int(math.ceil(len(self.elements) / float(self.num_workers)))
-            start = i * per_worker
-            end = min(start + per_worker, len(self.elements))
-            self.worker_elements[i] = self.elements[start:end]
 
     def get_item(self, work_info):
         if work_info is None:
@@ -886,6 +990,12 @@ class DataSetProg(metaclass=SingletonMeta):
             ]
         self.n_used_elements[worker_id] += 1
         return idx
+
+
+def filter_resolution(h, w, max_h_div_w_ratio=17 / 16, min_h_div_w_ratio=8 / 16):
+    if h / w <= max_h_div_w_ratio and h / w >= min_h_div_w_ratio:
+        return True
+    return False
 
 
 def format_numel_str(numel: int) -> str:

@@ -13,7 +13,14 @@ from torch.utils.data import DataLoader, Dataset, Sampler
 from torch.utils.data.distributed import DistributedSampler
 from megatron.legacy.data.data_samplers import RandomSeedDataset
 
-from mindspeed_mm.data.data_utils.constants import PROMPT_IDS, PROMPT_MASK, VIDEO, VIDEO_MASK
+from mindspeed_mm.data.data_utils.constants import (
+    PROMPT_IDS, 
+    PROMPT_MASK, 
+    VIDEO, 
+    VIDEO_MASK,
+    PROMPT_IDS_2,
+    PROMPT_MASK_2
+)
 from mindspeed_mm.data.datasets.t2v_dataset import DynamicVideoTextDataset
 from mindspeed_mm.data.data_utils.bucket import Bucket
 from mindspeed_mm.data.data_utils.aspect_ratio import get_num_pixels
@@ -40,6 +47,7 @@ class Collate:
         num_frames: int = 13,
         group_frame: bool = False,
         group_resolution: bool = False,
+        group_data: bool = False,
         max_height: int = 480,
         max_width: int = 640,
         ae_stride: int = 8,
@@ -50,6 +58,7 @@ class Collate:
         self.batch_size = batch_size
         self.group_frame = group_frame
         self.group_resolution = group_resolution
+        self.group_data = group_data
 
         self.max_height = max_height
         self.max_width = max_width
@@ -68,18 +77,27 @@ class Collate:
         batch_tubes = [i[VIDEO] for i in batch]  # b [c t h w]
         input_ids = [i[PROMPT_IDS] for i in batch]  # b [1 l]
         cond_mask = [i[PROMPT_MASK] for i in batch]  # b [1 l]
-        return batch_tubes, input_ids, cond_mask
+        input_ids_2 = [i[PROMPT_IDS_2] for i in batch]  # b [1 l]
+        cond_mask_2 = [i[PROMPT_MASK_2] for i in batch]  # b [1 l]
+    
+        if all([i is None for i in input_ids_2]):
+            input_ids_2 = None
+        if all([i is None for i in cond_mask_2]):
+            cond_mask_2 = None
+        return batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2
 
     def __call__(self, batch):
-        batch_tubes, input_ids, cond_mask = self.package(batch)
+        batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.package(batch)
 
         ds_stride = self.ae_stride * self.patch_size
         t_ds_stride = self.ae_stride_t * self.patch_size_t
 
-        pad_batch_tubes, attention_mask, input_ids, cond_mask = self.process(
+        pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.process(
             batch_tubes,
             input_ids,
             cond_mask,
+            input_ids_2,
+            cond_mask_2,
             t_ds_stride,
             ds_stride,
             self.max_thw,
@@ -91,7 +109,9 @@ class Collate:
             VIDEO: pad_batch_tubes,
             PROMPT_IDS: input_ids,
             VIDEO_MASK: attention_mask,
-            PROMPT_MASK: cond_mask
+            PROMPT_MASK: cond_mask,
+            PROMPT_IDS_2: input_ids_2,
+            PROMPT_MASK_2: cond_mask_2,
         }
 
     def process(
@@ -99,6 +119,8 @@ class Collate:
         batch_tubes,
         input_ids,
         cond_mask,
+        input_ids_2, 
+        cond_mask_2, 
         t_ds_stride,
         ds_stride,
         max_thw,
@@ -108,7 +130,9 @@ class Collate:
         batch_input_size = [i.shape for i in batch_tubes]  # [(c t h w), (c t h w)]
         if len(batch_input_size) != self.batch_size:
             raise AssertionError("batch_input_size and batch_size are not equal.")
-        if self.group_frame or self.group_resolution or self.batch_size == 1:  #
+        
+        is_grouped = self.group_frame or self.group_resolution or self.group_data or self.batch_size == 1
+        if is_grouped:  #
             len_each_batch = batch_input_size
             idx_length_dict = dict([*zip(list(range(self.batch_size)), len_each_batch)])
             count_dict = Counter(len_each_batch)
@@ -141,6 +165,10 @@ class Collate:
                 ]  # [(c t h w), (c t h w)]
                 input_ids = [input_ids[i] for i in pick_idx]  # b [1, l]
                 cond_mask = [cond_mask[i] for i in pick_idx]  # b [1, l]
+                if input_ids_2 is not None:
+                    input_ids_2 = [input_ids_2[i] for i in pick_idx]  # b [1, l]
+                if cond_mask_2 is not None:
+                    cond_mask_2 = [cond_mask_2[i] for i in pick_idx]  # b [1, l]
 
             for i in range(1, self.batch_size):
                 if batch_input_size[0] != batch_input_size[i]:
@@ -204,8 +232,10 @@ class Collate:
 
         input_ids = torch.stack(input_ids)  # b 1 l
         cond_mask = torch.stack(cond_mask)  # b 1 l
+        input_ids_2 = torch.stack(input_ids_2) if input_ids_2 is not None else input_ids_2  # b 1 l
+        cond_mask_2 = torch.stack(cond_mask_2) if cond_mask_2 is not None else cond_mask_2  # b 1 l
 
-        return pad_batch_tubes, attention_mask, input_ids, cond_mask
+        return (pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2)
 
 
 def split_to_even_chunks(indices, lengths, num_chunks, batch_size):
@@ -242,6 +272,31 @@ def split_to_even_chunks(indices, lengths, num_chunks, batch_size):
             else:
                 chunk = random.choice(pad_chunks)
                 print(chunks[idx], "->", chunk)
+        pad_chunks.append(chunk)
+    return pad_chunks
+
+
+def split_data_to_even_chunks(megabatch, lengths, world_size, batch_size):
+    """
+    Split a list of indices into `chunks` chunks of roughly equal lengths.
+    """
+    # batch_size=2, world_size=2
+    # [1, 2, 3, 4] -> [[1, 2], [3, 4]]
+    # [1, 2, 3] -> [[1, 2], [3]]
+    # [1, 2] -> [[1], [2]]
+    # [1] -> [[1], []]
+    chunks = [megabatch[i::world_size] for i in range(world_size)]
+
+    pad_chunks = []
+    for idx, chunk in enumerate(chunks):
+        if batch_size != len(chunk):  
+            if batch_size <= len(chunk):
+                raise AssertionError("batch_size must greater than len_chunk !")
+            if len(chunk) != 0:  # [[1, 2], [3]] -> [[1, 2], [3, 3]]
+                chunk = chunk + [random.choice(chunk) for _ in range(batch_size - len(chunk))]
+            else:
+                chunk = random.choice(pad_chunks)  # [[1], []] -> [[1], [1]]
+                print(chunks[idx], '->', chunk)
         pad_chunks.append(chunk)
     return pad_chunks
 
@@ -352,7 +407,69 @@ def get_length_grouped_indices(
     return out_list
 
 
-class LengthGroupedSampler(Sampler):
+def group_data_fun(lengths, generator=None):
+    # counter is decrease order
+    counter = Counter(lengths)  # counter {'1x256x256': 3, ''}   lengths ['1x256x256', '1x256x256', '1x256x256', ...]
+    grouped_indices = defaultdict(list)
+    for idx, item in enumerate(lengths):  # group idx to a list
+        grouped_indices[item].append(idx)
+
+    grouped_indices = dict(grouped_indices)  # {'1x256x256': [0, 1, 2], ...}
+    sorted_indices = [grouped_indices[item] for (item, _) in sorted(counter.items(), key=lambda x: x[1], reverse=True)]
+    
+    # shuffle in each group
+    shuffle_sorted_indices = []
+    for indice in sorted_indices:
+        shuffle_idx = torch.randperm(len(indice), generator=generator).tolist()
+        shuffle_sorted_indices.extend([indice[idx] for idx in shuffle_idx])
+    return shuffle_sorted_indices
+
+
+def get_length_grouped_data_indices(
+        lengths, 
+        batch_size, 
+        world_size, 
+        gradient_accumulation_size, 
+        initial_global_step, 
+        generator=None, 
+        group_data=False, 
+        seed=42):
+    # We need to use torch for the random part as a distributed sampler will set the random seed for torch.
+    if generator is None:
+        if world_size == 1:
+            generator = torch.Generator().manual_seed(seed)
+        else:
+            generator = torch.Generator()  # every rank will generate a fixed order but random index
+    
+    if group_data:
+        indices = group_data_fun(lengths, generator)
+    else:
+        indices = torch.randperm(len(lengths), generator=generator).tolist()
+    
+    megabatch_size = world_size * batch_size
+    megabatches = [indices[i: i + megabatch_size] for i in range(0, len(lengths), megabatch_size)]
+
+    megabatches = [split_data_to_even_chunks(megabatch, lengths, world_size, batch_size) for megabatch in megabatches]
+
+    indices_mega = torch.randperm(len(megabatches), generator=generator).tolist()
+
+    shuffled_megabatches = [megabatches[i] for i in indices_mega]
+
+    if group_data:
+        shuffled_megabatches = last_group_frame_fun(shuffled_megabatches, lengths)
+    
+    initial_global_step = initial_global_step * gradient_accumulation_size
+    shuffled_megabatches = shuffled_megabatches[initial_global_step:]
+
+    out_list = []
+    for megabatch in shuffled_megabatches:
+        for batch in megabatch:
+            for i in batch:
+                out_list.append(i)
+    return out_list
+
+
+class LengthGroupedSampler(DistributedSampler):
     r"""
     Sampler that samples indices in a way that groups together features of the dataset of roughly the same length while
     keeping a bit of randomness.
@@ -362,34 +479,58 @@ class LengthGroupedSampler(Sampler):
         self,
         batch_size: int,
         world_size: int,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
+        gradient_accumulation_size: int = 1, 
+        initial_global_step: int = 0, 
         lengths: Optional[List[int]] = None,
         group_frame=False,
         group_resolution=False,
+        group_data=False,
         generator=None,
     ):
+        super().__init__(dataset=lengths, num_replicas=num_replicas, rank=rank)
+
         if lengths is None:
             raise ValueError("Lengths must be provided.")
         if world_size == -1:
             raise ValueError("world_size must be provided.")
         self.batch_size = batch_size
         self.world_size = world_size
+        self.initial_global_step = initial_global_step
+        self.gradient_accumulation_size = gradient_accumulation_size
         self.lengths = lengths
         self.group_frame = group_frame
         self.group_resolution = group_resolution
+        self.group_data = group_data
         self.generator = generator
 
     def __len__(self):
+        if self.group_data:
+            return len(self.lengths) - self.initial_global_step * self.batch_size * self.world_size * self.gradient_accumulation_size
         return len(self.lengths)
 
     def __iter__(self):
-        indices = get_length_grouped_indices(
-            self.lengths,
-            self.batch_size,
-            self.world_size,
-            group_frame=self.group_frame,
-            group_resolution=self.group_resolution,
-            generator=self.generator,
-        )
+        if not self.group_data:
+            indices = get_length_grouped_indices(
+                self.lengths,
+                self.batch_size,
+                self.world_size,
+                group_frame=self.group_frame,
+                group_resolution=self.group_resolution,
+                generator=self.generator,
+            )
+        else:
+            indices = get_length_grouped_data_indices(
+                self.lengths,
+                self.batch_size,
+                self.world_size,
+                self.gradient_accumulation_size,
+                self.initial_global_step,
+                group_data=self.group_data,
+                generator=self.generator,
+            )
+        indices = indices[self.rank:self.total_size:self.num_replicas]
         return iter(indices)
 
 

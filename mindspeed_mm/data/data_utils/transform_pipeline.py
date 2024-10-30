@@ -13,7 +13,8 @@ from mindspeed_mm.data.data_utils.data_transform import (
     ToTensorVideo,
     UCFCenterCropVideo,
     Expand2Square,
-    JpegDegradationSimulator
+    JpegDegradationSimulator,
+    MaxHWResizeVideo
 )
 
 VIDEO_TRANSFORM_MAPPING = {
@@ -26,6 +27,7 @@ VIDEO_TRANSFORM_MAPPING = {
     "SpatialStrideCropVideo": SpatialStrideCropVideo,
     "norm_fun": transforms.Normalize,
     "ae_norm": AENorm,
+    "MaxHWResizeVideo": MaxHWResizeVideo
 }
 
 

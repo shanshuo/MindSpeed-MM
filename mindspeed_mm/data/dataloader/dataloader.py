@@ -76,7 +76,9 @@ def prepare_sampler_dataloader(
     sampler_type="stateful_distributed_sampler",
     group_frame=False,
     group_resolution=False,
-    world_size=-1,
+    group_data=False,
+    gradient_accumulation_size=1,
+    initial_global_step_for_sampler=0,
     collate_param=None,
     **kwargs,
 ):
@@ -124,15 +126,24 @@ def prepare_sampler_dataloader(
         )
     
     elif sampler_type == "LengthGroupedSampler":
+        if group_data and (group_frame or group_resolution):
+            raise AssertionError(
+                "group_data and (group_frame or group_resolution) cannot be true at the same time!"
+            )
         sampler = (
             LengthGroupedSampler(
                 batch_size,
-                world_size=world_size,
-                lengths=dataset.lengths,
+                world_size=process_group.size(),
+                num_replicas=process_group.size(),
+                rank=process_group.rank(),
+                gradient_accumulation_size=gradient_accumulation_size,
+                initial_global_step=initial_global_step_for_sampler,
+                lengths=dataset.sample_num_frames if not group_data else dataset.sample_size,
                 group_frame=group_frame,
                 group_resolution=group_resolution,
+                group_data=group_data,
             )
-            if (group_frame or group_resolution)
+            if (group_frame or group_resolution or group_data)
             else None
         )
         if sampler is None:

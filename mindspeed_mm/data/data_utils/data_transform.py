@@ -176,6 +176,62 @@ def resize_crop_to_fill(clip, target_size):
     return crop(clip, i, j, th, tw)
 
 
+def longsideresize(h, w, size, skip_low_resolution):
+    if h <= size[0] and w <= size[1] and skip_low_resolution:
+        return h, w
+    
+    if h / w > size[0] / size[1]:
+        # hxw 720x1280  size 320x640  hw_raito 9/16 > size_ratio 8/16  neww=320/720*1280=568  newh=320  
+        w = int(size[0] / h * w)
+        h = size[0]
+    else:
+        # hxw 720x1280  size 480x640  hw_raito 9/16 < size_ratio 12/16   newh=640/1280*720=360 neww=640  
+        # hxw 1080x1920  size 720x1280  hw_raito 9/16 = size_ratio 9/16   newh=1280/1920*1080=720 neww=1280  
+        h = int(size[1] / w * h)
+        w = size[1]
+    return h, w
+
+
+def calculate_statistics(data):
+    if len(data) == 0:
+        return None
+    data = np.array(data)
+    mean = np.mean(data)
+    variance = np.var(data)
+    std_dev = np.std(data)
+    minimum = np.min(data)
+    maximum = np.max(data)
+
+    return {
+        'mean': mean,
+        'variance': variance,
+        'std_dev': std_dev,
+        'min': minimum,
+        'max': maximum
+    }
+
+
+def get_params(h, w, stride):
+    
+    th, tw = h // stride * stride, w // stride * stride
+
+    i = (h - th) // 2
+    j = (w - tw) // 2
+
+    return (i, j, th, tw)
+
+
+def maxhwresize(ori_height, ori_width, max_hxw):
+    if ori_height * ori_width > max_hxw:
+        scale_factor = np.sqrt(max_hxw / (ori_height * ori_width))
+        new_height = int(ori_height * scale_factor)
+        new_width = int(ori_width * scale_factor)
+    else:
+        new_height = ori_height
+        new_width = ori_width
+    return new_height, new_width
+
+
 class AENorm:
     """
     Apply an ae_norm to a PIL image or video.
@@ -324,16 +380,9 @@ class SpatialStrideCropVideo:
             torch.tensor: cropped video clip by stride.
                 size is (T, C, OH, OW)
         """
-        # p_l: i, j, h, w
-        p_l = self.get_params(clip)
-        return crop(clip, p_l[0], p_l[1], p_l[2], p_l[3])
-
-    def get_params(self, clip):
-        h, w = clip.shape[-2:]
-        th, tw = h // self.stride * self.stride, w // self.stride * self.stride
-        # from top-left
-        param_list = [0, 0, th, tw]
-        return param_list
+        h, w = clip.shape[-2:] 
+        i, j, h, w = get_params(h, w, self.stride)
+        return crop(clip, i, j, h, w)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(stride={self.stride})"
@@ -350,10 +399,14 @@ class LongSideResizeVideo:
             size,
             skip_low_resolution=False,
             interpolation_mode="bilinear",
+            align_corners=False, 
+            antialias=False
     ):
         self.size = size
         self.skip_low_resolution = skip_low_resolution
         self.interpolation_mode = interpolation_mode
+        self.align_corners = align_corners
+        self.antialias = antialias
 
     def __call__(self, clip):
         """
@@ -361,19 +414,59 @@ class LongSideResizeVideo:
             clip (torch.tensor): Video clip to be cropped. Size is (T, C, H, W)
         Returns:
             torch.tensor: scale resized video clip.
-                size is (T, C, 512, *) or (T, C, *, 512)
         """
         _, _, h, w = clip.shape
-        if self.skip_low_resolution and max(h, w) <= self.size:
+        tr_h, tr_w = longsideresize(h, w, self.size, self.skip_low_resolution)
+        if h == tr_h and w == tr_w:
             return clip
-        if h > w:
-            w = int(w * self.size / h)
-            h = self.size
-        else:
-            h = int(h * self.size / w)
-            w = self.size
         resize_clip = resize(
-            clip, target_size=(h, w), interpolation_mode=self.interpolation_mode
+            clip, 
+            target_size=(tr_h, tr_w),
+            interpolation_mode=self.interpolation_mode,
+            align_corners=self.align_corners,
+            antialias=self.antialias
+        )
+        return resize_clip
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(size={self.size}, interpolation_mode={self.interpolation_mode}"
+
+
+class MaxHWResizeVideo:
+    '''
+    First use the h*w,
+    then resize to the specified size
+    '''
+
+    def __init__(
+            self,
+            max_hxw,
+            interpolation_mode="bilinear",
+            align_corners=False, 
+            antialias=False
+    ):
+        self.max_hxw = max_hxw
+        self.interpolation_mode = interpolation_mode
+        self.align_corners = align_corners
+        self.antialias = antialias
+
+    def __call__(self, clip):
+        """
+        Args:
+            clip (torch.tensor): Video clip to be cropped. Size is (T, C, H, W)
+        Returns:
+            torch.tensor: scale resized video clip.
+        """
+        _, _, h, w = clip.shape
+        tr_h, tr_w = maxhwresize(h, w, self.max_hxw)
+        if h == tr_h and w == tr_w:
+            return clip
+        resize_clip = resize(
+            clip, 
+            target_size=(tr_h, tr_w),
+            interpolation_mode=self.interpolation_mode,
+            align_corners=self.align_corners,
+            antialias=self.antialias
         )
         return resize_clip
 
@@ -662,3 +755,76 @@ class MaskGenerator:
                 mask[-1] = 1
 
         return mask
+
+
+low_aesthetic_score_notices_video = [
+    "This video has a low aesthetic quality.", 
+    "The beauty of this video is minimal.", 
+    "This video scores low in aesthetic appeal.", 
+    "The aesthetic quality of this video is below average.", 
+    "This video ranks low for beauty.", 
+    "The artistic quality of this video is lacking.", 
+    "This video has a low score for aesthetic value.", 
+    "The visual appeal of this video is low.", 
+    "This video is rated low for beauty.", 
+    "The aesthetic quality of this video is poor.", 
+]
+
+high_aesthetic_score_notices_video = [
+    "This video has a high aesthetic quality.", 
+    "The beauty of this video is exceptional.", 
+    "This video scores high in aesthetic value.", 
+    "With its harmonious colors and balanced composition.", 
+    "This video ranks highly for aesthetic quality", 
+    "The artistic quality of this video is excellent.", 
+    "This video is rated high for beauty.", 
+    "The aesthetic quality of this video is impressive.", 
+    "This video has a top aesthetic score.", 
+    "The visual appeal of this video is outstanding.", 
+]
+
+low_aesthetic_score_notices_image = [
+    "This image has a low aesthetic quality.", 
+    "The beauty of this image is minimal.", 
+    "This image scores low in aesthetic appeal.", 
+    "The aesthetic quality of this image is below average.", 
+    "This image ranks low for beauty.", 
+    "The artistic quality of this image is lacking.", 
+    "This image has a low score for aesthetic value.", 
+    "The visual appeal of this image is low.", 
+    "This image is rated low for beauty.", 
+    "The aesthetic quality of this image is poor.", 
+]
+
+high_aesthetic_score_notices_image = [
+    "This image has a high aesthetic quality.", 
+    "The beauty of this image is exceptional", 
+    "This photo scores high in aesthetic value.", 
+    "With its harmonious colors and balanced composition.", 
+    "This image ranks highly for aesthetic quality.", 
+    "The artistic quality of this photo is excellent.", 
+    "This image is rated high for beauty.", 
+    "The aesthetic quality of this image is impressive.", 
+    "This photo has a top aesthetic score.", 
+    "The visual appeal of this image is outstanding.", 
+]
+
+
+def add_aesthetic_notice_video(caption, aesthetic_score):
+    if aesthetic_score <= 4.25:
+        notice = random.choice(low_aesthetic_score_notices_video)
+        return random.choice([caption + ' ' + notice, notice + ' ' + caption])
+    if aesthetic_score >= 5.75:
+        notice = random.choice(high_aesthetic_score_notices_video)
+        return random.choice([caption + ' ' + notice, notice + ' ' + caption])
+    return caption
+
+
+def add_aesthetic_notice_image(caption, aesthetic_score):
+    if aesthetic_score <= 4.25:
+        notice = random.choice(low_aesthetic_score_notices_image)
+        return random.choice([caption + ' ' + notice, notice + ' ' + caption])
+    if aesthetic_score >= 5.75:
+        notice = random.choice(high_aesthetic_score_notices_image)
+        return random.choice([caption + ' ' + notice, notice + ' ' + caption])
+    return caption
