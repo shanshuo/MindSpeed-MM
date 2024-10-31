@@ -108,7 +108,7 @@ class OpenSoraPlanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         latents = self.scheduler.sample(model=self.predict_model, shape=shape, latents=latents, model_kwargs=model_kwargs,
                                         extra_step_kwargs=extra_step_kwargs)
         video = self.decode_latents(latents.to(self.vae.dtype))
-        video = video.permute(0, 2, 1, 3, 4)  # [b,t,c,h,w -> [b,c,t,h,w]
+        video = video.permute(0, 2, 1, 3, 4)  # [b,t,c,h,w] -> [b,c,t,h,w]
 
         return video
 
