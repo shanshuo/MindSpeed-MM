@@ -401,7 +401,7 @@ class VideoProcesser:
 
         # to find a suitable end_frame_idx, to ensure we do not need pad video
         end_frame_idx = self.find_closest_y(
-            len(frame_indices), vae_stride_t=4, model_ds_t=4
+            len(frame_indices), vae_stride_t=self.ae_stride_t, model_ds_t=self.sp_size
         )
         if end_frame_idx == -1:  # too short that can not be encoded exactly by videovae
             raise IndexError(
@@ -443,7 +443,7 @@ class VideoProcesser:
         cnt_no_resolution = 0
         cnt_no_aesthetic = 0
         cnt_resolution_mismatch = 0
-        cnt_aspect_mismath = 0
+        cnt_aspect_mismatch = 0
         cnt_resolution_too_small = 0
         cnt_movie = 0
         cnt_img = 0
@@ -495,7 +495,7 @@ class VideoProcesser:
                             min_h_div_w_ratio=1 / self.hw_aspect_thr
                         )
                         if not is_pick:
-                            cnt_aspect_mismath += 1
+                            cnt_aspect_mismatch += 1
                             continue
                         i["resolution"].update(dict(sample_height=sample_h, sample_width=sample_w))
 
@@ -508,7 +508,7 @@ class VideoProcesser:
                             min_h_div_w_ratio=1 / self.hw_aspect_thr * aspect
                         )
                         if not is_pick:
-                            cnt_aspect_mismath == 1
+                            cnt_aspect_mismatch == 1
                             continue
                         sample_h, sample_w = self.max_height, self.max_width
 
@@ -581,13 +581,15 @@ class VideoProcesser:
         counter = Counter(sample_size)
         total_batch_size = self.batch_size * torch.distributed.get_world_size() * self.gradient_accumulation_size
         filter_major_num = 4 * total_batch_size
+        len_before_filter_major = len(new_cap_list)
         new_cap_list, sample_size = zip(*[[i, j] for i, j in zip(new_cap_list, sample_size) if counter[j] >= filter_major_num])
-
+        cnt_filter_minority = len_before_filter_major - len(new_cap_list)
         print(
-            f"no_cap: {cnt_no_cap}, too_long: {cnt_too_long}, too_short: {cnt_too_short}, "
+            f"no_cap: {cnt_no_cap}, too_long: {cnt_too_long}, too_short: {cnt_too_short},"
+            f"cnt_filter_minority:{cnt_filter_minority} \n"
             f"no_resolution: {cnt_no_resolution}, resolution_mismatch: {cnt_resolution_mismatch}, "
-            f"cnt_resolution_too_small: {cnt_resolution_too_small}, cnt_aspect_mismath: {cnt_aspect_mismath}, "
-            f"Counter(sample_num_frames): {Counter(sample_num_frames)}, Counter(sample_size): {sample_size}, "
+            f"cnt_resolution_too_small: {cnt_resolution_too_small}, cnt_aspect_mismatch: {cnt_aspect_mismatch}, "
+            f"Counter(sample_num_frames): {Counter(sample_num_frames)}, Counter(sample_size): {counter}, "
             f"cnt_movie: {cnt_movie}, cnt_img: {cnt_img}, "
             f"before filter: {len(cap_list)}, after filter: {len(new_cap_list)}"
         )

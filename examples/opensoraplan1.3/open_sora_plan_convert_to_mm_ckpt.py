@@ -9,12 +9,10 @@ from safetensors.torch import load_file as safe_load
 
 
 def load_weight(weight_path):
-    if weight_path.endswith('.safetensors'):
+    if weight_path.endswith(".safetensors"):
         return safe_load(weight_path)
-    elif weight_path.endswith('.pt') or weight_path.endswith('.pth'):
-        return torch.load(weight_path, map_location='cpu')
     else:
-        raise ValueError(f"Unsupported file type: {weight_path}")
+        return torch.load(weight_path, map_location="cpu")
 
 
 def load_from_hf(load_path):
@@ -22,7 +20,7 @@ def load_from_hf(load_path):
     if os.path.isdir(load_path):
         for filename in os.listdir(load_path):
             file_path = os.path.join(load_path, filename)
-            if os.path.isfile(file_path):
+            if os.path.isfile(file_path) and os.path.splitext(file_path)[1] in [".pt", ".pth", ".ckpt", "safetensors"]:
                 ckpt_dict_part = load_weight(file_path)
                 ckpt_dict.update(ckpt_dict_part)
     elif os.path.isfile(load_path):
@@ -122,10 +120,10 @@ def save_vae(_state_dict, save_dir, exists_ok=False):
         if not exists_ok:
             print(f"save dir: {save_dir} exists, please check.")
             return
-        else:
-            os.makedirs(save_dir)
-        save_path = os.path.join(save_dir, "wfvae_mm.pt")
-        torch.save(_state_dict, save_path)
+    else:
+        os.makedirs(save_dir)
+    save_path = os.path.join(save_dir, "wfvae_mm.pt")
+    torch.save(_state_dict, save_path)
 
 
 if __name__ == "__main__":
