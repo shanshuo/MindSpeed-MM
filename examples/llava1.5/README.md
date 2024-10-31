@@ -238,11 +238,82 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
 
 #### 2. 配置参数
 
-需根据实际情况修改`model.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
+【数据目录配置】
+
+需根据实际情况修改`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
+
+注意`tokenizer_config`的权重路径为转换前的权重路径。
+
+```json
+{
+  "dataset_param": {
+      ...
+      "basic_parameters": {
+          "data_path": "LLaVA-Pretrain/ai2d_train_12k.jsonl",
+          "data_folder": "LLaVA-Pretrain/images"
+      },
+      ...
+      "tokenizer_config": {
+          ...
+          "from_pretrained": "{dir_to_raw_model}/vicuna-7b-v1.5",
+          ...
+      },
+      ...
+  },
+  ...
+}
+```
+
+【模型保存加载配置】
+
+根据实际情况配置`examples/llava1.5/pretrain_llava1_5.sh`的参数，包括加载、保存路径以及保存间隔`--save-interval`（注意：分布式优化器保存文件较大耗时较长，请谨慎设置保存间隔）
+
+```shell
+...
+# 保存路径
+SAVE_PATH="save_dir"
+...
+GPT_ARGS="
+    ...
+    --no-load-optim \  # 不加载优化器状态，若需加载请移除
+    --no-load-rng \  # 不加载随机数状态，若需加载请移除
+    --no-save-optim \  # 不保存优化器状态，若需保存请移除
+    --no-save-rng \  # 不保存随机数状态，若需保存请移除
+    ...
+"
+...
+OUTPUT_ARGS="
+    --log-interval 1 \  # 日志间隔
+    --save-interval 5000 \  # 保存间隔
+    ...
+"
+```
+
+若需要加载指定迭代次数的权重、优化器等状态，需修改`examples/llava1.5/pretrain_llava1_5.sh`，并将加载路径`LOAD_PATH`设置为保存文件夹路径`LOAD_PATH="save_dir"`
+
+```shell
+...
+LOAD_PATH="save_dir"
+...
+OUTPUT_ARGS="
+    ...
+    --load $LOAD_PATH
+"
+```
+
+并修改`latest_checkpointed_iteration.txt`文件内容为指定迭代次数
+
+```
+$save_dir
+   ├── latest_checkpointed_iteration.txt
+   ├── ...
+```
 
 【单机运行】
 
 ```shell
+    # 根据实际情况修改 ascend-toolkit 路径
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
     GPUS_PER_NODE=8
     MASTER_ADDR=locahost
     MASTER_PORT=29501

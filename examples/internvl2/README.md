@@ -115,7 +115,7 @@ def dot_product_attention_forward_wrapper(fn):
 - [InternVL2-2B](https://huggingface.co/OpenGVLab/InternVL2-2B/tree/main)；
 - [InternVL2-8B](https://huggingface.co/OpenGVLab/InternVL2-8B/tree/main)；
 
-将模型权重保存在`row_ckpt/InternVL2-2B`目录。
+将模型权重保存在`raw_ckpt/InternVL2-2B`目录。
 
 <a id="jump2.2"></a>
 
@@ -126,7 +126,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
 以InternVL2-2B为例，修改`inernvl_convert_to_mm_ckpt.py`中的`load_dir`、`save_dir`、`pipeline_layer_index`、`num_layers`如下：
 
 ```python
-  hg_ckpt_dir = 'row_ckpt/InternVL2-2B' # huggingface权重目录
+  hg_ckpt_dir = 'raw_ckpt/InternVL2-2B' # huggingface权重目录
   mm_save_dir = 'ckpt/InternVL2-2B'  # 转换后保存目录
   pipeline_layer_index = None     # None表示不进行pp切分；若要进行pp切分，则需要传入一个列表，例如[0, 3, 13, 23]
   num_layers=24                   # 模型结构层数
@@ -140,10 +140,10 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
   python examples/internvl2/internvl_convert_to_mm_ckpt.py
 ```
 
-同步修改`examples/internvl2/finetune_internvl2_2b.sh`中的`--load`参数，该路径为转换后或者切分后的权重，注意与原始权重`row_ckpt/InternVL2-2B`进行区分。
+同步修改`examples/internvl2/finetune_internvl2_2b.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重`raw_ckpt/InternVL2-2B`进行区分。
 
 ```shell
-  --load ckpt/InternVL2-2B
+LOAD_PATH="ckpt/InternVL2-2B"
 ```
 
 ---
@@ -201,13 +201,48 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
       ...
       "tokenizer_config": {
           ...
-          "from_pretrained": "row_ckpt/InternVL2-2B",
+          "from_pretrained": "raw_ckpt/InternVL2-2B",
           ...
       },
       ...
   },
   ...
 }
+```
+
+【模型保存加载配置】
+
+根据实际情况配置`examples/internvl2/finetune_internvl2.sh`的参数，包括加载、保存路径以及保存间隔`--save-interval`（注意：分布式优化器保存文件较大耗时较长，请谨慎设置保存间隔）
+
+```shell
+...
+# 加载路径
+LOAD_PATH="ckpt/InternVL2-2B"
+# 保存路径
+SAVE_PATH="save_dir"
+...
+GPT_ARGS="
+    ...
+    --no-load-optim \  # 不加载优化器状态，若需加载请移除
+    --no-load-rng \  # 不加载随机数状态，若需加载请移除
+    --no-save-optim \  # 不保存优化器状态，若需保存请移除
+    --no-save-rng \  # 不保存随机数状态，若需保存请移除
+    ...
+"
+...
+OUTPUT_ARGS="
+    --log-interval 1 \  # 日志间隔
+    --save-interval 5000 \  # 保存间隔
+    ...
+"
+```
+
+若需要加载指定迭代次数的权重、优化器等状态，需将加载路径`LOAD_PATH`设置为保存文件夹路径`LOAD_PATH="save_dir"`，并修改`latest_checkpointed_iteration.txt`文件内容为指定迭代次数
+
+```
+$save_dir
+   ├── latest_checkpointed_iteration.txt
+   ├── ...
 ```
 
 【单机运行配置】

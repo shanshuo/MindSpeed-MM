@@ -24,6 +24,8 @@ GBS=$(($WORLD_SIZE*$MBS/$CP))
 MM_DATA="./examples/llava1.5/data.json"
 MM_MODEL="./examples/llava1.5/model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
+LOAD_PATH="save_dir"
+SAVE_PATH="save_dir"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
@@ -79,6 +81,7 @@ OUTPUT_ARGS="
     --save-interval 5000 \
     --eval-interval 5000 \
     --eval-iters 5000 \
+    --save $SAVE_PATH \
 "
 
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)

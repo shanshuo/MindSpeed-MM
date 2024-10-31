@@ -86,6 +86,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
         train_dataset,
         args.mm.data.dataloader_param,
         process_group=mpu.get_data_parallel_group(),
+        consumed_samples=args.consumed_train_samples,
     )
     return iter(train_dataloader), None, None
 
