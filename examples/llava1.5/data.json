@@ -41,8 +41,9 @@
         "batch_size": 8,
         "num_workers": 8,
         "shuffle": false,
-        "drop_last": false,
+        "drop_last": true,
         "pin_memory": true,
+        "sampler_type": "BaseRandomBatchSampler",
         "collate_param": {
             "model_name": "llava",
             "pad_token_id": 0,

@@ -43,8 +43,9 @@
         "batch_size": 1,
         "num_workers": 0,
         "shuffle": false,
-        "drop_last": false,
+        "drop_last": true,
         "pin_memory": true,
+        "sampler_type": "BaseRandomBatchSampler",
         "collate_param": {
             "model_name": "internvl",
             "pad_id": 2

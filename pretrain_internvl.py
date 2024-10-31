@@ -1,6 +1,7 @@
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
 """Pretrain InternVL."""
 
+from copy import deepcopy
 import numpy as np
 import torch
 import torch.distributed
@@ -26,7 +27,7 @@ def model_provider(pre_process=True, post_process=True):
     """Builds the model."""
     args = get_args()
     print_rank_0("building InternVL model ...")
-    model_config = args.mm.model
+    model_config = deepcopy(args.mm.model)
     model_config.image_encoder.vision_encoder = get_model_config(model_config.image_encoder.vision_encoder)
     model_config.text_decoder = get_model_config(model_config.text_decoder)
 
@@ -128,7 +129,8 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     train_dataloader = build_mm_dataloader(
         train_dataset,
         data_config.dataloader_param,
-        process_group=mpu.get_data_parallel_group()
+        process_group=mpu.get_data_parallel_group(),
+        consumed_samples=args.consumed_train_samples,
     )
     train_dataloader, val_dataloader, test_dataloader = build_iterations(train_dataloader)
     return train_dataloader, val_dataloader, test_dataloader

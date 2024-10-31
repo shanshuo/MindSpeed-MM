@@ -26,6 +26,8 @@ GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 MM_DATA="./examples/internvl2/data_8B.json"
 MM_MODEL="./examples/internvl2/model_8B.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
+LOAD_PATH="InternVL2-8B_pp4"
+SAVE_PATH="save_dir"
 
 MM_ARGS="
     --mm-data ${MM_DATA} \
@@ -62,7 +64,7 @@ GPT_ARGS="
     --no-masked-softmax-fusion \
     --lr 4e-5 \
     --min-lr 0.0 \
-    --train-iters 2500 \
+    --train-iters 5000 \
     --lr-decay-style cosine \
     --weight-decay 0.05 \
     --clip-grad 1.0 \
@@ -75,7 +77,7 @@ GPT_ARGS="
     --no-save-rng \
     --use-distributed-optimizer \
     --bf16 \
-    --load InternVL2-8B_pp4 \
+    --load $LOAD_PATH \
 "
 
 OUTPUT_ARGS="
@@ -83,6 +85,7 @@ OUTPUT_ARGS="
     --save-interval 5000 \
     --eval-interval 5000 \
     --eval-iters 5000 \
+    --save $SAVE_PATH \
 "
 
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)
