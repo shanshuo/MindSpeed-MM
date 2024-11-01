@@ -26,11 +26,11 @@
 |           软件            | [版本](https://www.hiascend.com/zh/) |
 | :-----------------------: |:----------------------------------:|
 |          Python           |                3.8                 |
-|          Driver           |              RC3 商发版本              |
-|         Firmware          |              RC3 商发版本              |
-|           CANN            |              RC3 商发版本              |
-|           Torch           |               2.1.0                |
-|         Torch_npu         |               2.1.0                |
+|          Driver           |         AscendHDK 24.1.RC3          |
+|         Firmware          |         AscendHDK 24.1.RC3          |
+|           CANN            |             CANN 8.0.RC3             |
+|           Torch           |            2.1.0            |
+|         Torch_npu         |           release v6.0.RC3           |
 
 #### <span id="jump1.1"> 仓库拉取
 

@@ -29,14 +29,14 @@
 
 【模型开发时推荐使用配套的环境版本】
 
-|    软件     | [版本](https://www.hiascend.com/zh/) |
-|:---------:|:----------------------------------:|
-|  Python   |                3.10                 |
-|  Driver   |         在研版本          |
-| Firmware  |         在研版本          |
-|   CANN    |             在研版本             |
-|   Torch   |            2.1.0            |
-| Torch_npu |           2.1.0           |
+|           软件            | [版本](https://www.hiascend.com/zh/) |
+| :-----------------------: |:----------------------------------:|
+|          Python           |                3.10                 |
+|          Driver           |         AscendHDK 24.1.RC3          |
+|         Firmware          |         AscendHDK 24.1.RC3          |
+|           CANN            |             CANN 8.0.RC3             |
+|           Torch           |            2.1.0            |
+|         Torch_npu         |           release v6.0.RC3           |
 
 <a id="jump1.1"></a>
 
@@ -88,6 +88,7 @@
 **注意事项:**
 
   需要修改 mindspeed/core/transformer/dot_product_attention.py的65行，修改如下：
+
 ```python
 def dot_product_attention_forward_wrapper(fn):
     @wraps(fn)
@@ -142,6 +143,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
   转换的结果在： /some/output/folder/iter_0000001/mp_rank_00/model_optim_rng.pt
   
   对于转换后的结果，需要再执行如下转换，其中{target_dir}为最终的权重文件保存路径：
+
   ```python
   before = torch.load("/some/output/folder/iter_0000001/mp_rank_00/model_optim_rng.pt")["model"]
   torch.save(before, "{target_dir}/converted_clip.pt")
@@ -150,6 +152,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
 - lmsys/vicuna-7b-v1.5权重转换
 
   参考[ModelLink](https://gitee.com/ascend/ModelLink/blob/master/examples/README.md#21-huggingface%E6%9D%83%E9%87%8D%E8%BD%AC%E6%8D%A2%E5%88%B0megatron-lm%E6%A0%BC%E5%BC%8F)中语言模型权重转换的脚本：
+
   ```shell
   source {cann_dir}/ascend-toolkit/set_env.sh
   HF_FORMAT_DIR="{dir_to_model}/vicuna-7b-v1.5"
@@ -171,10 +174,11 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
 
 由于MindSpeed-MM中模型变量名称跟转换结果有差异，需要再做一次适配：
 
-  - 在megatron同级目录，创建convert.py脚本，将如下代码复制到convert.py中，
-  - 修改{target_dir}为上一步model_optim_rng.pt所在路径，
-  - 修改{dir_to_save_file}为结果文件所在路径，
-  - 执行命令：python convert.py
+- 在megatron同级目录，创建convert.py脚本，将如下代码复制到convert.py中，
+- 修改{target_dir}为上一步model_optim_rng.pt所在路径，
+- 修改{dir_to_save_file}为结果文件所在路径，
+- 执行命令：python convert.py
+
   ```python
   import torch
   def convert_param():
@@ -356,7 +360,6 @@ def convert_mlp(ckpt_path):
     torch.save(target_mlp,"./mlp.pt")
 
 ```
-
 
 <a id="jump5.2"></a>
 

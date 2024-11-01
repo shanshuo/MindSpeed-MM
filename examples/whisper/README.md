@@ -26,14 +26,14 @@
 
 【模型开发时推荐使用配套的环境版本】
 
-|    软件     | [版本](https://www.hiascend.com/zh/) |
-|:---------:|:----------------------------------:|
-|  Python   |                3.10                |
-|  Driver   |                在研版本                |
-| Firmware  |                在研版本                |
-|   CANN    |                在研版本                |
-|   Torch   |               2.1.0                |
-| Torch_npu |                2.1.0                |
+|           软件            | [版本](https://www.hiascend.com/zh/) |
+| :-----------------------: |:----------------------------------:|
+|          Python           |                3.10                 |
+|          Driver           |         AscendHDK 24.1.RC3          |
+|         Firmware          |         AscendHDK 24.1.RC3          |
+|           CANN            |             CANN 8.0.RC3             |
+|           Torch           |            2.1.0            |
+|         Torch_npu         |           release v6.0.RC3           |
 
 <a id="jump1.1"></a>
 

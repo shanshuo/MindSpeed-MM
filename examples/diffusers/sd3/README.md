@@ -27,7 +27,7 @@
 
   ```shell
   url=https://github.com/huggingface/diffusers
-  commit_id=e2ead7cdcc00859533e6bec7b0707a6fb0efef0a
+  commit_id=94643fac8a27345f695500085d78cc8fa01f5fa9
   ```
 
 ## 微调
@@ -39,11 +39,11 @@
 |           软件            | [版本](https://www.hiascend.com/zh/) |
 | :-----------------------: |:----------------------------------:|
 |          Python           |                3.8                 |
-|          Driver           |         在研版本          |
-|         Firmware          |         在研版本          |
-|           CANN            |             在研版本             |
+|          Driver           |         AscendHDK 24.1.RC3          |
+|         Firmware          |         AscendHDK 24.1.RC3          |
+|           CANN            |             CANN 8.0.RC3             |
 |           Torch           |            2.1.0            |
-|         Torch_npu         |           2.1.0           |
+|         Torch_npu         |           release v6.0.RC3           |
 
 1. 软件与驱动安装
 

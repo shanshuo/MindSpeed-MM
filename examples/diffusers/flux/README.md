@@ -28,7 +28,7 @@
 
   ```shell
   url=https://github.com/huggingface/diffusers
-  commit_id=
+  commit_id= a98a839de75f1ad82d8d200c3bc2e4ff89929081
   ```
 
 ## 微调
@@ -40,11 +40,11 @@
 |           软件            | [版本](https://www.hiascend.com/zh/) |
 | :-----------------------: |:----------------------------------:|
 |          Python           |                3.8                 |
-|          Driver           |         在研版本          |
-|         Firmware          |         在研版本          |
-|           CANN            |             在研版本             |
+|          Driver           |         AscendHDK 24.1.RC3          |
+|         Firmware          |         AscendHDK 24.1.RC3          |
+|           CANN            |             CANN 8.0.RC3             |
 |           Torch           |            2.1.0            |
-|         Torch_npu         |           2.1.0           |
+|         Torch_npu         |           release v6.0.RC3           |
 
 1. 软件与驱动安装
 
@@ -73,9 +73,9 @@
     3.1 【下载 FLUX [GitHub参考实现](https://github.com/huggingface/diffusers) 在模型根目录下执行以下命令，安装模型对应PyTorch版本需要的依赖】
 
     ```shell
-    git clone https://github.com/huggingface/diffusers.git -b v0.30.0
+    git clone https://github.com/huggingface/diffusers.git
     cd diffusers
-    git checkout 
+    git checkout a98a839de75f1ad82d8d200c3bc2e4ff89929081
     cp -r ../MindSpeed-MM/examples/diffusers/flux ./examples/dreambooth
     ```
 
@@ -89,7 +89,7 @@
 
     ```shell
     pip install e .
-    vim examples/dreambooth/requirements_flux.txt #修改torchvision版本：torchvision==0.16.0, torch==2.1.0
+    vim examples/dreambooth/requirements_flux.txt #修改版本：torchvision==0.16.0, torch==2.1.0, accelerate==0.33.0, 添加deepspeed==0.15.2
     pip install -r examples/dreambooth/requirements_flux.txt # 安装对应依赖
     ```
 
@@ -99,7 +99,7 @@
 
 1. 【准备微调数据集】
 
-    - 只包含图片的训练数据集，如非deepspeed脚本使用训练数据集dog:[下载地址](https://huggingface.co/datasets/diffusers/dog-example)，并将dog文件夹转移到examples/dreambooth/目录下
+    - 只包含图片的训练数据集，如非deepspeed脚本使用训练数据集dog:[下载地址](https://huggingface.co/datasets/diffusers/dog-example)，并将dog文件夹转移到`examples/dreambooth/`目录下
 
     ```shell
     input_dir="dog" # 数据集路径
@@ -115,6 +115,24 @@
     >该数据集的训练过程脚本只作为一种参考示例。
     >
 
+    - 如用自己的微调数据集，需在shell脚本中将`input_dir`修改为`dataset_name`：
+
+    ```shell
+    dataset_name="/path/customized_datasets" # 数据集路径
+    ```
+
+    在shell脚本`accelerate launch`目录下（70行左右）将`instance_data_dir=$instance_dir \` 修改为 `dataset_name=$dataset_name`，并将`instance_prompt`与`validation_prompt`改为与自己数据集所匹配的prompt:
+
+    ```shell
+    # Example
+    accelerate launch --config_file ${config_file} \
+      ./train_dreambooth_flux.py \
+      --pretrained_model_name_or_path=$model_name  \
+      --dataset_name=$dataset_name \
+      --instance_prompt="a prompt that is suitable for your own dataset" \
+      --validation_prompt="a validation prompt based on your own dataset" \
+    ```
+
 2. 【配置 FLUX 微调脚本】
 
     联网情况下，微调模型可通过以下步骤下载。无网络时，用户可访问huggingface官网自行下载[FLUX.1-dev模型](https://huggingface.co/black-forest-labs/FLUX.1-dev) `model_name`模型
@@ -123,10 +141,9 @@
     export model_name="black-forest-labs/FLUX.1-dev" # 预训练模型路径
     ```
 
-    获取对应的微调模型后，在以下shell启动脚本中将`model_name`参数设置为本地预训练模型绝对路径
+    获取对应的微调模型后，在以下shell启动微调脚本中将`model_name`参数设置为本地预训练模型绝对路径
 
     ```shell
-    scripts_path="./flux" # 模型根目录（模型文件夹名称）
     model_name="black-forest-labs/FLUX.1-dev" # 预训练模型路径
     batch_size=16
     max_train_steps=5000
@@ -134,22 +151,36 @@
     resolution=256
     config_file="pretrain_${mixed_precision}_accelerate_config.yaml"
     ```
-    
+
 3. 【修改代码文件】
 
-    在 `src/diffusers/models/embeddings.py` 文件里，在 `class FluxPosEmbed(nn.Module):` 下的 **第760行左右** 找到代码： `freqs_dtype = torch.float32 if is_mps else torch.float64` 进行修改, 请修改为：`freqs_dtype = torch.float32`
+    1. 在 `src/diffusers/models/embeddings.py` 文件里，在 `class FluxPosEmbed(nn.Module):` 下的 **第760行左右** 找到代码： `freqs_dtype = torch.float32 if is_mps else torch.float64` 进行修改, 请修改为：`freqs_dtype = torch.float32`
 
-    ```shell
-    # 修改为freqs_dtype = torch.float32
-    vim src/diffusers/models/embeddings.py
-    ```
+        ```shell
+        # 修改为freqs_dtype = torch.float32
+        vim src/diffusers/models/embeddings.py
+        ```
+
+    2. 打开`train_dreambooth_flux.py`文件并在62行附近添加代码
+
+        ```shell
+        cd examples/dreambooth/ # 从diffusers目录进入dreambooth目录
+        vim train_dreambooth_flux.py # 进入Python文件
+        ```
+
+        ```python
+        # 添加代码到train_dreambooth_flux.py 62行附近
+        from patch_flux import TorchPatcher, config_gc
+        TorchPatcher.apply_patch()
+        config_gc()
+        ```
 
 3. 【启动 FLUX 微调脚本】
 
-    本任务主要提供flux_sd3_text2img_dreambooth_flux.sh脚本，该脚本为FLUX微调脚本，支持多卡训练。
+    本任务主要提供finetune_flux_dreambooth_deepspeed_bf16.sh脚本，该脚本为FLUX微调脚本，支持多卡训练。
 
     ```shell
-    bash flux/sd3_text2img_dreambooth_flux.sh 
+    bash finetune_flux_dreambooth_deepspeed_bf16.sh 
     ```
 
 ### 性能
@@ -160,32 +191,65 @@ FLUX 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
 | 芯片 | 卡数 |     任务     |  FPS  | batch_size | AMP_Type | Torch_Version | deepspeed |
 |:---:|:---:|:----------:|:-----:|:----------:|:---:|:---:|:---:|
-| Atlas 900 A2 PODc | 8p | Flux-全参微调  |   17.08 |     1      | bf16 | 2.1 | ✔ |
-| 竞品A | 8p | Flux-全参微调  |  17.51 |     1      | bf16 | 2.1 | ✔ |
+| Atlas 900 A2 PODc | 8p | Flux-全参微调  |  55.23  |     16      | bf16 | 2.1 | ✔ |
+| 竞品A | 8p | Flux-全参微调  |  53.65 |     16      | bf16 | 2.1 | ✔ |
 
 ## 推理
 
 ### 环境搭建及运行
 
   **同微调对应章节**
-  
- 【运行推理的脚本】
 
-- 单机单卡推理
-- 调用推理脚本
+```shell
+cd examples/dreambooth/ # 从diffusers目录进入dreambooth目录
+```
+
+【FLUX模型推理】
+
+```shell
+vim infer_flux_text2img_bf16.py # 进入运行推理的Python文件
+```
+
+  1. 修改路径
+
+      ```python
+      MODEL_PATH = "/black-forest-labs/FLUX.1-dev"  # FLUX模型路径
+      ```
+
+  2. 运行代码
+
+      ```shell
+      python infer_flux_text2img_bf16.py
+      ```
+
+  【DREAMBOOTH微调FLUX模型推理】
 
   ```shell
-  python infer_flux_text2img_bf16.py
+  vim infer_flux_text2img_dreambooth_bf16.py
   ```
+
+  1. 修改路径
+
+      ```python
+      MODEL_PATH = "./output_FLUX_dreambooth"  # Dreambooth微调保存模型路径
+      ```
+
+  2. 运行代码
+
+      ```shell
+      python infer_flux_text2img_dreambooth_bf16.py
+      ```
 
 <a id="jump3"></a>
 
 ### 性能
 
-| 芯片 | 卡数 |     任务     |  E2E（it/s）  |  AMP_Type | Torch_Version | deepspeed |
-|:---:|:---:|:----------:|:-----:|:---:|:---:|:---:|
-| 竞品A | 8p |  文生图全参  | - | bf16 | 2.1 | ✔ |
-| Atlas 900 A2 PODc |8p |  文生图全参  | - | bf16 | 2.1 | ✔ 
+| 芯片 | 卡数 |     任务     |  E2E（it/s）  |  AMP_Type | Torch_Version |
+|:---:|:---:|:----------:|:-----:|:---:|:---:|
+| Atlas 900 A2 PODc |8p |  文生图  | 1.16 | bf16 | 2.1 |
+| 竞品A | 8p |  文生图  | 1.82 | bf16 | 2.1 |
+| Atlas 900 A2 PODc |8p |  文生图微调  | 1.12 | bf16 | 2.1 |
+| 竞品A | 8p |  文生图微调  | 1.82 | bf16 | 2.1 |
 
 ## 引用
 

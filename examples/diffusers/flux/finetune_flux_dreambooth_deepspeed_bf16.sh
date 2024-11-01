@@ -2,8 +2,8 @@ Network="FluxDreambooth"
 
 model_name="black-forest-labs/FLUX.1-dev" #FLUX预训练模型地址
 instance_dir="dog"
-batch_size=1
-max_train_steps=200
+batch_size=16
+max_train_steps=5000
 mixed_precision="bf16"
 resolution=256
 gradient_accumulation_steps=4
@@ -31,6 +31,16 @@ for para in $*; do
   fi
 done
 
+export ASCEND_SLOG_PRINT_TO_STDOUT=0
+export ASCEND_GLOBAL_LOG_LEVEL=3
+export ASCEND_GLOBAL_EVENT_ENABLE=0
+export TASK_QUEUE_ENABLE=2
+export COMBINED_ENABLE=1
+export HCCL_WHITELIST_DISABLE=1
+export HCCL_CONNECT_TIMEOUT=1200
+export HOST_CACHE_CAPACITY=20
+export ACLNN_CACHE_LIMIT=100000
+
 # cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径
 cur_path=$(pwd)
 cur_path_last_dirname=${cur_path##*/}
@@ -43,7 +53,6 @@ else
 fi
 
 echo ${test_path_dir}
-source ${test_path_dir}/env_npu.sh
 
 #创建DeviceID输出目录，不需要修改
 output_path=${cur_path}/output_FLUX_${mixed_precision}/${ASCEND_DEVICE_ID}
@@ -72,8 +81,8 @@ accelerate launch --config_file ${config_file} \
   --lr_warmup_steps=0 \
   --max_train_steps=$max_train_steps \
   --validation_prompt="A photo of sks dog in a bucket" \
-  --validation_epochs=2500 \
-  --checkpointing_steps=5001 \
+  --validation_epochs=200 \
+  --checkpointing_steps=500 \
   --seed="0" \
   --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_FLUX.log 2>&1 &
 wait
