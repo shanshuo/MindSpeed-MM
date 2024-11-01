@@ -58,12 +58,12 @@ MindSpeed-MM已发布版本维护策略：
 
 |           软件            | [版本](https://www.hiascend.com/zh/) |
 | :-----------------------: |:----------------------------------:|
-|          Python           |                3.8, 3.10                  |
+|          Python           |                3.8, 3.10                |
 |          Driver           |         Ascend HDK 24.1.RC3          |
 |         Firmware          |         Ascend HDK 24.1.RC3          |
 |           CANN            |             CANN 8.0.RC3             |
 |           Torch           |            2.1.0            |
-|         Torch_npu         |           release v6.0.RC3           |
+|         Torch_npu         |           Release v6.0.RC3           |
 
 【现版本实测性能（硬件信息：Atlas 900 A2 PODc）】
 
@@ -78,6 +78,7 @@ MindSpeed-MM已发布版本维护策略：
   <caption>MindSpeed-MM模型列表</caption>
   <thead>
     <tr>
+      <th>模型任务</th>
       <th>模型</th>
       <th>参数量</th>
       <th>任务</th>
@@ -91,8 +92,9 @@ MindSpeed-MM已发布版本维护策略：
   </thead>
   <tbody>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensora1.0">OpenSora 1.0</a></td>
-      <td><a href="https://huggingface.co/hpcaitech/Open-Sora/tree/v1.0.0">5.5B</a></td>
+      <td rowspan="3"> 视频生成 </td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.RC3/examples/opensora1.0">OpenSora 1.0</a></td>
+      <td><a href="https://huggingface.co/hpcai-tech/Open-Sora/tree/main">5.5B</a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
@@ -102,8 +104,8 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensora1.2">OpenSora 1.2</a></td>
-      <td><a href="https://huggingface.co/hpcaitech/Open-Sora/tree/v1.2.0">5.2B</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.RC3/examples/opensora1.2">OpenSora 1.2</a></td>
+      <td><a href="https://huggingface.co/hpcai-tech/OpenSora-STDiT-v3">5.2B</a></td>
       <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
@@ -113,8 +115,8 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensoraplan1.2">OpenSoraPlan 1.2</a></td>
-      <td><a href="https://huggingface.co/hpcaitech/Open-Sora/tree/v1.2.0">8.7B</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.RC3/examples/opensoraplan1.2">OpenSoraPlan 1.2</a></td>
+      <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.2.0">8.7B</a></td>
       <td>预训练</td>
       <td> 1x8</td>
       <td> BF16 </td>
@@ -124,7 +126,8 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sdxl">SDXL</a></td>
+      <td rowspan="5"> 图像生成 </td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.RC3/examples/diffusers/sdxl">SDXL</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/eda36c4c286d281f216dfeb79e64adad3f85d37a">3.5B</a></td>
       <td>预训练</td>
       <td> 1x8</td>
@@ -145,7 +148,7 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/1.0.RC3/master/examples/diffusers/sd3">SD3</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/eda36c4c286d281f216dfeb79e64adad3f85d37a">2B</a></td>
       <td>全参微调</td>
       <td> 1x8</td>
@@ -166,7 +169,7 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.RC3/examples/diffusers/kolors">Kolors</a></td>
       <td><a href="https://github.com/Kwai-Kolors/Kolors">2.6B</a></td>
       <td>推理</td>
       <td> 1x1 </td>
@@ -177,7 +180,8 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/llava1.5">LLaVA 1.5</a></td>
+      <td> 多模态理解 </td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.RC3/examples/llava1.5">LLaVA 1.5</a></td>
       <td><a href="https://github.com/haotian-liu/LLaVA">7B</a></td>
       <td>预训练</td>
       <td> 1x8 </td>
@@ -187,6 +191,10 @@ MindSpeed-MM已发布版本维护策略：
       <td> 【昇腾】【NAIE】 </td>
       <td>【Pass】</td>
     </tr>
+    </tbody>
+</table>
+
+---
 
 <table>
   <caption><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm">其他已适配昇腾的多模态大模型</a></caption>
