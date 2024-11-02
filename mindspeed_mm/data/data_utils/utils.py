@@ -422,10 +422,11 @@ class VideoProcesser:
         video = video.permute(0, 3, 1, 2)
 
         h, w = video.shape[-2:]
-        if h / w > 17 / 16 or h / w < 8 / 16:
-            raise AssertionError(
-                f"Only videos with a ratio (h/w) less than 17/16 and more than 8/16 are supported. But the video found ratio is {round(h / w, 2)} with the shape of {video.shape}"
-            )
+        if self.force_resolution:
+            if h / w > 17 / 16 or h / w < 8 / 16:
+                raise AssertionError(
+                    f"Only videos with a ratio (h/w) less than 17/16 and more than 8/16 are supported. But the video found ratio is {round(h / w, 2)} with the shape of {video.shape}"
+                )
         # TCHW -> TCHW
         video = self.video_transforms(video)
         # TCHW -> CTHW
@@ -520,10 +521,10 @@ class VideoProcesser:
                 # ======no fps and duration=====
                 duration = i.get("duration", None)
                 fps = i.get("fps", None)
-                if fps is None or duration is None:
+                if fps is None or (duration is None and i.get("num_frames", None) is None):
                     continue
 
-                i["num_frames"] = int(fps * duration)
+                i["num_frames"] = int(fps * duration) if i.get("num_frames", None) is None else i["num_frames"]
 
                 # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
                 frame_interval = 1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
@@ -580,6 +581,7 @@ class VideoProcesser:
 
         counter = Counter(sample_size)
         total_batch_size = self.batch_size * torch.distributed.get_world_size() * self.gradient_accumulation_size
+        total_batch_size = total_batch_size // self.sp_size * self.train_sp_batch_size
         filter_major_num = 4 * total_batch_size
         len_before_filter_major = len(new_cap_list)
         new_cap_list, sample_size = zip(*[[i, j] for i, j in zip(new_cap_list, sample_size) if counter[j] >= filter_major_num])

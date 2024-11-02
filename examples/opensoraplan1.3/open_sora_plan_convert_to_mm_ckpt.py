@@ -20,7 +20,7 @@ def load_from_hf(load_path):
     if os.path.isdir(load_path):
         for filename in os.listdir(load_path):
             file_path = os.path.join(load_path, filename)
-            if os.path.isfile(file_path) and os.path.splitext(file_path)[1] in [".pt", ".pth", ".ckpt", "safetensors"]:
+            if os.path.isfile(file_path) and os.path.splitext(file_path)[1] in [".pt", ".pth", ".ckpt", ".safetensors"]:
                 ckpt_dict_part = load_weight(file_path)
                 ckpt_dict.update(ckpt_dict_part)
     elif os.path.isfile(load_path):

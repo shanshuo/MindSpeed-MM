@@ -290,5 +290,5 @@ class DiffusersScheduler:
 
     def broadcast_timesteps(self, input_: torch.Tensor):
         sp_size = mpu.get_context_parallel_world_size()
-        src = int(os.getenv(("RANK", "0"))) // sp_size * sp_size
+        src = int(os.getenv("RANK", "0")) // sp_size * sp_size
         dist.broadcast(input_, src=src, group=mpu.get_context_parallel_group())
