@@ -28,7 +28,7 @@ PROMPT = [
 seed_list = [8, 23, 42, 1334]
 
 # pipeline 设置
-pipe = FluxPipeline.from_pretrain(MODEL_PATH, torch_dtype=torch.bfloat16)
+pipe = FluxPipeline.from_pretrained(MODEL_PATH, torch_dtype=torch.bfloat16)
 pipe = pipe.to(DEVICE)
 
 # 输出图片
@@ -37,10 +37,10 @@ for prompt_key in PROMPT:
         generator = torch.Generator(device="cpu").manual_seed(i)
         image = pipe(
             prompt=prompt_key,
-            num_inference_step=28,
+            num_inference_steps=28,
             height=1024,
             width=1024,
             guidance_scale=1.0,
             generator=generator,
-        ).image
-        image[0].save(f"{OUTPUT_PATH}/{prompt_key[26:40]}-{i}.png")
+        ).images
+        image[0].save(f"{OUTPUT_PATH}/{prompt_key[28:40]}-{i}.png")
