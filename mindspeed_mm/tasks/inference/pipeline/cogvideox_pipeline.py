@@ -13,34 +13,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, List, Union, Tuple
+from typing import Optional, List, Union
 import inspect
 
 import torch
 
-from diffusers.models.embeddings import get_3d_rotary_pos_embed
-
 from mindspeed_mm.tasks.inference.pipeline.pipeline_base import MMPipeline
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MMEncoderMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
-
-
-def get_resize_crop_region_for_grid(src, tgt_width, tgt_height):
-    tw = tgt_width
-    th = tgt_height
-    h, w = src
-    r = h / w
-    if r > (th / tw):
-        resize_height = th
-        resize_width = int(round(th / h * w))
-    else:
-        resize_width = tw
-        resize_height = int(round(tw / w * h))
-
-    crop_top = int(round((th - resize_height) / 2.0))
-    crop_left = int(round((tw - resize_width) / 2.0))
-
-    return (crop_top, crop_left), (crop_top + resize_height, crop_left + resize_width)
 
 
 class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
@@ -52,30 +32,37 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
     def __init__(self, vae, text_encoder, tokenizer, scheduler, predict_model, config=None):
         self.register_modules(
-            tokenizer=tokenizer, text_encoder=text_encoder, vae=vae.module,
-            predict_model=predict_model.module, scheduler=scheduler
+            tokenizer=tokenizer, text_encoder=text_encoder, vae=vae,
+            predict_model=predict_model, scheduler=scheduler
         )
 
-        self.vae = vae.module
+        self.vae = vae
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
         self.scheduler = scheduler
-        self.predict_model = predict_model.module
+        self.predict_model = predict_model
 
         config = config.to_dict()
         self.num_frames, self.height, self.width = config.get("input_size", [49, 480, 720])
         self.generator = torch.Generator().manual_seed(config.get("seed", 42))
         self.num_videos_per_prompt = 1
         self.max_sequence_length = 226
+        self.guidance_scale = config.get("guidance_scale", 6.0)
 
         self.scheduler.use_dynamic_cfg = config.get("use_dynamic_cfg", True)
 
-        self.vae_scale_factor_spatial = (
-            2 ** (len(self.vae.config.block_out_channels) - 1) if hasattr(self, "vae") and self.vae is not None else 8
-        )
-        self.vae_scale_factor_temporal = (
-            self.vae.config.temporal_compression_ratio if hasattr(self, "vae") and self.vae is not None else 4
-        )
+        self.vae_scale_factor_temporal = self.vae.vae_scale_factor[0]
+        self.vae_scale_factor_spatial = self.vae.vae_scale_factor[1]
+        self.vae_scaling_factor = self.vae.vae_scale_factor[2]
+
+        self.use_slicing = config.get("use_slicing", False)
+        self.use_tiling = config.get("use_tiling", True)
+
+        if self.use_tiling:
+            self.vae.enable_tiling()
+        else:
+            self.vae.disable_tiling()
+
 
     @property
     def num_timesteps(self):
@@ -85,32 +72,6 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
     def interrupt(self):
         return self._interrupt
 
-    def _prepare_rotary_positional_embeddings(
-        self,
-        height: int,
-        width: int,
-        num_frames: int,
-        device: torch.device,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
-        grid_height = height // (self.vae_scale_factor_spatial * self.predict_model.config.patch_size)
-        grid_width = width // (self.vae_scale_factor_spatial * self.predict_model.config.patch_size)
-        base_size_width = 720 // (self.vae_scale_factor_spatial * self.predict_model.config.patch_size)
-        base_size_height = 480 // (self.vae_scale_factor_spatial * self.predict_model.config.patch_size)
-
-        grid_crops_coords = get_resize_crop_region_for_grid(
-            (grid_height, grid_width), base_size_width, base_size_height
-        )
-        freqs_cos, freqs_sin = get_3d_rotary_pos_embed(
-            embed_dim=self.predict_model.config.attention_head_dim,
-            crops_coords=grid_crops_coords,
-            grid_size=(grid_height, grid_width),
-            temporal_size=num_frames,
-            use_real=True,
-        )
-
-        freqs_cos = freqs_cos.to(device=device)
-        freqs_sin = freqs_sin.to(device=device)
-        return freqs_cos, freqs_sin
 
     @torch.no_grad()
     def __call__(self,
@@ -166,7 +127,7 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
 
         # 5. Prepare latents
-        latent_channels = self.predict_model.config.in_channels
+        latent_channels = self.predict_model.in_channels
         batch_size = batch_size * self.num_videos_per_prompt
         shape = (
             batch_size,
@@ -180,25 +141,17 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         # 6 prepare extra step kwargs
         extra_step_kwargs = self.prepare_extra_step_kwargs(self.generator, eta)
 
-        # 7. Create rotary embeds if required
-        image_rotary_emb = (
-            self._prepare_rotary_positional_embeddings(height, width, latents.size(1), device)
-            if self.predict_model.config.use_rotary_positional_embeddings
-            else None
-        )
+        model_kwargs = {"prompt": prompt_embeds.unsqueeze(1),
+                        "prompt_mask": prompt_embeds_attention_mask}
 
-        model_kwargs = {"encoder_hidden_states": prompt_embeds,
-                        "image_rotary_emb": image_rotary_emb,
-                        "return_dict": False,
-                        "hidden_states": True}
-
+        self.scheduler.guidance_scale = self.guidance_scale
         latents = self.scheduler.sample(model=self.predict_model, shape=shape, latents=latents,
                                         model_kwargs=model_kwargs,
                                         extra_step_kwargs=extra_step_kwargs)
 
         latents = latents.permute(0, 2, 1, 3, 4)  # [batch_size, num_channels, num_frames, height, width]
-        latents = 1 / self.vae.config.scaling_factor * latents
-        video = self.decode_latents(latents).sample
+        latents = 1 / self.vae_scaling_factor * latents
+        video = self.decode_latents(latents)
         return video
 
     def callback_on_step_end_tensor_inputs_checks(self, callback_on_step_end_tensor_inputs):

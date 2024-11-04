@@ -231,9 +231,9 @@ class DiffusersScheduler:
                 latent_model_input = self.diffusion.scale_model_input(latent_model_input, t)
                 current_timestep = t
                 current_timestep = current_timestep.expand(latent_model_input.shape[0])
-                if "hidden_states" in model_kwargs:
-                    # 待切换到公共组件
-                    model_kwargs["hidden_states"] = latent_model_input
+                if use_dynamic_cfg:
+                    # b t c h w  -> b c t h w
+                    model_kwargs["latents"] = latent_model_input.permute(0, 2, 1, 3, 4)
                 else:
                     model_kwargs["latents"] = latent_model_input
                     video_mask = torch.ones_like(latent_model_input)[:, 0]
@@ -244,12 +244,9 @@ class DiffusersScheduler:
                 with torch.no_grad():
                     noise_pred = model(timestep=current_timestep, **model_kwargs)
 
-                if isinstance(noise_pred, tuple):
-                    noise_pred = noise_pred[0]
-
                 # perform guidance
                 if use_dynamic_cfg:
-                    noise_pred = noise_pred.float()
+                    noise_pred = noise_pred.permute(0, 2, 1, 3, 4).float()
                     self.guidance_scale = 1 + guidance_scale * (
                             (1 - math.cos(
                                 math.pi * ((self.num_inference_steps - t.item()) / self.num_inference_steps) ** 5.0)) / 2
