@@ -29,11 +29,14 @@ import torch
 import torchvision
 import numpy as np
 import pandas as pd
+import torchvision.transforms as TT
 from PIL import Image
 from bs4 import BeautifulSoup
 from einops import rearrange
 from torchvision import get_video_backend
 from torchvision.datasets.folder import IMG_EXTENSIONS, pil_loader
+from torchvision.transforms.functional import center_crop, resize
+from torchvision.transforms import InterpolationMode
 from torchvision.io.video import (
     _align_audio_frames,
     _check_av_available,
@@ -287,6 +290,9 @@ class VideoProcesser:
             frame_interval=1,
             train_pipeline=None,
             data_storage_mode="standard",
+            data_process_type=None,
+            skip_frame_num=0,
+            fps=None,
             train_fps=24,
             speed_factor=1.0,
             drop_short_ratio=1.0,
@@ -311,12 +317,17 @@ class VideoProcesser:
         self.video_transforms = None
         self.temporal_sample = TemporalRandomCrop(num_frames * frame_interval)
         self.data_storage_mode = data_storage_mode
+        self.data_process_type = data_process_type
+        self.skip_frame_num = skip_frame_num
+        self.fps = fps
+
+        self.max_height = max_height
+        self.max_width = max_width
+
         if self.data_storage_mode == "combine":
             self.train_fps = train_fps
             self.speed_factor = speed_factor
             self.drop_short_ratio = drop_short_ratio
-            self.max_height = max_height
-            self.max_width = max_width
             self.max_hxw = max_hxw
             self.min_hxw = min_hxw
             self.force_resolution = force_resolution
@@ -340,6 +351,9 @@ class VideoProcesser:
         else:
             self.video_transforms = get_transforms(is_video=True, train_pipeline=self.train_pipeline)
         if self.data_storage_mode == "standard":
+            if self.data_process_type == "CogvideoX":
+                return self.cog_data_process(vframes)
+
             total_frames = len(vframes)
             if num_frames:
                 self.num_frames = num_frames
@@ -368,6 +382,64 @@ class VideoProcesser:
                 predefine_num_frames=predefine_num_frames,
             )
         return video
+
+
+    def cog_data_process(self, video_frames):
+        actual_fps = video_frames.get_avg_fps()
+        ori_video_len = len(video_frames)
+
+        if ori_video_len / actual_fps * self.fps > self.num_frames:
+            num_frames = self.num_frames
+            start = int(self.skip_frame_num)
+            end = int(start + num_frames / self.fps * actual_fps)
+            end_safety = min(int(start + num_frames / self.fps * actual_fps), int(ori_video_len))
+            indices = np.arange(start, end, (end - start) // num_frames).astype(int)
+            temp_frames = video_frames.get_batch(np.arange(start, end_safety)).asnumpy()
+            if temp_frames is None:
+                raise ValueError("temp_frames is unexpectedly None")
+            tensor_frames = torch.from_numpy(temp_frames)
+            tensor_frames = tensor_frames[torch.tensor((indices - start).tolist())]
+        else:
+            if ori_video_len > self.num_frames:
+                num_frames = self.num_frames
+                start = int(self.skip_frame_num)
+                end = int(ori_video_len - self.skip_frame_num)
+                indices = np.arange(start, end, max((end - start) // num_frames, 1)).astype(int)
+                temp_frames = video_frames.get_batch(np.arange(start, end)).asnumpy()
+                if temp_frames is None:
+                    raise ValueError("temp_frames is unexpectedly None")
+                tensor_frames = torch.from_numpy(temp_frames)
+                tensor_frames = tensor_frames[torch.tensor((indices - start).tolist())]
+            else:
+
+                def nearest_smaller_4k_plus_1(n):
+                    remainder = n % 4
+                    if remainder == 0:
+                        return n - 3
+                    else:
+                        return n - remainder + 1
+
+                start = int(self.skip_frame_num)
+                end = int(ori_video_len - self.skip_frame_num)
+                # 3D VAE requires the number of frames to be 4k+1
+                num_frames = nearest_smaller_4k_plus_1(end - start)
+                end = int(start + num_frames)
+                temp_frames = video_frames.get_batch(np.arange(start, end)).asnumpy()
+                if temp_frames is None:
+                    raise ValueError("temp_frames is unexpectedly None")
+                tensor_frames = torch.from_numpy(temp_frames)
+
+        # the len of indices may be less than num_frames, due to round error
+        tensor_frames = pad_last_frame(
+            tensor_frames, self.num_frames
+        )
+        # [T, H, W, C] -> [T, C, H, W]
+        tensor_frames = tensor_frames.permute(0, 3, 1, 2)
+        tensor_frames = resize_for_rectangle_crop(tensor_frames, [self.max_height, self.max_width],
+                                                  reshape_mode="center")
+        tensor_frames = (tensor_frames - 127.5) / 127.5
+        return tensor_frames
+
 
     def combine_data_video_process(
             self, vframes, is_decord_read=True, predefine_num_frames=13
@@ -994,6 +1066,50 @@ class DataSetProg(metaclass=SingletonMeta):
             ]
         self.n_used_elements[worker_id] += 1
         return idx
+
+
+def resize_for_rectangle_crop(arr, image_size, reshape_mode="random"):
+    if arr.shape[3] / arr.shape[2] > image_size[1] / image_size[0]:
+        arr = resize(
+            arr,
+            size=[image_size[0], int(arr.shape[3] * image_size[0] / arr.shape[2])],
+            interpolation=InterpolationMode.BICUBIC,
+        )
+    else:
+        arr = resize(
+            arr,
+            size=[int(arr.shape[2] * image_size[1] / arr.shape[3]), image_size[1]],
+            interpolation=InterpolationMode.BICUBIC,
+        )
+
+    h, w = arr.shape[2], arr.shape[3]
+    arr = arr.squeeze(0)
+
+    delta_h = h - image_size[0]
+    delta_w = w - image_size[1]
+
+    if reshape_mode == "random" or reshape_mode == "none":
+        top = np.random.randint(0, delta_h + 1)
+        left = np.random.randint(0, delta_w + 1)
+    elif reshape_mode == "center":
+        top, left = delta_h // 2, delta_w // 2
+    else:
+        raise NotImplementedError
+    arr = TT.functional.crop(arr, top=top, left=left, height=image_size[0], width=image_size[1])
+    return arr
+
+
+def pad_last_frame(tensor, num_frames):
+    # T, H, W, C
+    if len(tensor) < num_frames:
+        pad_length = num_frames - len(tensor)
+        # Use the last frame to pad instead of zero
+        last_frame = tensor[-1]
+        pad_tensor = last_frame.unsqueeze(0).expand(pad_length, *tensor.shape[1:])
+        padded_tensor = torch.cat([tensor, pad_tensor], dim=0)
+        return padded_tensor
+    else:
+        return tensor[:num_frames]
 
 
 def filter_resolution(h, w, max_h_div_w_ratio=17 / 16, min_h_div_w_ratio=8 / 16):

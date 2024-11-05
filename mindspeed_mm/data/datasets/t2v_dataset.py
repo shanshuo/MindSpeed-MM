@@ -67,6 +67,7 @@ class T2VDataset(MMBaseDataset):
         basic_param: dict,
         vid_img_process: dict,
         use_text_processer: bool = False,
+        enable_text_preprocessing: bool = True,
         use_clean_caption: bool = True,
         support_chinese: bool = False,
         model_max_length: int = 120,
@@ -80,6 +81,7 @@ class T2VDataset(MMBaseDataset):
     ):
         super().__init__(**basic_param)
         self.use_text_processer = use_text_processer
+        self.enable_text_preprocessing = enable_text_preprocessing
         self.use_feature_data = use_feature_data
         self.vid_img_fusion_by_splicing = vid_img_fusion_by_splicing
         self.use_img_num = use_img_num
@@ -100,6 +102,10 @@ class T2VDataset(MMBaseDataset):
         self.image_processer_type = vid_img_process.get(
             "image_processer_type", "image2video"
         )
+        self.data_process_type = vid_img_process.get("data_process_type", "")
+        self.skip_frame_num = vid_img_process.get("skip_frame_num", 0)
+        self.fps = vid_img_process.get("fps", None)
+
         self.hw_stride = vid_img_process.get("hw_stride", 32)
         self.ae_stride_t = vid_img_process.get("ae_stride_t", 32)
         self.force_resolution = vid_img_process.get("force_resolution", True)
@@ -127,6 +133,9 @@ class T2VDataset(MMBaseDataset):
             frame_interval=self.frame_interval,
             train_pipeline=self.train_pipeline,
             data_storage_mode=self.data_storage_mode,
+            data_process_type=self.data_process_type,
+            skip_frame_num=self.skip_frame_num,
+            fps=self.fps,
             train_fps=self.train_fps,
             speed_factor=self.speed_factor,
             drop_short_ratio=self.drop_short_ratio,
@@ -158,6 +167,7 @@ class T2VDataset(MMBaseDataset):
             self.text_processer = TextProcesser(
                 model_max_length=model_max_length,
                 tokenizer=self.tokenizer,
+                enable_text_preprocessing=self.enable_text_preprocessing,
                 tokenizer_2=self.tokenizer_2,
                 use_clean_caption=use_clean_caption,
                 support_chinese=support_chinese,
