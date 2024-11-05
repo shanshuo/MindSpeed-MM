@@ -27,7 +27,7 @@
 
   ```shell
   url=https://github.com/huggingface/diffusers
-  commit_id=e2ead7cdcc00859533e6bec7b0707a6fb0efef0a
+  commit_id=94643fac8a27345f695500085d78cc8fa01f5fa9
   ```
 
 ## 微调
@@ -171,6 +171,22 @@
     vim sd3/fp16_accelerate_config.yaml
     # 修改：
     deepspeed_config_file: ./sd3/deepspeed_fp16.json # deepspeed JSON文件路径
+    ```
+
+4. 【Optional】Ubuntu系统需在`train_dreambooth_sd3.py`1705行附近 与 `train_dreambooth_lora_sd3.py`1861行附近 添加 `accelerator.print("")`
+
+    ```shell
+    vim examples/dreambooth/train_dreambooth_sd3.py
+    # 或
+    vim examples/dreambooth/train_dreambooth_lora_sd3.py
+    ```
+
+    如下：
+
+    ```python
+    if global_step >= args.max_train_steps:
+      break
+    accelerator.print("")
     ```
 
 3. 【启动 SD3 微调脚本】
