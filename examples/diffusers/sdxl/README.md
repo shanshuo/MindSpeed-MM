@@ -213,6 +213,16 @@
         compute_vae_encodings_fn = functools.partial(compute_vae_encode, accelerator=accelerator, vae=vae)
         ```
 
+    <a id="jump2.1"></a>
+
+    4. 【Optional】Ubuntu系统需在文件1216行附近添加 `accelerator.print("")`
+
+        ```python
+        if global_step >= args.max_train_steps:
+          break
+        accelerator.print("")
+        ```
+
 3. 【启动 SDXL 预训练脚本】
 
     本任务主要提供**混精fp16**和**混精bf16**两种**8卡**训练脚本，默认使用**deepspeed**分布式训练。
@@ -329,6 +339,12 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 <a id="jump3.1"></a>
 
 ### 微调
+
+   【Optional】如是Ubuntu系统需在 `examples/text_to_image/train_text_to_image_lora_sdxl.py` 与 `examples/controlnet/train_controlnet_sdxl.py` 添加 `accelerator.print("")`：[参考](#jump2.1)
+
+   > **注意**
+   > train_text_to_image_lora_sdxl 在1235行附近添加; train_controlnet_sdxl 在1307行附近添加
+   >
 
    【运行微调的脚本】
 

@@ -173,6 +173,22 @@
     deepspeed_config_file: ./sd3/deepspeed_fp16.json # deepspeed JSON文件路径
     ```
 
+4. 【Optional】Ubuntu系统需在`train_dreambooth_sd3.py`1705行附近 与 `train_dreambooth_lora_sd3.py`1861行附近 添加 `accelerator.print("")`
+
+    ```shell
+    vim examples/dreambooth/train_dreambooth_sd3.py
+    # 或
+    vim examples/dreambooth/train_dreambooth_lora_sd3.py
+    ```
+
+    如下：
+
+    ```python
+    if global_step >= args.max_train_steps:
+      break
+    accelerator.print("")
+    ```
+
 3. 【启动 SD3 微调脚本】
 
     本任务主要提供**混精fp16**和**混精bf16**dreambooth和dreambooth+lora的**8卡**训练脚本，使用与不使用**deepspeed**分布式训练。

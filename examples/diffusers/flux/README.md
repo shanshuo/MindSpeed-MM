@@ -175,6 +175,14 @@
         config_gc()
         ```
 
+    3. 【Optional】Ubuntu系统需在1701行附近 添加 `accelerator.print("")`
+
+        ```python
+        if global_step >= args.max_train_steps:
+          break
+        accelerator.print("")
+        ```
+
 3. 【启动 FLUX 微调脚本】
 
     本任务主要提供finetune_flux_dreambooth_deepspeed_bf16.sh脚本，该脚本为FLUX微调脚本，支持多卡训练。
