@@ -53,9 +53,11 @@
     conda create -n test python=3.8
     conda activate test
 
-    # 安装 torch 和 torch_npu
-    pip install torch-2.1.0-cp38-cp38m-manylinux2014_aarch64.whl
-    pip install torch-2.1.0*-cp38-cp38m-linux_aarch64.whl
+    # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
+    pip install torch-2.1.0-cp38-cp38m-manylinux2014_aarch64.whl 
+    pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
+    
+    # apex for Ascend 参考 https://gitee.com/ascend/apex
     pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
 
     # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
@@ -76,7 +78,7 @@
     git clone https://github.com/huggingface/diffusers.git
     cd diffusers
     git checkout a98a839de75f1ad82d8d200c3bc2e4ff89929081
-    cp -r ../MindSpeed-MM/examples/diffusers/flux ./examples/dreambooth
+    cp -r ../MindSpeed-MM/examples/diffusers/flux/* ./examples/dreambooth
     ```
 
     【主要代码路径】

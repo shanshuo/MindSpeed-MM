@@ -67,7 +67,6 @@ accelerate launch --config_file ${config_file} \
   ./train_dreambooth_flux.py \
   --pretrained_model_name_or_path=$model_name  \
   --instance_data_dir=$instance_dir \
-  --output_dir=$output_path \
   --instance_prompt="a photo of sks dog" \
   --resolution=$resolution \
   --train_batch_size=$batch_size \
