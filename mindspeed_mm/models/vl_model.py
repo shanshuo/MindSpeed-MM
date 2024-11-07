@@ -34,7 +34,7 @@ class VLModel(MultiModalModule):
     """
 
     def __init__(self, config) -> None:
-        super().__init__()
+        super().__init__(config)
 
         self.config = config.text_decoder
         self.pre_process = config.pre_process
