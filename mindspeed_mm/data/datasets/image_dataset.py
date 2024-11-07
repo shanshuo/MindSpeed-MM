@@ -103,8 +103,7 @@ class ImageDataset(MMBaseDataset):
             data_item["conversations"][0]["value"] = "<image>\n" + data_item["conversations"][0]["value"]
 
         image_path = os.path.join(self.data_folder, data_item["image"])
-        pixel_values = self.image_processer(image_path, train_pipeline=self.train_pipeline,
-                                            mode='single_image', num_image=1)
+        pixel_values = self.image_processer(image_path, mode='single_image', num_image=1)
         num_patches = pixel_values.size(0)
 
         ret = preprocess(

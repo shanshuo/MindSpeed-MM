@@ -74,35 +74,16 @@
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
     # checkout commit from MindSpeed core_r0.6.0
-    git checkout 3da17d56
+    git checkout 4c6847e6fda0a458914fd2ea664f6d09a8be300e
     pip install -r requirements.txt 
     pip3 install -e .
     cd ..
-
+    # 替换MindSpeed中的文件
+    cp examples/internvl2/dot_product_attention.py MindSpeed/mindspeed/core/transformer/dot_product_attention.py
+    
     # 安装其余依赖库
     pip install -e .
 ```
-
-**注意事项:**
-
-  需要修改 mindspeed/core/transformer/dot_product_attention.py的65行，修改如下：
-
-```python
-def dot_product_attention_forward_wrapper(fn):
-    @wraps(fn)
-    def wrapper(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params):
-        # 注释下一行
-        # attention_mask = get_attention_mask()
-        if get_args().use_flash_attn:
-            return dot_product_attention_forward(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
-        return fn(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
-
-    return wrapper
-```
-
----
-
-<a id="jump2"></a>
 
 ## 权重下载及转换
 

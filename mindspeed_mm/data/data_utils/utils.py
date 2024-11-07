@@ -726,13 +726,13 @@ class ImageProcesser:
         self.max_dynamic_patch = max_dynamic_patch
         self.use_thumbnail = use_thumbnail
 
-    def __call__(self, image_path, train_pipeline, mode, num_image):
+    def __call__(self, image_path, mode, num_image):
         if self.image_processer_type == "image2video":
             image = self.image_to_video(image_path)
         elif self.image_processer_type == "image2image":
             image = self.image_to_image(image_path)
         elif self.image_processer_type == "image2pixel":
-            image = self.image_to_pixel_values(image_path, train_pipeline, mode, num_image)
+            image = self.image_to_pixel_values(image_path, self.train_pipeline, mode, num_image)
         else:
             raise NotImplementedError(
                 f"Unsupported image processer type: {self.image_processer_type}"

@@ -229,8 +229,8 @@ MindSpeed-MM已发布版本维护策略：
       <td>微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> / </td>
-      <td> / </td>
+      <td> 9.95 (s/step) </td>
+      <td> 11.64 (s/step) </td>
       <td> 【昇腾】 </td>
       <td>【Test】</td>
     </tr>

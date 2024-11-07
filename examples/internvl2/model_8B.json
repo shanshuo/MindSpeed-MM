@@ -11,7 +11,7 @@
     "img_context_token_id": 92546,
     "text_decoder": {
         "num_layers": 32,
-        "pipeline_layer_index": [0, 3, 13, 23],
+        "pipeline_layer_index": [0, 6, 15, 24],
         "hidden_size": 4096,
         "num_attention_heads": 32,
         "num_query_groups": 8,
@@ -32,11 +32,8 @@
         "masked_softmax_fusion": false,
         "layernorm_zero_centered_gamma": false,
         "bias_dropout_fusion":false,
-        "apply_rope_fusion": false,
+        "apply_rope_fusion": true,
         "memory_efficient_layer_norm": false,
-        "recompute_granularity": "full",
-        "recompute_method": "uniform",
-        "recompute_num_layers": 1,
         "max_position_embeddings": 4096,
         "fp16": false,
         "bf16": true,
@@ -49,7 +46,7 @@
         "persist_layer_norm": true,
         "activation_func": "silu",
         "vocab_size": 92553,
-        "rotary_base": 100000
+        "rotary_base": 1000000
     },
     "image_encoder": {
         "vision_encoder": {

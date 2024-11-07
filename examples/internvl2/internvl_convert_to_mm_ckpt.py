@@ -121,7 +121,9 @@ def split_by_pp(_state_dict, _num_layers, _pipeline_layer_index=None):
                 layer = int(key.split('.')[3])
                 if layer >= pp_start_index and layer < pp_end_index:
                     new_layer = layer - pp_start_index
-                    new_key = key.replace(str(layer), str(new_layer))
+                    key_li = key.split('.')
+                    key_li[3] = str(new_layer)
+                    new_key = '.'.join(key_li)
                     new_dict[new_key] = value
                     copy_dict.pop(key)
         return_dicts.append(new_dict)
@@ -166,7 +168,7 @@ def save_by_pp(_state_dicts, _save_dir, _latest_checkpointed_iteration='release'
 if __name__ == "__main__":
     hg_ckpt_dir = "InternVL2-8B" # huggingface权重目录
     mm_save_dir = 'InternVL2-8B_pp4'  # 转换后权重保持目录
-    pipeline_layer_index = [0, 3, 13, 23]
+    pipeline_layer_index = [0, 6, 15, 24]
     num_layers = 32
 
     state_dict = load_from_hf(_load_dir=hg_ckpt_dir)

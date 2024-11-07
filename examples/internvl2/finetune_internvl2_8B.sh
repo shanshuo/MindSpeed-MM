@@ -2,15 +2,17 @@
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
-export TASK_QUEUE_ENABLE=1
+export TASK_QUEUE_ENABLE=2
 export COMBINED_ENABLE=1
 export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HOST_CACHE_CAPACITY=20
+export ACLNN_CACHE_LIMIT=100000
 
 GPUS_PER_NODE=8
 MASTER_ADDR=localhost
-MASTER_PORT=29199
+MASTER_PORT=6000
 NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
@@ -59,7 +61,7 @@ GPT_ARGS="
     --tokenizer-type NullTokenizer \
     --vocab-size 92553 \
     --position-embedding-type rope \
-    --rotary-base 100000 \
+    --rotary-base 1000000 \
     --swiglu \
     --no-masked-softmax-fusion \
     --lr 4e-5 \
@@ -78,6 +80,9 @@ GPT_ARGS="
     --use-distributed-optimizer \
     --bf16 \
     --load $LOAD_PATH \
+    --use-flash-attn \
+    --use-fused-rotary-pos-emb \
+    --variable-seq-lengths \
 "
 
 OUTPUT_ARGS="
