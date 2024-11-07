@@ -1,15 +1,21 @@
-from typing import Dict, Sequence, List, Union
 from dataclasses import dataclass
+from typing import Dict, Sequence, List, Union
 
-import torch
 import numpy as np
+import torch
 from transformers import WhisperProcessor
+
 from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
+from mindspeed_mm.data.data_utils.func_utils.collator import MultiModalDataCollatorForSeq2Seq
+from mindspeed_mm.data.data_utils.func_utils.convert import load_tokenizer, IGNORE_INDEX
+from mindspeed_mm.data.data_utils.func_utils.model_args import ProcessorArguments
+from mindspeed_mm.data.data_utils.func_utils.template import get_template_and_fix_tokenizer
 
 
 @dataclass
 class DataCollatorForLlava(object):
     """Collate examples for supervised fine-tuning."""
+
     def __init__(self, pad_token_id, model_max_length):
         self.pad_token_id = pad_token_id
         self.model_max_length = model_max_length
@@ -108,7 +114,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         )
 
     def __call__(
-        self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
+            self, features: List[Dict[str, Union[List[int], torch.Tensor]]]
     ) -> Dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need different padding methods
         # first treat the audio inputs by simply returning torch tensors
@@ -139,8 +145,25 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         return batch
 
 
+class DataCollatorForQwen2vl:
+    def __init__(self, ignore_pad_token_for_loss: bool, dataset_param=None):
+        process_args = ProcessorArguments(**dataset_param.preprocess_parameters.to_dict())
+        tokenizer_module = load_tokenizer(process_args)
+        tokenizer = tokenizer_module.get('tokenizer')
+        template = get_template_and_fix_tokenizer(tokenizer, dataset_param.basic_parameters.template)
+        self.data_collator = MultiModalDataCollatorForSeq2Seq(
+            template=template,
+            pad_to_multiple_of=8,  # for shift short attention
+            label_pad_token_id=IGNORE_INDEX if ignore_pad_token_for_loss else tokenizer.pad_token_id,
+            **tokenizer_module,
+        )
+
+    def __call__(self, *args, **kwargs):
+        return self.data_collator(*args, **kwargs)
+
+
 DATA_COLLATOR = {
     "llava": DataCollatorForLlava,
-    "internvl":DataCollatorForInternvl,
-    "whisper":DataCollatorSpeechSeq2SeqWithPadding
+    "internvl": DataCollatorForInternvl,
+    "qwen2vl": DataCollatorForQwen2vl
 }

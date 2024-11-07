@@ -97,7 +97,7 @@ def prepare_sampler_dataloader(
     gradient_accumulation_size=1,
     initial_global_step_for_sampler=0,
     collate_param=None,
-    **kwargs,
+    dataset_param=None,
 ):
     """
     Prepare a dataloader for distributed training. The dataloader will be wrapped by
@@ -123,7 +123,7 @@ def prepare_sampler_dataloader(
         collate_fn = None
         if collate_param:
             data_collate_type = collate_param.pop("model_name")
-            collate_fn = DATA_COLLATOR[data_collate_type](**collate_param)
+            collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
 
         sampler = StatefulDistributedSampler(
             dataset,

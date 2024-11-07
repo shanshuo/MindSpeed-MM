@@ -1,6 +1,7 @@
 import copy
 
 from torch.utils.data import ConcatDataset
+
 from mindspeed_mm.data.dataloader.dataloader import (
     prepare_base_dataloader,
     prepare_sampler_dataloader,
@@ -11,6 +12,7 @@ from mindspeed_mm.data.datasets.t2i_dataset import T2IDataset
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset, DynamicVideoTextDataset
 from mindspeed_mm.data.datasets.video_dataset import VideoDataset
 from mindspeed_mm.data.datasets.audio_dataset import AudioDataset
+from mindspeed_mm.data.datasets.qwen2vl_dataset import Qwen2vlDataset
 
 __all__ = [
     "build_mm_dataset", "build_mm_dataloader"
@@ -54,11 +56,13 @@ def build_mm_dataset(dataset_param):
         return ConcatDataset(datasets)
     elif dataset_type == "audio":
         return AudioDataset(basic_param, preprocess_param, **dataset_param)
+    elif dataset_type == "huggingface":
+        return Qwen2vlDataset(basic_param, preprocess_param, dataset_param)
     else:
         raise NotImplementedError(dataset_type)
 
 
-def build_mm_dataloader(dataset, dataloader_param, process_group=None, consumed_samples=0):
+def build_mm_dataloader(dataset, dataloader_param, process_group=None, consumed_samples=0, dataset_param=None):
     """
     Build a multimodal dataloader based on different tasks
 
@@ -83,6 +87,7 @@ def build_mm_dataloader(dataset, dataloader_param, process_group=None, consumed_
     elif dataloader_mode == "sampler":
         data_loader = prepare_sampler_dataloader(
             dataset, **dataloader_param, process_group=process_group, consumed_samples=consumed_samples,
+            dataset_param=dataset_param
         )
         return data_loader
     elif dataloader_mode == "variable":
