@@ -1,4 +1,5 @@
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
+import torch
 
 from megatron.core.transformer.mlp import MLP, MLPSubmodules
 from megatron.core.transformer.spec_utils import build_module
@@ -19,7 +20,7 @@ class MultimodalProjector(MultiModalModule):
         submodules (MLPSubmodules): Specifies MLP submodules for mlp type projector.
         projector_type (str): Projector type.
         input_size (int): Input size from feature encoder.
-    """
+    """ 
     def __init__(
             self,
             config: TransformerConfig,
@@ -48,10 +49,21 @@ class MultimodalProjector(MultiModalModule):
                 is_expert=False,
                 tp_comm_buffer_name=None,
             )
+        elif self.projector_type == "lnmlp":
+            self.ffn_hidden_size = config.ffn_hidden_size
+            self.layernorm = torch.nn.LayerNorm(config.input_size, eps=1e-6)
+            self.encoder = MLP(
+                config=config,
+                submodules=submodules,
+                input_size=config.ffn_hidden_size
+            )
         else:
             raise Exception(f"Unsupported multimodal projection type {self.projector_type}")
 
     def forward(self, hidden_states):
+        if self.projector_type == "lnmlp":
+            hidden_states = self.layernorm(hidden_states).view(-1, self.ffn_hidden_size)
+           
         encoder_output, encoder_output_bias = self.encoder(hidden_states)
 
         if encoder_output_bias is not None:

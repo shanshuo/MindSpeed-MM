@@ -3,16 +3,18 @@
 import torch
 from torch import nn
 
-from mindspeed_mm.models.common.module_spec.llava_layer_spec import get_layer_spec, get_mlp_module_spec
 from .projectors.multimodal_projector import MultimodalProjector
 from .vision_encoders.clip_vit_model import CLIPViT
 from .vision_encoders.internvit_model import InternViT
+from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
 
 
 VISION_MODEL_MAPPINGS = {
     "clip": CLIPViT,
     "InternViT": InternViT,
-    "mlp": MultimodalProjector
+    "mlp": MultimodalProjector,
+    "qwen2vit": Qwen2VLViT,
+    "lnmlp": MultimodalProjector
 }
 
 
@@ -76,3 +78,11 @@ class VisionModel(nn.Module):
 
         return image_embeddings
     
+    
+class Qwen2vlVisionModel(VisionModel):
+    def forward(self, images: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
+        image_embeddings = self.encoder(images, image_grid_thw)
+        if self.add_projector:
+            image_embeddings = self.projector(image_embeddings)
+
+        return image_embeddings 
