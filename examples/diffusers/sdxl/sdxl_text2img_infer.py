@@ -13,9 +13,6 @@ import numpy as np
 output_path = "./lora_nodp_NPU3"
 os.makedirs(output_path, exist_ok=True)
 
-
-
-model_path = "/diffusion/sdxl/model/"
 pipe = DiffusionPipeline.from_pretrained("/diffusion/sdxl/pretrained/", torch_dtype=torch.float32)
 pipe.to("npu")
 

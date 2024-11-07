@@ -13,7 +13,7 @@ from diffusers import ControlNetModel, StableDiffusionXLControlNetImg2ImgPipelin
 from diffusers.utils import load_image
 
 MODEL_NAME = "stabilityai/stable-diffusion-xl-base-1.0"
-VUE_NAME = "madebyollin/sdxl-vae-fp16-fix"
+VAE_NAME = "madebyollin/sdxl-vae-fp16-fix"
 
 time = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 print("start time: " + time)
@@ -26,7 +26,7 @@ controlnet = ControlNetModel.from_pretrained(
          use_safetensors=True,
          torch_dtype=torch.float16,
 ).to("npu")
-vae = AutoencoderKL.from_pretrained(VUE_NAME, torch_dtype=torch.float16).to("npu")
+vae = AutoencoderKL.from_pretrained(VAE_NAME, torch_dtype=torch.float16).to("npu")
 pipe = StableDiffusionXLControlNetImg2ImgPipeline.from_pretrained(
          MODEL_NAME,
          controlnet=controlnet,

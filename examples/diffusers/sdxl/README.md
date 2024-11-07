@@ -263,7 +263,7 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 #### LORA微调-数据集
 
    > **说明：**
-   > 数据集同预训练的`pokemon-blip-captions`，请参考预训练章节。
+   > 环境搭建同预训练。数据集同预训练的`pokemon-blip-captions`，请参考预训练章节。
    >
 
   ```shell
@@ -352,6 +352,9 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
     ```shell
     # 单机八卡微调
+    # finetune_sdxl_controlnet_deepspeed_fp16.sh 中依赖的图片，可以通过下面命令下载
+    # wget https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/controlnet_training/conditioning_image_1.png
+    # wget https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/controlnet_training/conditioning_image_2.png
     bash sdxl/finetune_sdxl_controlnet_deepspeed_fp16.sh      #8卡deepspeed训练 sdxl_controlnet fp16
     bash sdxl/finetune_sdxl_lora_deepspeed_fp16.sh            #8卡deepspeed训练 sdxl_lora fp16
     bash sdxl/finetune_sdxl_deepspeed_fp16.sh        #8卡deepspeed训练 sdxl_finetune fp16
@@ -378,7 +381,22 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
  【运行推理的脚本】
 
-- 单机单卡推理
+- 单机单卡推理,脚本配置
+  * sdxl/sdxl_text2img_lora_infer.py
+    * model_path配置为lora微调的输出目录 ，即用户在sdxl_text2img_lora_deepspeed.sh中指定的output_path
+    * "stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+  * sdxl/sdxl_text2img_controlnet_infer.py
+    * base_model_path配置为"stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+    * controlnet_path配置为controlnet微调输出的结果路径，即用户在sdxl_text2img_controlnet_deepspeed.sh中指定的output_path 
+  * sdxl/sdxl_text2img_infer.py 
+    * "/diffusion/sdxl/pretrained/"配置为"stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+    * "/diffusion/sdxl/pretrained/"也可以配置为微调输出的结果路径, 即微调脚本中指定的output_path
+  * sdxl/sdxl_img2img_infer.py
+    * MODEL_NAME配置为 "stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+    * VAE_NAME 配置为 "madebyollin/sdxl-vae-fp16-fix", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix)
+    * "Intel/dpt-hybrid-midas", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/Intel/dpt-hybrid-midas)
+    * "diffusers/controlnet-depth-sdxl-1.0-small", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0-small)
+
 - 调用推理脚本
 
   ```shell
