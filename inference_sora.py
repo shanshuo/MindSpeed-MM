@@ -7,7 +7,11 @@ from megatron.training import get_args
 
 from mindspeed_mm.configs.config import merge_mm_args, mm_extra_args_provider
 from mindspeed_mm.tasks.inference.pipeline import SoraPipeline_dict
-from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import save_videos, load_prompts
+from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import (
+    save_videos, 
+    load_prompts,
+    load_images
+)
 from mindspeed_mm.models.predictor import PredictModel
 from mindspeed_mm.models.diffusion import DiffusionModel
 from mindspeed_mm.models.ae import AEModel
@@ -47,6 +51,11 @@ def main():
     device = get_device(args.device)
 
     prompts = load_prompts(args.prompt)
+    images = load_images(args.image) if hasattr(args, "image") else None
+
+    if images is not None and len(prompts) != len(images):
+        raise AssertionError(f'The number of images {len(images)} and the numbers of prompts {len(prompts)} do not match')
+
     start_idx = 0
     save_fps = args.fps // args.frame_interval
     os.makedirs(args.save_path, exist_ok=True)
@@ -59,7 +68,13 @@ def main():
     for i in range(0, len(prompts), args.micro_batch_size):
         # == prepare batch prompts ==
         batch_prompts = prompts[i: i + args.micro_batch_size]
-        videos = sora_pipeline(prompt=batch_prompts, fps=save_fps, device=device, dtype=dtype)
+
+        if images is not None:
+            batch_images = images[i: i + args.micro_batch_size]
+        else:
+            batch_images = None
+
+        videos = sora_pipeline(prompt=batch_prompts, image=batch_images, fps=save_fps, device=device, dtype=dtype)
         video_grids.append(videos)
         start_idx += len(batch_prompts)
     video_grids = torch.cat(video_grids, dim=0)

@@ -26,6 +26,7 @@ from mindspeed_mm.models.diffusion import DiffusionModel
 from mindspeed_mm.models.ae import AEModel
 from mindspeed_mm.models.text_encoder import TextEncoder
 
+
 logger = getLogger(__name__)
 
 
@@ -49,6 +50,7 @@ class SoRAModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = core_transformer_config_from_args(get_args())
+        self.task = config.task if hasattr(config, "task") else "t2v"
         self.load_video_features = config.load_video_features
         self.load_text_features = config.load_text_features
         if not self.load_video_features:
@@ -76,7 +78,14 @@ class SoRAModel(nn.Module):
             if self.load_video_features:
                 latents = video
             else:
-                latents = self.ae.encode(video)
+                if self.task == "t2v":
+                    latents, _ = self.ae.encode(video)
+                elif self.task == "i2v":
+                    latents, i2v_results = self.ae.encode(video, **kwargs)
+                    kwargs.update(i2v_results)
+                else:
+                    raise NotImplementedError(f"Task {self.task} if not Implemented!")
+
             # Text Encode
             if self.load_text_features:
                 prompt = prompt_ids

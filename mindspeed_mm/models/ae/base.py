@@ -15,6 +15,7 @@
 
 import torch.nn as nn
 
+from mindspeed_mm.utils.extra_processor import I2VProcessor
 from .vae import VideoAutoencoderKL, VideoAutoencoder3D
 from .casualvae import CausalVAE
 from .wfvae import WFVAE
@@ -29,14 +30,25 @@ class AEModel(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.model = AE_MODEL_MAPPINGS[config.model_id](**config.to_dict())
+        self.config = config.to_dict()
+
+        self.i2v_processor_config = self.config.pop("i2v_processor", None)
+        if self.i2v_processor_config is not None:
+            self.i2v_processor = I2VProcessor(self.i2v_processor_config).get_processor()
+        else:
+            self.i2v_processor = None
+
+        self.model = AE_MODEL_MAPPINGS[config.model_id](**self.config)
 
     def get_model(self):
         return self.model
 
-    def encode(self, x):
-        return self.model.encode(x)
+    def encode(self, x, **kwargs):
+        video_latents = self.model.encode(x)
+        if self.i2v_processor is None:
+            return video_latents, None
+        else:
+            return video_latents, self.i2v_processor(self.model, x, video_latents, **kwargs)
 
     def decode(self, x):
         return self.model.decode(x)

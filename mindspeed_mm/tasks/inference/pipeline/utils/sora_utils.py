@@ -2,6 +2,8 @@ import os
 
 import torch
 from torchvision.io import write_video
+from diffusers.utils import load_image
+
 
 IMG_FPS = 120
 
@@ -37,4 +39,20 @@ def load_prompts(prompt):
             prompts = [line.strip() for line in f.readlines()]
         return prompts
     else:
-        return prompt
+        return [prompt]
+
+
+def load_images(image=None):
+    if image is None:
+        print("The input image is None, excute text to video task")
+        return None
+    
+    if os.path.exists(image):
+        if os.path.splitext(image)[-1].lower() in [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff"]:
+            return [load_image(image)]
+        else:
+            with open(image, "r") as f:
+                images = [load_image(line.strip()) for line in f.readlines()]
+            return images
+    else:
+        raise FileNotFoundError(f"The image path {image} does not exist")
