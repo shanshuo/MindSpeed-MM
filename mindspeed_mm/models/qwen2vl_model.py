@@ -212,12 +212,6 @@ class Qwen2VLModel(LanguageModule):
         if freeze_text_decoder and self.decoder is not None:
             for param in self.decoder.parameters():
                 param.requires_grad = False
-            if self.embedding is not None:
-                for param in self.embedding.parameters():
-                    param.requires_grad = False
-            if self.output_layer is not None:
-                for param in self.output_layer.parameters():
-                    param.requires_grad = False
 
         self.image_encoder.freeze(freeze_image_encoder, freeze_image_projection)
 
@@ -236,21 +230,22 @@ class Qwen2VLModel(LanguageModule):
             loss = loss * 0.0
 
         return loss
-    
-    def _build_causal_mask(self, inputs_embeddings, attention_mask):
+
+    def _build_causal_mask(self, input_ids, attention_mask):
+        seq_len = input_ids.shape[1]
         past_seen_token = 0
         cache_position = torch.arange(
-            past_seen_token, past_seen_token + inputs_embeddings.shape[1], device=inputs_embeddings.device)
-        dtype, device = inputs_embeddings.dtype, inputs_embeddings.device
+            past_seen_token, past_seen_token + seq_len, device=input_ids.device)
+        dtype, device = torch.bfloat16, input_ids.device
         min_dtype = torch.finfo(dtype).min
-        sequence_length = inputs_embeddings.shape[1]
+        sequence_length = input_ids.shape[1]
 
         target_length = (
             attention_mask.shape[-1]
-            if isinstance(attention_mask, torch.tensor)
+            if isinstance(attention_mask, torch.Tensor)
             else past_seen_token + sequence_length + 1
-        ) 
-        batch_size = inputs_embeddings.shape[0]
+        )
+        batch_size = input_ids.shape[0]
 
         if attention_mask is not None and attention_mask.dim() == 4:
             return attention_mask
@@ -266,7 +261,7 @@ class Qwen2VLModel(LanguageModule):
                 padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(padding_mask, min_dtype)
-            return causal_mask
+            return causal_mask > -1
 
     def forward(
             self,
@@ -328,7 +323,7 @@ class Qwen2VLModel(LanguageModule):
                 x_dtype = torch.bfloat16
 
                 rotary_pos_emb = self.rotary_pos_emb(input_ids.device, x_dtype, position_ids)
-
+                attention_mask = self._build_causal_mask(input_ids=input_ids, attention_mask=attention_mask)
                 hidden_states = self.decoder(
                     hidden_states=inputs_embeddings,
                     attention_mask=attention_mask,

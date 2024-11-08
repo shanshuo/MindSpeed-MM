@@ -7,9 +7,7 @@ import torch
 from megatron.core import mpu
 from megatron.core.enums import ModelType
 from megatron.training import get_args, print_rank_0
-from megatron.training.utils import (
-    average_losses_across_data_parallel_group,
-)
+from megatron.training.utils import average_losses_across_data_parallel_group
 
 from mindspeed_mm.configs.config import mm_extra_args_provider
 from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
@@ -34,6 +32,9 @@ def model_provider(pre_process=True, post_process=True):
     vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
 
     model = Qwen2VLModel(vlm_config)
+    for name, parameters in model.named_parameters():
+        if name.startswith('image_encoder'):
+            parameters.requires_grad = False
     return model
 
 
@@ -63,7 +64,6 @@ def loss_func(output_tensor):
     loss = output_tensor['loss'].mean()
     averaged_loss = average_losses_across_data_parallel_group([loss])
     loss = loss.unsqueeze(0)
-    # print('debug: loss:  ', loss)
     return loss, {"loss": averaged_loss[0]}
 
 

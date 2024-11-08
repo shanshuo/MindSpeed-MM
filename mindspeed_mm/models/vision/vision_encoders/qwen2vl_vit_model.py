@@ -360,7 +360,7 @@ class Qwen2VLViT(MultiModalModule):
         seq_len = hidden_states.shape[0]
         attention_mask = torch.full(
             [1, seq_len, seq_len], torch.finfo(hidden_states.dtype).min, device=hidden_states.device,
-            dtype=hidden_states.dtype
+            dtype=torch.bool
         )
         for i in range(1, len(cu_seqlens)):
             attention_mask[..., cu_seqlens[i - 1]: cu_seqlens[i], cu_seqlens[i - 1]: cu_seqlens[i]] = 0

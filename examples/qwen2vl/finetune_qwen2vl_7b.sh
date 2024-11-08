@@ -1,6 +1,6 @@
 #!/bin/bash
 set -x
-source /home/zsx/CANN/B100/ascend-toolkit/set_env.sh
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
@@ -28,7 +28,9 @@ PP=4
 CP=1
 SEQ_LEN=1024
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$PP))
+GRAD_ACC_STEP=96
+DP=$(($WORLD_SIZE/$TP/$PP/$CP))
+GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
 TOKENIZER_PATH=./Qwen2-VL-7B-Instruct
 
@@ -45,7 +47,7 @@ GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
     --num-layers 28 \
-    --num-layer-list 0,1 \
+    --num-layer-list 0,0,10,20 \
     --hidden-size 3584 \
     --ffn-hidden-size 18944 \
     --num-attention-heads 28 \
@@ -88,9 +90,6 @@ GPT_ARGS="
     --seed 42 \
     --group-query-attention \
     --num-query-groups 4 \
-    --rope-scaling-factor 8 \
-    --rope-scaling-original-max-position-embeddings 4096 \
-    --rope-scaling-type yarn \
     --bf16 \
     --variable-seq-lengths \
     --enable-one-logger
