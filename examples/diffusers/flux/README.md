@@ -90,7 +90,7 @@
     3.2【安装其余依赖库】
 
     ```shell
-    pip install e .
+    pip install -e .
     vim examples/dreambooth/requirements_flux.txt #修改版本：torchvision==0.16.0, torch==2.1.0, accelerate==0.33.0, 添加deepspeed==0.15.2
     pip install -r examples/dreambooth/requirements_flux.txt # 安装对应依赖
     ```
@@ -133,6 +133,41 @@
       --dataset_name=$dataset_name \
       --instance_prompt="a prompt that is suitable for your own dataset" \
       --validation_prompt="a validation prompt based on your own dataset" \
+    ```
+
+    【因模型较大 如不需要`checkpointing_steps`，请设置其大于`max_train_steps`, 避免开启】
+
+    ```shell
+    --checkpointing_steps=50000 \ # 修改50000步为所需要步数
+    ```
+
+    【如需保存checkpointing请修改代码（1669行-1693行）】
+
+    ```shell
+    vim examples/dreambooth/train_dreambooth_flux.py
+    ```
+
+    comment或删掉掉`if accelerator.is_main_process:`，并将其下面一行至`logger.info(f"Saved state to {save_path}")` 可选择然后SHIFT+TAB
+
+    > **说明：**
+    > 如1669行为if accelerator.is_main_process:, 将1670行至1693行前移
+    >
+
+    添加`accelerator.wait_for_everyone()`在 `save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")`上。如以下所示：
+
+    ```python
+    accelerator.wait_for_everyone()
+    save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+    accelerator.save_state(save_path)
+    logger.info(f"Saved state to {save_path}")
+    ```
+
+    更改shell脚本：
+
+    ```shell
+    export HCCL_CONNECT_TIMEOUT=1200 # 大幅调高HCCL_CONNECT_TIMEOUT (如5000)
+    export HCCL_EXEC_TIMEOUT=17000
+    --checkpointing_steps=50000 \ # 修改50000步为所需要步数
     ```
 
 2. 【配置 FLUX 微调脚本】

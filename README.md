@@ -101,7 +101,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 7.31 (Samples per Second) </td>
       <td> 8.15 (Samples per Second) </td>
       <td> 【昇腾】 </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensoraplan1.2">OpenSoraPlan 1.2</a></td>
@@ -188,7 +188,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 55.23 (FPS) </td>
       <td> 53.65 (FPS) </td>
       <td> 【昇腾】 </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
@@ -199,7 +199,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> / </td>
       <td> / </td>
       <td> 【NAIE】 </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td rowspan="6"> 多模态理解 </td>
@@ -211,7 +211,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 48.27 (FPS) </td>
       <td> 49.94 (FPS) </td>
       <td> 【昇腾】【NAIE】 </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
    <tr>
       <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/internvl2">Intern-VL-2.0</a></td>
@@ -275,7 +275,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 93.38 (Samples per Second) </td>
       <td> 109.23 (Samples per Second) </td>
       <td> 【昇腾】 </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     </tbody>
 </table>

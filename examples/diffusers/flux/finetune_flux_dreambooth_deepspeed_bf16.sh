@@ -7,7 +7,7 @@ max_train_steps=5000
 mixed_precision="bf16"
 resolution=256
 gradient_accumulation_steps=4
-config_file="pretrain_${mixed_precision}_accelerate_config.yaml"
+config_file="${mixed_precision}_accelerate_config.yaml"
 
 export TOKENIZERS_PARALLELISM=false
 
@@ -81,7 +81,7 @@ accelerate launch --config_file ${config_file} \
   --max_train_steps=$max_train_steps \
   --validation_prompt="A photo of sks dog in a bucket" \
   --validation_epochs=200 \
-  --checkpointing_steps=500 \
+  --checkpointing_steps=50000 \
   --seed="0" \
   --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_FLUX.log 2>&1 &
 wait
