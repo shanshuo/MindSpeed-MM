@@ -103,7 +103,7 @@
     3.3【安装其余依赖库】
 
     ```shell
-    pip install e .
+    pip install -e .
     vim examples/text_to_image/requirements_sdxl.txt #修改torchvision版本：torchvision==0.16.0, torch==2.1.0
     pip install -r examples/text_to_image/requirements_sdxl.txt # 安装diffusers原仓对应依赖
     pip install -r sdxl/requirements_sdxl_extra.txt #安装sdxl对应依赖

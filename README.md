@@ -112,7 +112,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 7.31 (Samples per Second) </td>
       <td> 8.15 (Samples per Second) </td>
       <td> 【昇腾】 </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.RC3/examples/opensoraplan1.2">OpenSoraPlan 1.2</a></td>
@@ -177,7 +177,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> / </td>
       <td> / </td>
       <td> 【NAIE】 </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td> 多模态理解 </td>
@@ -189,7 +189,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 48.30 (FPS) </td>
       <td> 49.49 (FPS) </td>
       <td> 【昇腾】【NAIE】 </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     </tbody>
 </table>
