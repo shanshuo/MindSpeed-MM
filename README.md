@@ -245,15 +245,15 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Coming Soon】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2-vl">Qwen2-VL</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2vl">Qwen2-VL</a></td>
       <td><a href="https://qwen2.org/vl/">7B</a></td>
-      <td>/</td>
-      <td> /</td>
-      <td> / </td>
-      <td> / </td>
-      <td> / </td>
-      <td> / </td>
-      <td>【Coming Soon】</td>
+      <td>微调</td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 14.416 (s/step) </td>
+      <td> 16.473 (s/step) </td>
+      <td> 【昇腾】 </td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td><a href="https://qwen2.org/vl/">72B</a></td>

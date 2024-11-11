@@ -22,6 +22,8 @@ WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 MM_DATA="./examples/qwen2vl/data.json"
 MM_MODEL="./examples/qwen2vl/model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
+LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
+SAVE_PATH="save_dir"
 
 TP=1
 PP=4
@@ -31,8 +33,6 @@ MBS=1
 GRAD_ACC_STEP=96
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
-
-TOKENIZER_PATH=./Qwen2-VL-7B-Instruct
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -51,8 +51,7 @@ GPT_ARGS="
     --hidden-size 3584 \
     --ffn-hidden-size 18944 \
     --num-attention-heads 28 \
-    --tokenizer-type PretrainedFromHF \
-    --tokenizer-name-or-path ${TOKENIZER_PATH} \
+    --tokenizer-type NullTokenizer \
     --seq-length ${SEQ_LEN} \
     --max-position-embeddings 32768 \
     --micro-batch-size ${MBS} \
@@ -87,10 +86,13 @@ GPT_ARGS="
     --no-gradient-accumulation-fusion \
     --no-load-optim \
     --no-load-rng \
+    --no-save-optim \
+    --no-save-rng \
     --seed 42 \
     --group-query-attention \
     --num-query-groups 4 \
     --bf16 \
+    --load $LOAD_PATH \
     --variable-seq-lengths \
     --enable-one-logger
 "
@@ -106,6 +108,7 @@ OUTPUT_ARGS="
     --save-interval 10000 \
     --eval-interval 10000 \
     --eval-iters 5000 \
+    --save $SAVE_PATH \
 "
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)
 mkdir -p logs
