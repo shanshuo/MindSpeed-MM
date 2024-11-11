@@ -252,7 +252,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> BF16 </td>
       <td> 14.416 (s/step) </td>
       <td> 16.473 (s/step) </td>
-      <td> 【昇腾】 </td>
+      <td> 【昇腾】【NAIE】 </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -262,7 +262,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> / </td>
       <td> / </td>
       <td> / </td>
-      <td> / </td>
+      <td> 【昇腾】【NAIE】 </td>
       <td>【Coming Soon】</td>
     </tr>
     <tr>
