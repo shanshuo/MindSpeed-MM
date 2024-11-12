@@ -13,9 +13,13 @@ from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.training import get_args
 
 from mindspeed_mm.models.common.module import MultiModalModule
-
+try:
+    from mindspeed.utils import set_actual_seq_len
+except ImportError:
+    set_actual_seq_len = None
 
 
 class Qwen2VLRotaryEmbedding_llm(Qwen2VLRotaryEmbedding):
@@ -364,10 +368,15 @@ class Qwen2VLViT(MultiModalModule):
         )
         for i in range(1, len(cu_seqlens)):
             attention_mask[..., cu_seqlens[i - 1]: cu_seqlens[i], cu_seqlens[i - 1]: cu_seqlens[i]] = 0
-
+        if get_args().use_flash_attn:
+            if set_actual_seq_len is None:
+                raise AssertionError("Please check the commit id of your MindSpeed")
+            set_actual_seq_len(tuple(cu_seqlens[1:].cup().numpy().tolist()))
         hidden_states = self.blocks(
             hidden_states=hidden_states,
             rotary_pos_emb=rotary_pos_emb,
             attention_mask=attention_mask,
         )
+        if get_args().use_flash_attn:
+            set_actual_seq_len(None)
         return hidden_states

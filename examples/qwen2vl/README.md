@@ -78,6 +78,9 @@
     pip install -r requirements.txt 
     pip3 install -e .
     cd ..
+    # 替换MindSpeed中的文件
+    cp examples/qwen2vl/dot_product_attention.py MindSpeed/mindspeed/core/transformer/dot_product_attention.py
+    
     # 安装其余依赖库
     pip install -e .
     #备注：当前需要修改下MindSpeed文件MindSpeed/mindspeed/core/transformer/transformer.py的368行，修改如下：
