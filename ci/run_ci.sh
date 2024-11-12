@@ -24,11 +24,9 @@ then
 else
     pip install -e .
     pip install -e .[test]
-    if [ "${type}" == "ut" ]; then
-        echo "build when ut test"
-        pip install --upgrade build
-        python -m build
-    fi
+    pip install --upgrade build
+    python -m build
+    exit ${PIPESTATUS[0]}
 fi
 echo "start test"
 cd "${WORKSPACE}/ci"
