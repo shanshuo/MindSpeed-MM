@@ -208,8 +208,8 @@ MindSpeed-MM已发布版本维护策略：
       <td>预训练</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 48.27 (FPS) </td>
-      <td> 49.94 (FPS) </td>
+      <td> 48.27 (Samples per Second) </td>
+      <td> 49.94 (Samples per Second) </td>
       <td> 【昇腾】【NAIE】 </td>
       <td>【Test】</td>
     </tr>
@@ -219,8 +219,8 @@ MindSpeed-MM已发布版本维护策略：
       <td>微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> / </td>
-      <td> / </td>
+      <td> 33.77 (Samples per Second) </td>
+      <td> 22.46 (Samples per Second) </td>
       <td> 【昇腾】 </td>
       <td>【Test】</td>
     </tr>
@@ -229,8 +229,8 @@ MindSpeed-MM已发布版本维护策略：
       <td>微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 9.95 (s/step) </td>
-      <td> 11.64 (s/step) </td>
+      <td> 12.86 (Samples per Second) </td>
+      <td> 11.00 (Samples per Second) </td>
       <td> 【昇腾】 </td>
       <td>【Test】</td>
     </tr>

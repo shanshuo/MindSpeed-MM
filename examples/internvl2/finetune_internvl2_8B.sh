@@ -51,7 +51,7 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 24 \
+    --num-layers 32 \
     --hidden-size 4096 \
     --num-attention-heads 16 \
     --seq-length 4096 \
@@ -83,6 +83,8 @@ GPT_ARGS="
     --use-flash-attn \
     --use-fused-rotary-pos-emb \
     --variable-seq-lengths \
+    --normalization RMSNorm \
+    --use-fused-rmsnorm \
 "
 
 OUTPUT_ARGS="

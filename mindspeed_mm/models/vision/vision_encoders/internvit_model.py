@@ -10,6 +10,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
+import torch_npu
 
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.enums import AttnMaskType
@@ -18,9 +19,9 @@ from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.transformer_layer import TransformerLayer, TransformerLayerSubmodules
 from megatron.core.utils import make_viewless_tensor
+from megatron.training.global_vars import get_args
 
 from mindspeed_mm.models.common.module import MultiModalModule
-from mindspeed_mm.utils.utils import get_device
 
 
 class InternRMSNorm(nn.Module):
@@ -30,17 +31,14 @@ class InternRMSNorm(nn.Module):
         self.variance_epsilon = eps
 
     def forward(self, hidden_states):
+        args = get_args()
+        if args.use_fused_rmsnorm:
+            return torch_npu.npu_rms_norm(hidden_states, self.weight, epsilon=self.variance_epsilon)[0]
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
-
-
-NORM2FN = {
-    'rms_norm': InternRMSNorm,
-    'layer_norm': nn.LayerNorm,
-}
 
 
 class InternVitTransformerLayer(TransformerLayer):
@@ -62,7 +60,7 @@ class InternVitTransformerLayer(TransformerLayer):
                          layer_number=layer_number, 
                          hidden_dropout=hidden_dropout)
         
-        if config.normalization == 'layernorm':
+        if config.normalization == 'LayerNorm':
             self.input_layernorm = torch.nn.LayerNorm(config.hidden_size, config.layernorm_epsilon)
             self.pre_mlp_layernorm = torch.nn.LayerNorm(config.hidden_size, config.layernorm_epsilon)
 

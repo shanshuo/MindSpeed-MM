@@ -169,7 +169,7 @@ LOAD_PATH="ckpt/InternVL2-2B"
 
 根据实际情况修改`data.json`中的数据集路径，包括`from_pretrained`、`data_path`、`data_folder`等字段。
 
-以InternVL2-2B为例，`data.json`进行以下修改，注意`tokenizer_config`的权重路径为转换前的权重路径。
+以InternVL2-2B为例，`data_2B.json`进行以下修改，注意`tokenizer_config`的权重路径为转换前的权重路径。
 
 ```json
 {
@@ -235,7 +235,7 @@ $save_dir
     source /usr/local/Ascend/ascend-toolkit/set_env.sh 
     GPUS_PER_NODE=8
     MASTER_ADDR=locahost
-    MASTER_PORT=29501
+    MASTER_PORT=6000
     NNODES=1
     NODE_RANK=0
     WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))

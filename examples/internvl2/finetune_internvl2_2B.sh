@@ -2,11 +2,13 @@
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
-export TASK_QUEUE_ENABLE=1
+export TASK_QUEUE_ENABLE=2
 export COMBINED_ENABLE=1
 export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
 export CUDA_DEVICE_MAX_CONNECTIONS=1
+export HOST_CACHE_CAPACITY=20
+export ACLNN_CACHE_LIMIT=100000
 
 GPUS_PER_NODE=8
 MASTER_ADDR=localhost
@@ -78,6 +80,11 @@ GPT_ARGS="
     --use-distributed-optimizer \
     --bf16 \
     --load $LOAD_PATH \
+    --use-flash-attn \
+    --use-fused-rotary-pos-emb \
+    --variable-seq-lengths \
+    --normalization RMSNorm \
+    --use-fused-rmsnorm \
 "
 
 OUTPUT_ARGS="

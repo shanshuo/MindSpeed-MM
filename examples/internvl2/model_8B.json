@@ -61,7 +61,7 @@
             "add_qkv_bias": true,
             "qk_layernorm": false,
             "activation_func": "gelu",
-            "normalization": "layernorm",
+            "normalization": "LayerNorm",
             "layernorm_epsilon": 1e-6,
             "hidden_dropout": 0.0,
             "drop_path_rate": 0.0,
