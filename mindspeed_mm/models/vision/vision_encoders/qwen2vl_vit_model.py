@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding, apply_rotary_pos_emb_vision, apply_multimodal_rotary_pos_emb
+from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.enums import AttnMaskType
@@ -20,6 +20,48 @@ try:
     from mindspeed.utils import set_actual_seq_len
 except ImportError:
     set_actual_seq_len = None
+
+# Copied from transformers.models.llama.modeling_llama.rotate_half
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+# Modified based on transformers.models.qwen2_vl.modeling_qwen2_vl
+def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1, use_fused_rope=True):
+    mrope_section = mrope_section * 2
+    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
+        unsqueeze_dim
+    )
+    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
+        unsqueeze_dim
+    )
+    if use_fused_rope:
+        import torch_npu
+        q_embed = torch_npu.npu_rotary_mul(q, cos, sin)
+        k_embed = torch_npu.npu_rotary_mul(k, cos, sin)
+    else:
+        q_embed = (q * cos) + (rotate_half(q) * sin)
+        k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+# Modified based on transformers.models.qwen2_vl.modeling_qwen2_vl
+def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor, use_fused_rope=True) -> torch.Tensor:
+    orig_dtype = tensor.dtype
+    tensor = tensor.float()
+    cos = freqs.cos()
+    sin = freqs.sin()
+    cos = cos.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
+    sin = sin.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
+    if use_fused_rope:
+        import torch_npu
+        output = torch_npu.npu_rotary_mul(tensor, cos, sin).to(orig_dtype)
+    else:
+        output = ((tensor * cos) + (rotate_half(tensor) * sin)).to(orig_dtype)
+    return output
 
 
 class Qwen2VLRotaryEmbedding_llm(Qwen2VLRotaryEmbedding):
