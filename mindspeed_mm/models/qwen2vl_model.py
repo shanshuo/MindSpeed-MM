@@ -261,7 +261,7 @@ class Qwen2VLModel(LanguageModule):
                 padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
                 padding_mask = padding_mask == 0
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(padding_mask, min_dtype)
-            return causal_mask > -1
+            return causal_mask < 0
 
     def forward(
             self,

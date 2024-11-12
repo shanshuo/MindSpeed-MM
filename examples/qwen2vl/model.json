@@ -86,7 +86,8 @@
         "rope_scaling_type": "yarn",
         "gated_linear_unit": true,
         "layernorm_epsilon": 1e-06,
-        "add_bias_linear":false
+        "add_bias_linear":false,
+        "add_qkv_bias": true
     },
     "text_encoder": null,
     "video_encoder": null
