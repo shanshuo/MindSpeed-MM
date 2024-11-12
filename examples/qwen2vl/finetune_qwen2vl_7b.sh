@@ -1,5 +1,5 @@
 #!/bin/bash
-set -x
+
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
@@ -54,6 +54,7 @@ GPT_ARGS="
     --ffn-hidden-size 18944 \
     --num-attention-heads 28 \
     --tokenizer-type NullTokenizer \
+    --vocab-size 152064 \
     --seq-length ${SEQ_LEN} \
     --max-position-embeddings 32768 \
     --micro-batch-size ${MBS} \

@@ -1,15 +1,16 @@
 import os
 import stat
-import safetensors.torch import load_file
+from safetensors.torch import load_file
 import torch
 
-def convert_hg_to_mm(hg_ckpt_dir, llm_path, vit_hidden_size, vit_attention_heads_num):
-    hiddensize_per_head = vit_hidden_size // vit_attention_heads_num
-    params_visual = load_file(hg_ckpt_dir + '/model-00001-of-00005.safetensors', device='cpu')
+
+def convert_hg_to_mm(_hg_ckpt_dir, _llm_path, _vit_hidden_size, _vit_attention_heads_num):
+    hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
+    file_path = os.path.join(_hg_ckpt_dir, 'model-00001-of-00005.safetensors')
+    params_visual = load_file(file_path, device='cpu')
     new_params = {}
     for key, value in params_visual.items():
         new_key = None
-
         #visual 权重转换部分
         if key.startswith('visual'):
             if 'merger' in key:
@@ -32,25 +33,25 @@ def convert_hg_to_mm(hg_ckpt_dir, llm_path, vit_hidden_size, vit_attention_heads
 
             if 'qkv.weight' in key:
                 res = value * 0
-                q_ = value[:vit_hidden_size, :]
-                k_ = value[vit_hidden_size:vit_hidden_size * 2, :]
-                v_ = value[vit_hidden_size * 2:vit_hidden_size * 3, :]
+                q_ = value[:_vit_hidden_size, :]
+                k_ = value[_vit_hidden_size:_vit_hidden_size * 2, :]
+                v_ = value[_vit_hidden_size * 2:_vit_hidden_size * 3, :]
                 i = 0
-                for j in range(vit_attention_heads_num):
+                for j in range(_vit_attention_heads_num):
                     res[i * hiddensize_per_head:(i + 1) * hiddensize_per_head, :] = q_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head, :]
                     res[(i + 1) * hiddensize_per_head:(i + 2) * hiddensize_per_head, :] = k_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head, :]
                     res[(i + 2) * hiddensize_per_head:(i + 3) * hiddensize_per_head, :] = v_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head, :]
                     i = i + 3
-                new_params[new_params] = res
+                new_params[new_key] = res
 
             elif 'qkv.bias' in key:
                 res = value * 0
-                q_ = value[:vit_hidden_size]
-                k_ = value[vit_hidden_size:vit_hidden_size * 2]
-                v_ = value[vit_hidden_size * 2:vit_hidden_size * 3]
+                q_ = value[:_vit_hidden_size]
+                k_ = value[_vit_hidden_size:_vit_hidden_size * 2]
+                v_ = value[_vit_hidden_size * 2:_vit_hidden_size * 3]
 
                 i = 0
-                for j in range(vit_attention_heads_num):
+                for j in range(_vit_attention_heads_num):
                     res[i * hiddensize_per_head:(i + 1) * hiddensize_per_head] = q_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head]
                     res[(i + 1) * hiddensize_per_head:(i + 2) * hiddensize_per_head] = k_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head]
                     res[(i + 2) * hiddensize_per_head:(i + 3) * hiddensize_per_head] = v_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head]
@@ -59,11 +60,12 @@ def convert_hg_to_mm(hg_ckpt_dir, llm_path, vit_hidden_size, vit_attention_heads
             else:
                 new_params[new_key] = value
 
-    llm_ckpt = torch.load(llm_path, map_location='cpu')['model']
+    llm_ckpt = torch.load(_llm_path, map_location='cpu')['model']
     for k, v in llm_ckpt.items():
         new_params[k] = v          
 
     return new_params
+
 
 def split_by_pp(_state_dict, _num_layers, _pipeline_layer_index=None):
     if _pipeline_layer_index is None:
@@ -111,9 +113,10 @@ def split_by_pp(_state_dict, _num_layers, _pipeline_layer_index=None):
         return_dicts.append(new_dict)
     return return_dicts
 
-def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release', _exist_ok=False):
+
+def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release', _exists_ok=False):
     if os.path.exists(_save_dir):
-        if not _exist_ok:
+        if not _exists_ok:
             print(f'save dir: {_save_dir} exists, please check.')
             return
     else:
@@ -145,6 +148,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
         save_dict = {}
         save_dict['model'] = _state_dict
         torch.save(save_dict, save_path)
+
 
 if __name__ == "__main__":
     hg_ckpt_dir = "raw_ckpt/Qwen2-VL-7B-Instruct"

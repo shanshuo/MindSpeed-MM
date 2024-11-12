@@ -110,6 +110,15 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/
 git clone https://gitee.com/ascend/ModelLink
 cd ModelLink
 ```
+将 modellink/tasks/checkpoint/models.py 的第393行
+```
+self.module = [AutoModelForCausalLM.from_pretrained(load_dir, device_map=device_map, trust_remote_code=trust_remote_code)]
+```
+改为：
+```
+from transformers import Qwen2VLForConditionalGeneration
+self.module = [Qwen2VLForConditionalGeneration.from_pretrained(load_dir, device_map=device_map, trust_remote_code=trust_remote_code)]
+```
 创建权重转换脚本 modelconvert.sh
 ```
 python convert_ckpt.py \
@@ -136,7 +145,7 @@ bash modelconvert.sh
 ```
 hg_ckpt_dir = 'hf_path/Qwen2-VL-7B-Instruct' # huggingface权重目录
 mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'  # 转换后保存目录
-pipeline_layer_index = None     # None表示不进行pp切分；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]
+pipeline_layer_index = [0, 0, 10, 20]     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。
 num_layers=28                   # 模型结构层数
 llm_path = 'llm_path/Qwen2-VL-7B-Instruct/inter_0000001/mp_rank/model_optim_rng.pt' # 第一步用 ModelLink 保存的模型路径
 ```
