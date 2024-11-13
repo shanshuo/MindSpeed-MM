@@ -11,11 +11,12 @@ from torch import nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import torch_npu
+from timm.models.layers import DropPath
 
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
-from megatron.core.transformer.transformer_block import TransformerBlock
+from megatron.core.transformer.transformer_block import TransformerBlock, TransformerBlockSubmodules
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.transformer_layer import TransformerLayer, TransformerLayerSubmodules
 from megatron.core.utils import make_viewless_tensor
@@ -53,7 +54,8 @@ class InternVitTransformerLayer(TransformerLayer):
         config: TransformerConfig, 
         submodules: TransformerLayerSubmodules, 
         layer_number: int = 1, 
-        hidden_dropout: float = None
+        hidden_dropout: float = None,
+        drop_path_rate: float = 0.0
     ):
         super().__init__(config=config, 
                          submodules=submodules, 
@@ -67,6 +69,9 @@ class InternVitTransformerLayer(TransformerLayer):
         # InternViT新增可学习参数
         self.ls1 = nn.Parameter(config.initializer_factor * torch.ones(config.hidden_size))
         self.ls2 = nn.Parameter(config.initializer_factor * torch.ones(config.hidden_size))
+
+        self.drop_path1 = DropPath(drop_path_rate) if drop_path_rate > 0. else nn.Identity()
+        self.drop_path2 = DropPath(drop_path_rate) if drop_path_rate > 0. else nn.Identity()
 
     def forward(
         self, 
@@ -95,7 +100,7 @@ class InternVitTransformerLayer(TransformerLayer):
             packed_seq_params=packed_seq_params,
         )
 
-        attention_output = (attention_output_with_bias[0] + attention_output_with_bias[1]) * self.ls1
+        attention_output = self.drop_path1((attention_output_with_bias[0] + attention_output_with_bias[1]) * self.ls1)
         attention_output_with_bias = (attention_output, None)
 
         with self.bias_dropout_add_exec_handler():
@@ -133,7 +138,7 @@ class InternVitTransformerLayer(TransformerLayer):
 
         # MLP.
         mlp_output_with_bias = self.mlp(pre_mlp_layernorm_output)
-        mlp_output = (mlp_output_with_bias[0] + mlp_output_with_bias[1]) * self.ls2
+        mlp_output = self.drop_path2((mlp_output_with_bias[0] + mlp_output_with_bias[1]) * self.ls2)
         mlp_output_with_bias = (mlp_output, None)
 
         with self.bias_dropout_add_exec_handler():
@@ -277,6 +282,34 @@ class InternVisionEmbeddings(nn.Module):
         return embeddings
 
 
+class InternVitTransformerBlock(TransformerBlock):
+    def __init__(
+        self,
+        config: TransformerConfig,
+        spec: Union[TransformerBlockSubmodules, ModuleSpec],
+        post_layer_norm: bool = True,
+        pre_process: bool = True,
+        post_process: bool = True,
+    ):
+        self.dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_layers)]
+        super().__init__(config=config, spec=spec, post_layer_norm=post_layer_norm, pre_process=pre_process, post_process=post_process)
+
+    def _build_layers(self):
+        def build_layer(layer_spec, layer_number, drop_path_rate):
+            return build_module(layer_spec, config=self.config, layer_number=layer_number, drop_path_rate=drop_path_rate)
+
+        # offset is implicit in TransformerLayer
+        self.layers = torch.nn.ModuleList(
+            [
+                build_layer(layer_spec, i + 1, self.dpr[i])
+                for i, layer_spec in enumerate(self.submodules.layer_specs)
+            ]
+        )
+
+        if self.post_process and self.post_layer_norm:
+            self.final_layernorm = InternRMSNorm(self.config.hidden_size, eps=self.config.layernorm_epsilon)
+
+
 class InternViT(MultiModalModule):
 
     def __init__(self, config: TransformerConfig,
@@ -292,7 +325,7 @@ class InternViT(MultiModalModule):
         self.ps_version = config.ps_version
 
         self.embeddings = InternVisionEmbeddings(config, self.image_size, self.patch_size)
-        self.encoder = TransformerBlock(
+        self.encoder = InternVitTransformerBlock(
             config=config,
             spec=transformer_layer_spec,
             pre_process=True,
