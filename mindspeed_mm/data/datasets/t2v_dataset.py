@@ -109,7 +109,7 @@ class T2VDataset(MMBaseDataset):
         self.hw_stride = vid_img_process.get("hw_stride", 32)
         self.ae_stride_t = vid_img_process.get("ae_stride_t", 32)
         self.force_resolution = vid_img_process.get("force_resolution", True)
-        self.sp_size = vid_img_process.get("sp_size", 1)
+        self.sp_size = vid_img_process.get("sp_size", 4)
         self.train_sp_batch_size = vid_img_process.get("train_sp_batch_size", 1)
         self.gradient_accumulation_size = vid_img_process.get("gradient_accumulation_size", 1)
         self.batch_size = vid_img_process.get("batch_size", 1)
@@ -246,10 +246,16 @@ class T2VDataset(MMBaseDataset):
         if file_type == "video":
             frame_indice = sample["sample_frame_index"]
             vframes, _, is_decord_read = self.video_reader(file_path)
+            start_frame_idx = sample.get("start_frame_idx", 0)
+            clip_total_frames = sample.get("num_frames", -1)
+            resolution_crop = tuple(sample.get("crop", (None, None, None, None)))
             video = self.video_processer(
                 vframes,
                 is_decord_read=is_decord_read,
                 predefine_num_frames=len(frame_indice),
+                start_frame_idx=start_frame_idx,
+                clip_total_frames=clip_total_frames,
+                resolution_crop=resolution_crop
             )
             examples[VIDEO] = video
         elif file_type == "image":

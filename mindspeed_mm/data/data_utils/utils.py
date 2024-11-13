@@ -61,6 +61,7 @@ from mindspeed_mm.data.data_utils.transform_pipeline import get_transforms
 from mindspeed_mm.data.data_utils.conversation import get_conv_template
 from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
 
+
 VID_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
 IS_TOKENIZER_GREATER_THAN_0_14 = version.parse(tokenizers.__version__) >= version.parse("0.14")
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
@@ -305,7 +306,7 @@ class VideoProcesser:
             hw_stride=32,
             hw_aspect_thr=1.5,
             ae_stride_t=4,
-            sp_size=1,
+            sp_size=4,
             train_sp_batch_size=1,
             gradient_accumulation_size=1,
             batch_size=1,
@@ -344,7 +345,8 @@ class VideoProcesser:
 
 
     def __call__(self, vframes, num_frames=None, frame_interval=None, image_size=None, is_decord_read=False,
-                 predefine_num_frames=13):
+                 predefine_num_frames=13, start_frame_idx=0, clip_total_frames=-1, resolution_crop=(None, None, None, None)
+    ):
         if image_size:
             self.video_transforms = get_transforms(is_video=True, train_pipeline=self.train_pipeline,
                                                    image_size=image_size)
@@ -380,6 +382,9 @@ class VideoProcesser:
                 vframes,
                 is_decord_read=is_decord_read,
                 predefine_num_frames=predefine_num_frames,
+                start_frame_idx=start_frame_idx,
+                clip_total_frames=clip_total_frames,
+                resolution_crop=resolution_crop
             )
         return video
 
@@ -442,20 +447,21 @@ class VideoProcesser:
 
 
     def combine_data_video_process(
-            self, vframes, is_decord_read=True, predefine_num_frames=13
+            self, vframes, is_decord_read=True, predefine_num_frames=13,
+            start_frame_idx=0, clip_total_frames=-1, resolution_crop=(None, None, None, None)
     ):
-        total_frames = len(vframes)
+        total_frames = len(vframes) if clip_total_frames == -1 else clip_total_frames
         fps = vframes.get_avg_fps() if vframes.get_avg_fps() > 0 else 30.0
+        s_x, e_x, s_y, e_y = resolution_crop
         # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
         frame_interval = (
             1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
         )
         # some special video should be set to a different number
-        start_frame_idx = 0
-        frame_indices = np.arange(start_frame_idx, total_frames, frame_interval).astype(
+        frame_indices = np.arange(start_frame_idx, start_frame_idx + total_frames, frame_interval).astype(
             int
         )
-        frame_indices = frame_indices[frame_indices < total_frames]
+        frame_indices = frame_indices[frame_indices < start_frame_idx + total_frames]
         # speed up
         max_speed_factor = len(frame_indices) / self.num_frames
         if self.speed_factor > 1 and max_speed_factor > 1:
@@ -492,6 +498,8 @@ class VideoProcesser:
         video = torch.from_numpy(video)
         # (T, H, W, C) -> (T C H W)
         video = video.permute(0, 3, 1, 2)
+        if s_y is not None:
+            video = video[:, :, s_y: e_y, s_x: e_x]
 
         h, w = video.shape[-2:]
         if self.force_resolution:
@@ -657,6 +665,7 @@ class VideoProcesser:
         filter_major_num = 4 * total_batch_size
         len_before_filter_major = len(new_cap_list)
         new_cap_list, sample_size = zip(*[[i, j] for i, j in zip(new_cap_list, sample_size) if counter[j] >= filter_major_num])
+        counter = Counter(sample_size)
         cnt_filter_minority = len_before_filter_major - len(new_cap_list)
         print(
             f"no_cap: {cnt_no_cap}, too_long: {cnt_too_long}, too_short: {cnt_too_short},"

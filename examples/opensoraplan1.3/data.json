@@ -21,7 +21,7 @@
 			"hw_stride": 32,
 			"ae_stride_t": 4,
 			"force_resolution": false,
-			"seed": 1234,
+			"seed": 42,
 			"hw_aspect_thr": 2.0,
 			"sp_size": 1,
 			"gradient_accumulation_size": 1,
