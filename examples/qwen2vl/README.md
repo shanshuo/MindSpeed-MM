@@ -83,9 +83,9 @@
     
     # 安装其余依赖库
     pip install -e .
-    #备注：当前需要修改下MindSpeed文件MindSpeed/mindspeed/core/transformer/transformer.py的368行，修改如下：
+    #备注：当前需要修改下MindSpeed文件MindSpeed/mindspeed/core/transformer/transformer.py的376行，修改如下：
     #is_recompute_activation = should_recompute_activation(self.layer_number)
-    #is_recompute_activation = should_recompute_activation(getattr(self, 'layer_number', None))
+    is_recompute_activation = should_recompute_activation(getattr(self, 'layer_number', None))
 ```
 
 ## 权重下载及转换
@@ -120,6 +120,7 @@ from transformers import Qwen2VLForConditionalGeneration
 self.module = [Qwen2VLForConditionalGeneration.from_pretrained(load_dir, device_map=device_map, trust_remote_code=trust_remote_code)]
 ```
 创建权重转换脚本 modelconvert.sh
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
 ```
 python convert_ckpt.py \
     --use-mcore-models \
@@ -293,6 +294,21 @@ $save_dir
 
 <a id="jump5"></a>
 
-## 推理
+## 推理（单卡）
+#### 1、准备工作（以微调环境为基础，包括环境安装、权重下载及转换-不切分）
+追加安装：
+```
+pip install qwen_vl_utils
+```
+注：权重转换步骤中，pipeline_layer_index = None
 
-Coming Soon...
+#### 2、配置参数
+根据实际情况修改inference_qwen2vl_7b.json中的路径配置，包括tokenizer_name_or_path、from_pretrained、image_processer_path、from_pretrained_with_deal。需注意
+1、配置的路径为从huggingface下载的原始Qwen2-VL-7B-Instruct路径
+2、from_pretrained_with_deal 需根据实际情况配置权重文件路径(不切分)
+
+#### 3、启动推理
+```shell
+    bash examples/qwen2vl/inference_qwen2vl_7b.sh
+```
+注：单卡推理需打开FA，否则可能会显存不足报错，开关--use-flash-attn 默认已开，确保FA步骤完成即可。

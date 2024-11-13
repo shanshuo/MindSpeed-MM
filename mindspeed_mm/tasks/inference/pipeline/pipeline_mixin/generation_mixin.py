@@ -332,7 +332,7 @@ class GenerationMixin:
         # 1. retrieve all kwargs that are non-None or non-model input related.
         # some encoder-decoder models have different names for model and encoder
         if (
-                self.config.is_encoder_decoder
+                self.model_config.is_encoder_decoder
                 and hasattr(self, "encoder")
                 and self.encoder.main_input_name != self.main_input_name
         ):
@@ -360,7 +360,7 @@ class GenerationMixin:
         # - encoder-decoder models should complain if the user attempts to pass `inputs_embeds` and `input_ids`, and
         # pull the former to inputs. It will be used in place of `input_ids` to get the encoder hidden states.
         if input_name == "input_ids" and "inputs_embeds" in model_kwargs:
-            if not self.config.is_encoder_decoder:
+            if not self.model_config.is_encoder_decoder:
                 # In this case, `input_ids` is moved to the `model_kwargs`, so a few automations (like the creation of
                 # the attention mask) can rely on the actual model input.
                 model_kwargs["input_ids"] = self._maybe_initialize_input_ids_for_generation(
@@ -656,7 +656,7 @@ class GenerationMixin:
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if generation_config.max_length is not None:
-            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+            max_position_embeddings = getattr(self.model_config, "max_position_embeddings", None)
             criteria.append(
                 MaxLengthCriteria(
                     max_length=generation_config.max_length,
@@ -702,7 +702,7 @@ class GenerationMixin:
                 UserWarning,
             )
         if input_ids_length >= generation_config.max_length:
-            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            input_ids_string = "decoder_input_ids" if self.model_config.is_encoder_decoder else "input_ids"
             warnings.warn(
                 f"Input length of {input_ids_string} is {input_ids_length}, but `max_length` is set to"
                 f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
@@ -884,7 +884,7 @@ class GenerationMixin:
             )
 
         # decoder-only models should use left-padding for generation
-        if not self.config.is_encoder_decoder:
+        if not self.model_config.is_encoder_decoder:
             # If `input_ids` was given, check if the last id in any sequence is `pad_token_id`
             # Note: If using, `inputs_embeds` this check does not work, because we want to be more hands-off.
             if (
@@ -950,7 +950,7 @@ class GenerationMixin:
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
                 expand_size=generation_config.num_return_sequences,
-                is_encoder_decoder=self.config.is_encoder_decoder,
+                is_encoder_decoder=self.model_config.is_encoder_decoder,
                 **model_kwargs,
             )
 
@@ -1102,6 +1102,9 @@ class GenerationMixin:
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
+
+            if "logits" in outputs:
+                outputs = outputs["logits"]
 
             next_token_logits = outputs[:, -1, :]
             # pre-process distribution
@@ -1256,7 +1259,7 @@ class GenerationMixin:
         decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
         # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.config.is_encoder_decoder:
+        if return_dict_in_generate and self.model_config.is_encoder_decoder:
             encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
             encoder_hidden_states = (
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None

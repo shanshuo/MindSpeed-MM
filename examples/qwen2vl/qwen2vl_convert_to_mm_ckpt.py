@@ -124,7 +124,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
     
     flags = os.O_WRONLY | os.O_CREAT
     mode = stat.S_IWUSR | stat.S_IRUSR
-    with os.fdopen(os.open(os.path.join(_save_dir, '_lastest_checkpointed_iteration.txt'), flags, mode), 'w') as fout:
+    with os.fdopen(os.open(os.path.join(_save_dir, 'latest_checkpointed_iteration.txt'), flags, mode), 'w') as fout:
         fout.write(_lastest_checkpointed_iteration)
 
     if _lastest_checkpointed_iteration == 'release':

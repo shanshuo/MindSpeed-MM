@@ -38,7 +38,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         # prepare for generate
         self.device = infer_config.device
         self.dtype = infer_config.dtype
-        self.config = infer_config.text_decoder
+        self.model_config = infer_config.text_decoder
         self.template = "internlm2-chat"
         self.system_message = "你是一个有用无害的人工智能助手"
         self.generation_config = infer_config.generation_config
@@ -185,4 +185,4 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         history.append((question, response))
         query_to_print = query.replace(IMG_CONTEXT_TOKEN, '')
         query_to_print = query_to_print.replace(f'{IMG_START_TOKEN}{IMG_END_TOKEN}', '<image>')
-        return response
+        print(response)

@@ -16,7 +16,7 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         self.model = language_model.text_decoder
         self.image_processor = image_processor
         self.args = args
-        self.config = self.vlmodel.config
+        self.model_config = self.vlmodel.config
         self.generation_config = args.mm.model.generation_config
 
         self.device = args.mm.model.device

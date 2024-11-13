@@ -413,7 +413,7 @@ class Qwen2VLViT(MultiModalModule):
         if get_args().use_flash_attn:
             if set_actual_seq_len is None:
                 raise AssertionError("Please check the commit id of your MindSpeed")
-            set_actual_seq_len(tuple(cu_seqlens[1:].cup().numpy().tolist()))
+            set_actual_seq_len(tuple(cu_seqlens[1:].cpu().numpy().tolist()))
         hidden_states = self.blocks(
             hidden_states=hidden_states,
             rotary_pos_emb=rotary_pos_emb,

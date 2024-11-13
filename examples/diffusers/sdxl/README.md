@@ -278,6 +278,8 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
    sdxl/finetune_sdxl_controlnet_deepspeed_fp16.sh
    ```
 
+   deepspeed版本需改成0.14.4版本
+
    参考如下修改controlnet/train_controlnet_sdxl.py, 追加trust_remote_code=True
 
    ```shell
