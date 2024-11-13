@@ -3,6 +3,7 @@ from collections import deque
 
 import torch.nn as nn
 import torch
+from einops import rearrange
 
 from mindspeed_mm.models.common.checkpoint import load_checkpoint
 from mindspeed_mm.models.common.module import MultiModalModule
@@ -417,7 +418,7 @@ class WFVAE(MultiModalModule):
         return torch.cat(result, dim=2)
 
     def decode(self, z):
-        z /= z / self.scale.to(z.device, dtype=z.dtype) + self.shift.to(z.device, dtype=z.dtype)
+        z = z / self.scale.to(z.device, dtype=z.dtype) + self.shift.to(z.device, dtype=z.dtype)
         self._empty_causal_cached(self.decoder)
 
         if self.use_tiling:
@@ -427,11 +428,8 @@ class WFVAE(MultiModalModule):
                 z = self.post_quant_conv(z)
             dec = self.decoder(z)
 
-        dtype = dec.dtype
-        dec = dec.to(torch.float16)
         wt = InverseHaarWaveletTransform3D().to(dec.device, dtype=dec.dtype)
         dec = wt(dec)
-        dec = dec.to(dtype)
 
         return dec
 

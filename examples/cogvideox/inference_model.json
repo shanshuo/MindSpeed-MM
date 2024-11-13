@@ -135,6 +135,7 @@
     "save_path":"./cogvideox_samples/",
     "fps": 8,
     "prompt":"examples/cogvideox/samples_prompts.txt",
+    "use_prompt_preprocess": true,
     "pipeline_class": "CogVideoXPipeline",
     "device":"npu",
     "dtype": "float16"

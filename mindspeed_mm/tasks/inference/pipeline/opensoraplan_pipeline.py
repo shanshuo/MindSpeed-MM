@@ -23,6 +23,7 @@ class OpenSoraPlanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.predict_model = predict_model
         text_encoder.use_attention_mask = config.use_attention_mask
         self.num_frames, self.height, self.width = config.input_size
+        self.version = config.version
         replace_with_fp32_forwards()
 
     @torch.no_grad()
@@ -41,13 +42,14 @@ class OpenSoraPlanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
                  enable_temporal_attentions: bool = True,
                  added_cond_kwargs: dict = None,
                  use_prompt_template: bool = True,
+                 use_prompt_preprocess: bool = True,
                  **kwargs,
                  ):
 
         # 1. Check inputs.
         # text prompt checks
         if use_prompt_template:
-            prompt, negative_prompt = self.use_prompt_template(positive_prompt=prompt, negative_prompt=negative_prompt)
+            prompt, negative_prompt = self.prompt_template(positive_prompt=prompt, negative_prompt=negative_prompt)
         self.text_prompt_checks(prompt, negative_prompt, prompt_embeds, negative_prompt_embeds)
         self.generate_params_checks(self.height, self.width)
 
@@ -69,7 +71,8 @@ class OpenSoraPlanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             device=device,
             do_classifier_free_guidance=do_classifier_free_guidance,
             max_length=max_sequence_length,
-            clean_caption=clean_caption)
+            clean_caption=clean_caption,
+            use_prompt_preprocess=use_prompt_preprocess)
 
         if do_classifier_free_guidance:
             prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
@@ -108,8 +111,6 @@ class OpenSoraPlanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         latents = self.scheduler.sample(model=self.predict_model, shape=shape, latents=latents, model_kwargs=model_kwargs,
                                         extra_step_kwargs=extra_step_kwargs)
         video = self.decode_latents(latents.to(self.vae.dtype))
-        video = video.permute(0, 2, 1, 3, 4)  # [b,t,c,h,w] -> [b,c,t,h,w]
-
         return video
 
     def prepare_extra_step_kwargs(self, generator, eta):
@@ -129,17 +130,26 @@ class OpenSoraPlanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             extra_step_kwargs["generator"] = generator
         return extra_step_kwargs
 
-    @staticmethod
-    def use_prompt_template(positive_prompt, negative_prompt):
+    def prompt_template(self, positive_prompt, negative_prompt):
         positive_template_list = []
         negative_template_list = []
         if not negative_prompt:
             negative_prompt = ""
-        positive_template = "(masterpiece), (best quality), (ultra-detailed), {}. emotional, harmonious, vignette, " \
-                            "4k epic detailed, shot on kodak, 35mm photo, sharp focus, high budget, cinemascope, moody, epic, gorgeous"
-        negative_template = "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, " \
-                            "fewer digits, cropped, worst quality, low quality, normal quality, " \
-                            "jpeg artifacts, signature, watermark, username, blurry"
+        if self.version == "v1.2":
+            positive_template = "(masterpiece), (best quality), (ultra-detailed), {}. emotional, harmonious, vignette, " \
+                                "4k epic detailed, shot on kodak, 35mm photo, sharp focus, high budget, cinemascope, moody, epic, gorgeous"
+            negative_template = "nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, " \
+                                "fewer digits, cropped, worst quality, low quality, normal quality, " \
+                                "jpeg artifacts, signature, watermark, username, blurry"
+        elif self.version == "v1.3":
+            positive_template = """
+            high quality, high aesthetic, {}
+            """
+            negative_template = """
+            nsfw, lowres, bad anatomy, bad hands, text, error, missing fingers, extra digit, fewer digits, cropped, worst quality, 
+            low quality, normal quality, jpeg artifacts, signature, watermark, username, blurry.
+            """
+
         if isinstance(positive_prompt, (list, tuple)):
             for positive_prompt_i in positive_prompt:
                 positive_template_i = positive_template.format(positive_prompt_i)

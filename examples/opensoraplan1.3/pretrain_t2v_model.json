@@ -7,7 +7,7 @@
     "load_text_features": false,
     "predictor": {
         "model_id": "videoditsparse",
-        "from_pretrained": "your pretrained ckpt path",
+        "from_pretrained": "./weights/sparsedit/sparsedit_mm.pth",
         "dtype": "bf16",
         "num_layers" : 32,
         "num_heads": 24,
@@ -41,13 +41,13 @@
     "text_encoder": {
         "model_id": "MT5",
         "hub_backend": "hf",
-        "from_pretrained": "your config and pretrained ckpt path",
+        "from_pretrained": "./weights/google/mt5-xxl",
         "low_cpu_mem_usage": false,
         "dtype": "bf16"
     },
     "ae": {
         "model_id": "wfvae",
-        "from_pretrained": "your pretrained ckpt path",
+        "from_pretrained": "./weights/vae/wfvae_mm.pt",
         "dtype": "bf16",
         "output_dtype": "bf16",
         "base_channels": 128,

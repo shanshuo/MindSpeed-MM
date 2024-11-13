@@ -56,6 +56,7 @@
     "save_path":"./opensora_samples/samples/",
     "fps":24,
     "prompt":"examples/opensora1.0/samples_prompts.txt",
+    "use_prompt_preprocess": true,
     "pipeline_class": "OpenSoraPipeline",
     "device":"npu",
     "dtype": "bf16"

@@ -9,6 +9,7 @@ from mindspeed_mm.configs.config import merge_mm_args, mm_extra_args_provider
 from mindspeed_mm.tasks.inference.pipeline import SoraPipeline_dict
 from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import (
     save_videos, 
+    save_video_grid,
     load_prompts,
     load_images
 )
@@ -56,15 +57,14 @@ def main():
     if images is not None and len(prompts) != len(images):
         raise AssertionError(f'The number of images {len(images)} and the numbers of prompts {len(prompts)} do not match')
 
-    start_idx = 0
     save_fps = args.fps // args.frame_interval
-    os.makedirs(args.save_path, exist_ok=True)
 
     # prepare pipeline
     sora_pipeline = prepare_pipeline(args, device)
 
     # == Iter over all samples ==
     video_grids = []
+    start_idx = 0
     for i in range(0, len(prompts), args.micro_batch_size):
         # == prepare batch prompts ==
         batch_prompts = prompts[i: i + args.micro_batch_size]
@@ -74,13 +74,22 @@ def main():
         else:
             batch_images = None
 
-        videos = sora_pipeline(prompt=batch_prompts, image=batch_images, fps=save_fps, device=device, dtype=dtype)
-        video_grids.append(videos)
+        videos = sora_pipeline(prompt=batch_prompts, 
+                               image=batch_images, 
+                               fps=save_fps, 
+                               max_sequence_length=args.model_max_length,
+                               use_prompt_preprocess=args.use_prompt_preprocess,
+                               device=device, 
+                               dtype=dtype
+                               )
+        save_videos(videos, start_idx, args.save_path, save_fps)
         start_idx += len(batch_prompts)
+        video_grids.append(videos)
+        print("Saved %s samples to %s" % (start_idx, args.save_path))
+
     video_grids = torch.cat(video_grids, dim=0)
-    save_videos(video_grids, args.save_path, save_fps, value_range=(-1, 1), normalize=True)
+    save_video_grid(video_grids, args.save_path, save_fps)
     print("Inference finished.")
-    print("Saved %s samples to %s" % (start_idx, args.save_path))
 
 
 if __name__ == "__main__":

@@ -187,7 +187,6 @@ class CausalVAE(MultiModalModule):
             if self.use_quant_layer:
                 z = self.post_quant_conv(z)
             dec = self.decoder(z)
-        dec = rearrange(dec, "b c t h w -> b t c h w").contiguous()
         return dec
 
     def forward(self, x, sample_posterior=True):

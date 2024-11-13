@@ -18,7 +18,8 @@ from diffusers.schedulers import (
     DEISMultistepScheduler,
     KDPM2AncestralDiscreteScheduler,
     CogVideoXDPMScheduler,
-    CogVideoXDDIMScheduler
+    CogVideoXDDIMScheduler,
+    FlowMatchEulerDiscreteScheduler
 )
 from diffusers.training_utils import compute_snr
 from megatron.core import mpu
@@ -228,9 +229,10 @@ class DiffusersScheduler:
             for i, t in enumerate(self.timesteps):
                 # timestep = torch.tensor([i] * shape[0], device=self.device)
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
-                latent_model_input = self.diffusion.scale_model_input(latent_model_input, t)
-                current_timestep = t
-                current_timestep = current_timestep.expand(latent_model_input.shape[0])
+                if not isinstance(self.diffusion, FlowMatchEulerDiscreteScheduler):
+                    latent_model_input = self.diffusion.scale_model_input(latent_model_input, t)
+                if not isinstance(self.diffusion, FlowMatchEulerDiscreteScheduler):
+                    current_timestep = t.expand(latent_model_input.shape[0])
                 if use_dynamic_cfg:
                     # b t c h w  -> b c t h w
                     model_kwargs["latents"] = latent_model_input.permute(0, 2, 1, 3, 4)

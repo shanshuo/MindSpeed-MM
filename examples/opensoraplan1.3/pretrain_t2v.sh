@@ -22,7 +22,7 @@ MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
 MM_DATA="./examples/opensoraplan1.3/data.json"
-MM_MODEL="./examples/opensoraplan1.3/model_opensoraplan1_3.json"
+MM_MODEL="./examples/opensoraplan1.3/pretrain_t2v_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 
 DISTRIBUTED_ARGS="
