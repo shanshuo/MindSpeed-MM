@@ -3,9 +3,16 @@ from collections import deque
 
 import torch
 from torch import nn
-import torch_npu
+import torch.nn.functional as F
 
-from mindspeed_mm.utils.utils import cast_tuple, video_to_image
+from mindspeed_mm.utils.utils import (
+    cast_tuple,
+    video_to_image,
+    get_context_parallel_group,
+    get_context_parallel_rank,
+    get_context_parallel_world_size,
+    get_context_parallel_group_rank,
+)
 
 
 class Conv2d(nn.Conv2d):
@@ -40,6 +47,36 @@ class Conv2d(nn.Conv2d):
     @video_to_image
     def forward(self, x):
         return super().forward(x)
+
+
+def divisible_by(num, den):
+    return (num % den) == 0
+
+
+def is_odd(n):
+    return not divisible_by(n, 2)
+
+
+class SafeConv3d(torch.nn.Conv3d):
+    def forward(self, input_x):
+        memory_count = torch.prod(torch.tensor(input_x.shape)).item() * 2 / 1024 ** 3
+        if memory_count > 2:
+            kernel_size = self.kernel_size[0]
+            part_num = int(memory_count / 2) + 1
+            input_chunks = torch.chunk(input_x, part_num, dim=2)  # NCTHW
+            if kernel_size > 1:
+                input_chunks = [input_chunks[0]] + [
+                    torch.cat((input_chunks[i - 1][:, :, -kernel_size + 1:], input_chunks[i]), dim=2)
+                    for i in range(1, len(input_chunks))
+                ]
+
+            output_chunks = []
+            for input_chunk in input_chunks:
+                output_chunks.append(super(SafeConv3d, self).forward(input_chunk))
+            output = torch.cat(output_chunks, dim=2)
+            return output
+        else:
+            return super(SafeConv3d, self).forward(input_x)
 
 
 class CausalConv3d(nn.Module):
@@ -167,3 +204,128 @@ class WfCausalConv3d(nn.Module):
                 return torch_npu.npu_format_cast(x, 2)
         else:
             return self.conv(x)
+
+
+def _fake_cp_pass_from_previous_rank(input_, dim, kernel_size, cache_padding=None):
+    # Bypass the function if kernel size is 1
+    if kernel_size == 1:
+        return input_
+
+    group = get_context_parallel_group()
+    cp_rank = get_context_parallel_rank()
+    cp_group_rank = get_context_parallel_group_rank()
+    cp_world_size = get_context_parallel_world_size()
+
+    global_rank = torch.distributed.get_rank()
+    global_world_size = torch.distributed.get_world_size()
+
+    input_ = input_.transpose(0, dim)
+
+    # pass from last rank
+    send_rank = global_rank + 1
+    recv_rank = global_rank - 1
+    if send_rank % cp_world_size == 0:
+        send_rank -= cp_world_size
+    if recv_rank % cp_world_size == cp_world_size - 1:
+        recv_rank += cp_world_size
+
+    recv_buffer = torch.empty_like(input_[-kernel_size + 1:]).contiguous()
+    if cp_rank < cp_world_size - 1:
+        req_send = torch.distributed.isend(input_[-kernel_size + 1:].contiguous(), send_rank, group=group)
+    if cp_rank > 0:
+        req_recv = torch.distributed.irecv(recv_buffer, recv_rank, group=group)
+
+    if cp_rank == 0:
+        if cache_padding is not None:
+            input_ = torch.cat([cache_padding.transpose(0, dim).to(input_.device), input_], dim=0)
+        else:
+            input_ = torch.cat([input_[:1]] * (kernel_size - 1) + [input_], dim=0)
+    else:
+        req_recv.wait()
+        input_ = torch.cat([recv_buffer, input_], dim=0)
+
+    input_ = input_.transpose(0, dim).contiguous()
+    return input_
+
+
+class _FakeCPConvolutionPassFromPreviousRank(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input_, dim, kernel_size, cache_padding):
+        ctx.dim = dim
+        ctx.kernel_size = kernel_size
+        return _fake_cp_pass_from_previous_rank(input_, dim, kernel_size, cache_padding)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return _drop_from_previous_rank(grad_output, ctx.dim, ctx.kernel_size), None, None, None
+
+
+def fake_cp_pass_from_previous_rank(input_, dim, kernel_size, cache_padding):
+    return _FakeCPConvolutionPassFromPreviousRank.apply(input_, dim, kernel_size, cache_padding)
+
+
+def _drop_from_previous_rank(input_, dim, kernel_size):
+    input_ = input_.transpose(0, dim)[kernel_size - 1:].transpose(0, dim)
+    return input_
+
+
+class ContextParallelCausalConv3d(nn.Module):
+    def __init__(self, chan_in, chan_out, kernel_size: Union[int, Tuple[int, int, int]], stride=1, **kwargs):
+        super().__init__()
+        kernel_size = cast_tuple(kernel_size, 3)
+
+        time_kernel_size, height_kernel_size, width_kernel_size = kernel_size
+
+        if not (is_odd(height_kernel_size) and is_odd(width_kernel_size)):
+            raise AssertionError("Height and width must be odd.")
+
+        time_pad = time_kernel_size - 1
+        height_pad = height_kernel_size // 2
+        width_pad = width_kernel_size // 2
+
+        self.height_pad = height_pad
+        self.width_pad = width_pad
+        self.time_pad = time_pad
+        self.time_kernel_size = time_kernel_size
+        self.temporal_dim = 2
+
+        stride = (stride, stride, stride)
+        dilation = (1, 1, 1)
+        self.conv = SafeConv3d(chan_in, chan_out, kernel_size, stride=stride, dilation=dilation, **kwargs)
+        self.cache_padding = None
+
+    def forward(self, input_, clear_cache=True):
+
+        input_parallel = fake_cp_pass_from_previous_rank(
+            input_, self.temporal_dim, self.time_kernel_size, self.cache_padding
+        )
+
+        del self.cache_padding
+        self.cache_padding = None
+        if not clear_cache:
+            cp_rank, cp_world_size = get_context_parallel_rank(), get_context_parallel_world_size()
+            global_rank = torch.distributed.get_rank()
+            if cp_world_size == 1:
+                self.cache_padding = (
+                    input_parallel[:, :, -self.time_kernel_size + 1:].contiguous().detach().clone().cpu()
+                )
+            else:
+                if cp_rank == cp_world_size - 1:
+                    torch.distributed.isend(
+                        input_parallel[:, :, -self.time_kernel_size + 1:].contiguous(),
+                        global_rank + 1 - cp_world_size,
+                        group=get_context_parallel_group(),
+                    )
+                if cp_rank == 0:
+                    recv_buffer = torch.empty_like(input_parallel[:, :, -self.time_kernel_size + 1:]).contiguous()
+                    torch.distributed.recv(
+                        recv_buffer, global_rank - 1 + cp_world_size, group=get_context_parallel_group()
+                    )
+                    self.cache_padding = recv_buffer.contiguous().detach().clone().cpu()
+
+        padding_2d = (self.width_pad, self.width_pad, self.height_pad, self.height_pad)
+        input_parallel = F.pad(input_parallel, padding_2d, mode="constant", value=0)
+
+        output_parallel = self.conv(input_parallel)
+        output = output_parallel
+        return output

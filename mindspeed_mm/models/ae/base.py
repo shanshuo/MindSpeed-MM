@@ -16,14 +16,17 @@
 import torch.nn as nn
 
 from mindspeed_mm.utils.extra_processor import I2VProcessor
-from .casualvae import CausalVAE
-from .vae import VideoAutoencoder3D, VideoAutoencoderKL
-from .wfvae import WFVAE
+from mindspeed_mm.models.ae.vae import VideoAutoencoderKL, VideoAutoencoder3D
+from mindspeed_mm.models.ae.casualvae import CausalVAE
+from mindspeed_mm.models.ae.wfvae import WFVAE
+from mindspeed_mm.models.ae.contextparallelcausalvae import ContextParallelCasualVAE
+
 
 AE_MODEL_MAPPINGS = {"vae": VideoAutoencoderKL,
                      "vae3D": VideoAutoencoder3D,
                      "casualvae": CausalVAE,
-                     "wfvae": WFVAE}
+                     "wfvae": WFVAE,
+                     "contextparallelcasualvae": ContextParallelCasualVAE}
 
 
 class AEModel(nn.Module):

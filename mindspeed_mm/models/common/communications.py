@@ -1,6 +1,9 @@
 from typing import List
+
 import torch
 import torch.distributed as dist
+
+from mindspeed_mm.utils.utils import get_context_parallel_world_size, get_context_parallel_rank, get_context_parallel_group
 
 
 def _adjust_tensor_dimensions(tensor, scatter_idx, gather_idx):
@@ -317,3 +320,56 @@ def split_forward_gather_backward(input_, process_group, dim, grad_scale=1.0, sp
 
 def gather_forward_split_backward(input_, process_group, dim, grad_scale=None, gather_sizes=None):
     return _GatherForwardSplitBackward.apply(input_, process_group, dim, grad_scale, gather_sizes)
+
+
+def _conv_split(input_, dim, kernel_size):
+    cp_world_size = get_context_parallel_world_size()
+
+    # Bypass the function if context parallel is 1
+    if cp_world_size == 1:
+        return input_
+
+    cp_rank = get_context_parallel_rank()
+
+    dim_size = (input_.size()[dim] - kernel_size) // cp_world_size
+
+    if cp_rank == 0:
+        output = input_.transpose(dim, 0)[: dim_size + kernel_size].transpose(dim, 0)
+    else:
+        output = input_.transpose(dim, 0)[
+            cp_rank * dim_size + kernel_size : (cp_rank + 1) * dim_size + kernel_size
+        ].transpose(dim, 0)
+    output = output.contiguous()
+
+    return output
+
+
+def _conv_gather(input_, dim, kernel_size):
+    cp_world_size = get_context_parallel_world_size()
+
+    # Bypass the function if context parallel is 1
+    if cp_world_size == 1:
+        return input_
+
+    group = get_context_parallel_group()
+    cp_rank = get_context_parallel_rank()
+
+    input_first_kernel_ = input_.transpose(0, dim)[:kernel_size].transpose(0, dim).contiguous()
+    if cp_rank == 0:
+        input_ = input_.transpose(0, dim)[kernel_size:].transpose(0, dim).contiguous()
+    else:
+        input_ = input_.transpose(0, dim)[max(kernel_size - 1, 0) :].transpose(0, dim).contiguous()
+
+    tensor_list = [torch.empty_like(torch.cat([input_first_kernel_, input_], dim=dim))] + [
+        torch.empty_like(input_) for _ in range(cp_world_size - 1)
+    ]
+    if cp_rank == 0:
+        input_ = torch.cat([input_first_kernel_, input_], dim=dim)
+
+    tensor_list[cp_rank] = input_
+    torch.distributed.all_gather(tensor_list, input_, group=group)
+
+    # Note: torch.cat already creates a contiguous tensor.
+    output = torch.cat(tensor_list, dim=dim).contiguous()
+
+    return output
