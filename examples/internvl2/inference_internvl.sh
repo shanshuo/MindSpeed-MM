@@ -73,7 +73,6 @@ GPT_ARGS="
     --no-save-rng \
     --use-distributed-optimizer \
     --bf16 \
-    --use-flash-attn \
 "
 
 OUTPUT_ARGS="
@@ -91,6 +90,6 @@ torchrun $DISTRIBUTED_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
     --distributed-backend nccl \
-    | tee logs/train_${logfile}.log 2>&1
+    | tee logs/inference_${logfile}.log 2>&1
 
 set +x

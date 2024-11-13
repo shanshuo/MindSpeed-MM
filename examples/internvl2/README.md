@@ -193,7 +193,7 @@ LOAD_PATH="ckpt/InternVL2-2B"
 
 【模型保存加载配置】
 
-根据实际情况配置`examples/internvl2/finetune_internvl2.sh`的参数，包括加载、保存路径以及保存间隔`--save-interval`（注意：分布式优化器保存文件较大耗时较长，请谨慎设置保存间隔）
+根据实际情况配置`examples/internvl2/finetune_internvl2_xx.sh`的参数，包括加载、保存路径以及保存间隔`--save-interval`（注意：分布式优化器保存文件较大耗时较长，请谨慎设置保存间隔）, 以InternVL2-2B为例：
 
 ```shell
 ...
@@ -228,7 +228,7 @@ $save_dir
 
 【单机运行配置】
 
-配置`examples/internvl2/finetune_internvl2.sh`参数如下
+配置`examples/internvl2/finetune_internvl2_xx.sh`参数如下
 
 ```shell
     # 根据实际情况修改 ascend-toolkit 路径
@@ -255,4 +255,40 @@ $save_dir
 
 ## 推理
 
-Coming Soon...
+#### 1. 准备工作
+配置脚本前需要完成前置准备工作，包括：环境安装、权重下载及转换，详情可查看对应章节。
+
+#### 2. 配置参数
+【参数配置】
+
+修改inference_xx.json文件，包括`image_path`、`prompt`、`from_pretrained`以及tokenizer的`from_pretrained`等字段。
+以InternVL2-2B为例，按实际情况修改inference_2B.json，注意tokenizer_config的权重路径为转换前的权重路径。
+```json
+{   
+    "image_path": "./examples/internvl2/view.jpg",
+    "prompts": "Please describe the image shortly.",
+    "model_id": "InternVLPipeline",
+    "from_pretrained": "./ckpt/InternVL2-2B/release/mp_rank_00/model_optim_rng.pt",
+    ...
+    "tokenizer":{
+        ...
+        "autotokenizer_name": "AutoTokenizer",
+        "from_pretrained": "raw_ckpt/InternVL2-2B",
+        ...
+    },
+    ...
+}
+```
+【启动脚本配置】
+按实际情况修改inference_internvl.sh脚本，
+```shell
+    # 根据实际情况修改 ascend-toolkit 路径
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+    ...
+    MM_MODEL="./examples/internvl2/inference_2B.json"
+```
+#### 3. 启动推理
+
+```shell
+  bash examples/internvl2/inference_internvl.sh
+```
