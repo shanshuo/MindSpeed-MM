@@ -96,7 +96,7 @@
 从Huggingface等网站下载开源模型权重
 
 - [PixArt-alpha/PixArt-alpha](https://huggingface.co/PixArt-alpha/PixArt-alpha/resolve/main/PixArt-XL-2-512x512.pth)   - PixArt-XL-2-512x512模型(训练用)
-- [stabilityai/sd-vae-ft-ema](https://huggingface.co/stabilityai/sd-vae-ft-mse-original)   - 2d vae模型
+- [stabilityai/sd-vae-ft-ema](https://huggingface.co/stabilityai/sd-vae-ft-mse/tree/main)   - 2d vae模型
 - [hpcai-tech/OpenSora-VAE-v1.2](https://huggingface.co/hpcai-tech/OpenSora-VAE-v1.2/tree/main)   - 3d vae模型
 - [DeepFloyd/t5-v1_1-xxl](https://huggingface.co/DeepFloyd/t5-v1_1-xxl)       -  t5模型
 - [hpcai-tech/OpenSora-STDiT-v3](https://huggingface.co/hpcai-tech/OpenSora-STDiT-v3/tree/main)        -  预训练权重(推理用)
@@ -188,9 +188,10 @@
 
 #### 1. 准备工作
 
-参考上面模型准备环节，下载相应的权重到本地
+下载相应的权重到本地
 
 - [hpcai-tech/OpenSora-VAE-v1.2](https://huggingface.co/hpcai-tech/OpenSora-VAE-v1.2/tree/main)   - 3d vae模型
+- [stabilityai/sd-vae-ft-ema](https://huggingface.co/stabilityai/sd-vae-ft-mse/tree/main)   - 2d vae模型
 - [DeepFloyd/t5-v1_1-xxl](https://huggingface.co/DeepFloyd/t5-v1_1-xxl)       -  t5模型
 - [hpcai-tech/OpenSora-STDiT-v3](https://huggingface.co/hpcai-tech/OpenSora-STDiT-v3/tree/main)   -  predict model
 
@@ -198,11 +199,18 @@
 
 #### 2. 配置参数
 
-将上述权重传到json文件中 from_pretrained字段中，prompt字段可以自定义成自己的prompt
-
+打开下面的json文件
 ```
 examples/opensora1.2/inference_model_102x720x1280.json
 ```
+
+将json中ae中的from_pretrained和from_pretrained_3dvae_ckpt字段，分别传入上面的2d vae模型和3d vae模型的本地路径。
+
+将json中text_encoder和tokenizer中的from_pretrained字段，传入t5模型本地路径。
+
+将json中predictor中的from_pretrained字段传入predict_model模型的本地路径。
+
+json中prompt字段可以传入自己定义的prompt进行推理，save_path字段为保存视频的目录。
 
 <a id="jump5.3"></a>
 
