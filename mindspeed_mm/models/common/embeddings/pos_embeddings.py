@@ -475,3 +475,88 @@ class NpuRotaryEmbedding(nn.Module):
             self.tmp_store('cached_freqs', freqs.detach())
 
         return freqs
+
+
+def broad_cat(tensors, dim=-1):
+    num_tensors = len(tensors)
+    shape_lens = set(list(map(lambda t: len(t.shape), tensors)))
+    shape_len = list(shape_lens)[0]
+    dim = (dim + shape_len) if dim < 0 else dim
+    dims = list(zip(*map(lambda t: list(t.shape), tensors)))
+    expandable_dims = [(i, val) for i, val in enumerate(dims) if i != dim]
+    max_dims = list(map(lambda t: (t[0], max(t[1])), expandable_dims))
+    expanded_dims = list(map(lambda t: (t[0], (t[1],) * num_tensors), max_dims))
+    expanded_dims.insert(dim, (dim, dims[dim]))
+    expandable_shapes = list(zip(*map(lambda t: t[1], expanded_dims)))
+    tensors = list(map(lambda t: t[0].expand(*t[1]), zip(tensors, expandable_shapes)))
+    return torch.cat(tensors, dim=dim)
+
+
+class Rotary3DPositionEmbedding(nn.Module):
+    def __init__(
+        self,
+        height,
+        width,
+        compressed_num_frames,
+        hidden_size,
+        hidden_size_head,
+        text_length,
+        theta=10000,
+        rot_v=False,
+        learnable_pos_embed=False,
+    ):
+        super().__init__()
+        self.rot_v = rot_v
+
+        dim_t = hidden_size_head // 4
+        dim_h = hidden_size_head // 8 * 3
+        dim_w = hidden_size_head // 8 * 3
+
+        freqs_t = 1.0 / (theta ** (torch.arange(0, dim_t, 2)[: (dim_t // 2)].float() / dim_t))
+        freqs_h = 1.0 / (theta ** (torch.arange(0, dim_h, 2)[: (dim_h // 2)].float() / dim_h))
+        freqs_w = 1.0 / (theta ** (torch.arange(0, dim_w, 2)[: (dim_w // 2)].float() / dim_w))
+
+        grid_t = torch.arange(compressed_num_frames, dtype=torch.float32)
+        grid_h = torch.arange(height, dtype=torch.float32)
+        grid_w = torch.arange(width, dtype=torch.float32)
+
+        freqs_t = torch.einsum("..., f -> ... f", grid_t, freqs_t)
+        freqs_h = torch.einsum("..., f -> ... f", grid_h, freqs_h)
+        freqs_w = torch.einsum("..., f -> ... f", grid_w, freqs_w)
+
+        freqs_t = repeat(freqs_t, "... n -> ... (n r)", r=2)
+        freqs_h = repeat(freqs_h, "... n -> ... (n r)", r=2)
+        freqs_w = repeat(freqs_w, "... n -> ... (n r)", r=2)
+
+        freqs = broad_cat((freqs_t[:, None, None, :], freqs_h[None, :, None, :], freqs_w[None, None, :, :]), dim=-1)
+        freqs = rearrange(freqs, "t h w d -> (t h w) d")
+
+        freqs = freqs.contiguous()
+        freqs_sin = freqs.sin()
+        freqs_cos = freqs.cos()
+        self.register_buffer("freqs_sin", freqs_sin)
+        self.register_buffer("freqs_cos", freqs_cos)
+
+        self.text_length = text_length
+        if learnable_pos_embed:
+            num_patches = int(height * width * compressed_num_frames + text_length)
+            self.pos_embedding = nn.Parameter(torch.zeros(1, num_patches, int(hidden_size)), requires_grad=True)
+        else:
+            self.pos_embedding = None
+
+    def rotary(self, t):
+        seq_len = t.shape[2]
+        freqs_cos = self.freqs_cos[:seq_len].unsqueeze(0).unsqueeze(0)
+        freqs_sin = self.freqs_sin[:seq_len].unsqueeze(0).unsqueeze(0)
+
+        return t * freqs_cos + rotate_half(t) * freqs_sin
+
+    def position_embedding_forward(self, position_ids, **kwargs):
+        if self.pos_embedding is not None:
+            return self.pos_embedding[:, :self.text_length + kwargs.get("seq_length", 0)]
+        else:
+            return None
+
+    def forward(self, x):
+        x[:, self.text_length:] = self.rotary(x.transpose(1, 2)[:, :, self.text_length:]).transpose(1, 2)
+        return x

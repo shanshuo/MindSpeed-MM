@@ -582,3 +582,30 @@ class PatchEmbed2D(nn.Module):
         latent = self.proj(latent)
         latent = rearrange(latent, '(b t) c h w -> b (t h w) c', b=b)
         return latent
+
+
+class VideoPatch2D(nn.Module):
+    """
+    2D Image to Patch Embedding concat witch text embedding
+    """
+    def __init__(
+        self,
+        in_channels,
+        hidden_size,
+        patch_size,
+        bias=True,
+    ):
+        super().__init__()
+        self.proj = nn.Conv2d(in_channels, hidden_size, kernel_size=patch_size, stride=patch_size, bias=bias)
+
+    def forward(self, latent, encoder_outputs):
+        latent = latent.transpose(1, 2)
+        b, t = latent.shape[:2]
+        emb = latent.view(-1, *latent.shape[2:])
+        emb = self.proj(emb)  # ((b t),d,h/2,w/2)
+        emb = emb.view(b, t, *emb.shape[1:])
+        emb = emb.flatten(3).transpose(2, 3)  # (b,t,n,d)
+        emb = rearrange(emb, "b t n d -> b (t n) d")
+
+        emb = emb.contiguous()
+        return emb, None  # (b,n_t+t*n_i,d)

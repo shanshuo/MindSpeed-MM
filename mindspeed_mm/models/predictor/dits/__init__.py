@@ -3,5 +3,6 @@ from .video_dit_sparse import VideoDitSparse, VideoDitSparseI2V
 from .latte import Latte
 from .stdit import STDiT
 from .stdit3 import STDiT3
+from .sat_dit import SatDiT
 
-__all__ = ["VideoDiT", "VideoDitSparse", "Latte", "STDiT", "STDiT3", "VideoDitSparseI2V"]
+__all__ = ["VideoDiT", "VideoDitSparse", "Latte", "STDiT", "STDiT3", "SatDiT", "VideoDitSparseI2V"]

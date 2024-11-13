@@ -14,7 +14,9 @@ from megatron.training.arguments import core_transformer_config_from_args
 from mindspeed_mm.utils.utils import video_to_image
 from mindspeed_mm.models.common.normalize import normalize
 from mindspeed_mm.models.common.embeddings.rope import RoPE3D, PositionGetter3D
+from mindspeed_mm.models.common.embeddings.pos_embeddings import Rotary3DPositionEmbedding
 from mindspeed_mm.models.common.conv import CausalConv3d, WfCausalConv3d
+from mindspeed_mm.models.common.linear import MatmulAddLinear
 
 # TODO: 使用megatron通信接口替换
 from .communications import (
@@ -334,6 +336,113 @@ class MultiHeadAttentionBSH(nn.Module):
             )
             q = self.rope(q, pos_thw)
             k = self.rope(k, pos_thw)
+        q = q.view(b, -1, self.inner_dim)
+        k = k.view(b, -1, self.inner_dim)
+
+        out = torch_npu.npu_fusion_attention(
+            q,
+            k,
+            v,
+            head_num=self.num_heads,
+            atten_mask=mask,
+            input_layout="BSH",
+            scale=1 / math.sqrt(self.head_dim)
+        )[0]
+
+        out = self.proj_out(out)
+        out = self.dropout(out)
+        if input_ndim == 4:
+            out = out.transpose(-1, -2).reshape(b, c, h, w)
+        return out
+
+
+class SelfAttentionBSH(nn.Module):
+    """
+    A multi-head attention layer for self-atten, layout "BSH".
+
+    Args:
+        query_dim: The number of channels in the query.
+        key_dim: The number of channels in the key, defaults to `query_dim`.
+        num_heads: The number of heads to use for multi-head attention.
+        head_dim: The number of channels in each head.
+        dropout: The dropout probability to use.
+        proj_qkv_bias: Whether to use bias in qkv projection.
+        proj_out_bias: Whether to use bias in out projection.
+        use_rope: Whether to use rope
+        interpolation_scale: The scale of interpolation.
+
+    """
+
+    def __init__(
+        self,
+        query_dim: int,
+        key_dim: int,
+        num_heads: int,
+        head_dim: int,
+        dropout: float = 0.0,
+        proj_qkv_bias: bool = False,
+        proj_out_bias: bool = True,
+        use_rope: bool = False,
+        rope: Optional[nn.Module] = None,
+        qk_ln: bool = False,
+        interpolation_scale: Tuple[int] = (1, 1, 1),
+    ):
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.inner_dim = self.num_heads * self.head_dim
+        self.qk_ln = qk_ln
+        self.use_rope = use_rope
+        self.rope = rope
+        if self.qk_ln:
+            self.q_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+            self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+
+        key_dim = key_dim if key_dim is not None else query_dim
+
+        self.proj_qkv = nn.Linear(query_dim, self.inner_dim * 3, bias=proj_qkv_bias)
+
+        self.proj_out = MatmulAddLinear(self.inner_dim, query_dim, bias=proj_out_bias)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None,
+        frames: Optional[int] = None,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            query: The hidden states of the query.
+            key: The hidden states of the key.
+            mask: The attention mask to use.
+            **kwargs: Additional keyword arguments to pass along
+        """
+        input_ndim = query.ndim
+        if input_ndim == 4:
+            b, c, h, w = query.shape
+            query = query.view(b, c, h * w).transpose(1, 2)
+
+        b, _, _ = query.shape
+
+        if mask is not None:
+            mask = mask.view(b, 1, -1, mask.shape[-1])
+
+        q, k, v = self.proj_qkv(query).chunk(3, dim=2)
+
+        q = q.view(b, -1, self.num_heads, self.head_dim)
+        k = k.view(b, -1, self.num_heads, self.head_dim)
+
+        if self.qk_ln:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
+
+        if self.use_rope and self.rope is not None:
+            q = self.rope(q)
+            k = self.rope(k)
         q = q.view(b, -1, self.inner_dim)
         k = k.view(b, -1, self.inner_dim)
 
