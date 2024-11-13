@@ -165,5 +165,6 @@ class DataCollatorForQwen2vl:
 DATA_COLLATOR = {
     "llava": DataCollatorForLlava,
     "internvl": DataCollatorForInternvl,
+    "whisper": DataCollatorSpeechSeq2SeqWithPadding,
     "qwen2vl": DataCollatorForQwen2vl
 }

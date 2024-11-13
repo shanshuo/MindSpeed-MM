@@ -84,7 +84,7 @@ class SDModel(nn.Module):
 
         # handle the image
         if not self.config.load_image_feature:
-            x = self.ae.encode(x).latent_dist.sample().mul_(self.config["ae"].ae_factor)
+            x, _ = self.ae.encode(x).latent_dist.sample().mul_(self.config["ae"].ae_factor)
 
         # handle the text
         if ("text_encoder" in self.config.keys()) and (

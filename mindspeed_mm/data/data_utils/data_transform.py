@@ -61,6 +61,19 @@ def to_tensor(clip):
     return clip.float() / 255.0
 
 
+def to_tensor_after_resize(clip):
+    """
+    Convert resized tensor to [0, 1]
+    Args:
+        clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W)
+    Return:
+        clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W), but in [0, 1]
+    """
+    _is_tensor_video_clip(clip)
+    # return clip.float().permute(3, 0, 1, 2) / 255.0
+    return clip.float() / 255.0
+
+
 def hflip(clip):
     """
     Args:
@@ -181,12 +194,12 @@ def longsideresize(h, w, size, skip_low_resolution):
         return h, w
     
     if h / w > size[0] / size[1]:
-        # hxw 720x1280  size 320x640  hw_raito 9/16 > size_ratio 8/16  neww=320/720*1280=568  newh=320  
+        # hxw 720x1280  size 320x640  hw_raito 9/16 > size_ratio 8/16  neww=320/720*1280=568  newh=320
         w = int(size[0] / h * w)
         h = size[0]
     else:
-        # hxw 720x1280  size 480x640  hw_raito 9/16 < size_ratio 12/16   newh=640/1280*720=360 neww=640  
-        # hxw 1080x1920  size 720x1280  hw_raito 9/16 = size_ratio 9/16   newh=1280/1920*1080=720 neww=1280  
+        # hxw 720x1280  size 480x640  hw_raito 9/16 < size_ratio 12/16   newh=640/1280*720=360 neww=640
+        # hxw 1080x1920  size 720x1280  hw_raito 9/16 = size_ratio 9/16   newh=1280/1920*1080=720 neww=1280
         h = int(size[1] / w * h)
         w = size[1]
     return h, w
@@ -212,7 +225,6 @@ def calculate_statistics(data):
 
 
 def get_params(h, w, stride):
-    
     th, tw = h // stride * stride, w // stride * stride
 
     i = (h - th) // 2
@@ -338,6 +350,28 @@ class ToTensorVideo:
             clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W)
         """
         return to_tensor(clip)
+
+    def __repr__(self) -> str:
+        return self.__class__.__name__
+
+
+class ToTensorAfterResize:
+    """
+    Convert tensor data type from uint8 to float, divide value by 255.0 and
+    permute the dimensions of clip tensor
+    """
+
+    def __init__(self):
+        pass
+
+    def __call__(self, clip):
+        """
+        Args:
+            clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W)
+        Return:
+            clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W), but in [0, 1]
+        """
+        return to_tensor_after_resize(clip)
 
     def __repr__(self) -> str:
         return self.__class__.__name__

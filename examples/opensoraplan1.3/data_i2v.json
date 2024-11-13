@@ -1,0 +1,97 @@
+{
+	"dataset_param": {
+		"dataset_type": "i2v",
+		"basic_parameters": {
+			"data_path": "data_path",
+			"data_folder": "",
+			"data_storage_mode": "combine"
+		},
+		"preprocess_parameters": {
+			"video_reader_type": "decoder",
+			"image_reader_type": "Image",
+			"num_frames": 93,
+			"frame_interval": 1,
+			"max_hxw": 236544,
+			"min_hxw": 102400,
+			"train_fps": 18,
+			"speed_factor": 1.0,
+			"drop_short_ratio": 0.0,
+			"cfg": 0.1,
+			"hw_stride": 32,
+			"ae_stride_t": 4,
+			"force_resolution": false,
+			"seed": 1234,
+			"hw_aspect_thr": 2.0,
+			"sp_size": 1,
+			"gradient_accumulation_size": 1,
+			"batch_size": 1,
+			"min_num_frames": 29,
+			"use_aesthetic": true,
+			"train_pipeline": {
+				"video": [
+					{
+						"trans_type": "MaxHWResizeVideo",
+						"param": {
+							"max_hxw": 236544,
+							"align_corners": true,
+							"antialias": true
+						}
+					},
+					{
+						"trans_type": "SpatialStrideCropVideo",
+						"param": {
+							"stride": 32
+						}
+					}
+				]
+			},
+			"train_pipeline_after_resize": {
+				"video": [
+					{
+						"trans_type": "ToTensorAfterResize"
+					},
+					{
+						"trans_type": "ae_norm"
+					}
+				]
+			}
+		},
+		"use_text_processer": true,
+		"model_max_length": 512,
+		"tokenizer_config": {
+			"hub_backend": "hf",
+			"autotokenizer_name": "AutoTokenizer",
+			"from_pretrained": "your model path"
+		},
+		"mask_type_ratio_dict_video": {
+			"i2v": 1
+		}
+	},
+	"dataloader_param": {
+		"dataloader_mode": "sampler",
+		"sampler_type": "LengthGroupedSampler",
+		"batch_size": 1,
+		"num_workers": 4,
+		"shuffle": true,
+		"drop_last": true,
+		"pin_memory": false,
+		"group_frame": false,
+		"group_resolution": false,
+		"group_data": true,
+		"initial_global_step_for_sampler": 0,
+		"gradient_accumulation_size": 1,
+		"collate_param": {
+			"batch_size": 1,
+			"num_frames": 93,
+			"group_frame": false,
+			"group_resolution": false,
+			"group_data": true,
+			"max_height": 640,
+			"max_width": 640,
+			"ae_stride": 8,
+			"ae_stride_t": 4,
+			"patch_size": 2,
+			"patch_size_t": 1
+		}
+	}
+}

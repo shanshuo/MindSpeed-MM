@@ -13,17 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Mapping, Any
 from logging import getLogger
+from typing import Any, Mapping
 
 import torch
-from torch import nn
-from megatron.training.arguments import core_transformer_config_from_args
 from megatron.training import get_args
+from megatron.training.arguments import core_transformer_config_from_args
+from torch import nn
 
-from mindspeed_mm.models.predictor import PredictModel
-from mindspeed_mm.models.diffusion import DiffusionModel
 from mindspeed_mm.models.ae import AEModel
+from mindspeed_mm.models.diffusion import DiffusionModel
+from mindspeed_mm.models.predictor import PredictModel
 from mindspeed_mm.models.text_encoder import TextEncoder
 
 

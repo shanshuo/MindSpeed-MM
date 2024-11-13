@@ -11,6 +11,7 @@ from mindspeed_mm.data.data_utils.data_transform import (
     ResizeCropToFill,
     SpatialStrideCropVideo,
     ToTensorVideo,
+    ToTensorAfterResize,
     UCFCenterCropVideo,
     Expand2Square,
     JpegDegradationSimulator,
@@ -19,6 +20,7 @@ from mindspeed_mm.data.data_utils.data_transform import (
 
 VIDEO_TRANSFORM_MAPPING = {
     "ToTensorVideo": ToTensorVideo,
+    "ToTensorAfterResize": ToTensorAfterResize,
     "RandomHorizontalFlipVideo": RandomHorizontalFlipVideo,
     "UCFCenterCropVideo": UCFCenterCropVideo,
     "ResizeCrop": ResizeCrop,

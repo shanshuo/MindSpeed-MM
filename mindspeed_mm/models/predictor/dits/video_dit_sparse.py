@@ -9,11 +9,18 @@ from diffusers.models.normalization import AdaLayerNormSingle
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
 
+from mindspeed_mm.data.data_utils.constants import INPUT_MASK, MASKED_VIDEO
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.embeddings import PatchEmbed2D
 from mindspeed_mm.models.common.ffn import FeedForward
 from mindspeed_mm.models.common.attention import MultiHeadSparseAttentionSBH
 from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
+
+
+def zero_module(module):
+    for p in module.parameters():
+        nn.init.zeros_(p)
+    return module
 
 
 class VideoDitSparse(MultiModalModule):
@@ -197,7 +204,7 @@ class VideoDitSparse(MultiModalModule):
         height, width = latents.shape[-2] // self.patch_size, latents.shape[-1] // self.patch_size
 
         latents, prompt, timestep, embedded_timestep = self._operate_on_patched_inputs(
-            latents, prompt, timestep, batch_size
+            latents, prompt, timestep, batch_size, **kwargs
         )
 
         latents = rearrange(latents, 'b s h -> s b h', b=batch_size).contiguous()
@@ -360,7 +367,7 @@ class VideoDitSparse(MultiModalModule):
             buffers = tuple(self.buffers())
             return buffers[0].dtype
 
-    def _operate_on_patched_inputs(self, latents, prompt, timestep, batch_size):
+    def _operate_on_patched_inputs(self, latents, prompt, timestep, batch_size, **kwargs):
 
         latents = self.pos_embed(latents.to(self.dtype))
 
@@ -527,3 +534,100 @@ class VideoDiTSparseBlock(nn.Module):
         return latents
 
 
+class VideoDitSparseI2V(VideoDitSparse):
+    def __init__(
+            self,
+            num_heads: int = 16,
+            head_dim: int = 88,
+            in_channels: Optional[int] = None,
+            out_channels: Optional[int] = None,
+            num_layers: int = 1,
+            dropout: float = 0.0,
+            cross_attention_dim: Optional[int] = None,
+            attention_bias: bool = False,
+            patch_size: Optional[int] = None,
+            patch_size_t: Optional[int] = None,
+            activation_fn: str = "geglu",
+            only_cross_attention: bool = False,
+            double_self_attention: bool = False,
+            upcast_attention: bool = False,
+            norm_elementwise_affine: bool = True,
+            norm_eps: float = 1e-5,
+            caption_channels: int = None,
+            interpolation_scale: Tuple[float] = None,
+            sparse1d: bool = False,
+            sparse_n: int = 2,
+            vae_scale_factor_t: int = 4,
+            **kwargs
+    ):
+        super().__init__(
+            num_heads=num_heads,
+            head_dim=head_dim,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            num_layers=num_layers,
+            dropout=dropout,
+            cross_attention_dim=cross_attention_dim,
+            attention_bias=attention_bias,
+            patch_size=patch_size,
+            patch_size_t=patch_size_t,
+            activation_fn=activation_fn,
+            only_cross_attention=only_cross_attention,
+            double_self_attention=double_self_attention,
+            upcast_attention=upcast_attention,
+            norm_elementwise_affine=norm_elementwise_affine,
+            norm_eps=norm_eps,
+            caption_channels=caption_channels,
+            interpolation_scale=interpolation_scale,
+            sparse1d=sparse1d,
+            sparse_n=sparse_n,
+        )
+        self.vae_scale_factor_t = vae_scale_factor_t
+        inner_dim = num_heads * head_dim
+        self.pos_embed_masked_hidden_states = nn.ModuleList(
+            [
+                PatchEmbed2D(
+                    patch_size=patch_size,
+                    in_channels=in_channels,
+                    embed_dim=inner_dim,
+                ),
+                zero_module(nn.Linear(inner_dim, inner_dim, bias=False)),
+            ]
+        )
+
+        self.pos_embed_mask = nn.ModuleList(
+            [
+                PatchEmbed2D(
+                    patch_size=patch_size,
+                    in_channels=self.vae_scale_factor_t,
+                    embed_dim=inner_dim,
+                ),
+                zero_module(nn.Linear(inner_dim, inner_dim, bias=False)),
+            ]
+        )
+
+    def _operate_on_patched_inputs(self, hidden_states, encoder_hidden_states, timestep, batch_size, **kwargs):
+        # inpaint
+
+        input_hidden_states = hidden_states
+        input_masked_hidden_states = kwargs.get(MASKED_VIDEO, None)
+        input_mask = kwargs.get(INPUT_MASK, None)
+        input_hidden_states = self.pos_embed(input_hidden_states.to(self.dtype))
+
+        input_masked_hidden_states = self.pos_embed_masked_hidden_states[0](input_masked_hidden_states.to(self.dtype))
+        input_masked_hidden_states = self.pos_embed_masked_hidden_states[1](input_masked_hidden_states)
+
+        input_mask = self.pos_embed_mask[0](input_mask.to(self.dtype))
+        input_mask = self.pos_embed_mask[1](input_mask)
+
+        hidden_states = input_hidden_states + input_masked_hidden_states + input_mask
+
+        added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
+        timestep, embedded_timestep = self.adaln_single(
+            timestep, added_cond_kwargs, batch_size=batch_size, hidden_dtype=self.dtype
+        )  # b 6d, b d
+
+        encoder_hidden_states = self.caption_projection(encoder_hidden_states)  # b, 1, l, d or b, 1, l, d
+        encoder_hidden_states = rearrange(encoder_hidden_states, 'b 1 l d -> (b 1) l d')
+
+        return hidden_states, encoder_hidden_states, timestep, embedded_timestep

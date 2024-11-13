@@ -10,6 +10,7 @@ from mindspeed_mm.data.dataloader.dataloader import (
 from mindspeed_mm.data.datasets.image_dataset import ImageDataset
 from mindspeed_mm.data.datasets.t2i_dataset import T2IDataset
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset, DynamicVideoTextDataset
+from mindspeed_mm.data.datasets.i2v_dataset import I2VDataset
 from mindspeed_mm.data.datasets.video_dataset import VideoDataset
 from mindspeed_mm.data.datasets.audio_dataset import AudioDataset
 from mindspeed_mm.data.datasets.qwen2vl_dataset import Qwen2vlDataset
@@ -38,6 +39,8 @@ def build_mm_dataset(dataset_param):
     preprocess_param = dataset_param["preprocess_parameters"]
     if dataset_type == "t2v":
         return T2VDataset(basic_param, preprocess_param, **dataset_param)
+    elif dataset_type == "i2v":
+        return I2VDataset(basic_param, preprocess_param, **dataset_param)
     elif dataset_type == "t2i":
         return T2IDataset(basic_param, preprocess_param, **dataset_param)
     elif dataset_type == "dt2v":  # 构建动态分辨率数据集

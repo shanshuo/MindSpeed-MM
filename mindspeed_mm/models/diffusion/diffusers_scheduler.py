@@ -67,7 +67,7 @@ class DiffusersScheduler:
         self.num_inference_steps = config.pop("num_inference_steps", None)
         self.prediction_type = config.get("prediction_type", "epsilon")
         self.noise_offset = config.pop("noise_offset", 0)
-        self.snr_gamma = config.pop("snr_gamma", 5.0)
+        self.snr_gamma = config.pop("snr_gamma", None)
         self.t_sample_method = config.pop("t_sample_method", "random")
         self.device = get_device(config.pop("device", "npu"))
         model_id = config.pop("model_id")

@@ -16,8 +16,8 @@
 import torch.nn as nn
 
 from mindspeed_mm.utils.extra_processor import I2VProcessor
-from .vae import VideoAutoencoderKL, VideoAutoencoder3D
 from .casualvae import CausalVAE
+from .vae import VideoAutoencoder3D, VideoAutoencoderKL
 from .wfvae import WFVAE
 
 AE_MODEL_MAPPINGS = {"vae": VideoAutoencoderKL,

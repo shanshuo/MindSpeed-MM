@@ -19,7 +19,9 @@ from mindspeed_mm.data.data_utils.constants import (
     VIDEO, 
     VIDEO_MASK,
     PROMPT_IDS_2,
-    PROMPT_MASK_2
+    PROMPT_MASK_2,
+    MASKED_VIDEO,
+    INPUT_MASK
 )
 from mindspeed_mm.data.datasets.t2v_dataset import DynamicVideoTextDataset
 from mindspeed_mm.data.data_utils.bucket import Bucket
@@ -34,6 +36,18 @@ def pad_to_multiple(number, ds_stride):
     else:
         padding = ds_stride - remainder
         return number + padding
+
+
+class ProcessedData:
+    def __init__(self, pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2, masked_video, input_mask):
+        self.pad_batch_tubes = pad_batch_tubes
+        self.attention_mask = attention_mask
+        self.input_ids = input_ids
+        self.cond_mask = cond_mask
+        self.input_ids_2 = input_ids_2
+        self.cond_mask_2 = cond_mask_2
+        self.masked_video = masked_video
+        self.input_mask = input_mask
 
 
 class Collate:
@@ -74,11 +88,11 @@ class Collate:
         self.max_thw = (self.num_frames, self.max_height, self.max_width)
 
     def package(self, batch):
-        batch_tubes = [i[VIDEO] for i in batch]  # b [c t h w]
-        input_ids = [i[PROMPT_IDS] for i in batch]  # b [1 l]
-        cond_mask = [i[PROMPT_MASK] for i in batch]  # b [1 l]
-        input_ids_2 = [i[PROMPT_IDS_2] for i in batch]  # b [1 l]
-        cond_mask_2 = [i[PROMPT_MASK_2] for i in batch]  # b [1 l]
+        batch_tubes = [i.get(VIDEO, None) for i in batch]  # b [c t h w]
+        input_ids = [i.get(PROMPT_IDS, None) for i in batch]  # b [1 l]
+        cond_mask = [i.get(PROMPT_MASK, None) for i in batch]  # b [1 l]
+        input_ids_2 = [i.get(PROMPT_IDS_2, None) for i in batch]  # b [1 l]
+        cond_mask_2 = [i.get(PROMPT_MASK_2, None) for i in batch]  # b [1 l]
     
         if all([i is None for i in input_ids_2]):
             input_ids_2 = None
@@ -92,7 +106,7 @@ class Collate:
         ds_stride = self.ae_stride * self.patch_size
         t_ds_stride = self.ae_stride_t * self.patch_size_t
 
-        pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.process(
+        processed_res = self.process(
             batch_tubes,
             input_ids,
             cond_mask,
@@ -103,15 +117,17 @@ class Collate:
             self.max_thw,
             self.ae_stride_thw,
         )
-        if torch.any(torch.isnan(pad_batch_tubes)):
+        if torch.any(torch.isnan(processed_res.pad_batch_tubes)):
             raise AssertionError("after pad_batch_tubes.")
         return {
-            VIDEO: pad_batch_tubes,
-            PROMPT_IDS: input_ids,
-            VIDEO_MASK: attention_mask,
-            PROMPT_MASK: cond_mask,
-            PROMPT_IDS_2: input_ids_2,
-            PROMPT_MASK_2: cond_mask_2,
+            VIDEO: processed_res.pad_batch_tubes,
+            PROMPT_IDS: processed_res.input_ids,
+            VIDEO_MASK: processed_res.attention_mask,
+            PROMPT_MASK: processed_res.cond_mask,
+            PROMPT_IDS_2: processed_res.input_ids_2,
+            PROMPT_MASK_2: processed_res.cond_mask_2,
+            MASKED_VIDEO: processed_res.masked_video,
+            INPUT_MASK: processed_res.input_mask,
         }
 
     def process(
@@ -235,7 +251,15 @@ class Collate:
         input_ids_2 = torch.stack(input_ids_2) if input_ids_2 is not None else input_ids_2  # b 1 l
         cond_mask_2 = torch.stack(cond_mask_2) if cond_mask_2 is not None else cond_mask_2  # b 1 l
 
-        return (pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2)
+        # if opensoraplan i2v dataset, batch_tube has masked_video and mask
+        if pad_batch_tubes.shape[1] == 7:
+            pad_batch_tubes, masked_video, input_mask = pad_batch_tubes[:, :3], pad_batch_tubes[:, 3:6], pad_batch_tubes[:, 6:7]
+        else:
+            masked_video = None
+            input_mask = None
+
+        processed_res = ProcessedData(pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2, masked_video, input_mask)
+        return processed_res
 
 
 def split_to_even_chunks(indices, lengths, num_chunks, batch_size):
