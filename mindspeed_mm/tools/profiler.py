@@ -82,7 +82,7 @@ class Profiler:
                 data_simplification=self.sp_data_simplification,
             )
             skip_first = self.sp_start_step
-            active = self.sp_start_step - self.sp_end_step
+            active = self.sp_end_step - self.sp_start_step
 
             activites = [torch_npu.profiler.ProfilerActivity.NPU]
             if self.sp_with_cpu:
