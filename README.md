@@ -56,8 +56,9 @@ MindSpeed-MM已发布版本维护策略：
 
 【版本配套环境】
 
-|           软件            | [版本](https://www.hiascend.com/zh/) |
+|           软件            | [版本](https://www.hiascend.com/hardware/firmware-drivers/commercial?product=4&model=26) |
 | :-----------------------: |:----------------------------------:|
+|          硬件配置         |                Atlas 800T A2 <br> Atlas 900 A2 PoD                 |
 |          Python           |                3.8, 3.10                |
 |          Driver           |         Ascend HDK 24.1.RC3          |
 |         Firmware          |         Ascend HDK 24.1.RC3          |
@@ -148,7 +149,7 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/1.0.RC3/master/examples/diffusers/sd3">SD3</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.RC3/examples/diffusers/sd3">SD3</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/eda36c4c286d281f216dfeb79e64adad3f85d37a">2B</a></td>
       <td>全参微调</td>
       <td> 1x8</td>
@@ -304,6 +305,13 @@ MindSpeed-MM集成了昇腾profiling采集工具，以提供对模型运行情�
 
   具体方法见 [README](./mindspeed_mm/tools/README.md) 的profiling章节
 
+### MindStudio Insight性能分析工具
+
+针对大模型集群场景的性能调优，这里推荐一款优秀的可视化调优工具MindStudio Insight。
+MindStudio Insight提供了包括Timeline视图、通信分析、计算耗时等的可视化呈现，以便用户分析潜在的性能瓶颈，并指导如何采取措施消除或减少这些瓶颈。
+
+  具体使用方法见[《MindStudio Insight操作指南》](https://www.hiascend.com/document/detail/zh/mindstudio/70RC3/msinsightug/msascendinsightug/Insight_userguide_0002.html)，下载地址[《MindStudio Insight》](https://support.huawei.com/enterprise/zh/ascend-computing/mindstudio-pid-251913966/software/262029358?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C251913966)
+
 ---
 
 ## 致谢
@@ -316,6 +324,12 @@ MindSpeed-MM 由华为公司的下列部门联合贡献 ：
 * 计算技术开发部
 
 感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
+
+---
+
+## Mindspeed-MM 相关介绍
+
+1. [面向大规模分布式训练的多模态套件](https://mp.weixin.qq.com/s/Qiw_qThKA72T0lLOSpjkKw)
 
 ---
 

@@ -29,8 +29,9 @@
 
 【模型开发时推荐使用配套的环境版本】
 
-|           软件            |  [版本](https://www.hiascend.com/zh/)  |
-| :-----------------------: |:------------------------------------:|
+|           软件            | [版本](https://www.hiascend.com/hardware/firmware-drivers/commercial?product=4&model=26) |
+| :-----------------------: |:----------------------------------:|
+|          硬件配置         |                Atlas 800T A2 <br> Atlas 900 A2 PoD                 |
 |          Python           |                 3.10                  |
 |          Driver           |         Ascend HDK 24.1.RC3          |
 |         Firmware          |         Ascend HDK 24.1.RC3          |
@@ -56,6 +57,8 @@
 <a id="jump1.2"></a>
 
 #### 2. 环境搭建
+
+torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
 ```bash
     # python3.10
