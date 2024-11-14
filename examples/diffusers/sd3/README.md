@@ -36,8 +36,9 @@
 
 【模型开发时推荐使用配套的环境版本】
 
-|           软件            | [版本](https://www.hiascend.com/zh/) |
+|           软件            | [版本](https://www.hiascend.com/hardware/firmware-drivers/commercial?product=4&model=26) |
 | :-----------------------: |:----------------------------------:|
+|          硬件配置         |                Atlas 800T A2 <br> Atlas 900 A2 PoD                 |
 |          Python           |                3.8                 |
 |          Driver           |         AscendHDK 24.1.RC3          |
 |         Firmware          |         AscendHDK 24.1.RC3          |
@@ -46,6 +47,8 @@
 |         Torch_npu         |           release v6.0.RC3           |
 
 1. 软件与驱动安装
+
+torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
     ```bash
     # python3.8
@@ -71,7 +74,7 @@
 
 3. 模型搭建
 
-    3.1 【下载 SD3 [GitHub参考实现](https://github.com/huggingface/diffusers) 或 [适配昇腾AI处理器的实现](https://gitee.com/ascend/ModelZoo-PyTorch.git) 或 在模型根目录下执行以下命令，安装模型对应PyTorch版本需要的依赖】
+    3.1 【下载 SD3 [GitHub参考实现](https://github.com/huggingface/diffusers) 或 在模型根目录下执行以下命令，安装模型对应PyTorch版本需要的依赖】
 
     ```shell
     git clone https://github.com/huggingface/diffusers.git -b v0.30.0

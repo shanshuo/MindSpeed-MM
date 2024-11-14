@@ -28,8 +28,9 @@
 
 【模型开发时推荐使用配套的环境版本】
 
-|           软件            | [版本](https://www.hiascend.com/zh/) |
+|           软件            | [版本](https://www.hiascend.com/hardware/firmware-drivers/commercial?product=4&model=26) |
 | :-----------------------: |:----------------------------------:|
+|          硬件配置         |                Atlas 800T A2 <br> Atlas 900 A2 PoD                 |
 |          Python           |                3.10                 |
 |          Driver           |         AscendHDK 24.1.RC3          |
 |         Firmware          |         AscendHDK 24.1.RC3          |
@@ -57,6 +58,8 @@
 <a id="jump1.2"></a>
 
 #### 2. 环境搭建
+
+torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
 ```bash
     # python3.10
@@ -95,7 +98,8 @@
 #### 1. 权重下载
 
 从Huggingface库下载对应的模型权重:
--  模型地址: [Qwen2-VL-7B](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/tree/main)；
+
+- 模型地址: [Qwen2-VL-7B](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/tree/main)；
 
  将下载的模型权重保存到本地的`ckpt/hf_path/Qwen2-VL-7B-Instruct`目录下。
 <a id="jump2.2"></a>
@@ -106,6 +110,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/
 
 以Qwen2VL-7B为例
 首先通过 [ModelLink](https://gitee.com/ascend/ModelLink) 的权重转换工具将 Qwen2VL-7B语言模型部分的权重转换到 megatron 支持的格式：
+
 ```
 git clone https://gitee.com/ascend/ModelLink
 cd ModelLink
@@ -136,7 +141,9 @@ python convert_ckpt.py \
     --model-type-hf llama2 \
     --params-dtype bf16
 ```
+
 然后执行
+
 ```
 bash modelconvert.sh
 ```
@@ -158,6 +165,7 @@ llm_path = 'llm_path/Qwen2-VL-7B-Instruct/inter_0000001/mp_rank/model_optim_rng.
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
   python examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py
   ```
+
 同步修改examples/qwen2vl/finetune_qwen2vl_7b.sh中的LOAD_PATH参数，该路径为转换后或者切分后的权重，注意与原始权重 hf_path/Qwen2-VL-7B-Instruct进行区分。
 
 ```
@@ -177,6 +185,7 @@ LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
 (2)获取图片数据集的描述文件（[LLaVA-Instruct-150K](https://huggingface.co/datasets/liuhaotian/LLaVA-Instruct-150K/tree/main)），下载至./data/路径下;
 
 (3)在./data路径下新建文件mllm_format_llava_instruct_data.json，运行数据转换脚本python examples/qwen2vl/llava_instruct_2_mllm_demo_format.py;
+
    ```
    $playground
    ├── data
@@ -261,6 +270,7 @@ OUTPUT_ARGS="
 
 若需要加载指定迭代次数的权重、优化器等状态，需将加载路径`LOAD_PATH`设置为保存文件夹路径`LOAD_PATH="save_dir"`，并修改`latest_checkpointed_iteration.txt`文件内容为指定迭代次数
 (此功能coming soon)
+
 ```
 $save_dir
    ├── latest_checkpointed_iteration.txt

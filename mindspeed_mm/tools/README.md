@@ -83,4 +83,4 @@ prof.stop()
     - 动态采集通过识别`profiler_config.json`文件的状态判断文件是否被修改，若感知到`profiler_config.json`文件被修改，`dynamic_profile`会在下一个step时开启Profiling任务
     - `config_path`目录下会自动记录`dynamic_profile`的维测日志
 
-动态采集的具体参数、入参表、及具体操作步骤等请[参考链接](https://www.hiascend.com/document/detail/zh/canncommercial/80RC2/devaids/auxiliarydevtool/atlasprofiling_16_0038.html#ZH-CN_TOPIC_0000001988052037__zh-cn_topic_0000001849812417_section17272160135118)
+动态采集的具体参数、入参表、及具体操作步骤等请[参考链接](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha001/devaids/devtools/profiling/atlasprofiling_16_0033.html#ZH-CN_TOPIC_0000002046667974__section17272160135118)

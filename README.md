@@ -127,13 +127,13 @@ MindSpeed-MM已发布版本维护策略：
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX</a></td>
-      <td><a href="https://huggingface.co/THUDM/CogVideo">5B</a></td>
-      <td>/</td>
-      <td> /</td>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX-5b">5B</a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
       <td> / </td>
       <td> / </td>
-      <td> / </td>
-      <td> / </td>
+      <td> 【昇腾】【NAIE】 </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -235,13 +235,14 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Test】</td>
     </tr>
     <tr>
-      <td><a href="https://huggingface.co/OpenGVLab/InternVL2-26B">26B</a></td>
-      <td>/</td>
-      <td> /</td>
+      <td><a href="https://huggingface.co/OpenGVLab/InternVL2-26B">76B</a></td>
+      <td> 微调 </td>
+      <td> 8x16 </td>
+      <td> BF16 </td>
       <td> / </td>
       <td> / </td>
-      <td> / </td>
-      <td> / </td>
+      <td> 【昇腾】 </td>
+      .
       <td>【Coming Soon】</td>
     </tr>
     <tr>
@@ -390,6 +391,13 @@ MindSpeed-MM集成了昇腾profiling采集工具，以提供对模型运行情�
 
   具体方法见 [README](./mindspeed_mm/tools/README.md) 的profiling章节
 
+### MindStudio Insight性能分析工具
+
+针对大模型集群场景的性能调优，这里推荐一款优秀的可视化调优工具MindStudio Insight。
+MindStudio Insight提供了包括Timeline视图、通信分析、计算耗时等的可视化呈现，以便用户分析潜在的性能瓶颈，并指导如何采取措施消除或减少这些瓶颈。
+
+  具体使用方法见[《MindStudio Insight操作指南》](https://www.hiascend.com/document/detail/zh/mindstudio/70RC3/msinsightug/msascendinsightug/Insight_userguide_0002.html)，下载地址[《MindStudio Insight》](https://support.huawei.com/enterprise/zh/ascend-computing/mindstudio-pid-251913966/software/262029358?idAbsPath=fixnode01%7C23710424%7C251366513%7C22892968%7C251913966)
+
 ---
 
 ## 致谢
@@ -402,6 +410,12 @@ MindSpeed-MM 由华为公司的下列部门联合贡献 ：
 * 计算技术开发部
 
 感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
+
+---
+
+## Mindspeed-MM 相关介绍
+
+1. [面向大规模分布式训练的多模态套件](https://mp.weixin.qq.com/s/Qiw_qThKA72T0lLOSpjkKw)
 
 ---
 
