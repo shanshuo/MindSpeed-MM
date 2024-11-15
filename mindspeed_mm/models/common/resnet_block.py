@@ -138,8 +138,6 @@ class ContextParallelResnetBlock3D(nn.Module):
 
         self.norm1 = normalization(
             in_channels,
-            zq_ch=zq_ch,
-            add_conv=add_conv,
             gather=gather_norm,
         )
 
@@ -152,8 +150,6 @@ class ContextParallelResnetBlock3D(nn.Module):
             self.temb_proj = torch.nn.Linear(temb_channels, out_channels)
         self.norm2 = normalization(
             out_channels,
-            zq_ch=zq_ch,
-            add_conv=add_conv,
             gather=gather_norm,
         )
         self.dropout = torch.nn.Dropout(dropout)
