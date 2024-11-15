@@ -1,4 +1,5 @@
 from typing import Optional, Tuple
+from contextlib import nullcontext
 
 from einops import rearrange, repeat
 import torch
@@ -71,6 +72,7 @@ class VideoDitSparse(MultiModalModule):
     ):
         super().__init__(config=None)
         args = get_args()
+        self.sequence_parallel = args.sequence_parallel
         self.gradient_checkpointing = True
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
@@ -121,6 +123,10 @@ class VideoDitSparse(MultiModalModule):
         self.scale_shift_table = nn.Parameter(torch.randn(2, inner_dim) / inner_dim ** 0.5)
         self.proj_out = nn.Linear(inner_dim, patch_size_t * patch_size * patch_size * out_channels)
         self.adaln_single = AdaLayerNormSingle(inner_dim)
+        # set label "sequence_parallel", for all_reduce the grad
+        for param in self.adaln_single.parameters():
+            setattr(param, "sequence_parallel", self.sequence_parallel)
+        setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
 
     def prepare_sparse_mask(self, video_mask, prompt_mask, sparse_n):
         video_mask = video_mask.unsqueeze(1)
@@ -173,6 +179,12 @@ class VideoDitSparse(MultiModalModule):
         prompt_mask: Optional[torch.Tensor] = None,
         **kwargs
     ) -> torch.Tensor:
+        # RNG context.
+        if self.sequence_parallel:
+            rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
+        else:
+            rng_context = nullcontext()
+        
         batch_size, c, frames, h, w = latents.shape
         prompt_mask = prompt_mask.view(batch_size, -1, prompt_mask.shape[-1])
         if self.training and mpu.get_context_parallel_world_size() > 1:
@@ -215,49 +227,54 @@ class VideoDitSparse(MultiModalModule):
         for sparse_n in [1, 4]:
             sparse_mask[sparse_n] = self.prepare_sparse_mask(video_mask, prompt_mask, sparse_n)
 
+        if self.sequence_parallel:
+            latents = tensor_parallel.scatter_to_sequence_parallel_region(latents)
+            prompt = tensor_parallel.scatter_to_sequence_parallel_region(prompt)
+        
         # 2. Blocks
         frames = torch.tensor(frames)
         height = torch.tensor(height)
         width = torch.tensor(width)
 
-        for i, block in enumerate(self.videodit_sparse_blocks):
-            if i > 1 and i < 30:
-                video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
-            else:
-                video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
+        with rng_context:
+            for i, block in enumerate(self.videodit_sparse_blocks):
+                if i > 1 and i < 30:
+                    video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
+                else:
+                    video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
 
-            if self.training and self.gradient_checkpointing:
-                def create_custom_forward(module, return_dict=None):
-                    def custom_forward(*inputs):
-                        if return_dict is not None:
-                            return module(*inputs, return_dict=return_dict)
-                        else:
-                            return module(*inputs)
-                    return custom_forward
+                if self.training and self.gradient_checkpointing:
+                    def create_custom_forward(module, return_dict=None):
+                        def custom_forward(*inputs):
+                            if return_dict is not None:
+                                return module(*inputs, return_dict=return_dict)
+                            else:
+                                return module(*inputs)
+                        return custom_forward
 
-                latents = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    latents,
-                    video_mask,
-                    prompt,
-                    prompt_mask,
-                    timestep,
-                    frames,
-                    height,
-                    width
-                )
-            else:
-                latents = block(
-                            latents,
-                            video_mask=video_mask,
-                            prompt=prompt,
-                            prompt_mask=prompt_mask,
-                            timestep=timestep,
-                            frames=frames,
-                            height=height,
-                            width=width,
-                        )
-
+                    latents = torch.utils.checkpoint.checkpoint(
+                        create_custom_forward(block),
+                        latents,
+                        video_mask,
+                        prompt,
+                        prompt_mask,
+                        timestep,
+                        frames,
+                        height,
+                        width
+                    )
+                else:
+                    latents = block(
+                                latents,
+                                video_mask=video_mask,
+                                prompt=prompt,
+                                prompt_mask=prompt_mask,
+                                timestep=timestep,
+                                frames=frames,
+                                height=height,
+                                width=width,
+                            )
+        
         # To (b, t*h*w, h) or (b, t//sp*h*w, h)
         latents = rearrange(latents, 's b h -> b s h', b=batch_size).contiguous()
 
@@ -390,6 +407,9 @@ class VideoDitSparse(MultiModalModule):
         latents = self.norm_out(latents)
         # Modulation
         latents = latents * (1 + scale) + shift
+        if self.sequence_parallel:
+            latents = tensor_parallel.gather_from_sequence_parallel_region(latents,
+                                                                           tensor_parallel_output_grad=False)
         latents = self.proj_out(latents)
         latents = latents.squeeze(1)
 
@@ -433,6 +453,9 @@ class VideoDiTSparseBlock(nn.Module):
             sparse_group: bool = False,
     ):
         super().__init__()
+
+        args = get_args()
+        self.sequence_parallel = args.sequence_parallel
 
         # Define 3 blocks. Each block has its own normalization layer.
         # 1. Self-Attn
@@ -483,6 +506,8 @@ class VideoDiTSparseBlock(nn.Module):
 
         # 4. Scale-shift.
         self.scale_shift_table = nn.Parameter(torch.randn(6, dim) / dim ** 0.5)
+        # set label "sequence_parallel", for all_reduce the grad
+        setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
 
     def forward(
             self,
