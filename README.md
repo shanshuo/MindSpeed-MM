@@ -123,7 +123,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 0.71 (Samples per Second) </td>
       <td> 0.73 (Samples per Second) </td>
       <td> 【昇腾】 </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX</a></td>
@@ -188,7 +188,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 55.23 (FPS) </td>
       <td> 53.65 (FPS) </td>
       <td> 【昇腾】 </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
@@ -222,7 +222,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 33.77 (Samples per Second) </td>
       <td> 22.46 (Samples per Second) </td>
       <td> 【昇腾】 </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-8B">8B</a></td>
@@ -232,7 +232,7 @@ MindSpeed-MM已发布版本维护策略：
       <td> 12.86 (Samples per Second) </td>
       <td> 11.00 (Samples per Second) </td>
       <td> 【昇腾】 </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-26B">26B</a></td>
