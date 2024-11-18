@@ -8,8 +8,9 @@ import torch.nn.functional as F
 from diffusers.models.embeddings import SinusoidalPositionalEmbedding
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
+from megatron.training.arguments import core_transformer_config_from_args
 
-from mindspeed_mm.models.common.blocks import MatmulAddFeedForward
+from mindspeed_mm.models.common.ffn import FeedForward as TensorParallelFeedForward
 from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
 from mindspeed_mm.models.common.embeddings.pos_embeddings import Rotary3DPositionEmbedding
 from mindspeed_mm.models.common.embeddings.time_embeddings import TimeStepEmbedding
@@ -503,17 +504,28 @@ class VideoDiTBlock(nn.Module):
         # 2. Feed-forward
         self.norm2 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
 
-        self.ff = MatmulAddFeedForward(
+        self.ff = TensorParallelFeedForward(
             dim,
             dropout=dropout,
             activation_fn=activation_fn,
             final_dropout=final_dropout,
             inner_dim=ff_inner_dim,
-            bias=ff_bias,
+            bias=ff_bias
         )
 
         # 3. Scale-shift.
-        self.scale_shift_table = nn.Sequential(nn.SiLU(), nn.Linear(self.time_embed_dim, 12 * dim))
+        args = get_args()
+        config = core_transformer_config_from_args(args)
+        self.scale_shift_table = nn.Sequential(
+            nn.SiLU(),
+            tensor_parallel.ColumnParallelLinear(
+                self.time_embed_dim,
+                12 * dim,
+                config=config,
+                init_method=config.init_method,
+                gather_output=True
+            )
+        )
 
         # let chunk size default to None
         self._chunk_size = None
@@ -549,7 +561,7 @@ class VideoDiTBlock(nn.Module):
             text_shift_mlp,
             text_scale_mlp,
             text_gate_mlp,
-        ) = self.scale_shift_table(timestep).unsqueeze(1).chunk(12, dim=2)
+        ) = self.scale_shift_table(timestep)[0].unsqueeze(1).chunk(12, dim=2)
         latents_text = latents[:, :self.text_length]
         latents_vid = latents[:, self.text_length:]
         latents_vid = self.norm1(latents_vid)

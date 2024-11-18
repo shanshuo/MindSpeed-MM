@@ -4,25 +4,27 @@
 </p>
 
 ## 目录
-- [支持任务列表](#jump1)
-- [环境安装](#jump2)
-  - [仓库拉取](#jump2.1)
-  - [环境搭建](#jump2.2)
-  - [Decord搭建](#jump2.3)
-- [权重下载及转换](#jump3)
-  - [VAE下载](#jump3.1)
-  - [transformer文件下载](#jump3.2)
-  - [T5模型下载](#jump3.3)
-  - [权重转换](#jump3.4)
-- [数据集准备及处理](#jump4)
-- [预训练](#jump5)
-  - [准备工作](#jump5.1)
-  - [配置参数](#jump5.2)
-  - [启动预训练](#jump5.3)
-- [推理](#jump6)
-  - [准备工作](#jump6.1)
-  - [配置参数](#jump6.2)
-  - [启动推理](#jump6.3)
+- [CogVideoX 使用指南](#cogvideox-使用指南)
+  - [目录](#目录)
+  - [支持任务列表](#支持任务列表)
+  - [环境安装](#环境安装)
+      - [仓库拉取](#仓库拉取)
+      - [环境搭建](#环境搭建)
+      - [Decord搭建](#decord搭建)
+  - [权重下载及转换](#权重下载及转换)
+      - [VAE下载](#vae下载)
+      - [transformer文件下载](#transformer文件下载)
+      - [T5模型下载](#t5模型下载)
+      - [权重转换](#权重转换)
+  - [数据集准备及处理](#数据集准备及处理)
+  - [预训练](#预训练)
+      - [准备工作](#准备工作)
+      - [配置参数](#配置参数)
+      - [启动预训练](#启动预训练)
+  - [推理](#推理)
+      - [准备工作](#准备工作-1)
+      - [配置参数](#配置参数-1)
+      - [启动推理](#启动推理)
 
 ---
 <a id="jump1"></a>
@@ -154,7 +156,7 @@ pip install decord==0.6.0
 #### 权重转换
 权重转换source_path参数请配置transformer权重文件的路径：
 ```bash
-python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1
+python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --mode split
 ```
 
 ---
@@ -234,6 +236,11 @@ i2v任务启动预训练
 |------|:--------------------------------:|:-----------------------------------:|
 |  examples/cogvideox/inference_model.json    |         from_pretrained          |            修改为下载的权重所对应路径            |
 |   examples/cogvideox/samples_prompts.txt   |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
+
+如果使用训练后保存的权重进行推理，需要使用脚本进行转换，权重转换source_path参数请配置训练时的保存路径
+```bash
+python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --mode merge
+```
 
 <a id="jump6.3"></a>
 #### 启动推理
