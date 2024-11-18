@@ -1,4 +1,5 @@
 import importlib
+import torch
 import torch.nn as nn
 from mindspeed_mm.utils.utils import get_dtype
 

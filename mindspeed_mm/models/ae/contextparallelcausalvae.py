@@ -221,7 +221,6 @@ class ContextParallelCasualVAE(MultiModalModule):
             res = _conv_gather(res, dim=2, kernel_size=1)
 
         res = 0.7 * res
-        res = res.permute(0, 2, 1, 3, 4).contiguous()
 
         return res
 
