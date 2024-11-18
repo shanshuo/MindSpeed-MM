@@ -400,9 +400,33 @@ class SelfAttentionBSH(nn.Module):
 
         key_dim = key_dim if key_dim is not None else query_dim
 
-        self.proj_qkv = nn.Linear(query_dim, self.inner_dim * 3, bias=proj_qkv_bias)
+        args = get_args()
+        config = core_transformer_config_from_args(args)
+        self.tp_size = mpu.get_tensor_model_parallel_world_size()
+        self.sp_size = mpu.get_context_parallel_world_size()
+        self.num_attention_heads_per_partition = core.utils.divide(num_heads, self.tp_size)
+        self.num_attention_heads_per_partition_per_cp = core.utils.divide(
+            self.num_attention_heads_per_partition, self.sp_size)
 
-        self.proj_out = MatmulAddLinear(self.inner_dim, query_dim, bias=proj_out_bias)
+        self.proj_qkv = tensor_parallel.ColumnParallelLinear(
+            query_dim,
+            self.inner_dim * 3,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_qkv_bias,
+            gather_output=False
+        )
+
+        self.proj_out = tensor_parallel.RowParallelLinear(
+            query_dim,
+            self.inner_dim,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_qkv_bias,
+            input_is_parallel=True,
+            skip_bias_add=False
+        )
+
         self.dropout = nn.Dropout(dropout)
 
     def forward(
@@ -431,10 +455,10 @@ class SelfAttentionBSH(nn.Module):
         if mask is not None:
             mask = mask.view(b, 1, -1, mask.shape[-1])
 
-        q, k, v = self.proj_qkv(query).chunk(3, dim=2)
+        q, k, v = self.proj_qkv(query)[0].chunk(3, dim=2)
 
-        q = q.view(b, -1, self.num_heads, self.head_dim)
-        k = k.view(b, -1, self.num_heads, self.head_dim)
+        q = q.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        k = k.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim)
 
         if self.qk_ln:
             q = self.q_norm(q)
@@ -443,20 +467,20 @@ class SelfAttentionBSH(nn.Module):
         if self.use_rope and self.rope is not None:
             q = self.rope(q)
             k = self.rope(k)
-        q = q.view(b, -1, self.inner_dim)
-        k = k.view(b, -1, self.inner_dim)
+        q = q.view(b, -1, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        k = k.view(b, -1, self.num_attention_heads_per_partition_per_cp * self.head_dim)
 
         out = torch_npu.npu_fusion_attention(
             q,
             k,
             v,
-            head_num=self.num_heads,
+            head_num=self.num_attention_heads_per_partition_per_cp,
             atten_mask=mask,
             input_layout="BSH",
             scale=1 / math.sqrt(self.head_dim)
         )[0]
 
-        out = self.proj_out(out)
+        out, _ = self.proj_out(out)
         out = self.dropout(out)
         if input_ndim == 4:
             out = out.transpose(-1, -2).reshape(b, c, h, w)

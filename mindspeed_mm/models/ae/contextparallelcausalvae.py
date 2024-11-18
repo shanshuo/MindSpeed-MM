@@ -5,6 +5,8 @@ from torch import nn
 from einops import rearrange
 import numpy as np
 
+from megatron.core import mpu
+from megatron.training import print_rank_0
 from mindspeed_mm.models.common.activations import Sigmoid
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.conv import Conv2d, CausalConv3d, ContextParallelCausalConv3d
@@ -23,6 +25,8 @@ from mindspeed_mm.utils.utils import (
     initialize_context_parallel,
     get_context_parallel_group,
     get_context_parallel_group_rank,
+    get_context_parallel_world_size,
+    get_context_parallel_rank
 )
 
 CASUALVAE_MODULE_MAPPINGS = {
@@ -183,6 +187,12 @@ class ContextParallelCasualVAE(MultiModalModule):
         if from_pretrained is not None:
             load_checkpoint(self, from_pretrained)
 
+        self.dp_group_nums = torch.distributed.get_world_size() // mpu.get_data_parallel_world_size()
+
+        if self.cp_size > 0:
+            if not is_context_parallel_initialized():
+                initialize_context_parallel(self.cp_size)
+
     def get_encoder(self):
         if self.use_quant_layer:
             return [self.quant_conv, self.encoder]
@@ -193,13 +203,51 @@ class ContextParallelCasualVAE(MultiModalModule):
             return [self.post_quant_conv, self.decoder]
         return [self.decoder]
 
+    def _bs_split_and_pad(self, x, split_size):
+        bs = x.shape[0]
+        remain = bs % split_size
+        if remain == 0:
+            return torch.tensor_split(x, split_size, dim=0)
+        else:
+            print_rank_0(f"[WARNING]: data batch size {bs} is not divisible by split size {split_size}, which may cause waste!")
+            x = torch.cat([x, x[-1:].repeat_interleave(split_size - remain, dim=0)], dim=0)
+            return torch.tensor_split(x, split_size, dim=0)
+
     def encode(self, x):
+        if self.cp_size % self.dp_group_nums == 0 and self.cp_size > self.dp_group_nums:
+            # loop cp
+            data_list = [torch.empty_like(x) for _ in range(self.cp_size)]
+            data_list[get_context_parallel_rank()] = x
+            torch.distributed.all_gather(data_list, x, group=get_context_parallel_group())
+            data_list = data_list[::self.dp_group_nums]
+            latents = []
+            for data in data_list:
+                latents.append(self._encode(x))
+            return latents[get_context_parallel_group_rank() % self.dp_group_nums]
+
+        elif self.dp_group_nums % self.cp_size == 0 and self.cp_size < self.dp_group_nums:
+            # split
+            bs = x.shape[0]
+            data_list = self._bs_split_and_pad(x, self.dp_group_nums // self.cp_size)
+            data = data_list[get_context_parallel_rank() % (self.dp_group_nums // self.cp_size)]
+            _latent = self._encode(data)
+            latents = [torch.empty_like(_latent) for _ in range(self.dp_group_nums)]
+            latents[get_context_parallel_rank() % (self.dp_group_nums // self.cp_size)] = _latent
+
+            # dit only supports tensor model parallel now, context parallel and pipeline parallel is not supported yet.
+            torch.distributed.all_gather(latents, _latent, group=mpu.get_tensor_model_parallel_group())
+            latents = latents[::self.cp_size]
+            return torch.cat(latents, dim=0)[:bs]
+
+        elif self.cp_size == self.dp_group_nums:
+            return self._encode(x)
+        else:
+            raise NotImplementedError(f"Not supported megatron data parallel group nums {self.dp_group_nums} and VAE cp_size {self.cp_size}!")
+
+    def _encode(self, x):
         x = x.permute(0, 2, 1, 3, 4).contiguous()
 
         if self.cp_size > 0:
-            if not is_context_parallel_initialized():
-                initialize_context_parallel(self.cp_size)
-
             global_src_rank = get_context_parallel_group_rank() * self.cp_size
             torch.distributed.broadcast(x, src=global_src_rank, group=get_context_parallel_group())
 
@@ -225,6 +273,12 @@ class ContextParallelCasualVAE(MultiModalModule):
         return res
 
     def decode(self, z, **kwargs):
+        if self.cp_size > 0:            
+            global_src_rank = get_context_parallel_group_rank() * self.cp_size
+            torch.distributed.broadcast(z, src=global_src_rank, group=get_context_parallel_group())
+
+            z = _conv_split(z, dim=2, kernel_size=1)
+
         if self.use_tiling:
             if (z.shape[-1] > self.tile_latent_min_size
                     or z.shape[-2] > self.tile_latent_min_size
@@ -234,7 +288,10 @@ class ContextParallelCasualVAE(MultiModalModule):
             if self.use_quant_layer:
                 z = self.post_quant_conv(z)
             dec = self.decoder(z)
-        dec = rearrange(dec, "b c t h w -> b t c h w").contiguous()
+
+        if self.cp_size > 0:
+            dec = _conv_gather(dec, dim=2, kernel_size=1)
+
         return dec
 
     def forward(self, x, sample_posterior=True):
@@ -572,6 +629,7 @@ class Decoder(nn.Module):
         dropout: float = 0.0,
         resolution: int = 256,
         num_res_blocks: int = 2,
+        temporal_compress_times: int = 4,
         gather_norm: bool = False,
     ):
         super().__init__()
@@ -586,6 +644,9 @@ class Decoder(nn.Module):
         # ---- Nonlinearity ----
         if self.enable_nonlinearity:
             self.nonlinearity = model_name_to_cls(nonlinearity)()
+
+        # log2 of temporal compress_times
+        self.temporal_compress_level = int(np.log2(temporal_compress_times))
 
         # ---- In ----
         block_in = hidden_size * hidden_size_mult[self.num_resolutions - 1]
@@ -649,8 +710,9 @@ class Decoder(nn.Module):
             up.block = block
             up.attn = attn
             if spatial_upsample[i_level]:
+                compress_time = i_level >= self.num_resolutions - self.temporal_compress_level
                 up.upsample = model_name_to_cls(spatial_upsample[i_level])(
-                    block_in, block_in
+                    block_in, block_in, compress_time=compress_time
                 )
                 curr_res = curr_res * 2
             if temporal_upsample[i_level]:

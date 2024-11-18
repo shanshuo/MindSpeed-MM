@@ -108,8 +108,81 @@ def save_by_tp(state_dicts: List[Dict], save_dir: str):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
+    flags = os.O_WRONLY | os.O_CREAT
+    mode = stat.S_IWUSR | stat.S_IRUSR
+    with os.fdopen(os.open(os.path.join(save_dir, 'latest_checkpointed_iteration.txt'), flags, mode), 'w') as fout:
+        fout.write(latest_checkpointed_iteration)
+    if latest_checkpointed_iteration == 'release':
+        directory = 'release'
+    else:
+        directory = 'iter_{:07d}'.format(latest_checkpointed_iteration)
+
     for tp_rank, state_dict in enumerate(state_dicts):
-        torch.save(state_dict, os.path.join(save_dir, f"tp_rank_{tp_rank:02d}_model_states.pt"))
+        os.makedirs(os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}"))
+        save_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
+        save_dict = {}
+        save_dict['model'] = state_dict
+        torch.save(save_dict, save_path)
+
+
+def merge_by_tp(train_save_dir: str, save_path: str, num_layers: int, tp_size: int):
+    flags = os.O_RDONLY
+    mode = stat.S_IRUSR
+    with os.fdopen(os.open(os.path.join(train_save_dir, "latest_checkpointed_iteration.txt"), flags, mode)) as f:
+        latest_checkpointed_iteration = f.readline()
+
+    if latest_checkpointed_iteration == 'release':
+        directory = 'release'
+    else:
+        directory = 'iter_{:07d}'.format(latest_checkpointed_iteration)    
+
+    _state_dicts = []
+    for tp_rank in range(tp_size):
+        state_dict_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
+        _state_dicts.append(torch.load(state_dict_path)['model'])
+    
+    if tp_size == 1:
+        torch.save(_state_dicts[0], save_path)
+        return 
+
+    merged_state_dict = copy.deepcopy(_state_dicts[0])
+    for index in num_layers:
+        # ColumnParallelLinear
+        suffixed_0 = [
+            f"videodit_blocks.{index}.ff.net.0.proj.weight",
+            f"videodit_blocks.{index}.ff.net.0.proj.bias",
+            f"videodit_blocks.{index}.scale_shift_table.1.weight",
+            f"videodit_blocks.{index}.scale_shift_table.1.bias"
+        ]
+        # RowParallelLinear
+        suffixed_1 = [
+            f"videodit_blocks.{index}.self_atten.proj_out.weight",
+            f"videodit_blocks.{index}.ff.net.2.weight",
+        ]
+        # self_atten.proj_qkv
+        suffixed_special = [
+            f"videodit_blocks.{index}.self_atten.proj_qkv.weight",
+            f"videodit_blocks.{index}.self_atten.proj_qkv.bias"
+        ]
+        for name in suffixed_0:
+            parameters = [_state_dicts[tp_rank][name] for tp_rank in range(tp_size)]
+            parameters = torch.cat(parameters, dim=0)
+            merged_state_dict[name] = parameters
+        for name in suffixed_1:
+            parameters = [_state_dicts[tp_rank][name] for tp_rank in range(tp_size)]
+            parameters = torch.cat(parameters, dim=1)
+            merged_state_dict[name] = parameters
+        for name in suffixed_special:
+            wq = [torch.chunk(_state_dicts[tp_rank][name], 3, dim=0)[0] for tp_rank in range(tp_size)]
+            wk = [torch.chunk(_state_dicts[tp_rank][name], 3, dim=0)[1] for tp_rank in range(tp_size)]
+            wv = [torch.chunk(_state_dicts[tp_rank][name], 3, dim=0)[2] for tp_rank in range(tp_size)]
+            wq = torch.cat(wq, dim=0)
+            wk = torch.cat(wk, dim=0)
+            wv = torch.cat(wv, dim=0)
+            wqkv = torch.cat([wq, wk, wv], dim=0)
+            merged_state_dict[name] = wqkv
+    torch.save(merged_state_dict, save_path)
+    return 
 
 
 def get_args():
@@ -119,6 +192,9 @@ def get_args():
     parser.add_argument("--source_path", type=str, default="./transformer/1/mp_rank_00_model_states.pt", help="Source path of checkpoint")
     parser.add_argument("--target_path", type=str, default="./ckpt/sat_dit/", help="Save path of MM checkpoint")
     parser.add_argument("--task", type=str, default="t2v", choices=["t2v", "i2v"], help="Task type")
+    parser.add_argument("--mode", type=str, default="split", choice=["split", "merge"], 
+        help="Split mode is used to split the pretrained weights according to tp_size before training, \
+        and Merge mode is used to merge weights based on tp_size after training is completed")
 
     args = parser.parse_args()
     return args
@@ -126,15 +202,19 @@ def get_args():
 
 if __name__ == "__main__":
     args = get_args()
-    source_state_dict = torch.load(args.source_path, map_location='cpu')['module']
+    if args.mode == 'split':
+        source_state_dict = torch.load(args.source_path, map_location='cpu')['module']
 
-    if args.task == "i2v":
-        CONVERT_MAPPING.update({"mixins.pos_embed.pos_embedding": "pos_embed.pos_embedding"})
+        if args.task == "i2v":
+            CONVERT_MAPPING.update({"mixins.pos_embed.pos_embedding": "pos_embed.pos_embedding"})
 
-    # inplace state dict
-    for i in range(args.num_layers):
-        CONVERT_MAPPING.update(get_layer_mapping(i))
-    update_state_dict_inplace(source_state_dict, CONVERT_MAPPING)
+        # inplace state dict
+        for i in range(args.num_layers):
+            CONVERT_MAPPING.update(get_layer_mapping(i))
+        update_state_dict_inplace(source_state_dict, CONVERT_MAPPING)
 
-    state_dicts = split_by_tp(source_state_dict, tp_size=args.tp_size, num_layers=args.num_layers)
-    save_by_tp(state_dicts, args.target_path)
+        state_dicts = split_by_tp(source_state_dict, tp_size=args.tp_size, num_layers=args.num_layers)
+        save_by_tp(state_dicts, args.target_path)
+    
+    elif args.mode == 'merge':
+        merge_by_tp(args.source_path, args.target_path, args.num_layers, args.tp_size)
