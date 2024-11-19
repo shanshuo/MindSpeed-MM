@@ -154,7 +154,7 @@ pip install decord==0.6.0
 
 <a id="jump3.4"></a>
 #### 权重转换
-权重转换source_path参数请配置transformer文件的路径：
+权重转换source_path参数请配置transformer权重文件的路径：
 ```bash
 python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --mode split
 ```

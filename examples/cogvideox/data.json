@@ -26,7 +26,7 @@
 		"tokenizer_config": {
 			"hub_backend": "hf",
 			"autotokenizer_name": "T5Tokenizer",
-			"from_pretrained": "CogVideoX/t5-v1_1-xxl"
+			"from_pretrained": "5b-cogvideo/tokenizer"
 		}
 	},
 	"dataloader_param": {

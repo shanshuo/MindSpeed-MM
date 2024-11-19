@@ -23,7 +23,7 @@ class LayerNorm(nn.Module):
         return x
 
 
-def normalize(in_channels, num_groups=32, eps=1e-6, affine=True, norm_type="groupnorm", gather=False):
+def normalize(in_channels, num_groups=32, eps=1e-6, affine=True, norm_type="groupnorm", gather=False, **kwargs):
     if not gather:
         if norm_type == "groupnorm":
             return torch.nn.GroupNorm(
