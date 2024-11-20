@@ -32,11 +32,11 @@
 | :-----------------------: |:----------------------------------:|
 |          硬件配置         |                Atlas 800T A2 <br> Atlas 900 A2 PoD                 |
 |          Python           |                3.8                 |
-|          Driver           |         在研版本          |
-|         Firmware          |         在研版本          |
-|           CANN            |             在研版本             |
+|          Driver           |         AscendHDK 24.1.RC3          |
+|         Firmware          |         AscendHDK 24.1.RC3          |
+|           CANN            |             CANN 8.0.RC3             |
 |           Torch           |            2.1.0            |
-|         Torch_npu         |           2.1.0           |
+|         Torch_npu         |           release v6.0.RC3           |
 
 <a id="jump1.1"></a>
 
@@ -119,9 +119,9 @@ pip install decord==0.6.0
 
 #### 2. 权重转换
 
-MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分。
+MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt_to_mm.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分。
 
-首先修改 examples/opensoraplan1.3/convert_ckpt.py 参数
+首先修改 examples/opensoraplan1.3/convert_ckpt_to_mm.py 参数
 
     TP_SIZE = 1  # TP（Tensor Parallel）size，需要和训练脚本的CP保持一致
     dit_hg_weight_path = "raw_ckpt/open-sora-plan/any93x640x640/" #huggingface下载的dit预训练权重路径
@@ -135,10 +135,10 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 
     # 根据实际情况修改 ascend-toolkit 路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
-    python examples/opensoraplan1.3/convert_kpt.py
+    python examples/opensoraplan1.3/convert_ckpt_to_mm.py
 ---
 
-同步修改examples/opensoraplan1.3/pretrain_t2v.sh.sh中的--load参数，该路径为转换后或者切分后的权重，注意--load配置的是转换到MindSpeed-MM后的dit权重路径，vae权重路径在pretrain_t2v_model.json中配置
+同步修改examples/opensoraplan1.3/pretrain_t2v.sh中的--load参数，该路径为转换后或者切分后的权重，注意--load配置的是转换到MindSpeed-MM后的dit权重路径，vae权重路径在pretrain_t2v_model.json中配置
 
     --load "mm_ckpt/open-sora-plan/checkpoint"
 
