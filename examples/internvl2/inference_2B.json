@@ -1,7 +1,7 @@
 {   
-    "image_path": "./image.jpg",
+    "image_path": "./examples/internvl2/view.jpg",
     "prompts": "Please describe the image shortly.",
-    "model_id": "InternVLPipeline",
+    "pipeline_class": "InternVLPipeline",
     "from_pretrained": "./ckpt/model_optim_rng.pt",
     "dtype": "bf16",
     "device": "npu",

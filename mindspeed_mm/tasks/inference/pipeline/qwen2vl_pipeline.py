@@ -33,8 +33,7 @@ class Qwen2VlPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
                       do_sample=True if self.generation_config.temperature > 0 else False,
                       temperature=self.generation_config.temperature,
                       max_new_tokens=self.generation_config.max_new_tokens,
-                      streamer=streamer,
-                      use_cache=True)
+                      streamer=streamer)
 
     def prepare_inputs(self):
         messages = [

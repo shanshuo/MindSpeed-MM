@@ -1,5 +1,5 @@
 {
-    "model_id": "Qwen2VlPipeline",
+    "pipeline_class": "Qwen2VlPipeline",
     "ps_version": "v2",
     "params_dtype": "bf16",
     "img_context_token_id": 151655,
@@ -146,7 +146,6 @@
         "sequence_bias": null,
         "suppress_tokens": null,
         "typical_p": 1.0,
-        "transformers_version": "4.31.0",
         "force_words_ids": null,
         "num_beams": 1,
         "renormalize_logits": false,

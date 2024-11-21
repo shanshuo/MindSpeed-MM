@@ -61,11 +61,11 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         pixel_values = [transform(image) for image in images]
         pixel_values = torch.stack(pixel_values)
         return pixel_values
-    
+
     def _prepare_prompts(self, question):
         question = "<image>\n" + question
         return question
-    
+
     def prepare_inputs(self):
         image_size = self.infer_config.image_encoder.vision_encoder.image_size
         patch_size = self.infer_config.image_encoder.vision_encoder.patch_size
@@ -76,11 +76,10 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
         question = self._prepare_prompts(self.infer_config.prompts)
         return pixel_values, question
-    
+
     def prepare_inputs_for_generation(
-            self, input_ids, attention_mask=None, inputs_embeds=None, **kwargs
+            self, input_ids, attention_mask=None, **kwargs
     ):
-        input_ids = torch.cat((self.init_input_ids, input_ids), dim=-1)
         B, S = input_ids.shape
         attention_mask = torch.ones(B, S).npu()
         attention_mask = self.infer_model._prepare_decoder_attention_mask(attention_mask)
@@ -88,7 +87,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         if attention_mask is not None and position_ids is None:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-        
+
         cur_input_embeds = self.model.embedding(input_ids, position_ids=position_ids)
         B, N, C = cur_input_embeds.shape
         cur_input_embeds = cur_input_embeds.reshape(B * N, C)
@@ -97,29 +96,27 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         selected = (input_ids == self.img_context_token_id)
         if selected.sum() == 0:
             raise ValueError("image special token must in input_ids")
-        cur_input_embeds[selected] = inputs_embeds.reshape(-1, C).to(cur_input_embeds.device)
+        cur_input_embeds[selected] = self.vit_embeds.reshape(-1, C).to(cur_input_embeds.device)
         cur_input_embeds = cur_input_embeds.reshape(B, N, C)
+        model_inputs = {
+            "decoder_input": cur_input_embeds,
+            "position_ids": position_ids,
+            "attention_mask": attention_mask,
+            "input_ids": input_ids,
+        }
 
-        model_inputs = {"decoder_input": cur_input_embeds}
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "attention_mask": attention_mask,
-                "input_ids": input_ids
-            }
-        )
         return model_inputs
-    
+
     @torch.no_grad()
     def _inference(
             self,
+            input_ids,
             pixel_values=None,
             attention_mask=None,
             visual_features=None,
-            generation_config=None,
             output_hidden_states=None,
             return_dict=None,
-            **generate_kwargs,
+
     ) -> torch.LongTensor:
         if self.img_context_token_id is None:
             raise ValueError("img_context_token_id cannot be None")
@@ -129,25 +126,23 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
             else:
                 vit_embeds = self.image_encoder(pixel_values)
                 vit_embeds = self.infer_model.vit_proj(vit_embeds)
-        
+        self.vit_embeds = vit_embeds
         outputs = self.generate(
-            inputs_embeds=vit_embeds,
+            input_ids=input_ids,
             attention_mask=attention_mask,
-            generation_config=generation_config,
+            generation_config=self.generation_config,
             output_hidden_states=output_hidden_states,
+            streamer=self.streamer,
             return_dict=return_dict,
-            use_cache=True,
-            **generate_kwargs
         )
 
         return outputs
-    
+
     def __call__(self):
         IMG_CONTEXT_TOKEN = "<IMG_CONTEXT>"
         IMG_START_TOKEN = "<img>"
         IMG_END_TOKEN = "</img>"
 
-        generation_config = dict()
         pixel_values, question = self.prepare_inputs()
         num_patches_list = [pixel_values.shape[0]] if pixel_values is not None else []
 
@@ -155,12 +150,6 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
         template = get_conv_template("internlm2-chat")
         template.system_message = self.system_message
-        eos_token_id = self.tokenizer.convert_tokens_to_ids(template.sep)
-
-        history = []
-        for (old_question, old_answer) in history:
-            template.append_message(template.roles[0], old_question)
-            template.append_message(template.roles[1], old_answer)
         template.append_message(template.roles[0], question)
         template.append_message(template.roles[1], None)
         query = template.get_prompt()
@@ -171,18 +160,8 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
         model_inputs = self.tokenizer(query, return_tensors='pt')
         input_ids = model_inputs['input_ids'].npu()
-        self.init_input_ids = input_ids
         attention_mask = model_inputs['attention_mask'].npu()
-        generation_config['eos_token_id'] = eos_token_id
-
-        generation_output = self._inference(
+        self._inference(
+            input_ids=input_ids,
             pixel_values=pixel_values,
-            attention_mask=attention_mask,
-            **generation_config
-        )
-        response = self.tokenizer.batch_decode(generation_output, skip_special_tokens=True)[0]
-        response = response.split(template.sep)[0].strip()
-        history.append((question, response))
-        query_to_print = query.replace(IMG_CONTEXT_TOKEN, '')
-        query_to_print = query_to_print.replace(f'{IMG_START_TOKEN}{IMG_END_TOKEN}', '<image>')
-        print(response)
+            attention_mask=attention_mask)

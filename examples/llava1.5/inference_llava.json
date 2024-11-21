@@ -1,5 +1,6 @@
 {
   "model_id": "llava",
+  "pipeline_class": "LlavaPipeline",
   "text_decoder": {
       "num_layers": 32,
       "hidden_size": 4096,

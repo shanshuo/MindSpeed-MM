@@ -1,30 +1,37 @@
 import torch
-
+from PIL import Image
 from transformers.generation.streamers import TextStreamer
+from transformers import CLIPImageProcessor
+
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MMEncoderMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.generation_mixin import GenerationMixin
 from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
+from mindspeed_mm.models.text_encoder import Tokenizer
+from pretrain_llava import model_provider
 
 
 class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
-    def __init__(self, tokenizer, language_model, image_processor, args):
+    def __init__(self, infer_config):
 
-        self.tokenizer = tokenizer
-        self.vlmodel = language_model
-        self.model = language_model.text_decoder
-        self.image_processor = image_processor
-        self.args = args
+        self.infer_config = infer_config
+        self.tokenizer = Tokenizer(infer_config.tokenizer).get_tokenizer()
+        self.tokenizer.add_tokens([MODEL_CONSTANTS["llava"]["IMAGE_PATCH_TOKEN"]], special_tokens=True)
+        self.image_processor = CLIPImageProcessor.from_pretrained(infer_config.image_processer_path)
+        self.vlmodel = model_provider()
+        self.device = infer_config.device
+        self.dtype = infer_config.dtype
+        self.vlmodel.to(self.device, dtype=self.dtype)
+        self.model = self.vlmodel.text_decoder
         self.model_config = self.vlmodel.config
-        self.generation_config = args.mm.model.generation_config
-
-        self.device = args.mm.model.device
+        self.generation_config = infer_config.generation_config
         self.main_input_name = 'input_ids'
-        self.model.to(self.device)
 
-    def __call__(self, prompt, image, device, dtype=torch.float16):
+    def __call__(self):
 
+        image = self.load_image(self.infer_config.image_path)
+        prompt = self.infer_config.prompts
         prompt = self.format_prompt(prompt, mm_use_im_start_end=False)
         system = "A chat between a curious human and an artificial intelligence assistant. \
 The assistant gives helpful, detailed, and polite answers to the human's questions."
@@ -34,14 +41,14 @@ The assistant gives helpful, detailed, and polite answers to the human's questio
         image_size = image[0].size
         image_tensor = self.process_images(image, image_aspect_ratio="pad")
         if isinstance(image_tensor, list):
-            image_tensor = [image.to(device, dtype=dtype) for image in image_tensor]
+            image_tensor = [image.to(self.device, dtype=self.dtype) for image in image_tensor]
         else:
-            image_tensor = image_tensor.to(device, dtype=dtype)
+            image_tensor = image_tensor.to(self.device, dtype=self.dtype)
         input_ids = self.tokenizer_image_token(prompt, MODEL_CONSTANTS["llava"]["IMAGE_TOKEN_INDEX"],
-                                               return_tensors='pt').unsqueeze(0).to(device)
+                                               return_tensors='pt').unsqueeze(0).to(self.device)
         streamer = TextStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
 
-        attention_mask = torch.ones(input_ids.shape).bool().to(device)
+        attention_mask = torch.ones(input_ids.shape).bool().to(self.device)
         (inputs,
          position_ids,
          attention_mask,
@@ -152,3 +159,8 @@ The assistant gives helpful, detailed, and polite answers to the human's questio
         mask = indices > torch.arange(size).unsqueeze(1)  # shape: (size, size)
 
         return mask.to(device)
+
+    @staticmethod
+    def load_image(image_file):
+        image = Image.open(image_file).convert('RGB')
+        return [image]
