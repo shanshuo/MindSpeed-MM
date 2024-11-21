@@ -173,8 +173,8 @@ class DiffusersScheduler:
                     rank=dist.get_rank(),
                     bsz=b, device=x_start.device,
                 )
-        if mpu.get_context_parallel_world_size() > 1:
-            self.broadcast_timesteps(t)
+        self.broadcast_timesteps(t)
+
         if self.noise_offset:
             # https://www.crosslabs.org//blog/diffusion-with-offset-noise
             noise += self.noise_offset * torch.randn((b, c, 1, 1, 1), device=x_start.device)
@@ -288,6 +288,10 @@ class DiffusersScheduler:
         return latents
 
     def broadcast_timesteps(self, input_: torch.Tensor):
-        sp_size = mpu.get_context_parallel_world_size()
-        src = int(os.getenv("RANK", "0")) // sp_size * sp_size
-        dist.broadcast(input_, src=src, group=mpu.get_context_parallel_group())
+        cp_src_rank = list(mpu.get_context_parallel_global_ranks())[0]
+        if mpu.get_context_parallel_world_size() > 1:
+            dist.broadcast(input_, cp_src_rank, group=mpu.get_context_parallel_group())
+
+        tp_src_rank = mpu.get_tensor_model_parallel_src_rank()
+        if mpu.get_tensor_model_parallel_world_size() > 1:
+            dist.broadcast(input_, tp_src_rank, group=mpu.get_tensor_model_parallel_group())
