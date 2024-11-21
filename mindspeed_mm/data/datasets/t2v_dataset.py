@@ -245,7 +245,7 @@ class T2VDataset(MMBaseDataset):
 
     def get_data_from_feature_data(self, feature_path):
         if feature_path.endswith(".pt"):
-            return torch.load(feature_path)
+            return torch.load(feature_path, map_location=torch.device('cpu'))
         raise NotImplementedError("Not implemented.")
 
     def get_merge_data(self, examples, index):
