@@ -2,6 +2,8 @@
 # Copyright 2024 The HUAWEI Team. All rights reserved.
 
 
+import PIL
+import torch
 from mindspeed_mm.data.data_utils.utils import TextProcesser
 
 
@@ -59,7 +61,15 @@ class InputsCheckMixin:
         return [InputsCheckMixin._preprocess_text(prompt, clean, to_lower) for prompt in prompt]
 
     def image_prompt_checks(self, image_prompt, ):
-        raise NotImplementedError()
+        if (
+            not isinstance(image_prompt, torch.Tensor)
+            and not isinstance(image_prompt, PIL.Image.Image)
+            and not isinstance(image_prompt, list)
+        ):
+            raise ValueError(
+                "`image` has to be of type `torch.Tensor` or `PIL.Image.Image` or `List[PIL.Image.Image]` but is"
+                f" {type(image)}"
+            )
 
     def video_prompt_checks(self, video_prompt, kwargs):
         raise NotImplementedError()

@@ -179,32 +179,32 @@ class ContextParallelResnetBlock3D(nn.Module):
                 )
         self.act = Sigmoid()
 
-    def forward(self, x, temb=None, zq=None, clear_fake_cp_cache=True):
+    def forward(self, x, temb=None, zq=None, clear_fake_cp_cache=True, enable_cp=True):
         h = x
 
         if zq is not None:
-            h = self.norm1(h, zq, clear_fake_cp_cache=clear_fake_cp_cache)
+            h = self.norm1(h, zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp)
         else:
             h = self.norm1(h)
 
         h = self.act(h)
-        h = self.conv1(h, clear_cache=clear_fake_cp_cache)
+        h = self.conv1(h, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
 
         if temb is not None:
             h = h + self.temb_proj(self.act(temb))[:, :, None, None, None]
 
         if zq is not None:
-            h = self.norm2(h, zq, clear_fake_cp_cache=clear_fake_cp_cache)
+            h = self.norm2(h, zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp)
         else:
             h = self.norm2(h)
 
         h = self.act(h)
         h = self.dropout(h)
-        h = self.conv2(h, clear_cache=clear_fake_cp_cache)
+        h = self.conv2(h, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
 
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                x = self.conv_shortcut(x, clear_cache=clear_fake_cp_cache)
+                x = self.conv_shortcut(x, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
             else:
                 x = self.nin_shortcut(x)
 

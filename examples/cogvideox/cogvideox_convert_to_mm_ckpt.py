@@ -1,4 +1,5 @@
 import os
+import stat
 import copy
 import argparse
 from typing import Any, Dict, List
@@ -104,7 +105,7 @@ def split_by_tp(state_dict: Dict[str, Any], tp_size: int = 2, num_layers: int = 
     return new_state_dicts
 
 
-def save_by_tp(state_dicts: List[Dict], save_dir: str):
+def save_by_tp(state_dicts: List[Dict], save_dir: str, latest_checkpointed_iteration='release'):
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
 
@@ -138,7 +139,7 @@ def merge_by_tp(train_save_dir: str, save_path: str, num_layers: int, tp_size: i
 
     _state_dicts = []
     for tp_rank in range(tp_size):
-        state_dict_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
+        state_dict_path = os.path.join(train_save_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
         _state_dicts.append(torch.load(state_dict_path)['model'])
     
     if tp_size == 1:
@@ -192,7 +193,7 @@ def get_args():
     parser.add_argument("--source_path", type=str, default="./transformer/1/mp_rank_00_model_states.pt", help="Source path of checkpoint")
     parser.add_argument("--target_path", type=str, default="./ckpt/sat_dit/", help="Save path of MM checkpoint")
     parser.add_argument("--task", type=str, default="t2v", choices=["t2v", "i2v"], help="Task type")
-    parser.add_argument("--mode", type=str, default="split", choice=["split", "merge"], 
+    parser.add_argument("--mode", type=str, default="split", choices=["split", "merge"], 
         help="Split mode is used to split the pretrained weights according to tp_size before training, \
         and Merge mode is used to merge weights based on tp_size after training is completed")
 

@@ -294,11 +294,15 @@ class ContextParallelCausalConv3d(nn.Module):
         self.conv = SafeConv3d(chan_in, chan_out, kernel_size, stride=stride, dilation=dilation, **kwargs)
         self.cache_padding = None
 
-    def forward(self, input_, clear_cache=True):
-
-        input_parallel = fake_cp_pass_from_previous_rank(
-            input_, self.temporal_dim, self.time_kernel_size, self.cache_padding
-        )
+    def forward(self, input_, clear_cache=True, enable_cp=True):
+        if enable_cp:
+            input_parallel = fake_cp_pass_from_previous_rank(
+                input_, self.temporal_dim, self.time_kernel_size, self.cache_padding
+            )
+        else:
+            input_parallel = torch.cat(
+                [input_[:,:,0:1]] * (self.time_kernel_size - 1) + [input_], dim=2
+            )
 
         del self.cache_padding
         self.cache_padding = None

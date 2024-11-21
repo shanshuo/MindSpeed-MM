@@ -70,7 +70,10 @@ def conv_gather_from_context_parallel_region(input_, dim, kernel_size):
 
 
 class ContextParallelGroupNorm(torch.nn.GroupNorm):
-    def forward(self, input_):
+    def forward(self, input_, enable_cp=True):
+        if not enable_cp:
+            return super().forward(input_)
+
         gather_flag = input_.shape[2] > 1
         if gather_flag:
             input_ = conv_gather_from_context_parallel_region(input_, dim=2, kernel_size=1)
@@ -138,7 +141,7 @@ class SpatialNorm3D(nn.Module):
             kernel_size=1,
         )
 
-    def forward(self, f, zq, clear_fake_cp_cache=True):
+    def forward(self, f, zq, clear_fake_cp_cache=True, enable_cp=True):
         if f.shape[2] > 1 and f.shape[2] % 2 == 1:
             f_first, f_rest = f[:, :, :1], f[:, :, 1:]
             f_first_size, f_rest_size = f_first.shape[-3:], f_rest.shape[-3:]
@@ -150,9 +153,9 @@ class SpatialNorm3D(nn.Module):
             zq = torch.nn.functional.interpolate(zq, size=f.shape[-3:], mode="nearest")
 
         if self.add_conv:
-            zq = self.conv(zq, clear_cache=clear_fake_cp_cache)
+            zq = self.conv(zq, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
 
         norm_f = self.norm_layer(f)
 
-        new_f = norm_f * self.conv_y(zq) + self.conv_b(zq)
+        new_f = norm_f * self.conv_y(zq, enable_cp=enable_cp) + self.conv_b(zq, enable_cp=enable_cp)
         return new_f

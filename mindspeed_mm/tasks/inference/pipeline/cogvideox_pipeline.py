@@ -15,8 +15,10 @@
 
 from typing import Optional, List, Union
 import inspect
+import PIL
 
 import torch
+from diffusers.video_processor import VideoProcessor
 
 from mindspeed_mm.tasks.inference.pipeline.pipeline_base import MMPipeline
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MMEncoderMixin
@@ -55,13 +57,14 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.vae_scale_factor_spatial = self.vae.vae_scale_factor[1]
         self.vae_scaling_factor = self.vae.vae_scale_factor[2]
 
-        self.use_slicing = config.get("use_slicing", False)
         self.use_tiling = config.get("use_tiling", True)
 
         if self.use_tiling:
             self.vae.enable_tiling()
         else:
             self.vae.disable_tiling()
+
+        self.video_processor = VideoProcessor(vae_scale_factor=self.vae_scale_factor_spatial)
 
 
     @property
@@ -72,10 +75,29 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
     def interrupt(self):
         return self._interrupt
 
+    def prepare_image_latents(self, image, height, width, device, dtype):
+        image = self.video_processor.preprocess(image, height=height, width=width).to(device, dtype=dtype)
+        image = image.unsqueeze(2).permute(0, 2, 1, 3, 4) # [B, C, T, H, W] -> [B, T, C, H, W]
+
+        image_latents = [self.vae.encode(img.unsqueeze(0)) for img in image]
+        image_latents = torch.cat(image_latents, dim=0) # [B, C, T, H, W]
+
+        padding_shape = (
+            image_latents.shape[0],
+            self.predict_model.in_channels // 2,
+            (self.num_frames - 1) // self.vae_scale_factor_temporal,
+            height // self.vae_scale_factor_spatial,
+            width // self.vae_scale_factor_spatial
+        )
+
+        latent_padding = torch.zeros(padding_shape, device=device, dtype=dtype)
+        image_latents = torch.cat([image_latents, latent_padding], dim=2)
+        return image_latents
 
     @torch.no_grad()
     def __call__(self,
         prompt: Optional[Union[str, List[str]]] = None,
+        image: Optional[Union[PIL.Image.Image, List[PIL.Image.Image]]] = None,
         negative_prompt: Optional[Union[str, List[str]]] = None,
         eta: float = 0.0,
         latents: Optional[torch.FloatTensor] = None,
@@ -98,6 +120,10 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             prompt_embeds,
             negative_prompt_embeds,
         )
+
+        if image is not None:
+            self.image_prompt_checks(image)
+
         self.generate_params_checks(height, width)
         self._interrupt = False
 
@@ -127,7 +153,7 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
 
         # 5. Prepare latents
-        latent_channels = self.predict_model.in_channels
+        latent_channels = self.predict_model.in_channels if image is None else self.predict_model.in_channels // 2
         batch_size = batch_size * self.num_videos_per_prompt
         shape = (
             batch_size,
@@ -138,11 +164,29 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         )
         latents = self.prepare_latents(shape, generator=self.generator, device=device, dtype=prompt_embeds.dtype,
                                        latents=latents)
+
+        # prepare image_latents for i2v task
+        if image is not None:
+            image_latents = self.prepare_image_latents(
+                image=image,
+                height=height,
+                width=width,
+                device=device,
+                dtype=prompt_embeds.dtype
+            )
+
+            # do_classifier_free_guidence
+            image_latents = torch.cat([image_latents] * 2)
+        else:
+            image_latents = None
+
+    
         # 6 prepare extra step kwargs
         extra_step_kwargs = self.prepare_extra_step_kwargs(self.generator, eta)
 
         model_kwargs = {"prompt": prompt_embeds.unsqueeze(1),
-                        "prompt_mask": prompt_embeds_attention_mask}
+                        "prompt_mask": prompt_embeds_attention_mask,
+                        "image_latents": image_latents}
 
         self.scheduler.guidance_scale = self.guidance_scale
         latents = self.scheduler.sample(model=self.predict_model, shape=shape, latents=latents,
