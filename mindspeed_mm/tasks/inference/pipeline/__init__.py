@@ -5,14 +5,14 @@ from mindspeed_mm.tasks.inference.pipeline.internvl_pipeline import InternVLPipe
 from mindspeed_mm.tasks.inference.pipeline.llava_pipeline import LlavaPipeline
 from mindspeed_mm.tasks.inference.pipeline.qwen2vl_pipeline import Qwen2VlPipeline
 
-SoraPipeline_dict = {"OpenSoraPlanPipeline": OpenSoraPlanPipeline,
-                     "OpenSoraPipeline": OpenSoraPipeline,
-                     "CogVideoXPipeline": CogVideoXPipeline}
+sora_pipeline_dict = {"OpenSoraPlanPipeline": OpenSoraPlanPipeline,
+                      "OpenSoraPipeline": OpenSoraPipeline,
+                      "CogVideoXPipeline": CogVideoXPipeline}
 
-VlmPipeline_dict = {
+vlm_pipeline_dict = {
     "InternVLPipeline": InternVLPipeline,
     "LlavaPipeline": LlavaPipeline,
     "Qwen2VlPipeline": Qwen2VlPipeline
 }
 
-__all__ = ["SoraPipeline_dict"]
+__all__ = ["sora_pipeline_dict", "vlm_pipeline_dict"]

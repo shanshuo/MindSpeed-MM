@@ -331,14 +331,8 @@ class GenerationMixin:
         """
         # 1. retrieve all kwargs that are non-None or non-model input related.
         # some encoder-decoder models have different names for model and encoder
-        if (
-                self.model_config.is_encoder_decoder
-                and hasattr(self, "encoder")
-                and self.encoder.main_input_name != self.main_input_name
-        ):
-            input_name = self.encoder.main_input_name
-        else:
-            input_name = self.main_input_name
+
+        input_name = self.main_input_name
 
         model_kwargs = {k: v for k, v in model_kwargs.items() if v is not None or k != input_name}
 
@@ -643,8 +637,6 @@ class GenerationMixin:
             processors.append(
                 SuppressTokensAtBeginLogitsProcessor(generation_config.begin_suppress_tokens, begin_index)
             )
-        if generation_config.forced_decoder_ids is not None:
-            processors.append(ForceTokensLogitsProcessor(generation_config.forced_decoder_ids))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if generation_config.renormalize_logits is True:
@@ -840,8 +832,6 @@ class GenerationMixin:
 
         generation_config = copy.deepcopy(generation_config)
         model_kwargs = generation_config.update_unuse(**kwargs)  # All unused kwargs must be model kwargs
-        # generation_config.validate()
-        # self._validate_model_kwargs(model_kwargs.copy())
 
         # 2. Set generation parameters if not already defined
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -1103,7 +1093,7 @@ class GenerationMixin:
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
-            if "logits" in outputs:
+            if isinstance(outputs, dict) and "logits" in outputs:
                 outputs = outputs["logits"]
 
             next_token_logits = outputs[:, -1, :]
@@ -1146,7 +1136,7 @@ class GenerationMixin:
             streamer.end()
 
         return input_ids
-    
+
     def greedy_search(
         self,
         input_ids: torch.LongTensor,
@@ -1271,17 +1261,17 @@ class GenerationMixin:
             cur_len = model_kwargs["inputs_embeds"].shape[1]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs["cache_position"] = torch.arange(cur_len, device=input_ids.device)
 
         while True:
             # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            model_inputs["input_ids"] = input_ids
+            model_kwargs["input_ids"] = input_ids
+            model_kwargs = self.prepare_inputs_for_generation(**model_kwargs)
             # forward pass to get next token
             outputs = self.model(
-                **model_inputs
+                **model_kwargs
             )
-
+            if isinstance(outputs, dict) and "logits" in outputs:
+                outputs = outputs["logits"]
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
 
@@ -1322,4 +1312,4 @@ class GenerationMixin:
         if streamer is not None:
             streamer.end()
 
-        return input_ids   
+        return input_ids

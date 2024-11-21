@@ -6,7 +6,7 @@ from megatron.training.initialize import initialize_megatron
 from megatron.training import get_args
 
 from mindspeed_mm.configs.config import merge_mm_args, mm_extra_args_provider
-from mindspeed_mm.tasks.inference.pipeline import SoraPipeline_dict
+from mindspeed_mm.tasks.inference.pipeline import sora_pipeline_dict
 from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import (
     save_videos, 
     save_video_grid,
@@ -35,7 +35,7 @@ def prepare_pipeline(args, device):
     if not hasattr(vae, 'dtype'):
         vae.dtype = args.ae.dtype
     tokenizer.model_max_length = args.model_max_length
-    sora_pipeline_class = SoraPipeline_dict[args.pipeline_class]
+    sora_pipeline_class = sora_pipeline_dict[args.pipeline_class]
     sora_pipeline = sora_pipeline_class(vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, scheduler=scheduler,
                                         predict_model=predict_model, config=args.pipeline_config)
     return sora_pipeline

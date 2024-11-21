@@ -184,7 +184,7 @@ class MMEncoderMixin:
         prompt_attention_mask = prompt_attention_mask.repeat(num_images_per_prompt, 1)
         return prompt_attention_mask
 
-    def process_images(self, images: List, image_aspect_ratio: float = None, image_grid_pinpoints: Optional = None):
+    def process_images(self, images: List, image_aspect_ratio: str = None, image_grid_pinpoints: Optional = None):
         new_images = []
         if image_aspect_ratio == "pad":
             for image in images:
