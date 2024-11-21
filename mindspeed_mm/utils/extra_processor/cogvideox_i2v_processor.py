@@ -40,7 +40,7 @@ class CogVideoXI2VProcessor:
         else:
             if self.noised_image_input:
                 images = self.add_noise_to_image(images)
-            image_latents = vae_model.encode(images)
+            image_latents = vae_model.encode(images, enable_cp=False)
             if self.noised_image_all_concat:
                 image_latents = image_latents.repeat(1, 1, video_latents.size(2), 1, 1)
             else:

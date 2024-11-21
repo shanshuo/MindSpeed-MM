@@ -40,6 +40,9 @@ def load_checkpoint(model, ckpt_path):
     else:
         raise ValueError(f"Invalid checkpoint path: {ckpt_path}")
 
+    if "model" in ckpt_dict.keys():
+        ckpt_dict = ckpt_dict["model"]
+
     missing_keys, unexpected_keys = model.load_state_dict(ckpt_dict, strict=False)
     print(f"Missing keys: {missing_keys}")
     print(f"Unexpected keys: {unexpected_keys}")

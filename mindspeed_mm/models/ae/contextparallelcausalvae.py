@@ -1,5 +1,6 @@
 from typing import Tuple
 
+import os
 import torch
 from torch import nn
 from einops import rearrange
@@ -17,7 +18,6 @@ from mindspeed_mm.models.common.updownsample import (SpatialDownsample2x, TimeDo
                                                      TimeUpsample2x,
                                                      TimeUpsampleRes2x, Upsample3D, Downsample, DownSample3D,
                                                      Spatial2xTime2x3DDownsample, Spatial2xTime2x3DUpsample)
-from mindspeed_mm.models.common.checkpoint import load_checkpoint
 from mindspeed_mm.models.common.regularizer import DiagonalGaussianDistribution
 from mindspeed_mm.models.common.communications import _conv_split, _conv_gather
 from mindspeed_mm.utils.utils import (
@@ -185,7 +185,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             self.post_quant_conv = quant_conv_cls(embed_dim, z_channels, 1)
 
         if from_pretrained is not None:
-            load_checkpoint(self, from_pretrained)
+            self.load_checkpoint(from_pretrained)
 
         self.dp_group_nums = torch.distributed.get_world_size() // mpu.get_data_parallel_world_size()
 
@@ -213,7 +213,10 @@ class ContextParallelCasualVAE(MultiModalModule):
             x = torch.cat([x, x[-1:].repeat_interleave(split_size - remain, dim=0)], dim=0)
             return torch.tensor_split(x, split_size, dim=0)
 
-    def encode(self, x):
+    def encode(self, x, enable_cp=True):
+        if not enable_cp:
+            return self._encode(x, enable_cp=False)
+
         if self.cp_size % self.dp_group_nums == 0 and self.cp_size > self.dp_group_nums:
             # loop cp
             data_list = [torch.empty_like(x) for _ in range(self.cp_size)]
@@ -244,28 +247,22 @@ class ContextParallelCasualVAE(MultiModalModule):
         else:
             raise NotImplementedError(f"Not supported megatron data parallel group nums {self.dp_group_nums} and VAE cp_size {self.cp_size}!")
 
-    def _encode(self, x):
+    def _encode(self, x, enable_cp=True):
         x = x.permute(0, 2, 1, 3, 4).contiguous()
 
-        if self.cp_size > 0:
+        if self.cp_size > 0 and enable_cp:
             global_src_rank = get_context_parallel_group_rank() * self.cp_size
             torch.distributed.broadcast(x, src=global_src_rank, group=get_context_parallel_group())
-
             x = _conv_split(x, dim=2, kernel_size=1)
-        if self.use_tiling:
-            if (x.shape[-1] > self.tile_sample_min_size
-                    or x.shape[-2] > self.tile_sample_min_size
-                    or x.shape[-3] > self.tile_sample_min_size_t):
-                posterior = self.tiled_encode(x)
-        else:
-            h = self.encoder(x)
-            if self.use_quant_layer:
-                h = self.quant_conv(h)
-            posterior = DiagonalGaussianDistribution(h)
+
+        h = self.encoder(x, enable_cp=enable_cp)
+        if self.use_quant_layer:
+            h = self.quant_conv(h)
+        posterior = DiagonalGaussianDistribution(h)
 
         res = posterior.sample()
 
-        if self.cp_size > 0:
+        if self.cp_size > 0 and enable_cp:
             res = _conv_gather(res, dim=2, kernel_size=1)
 
         res = 0.7 * res
@@ -444,6 +441,24 @@ class ContextParallelCasualVAE(MultiModalModule):
     def disable_tiling(self):
         self.enable_tiling(False)
 
+    def load_checkpoint(self, ckpt_path):
+        if not os.path.isfile(ckpt_path):
+            raise FileNotFoundError(f"Could not find checkpoint at {ckpt_path}")
+
+        if ckpt_path.endswith("pt") or ckpt_path.endswith("pth"):
+            ckpt_dict = torch.load(ckpt_path, map_location=lambda storage, loc: storage)
+        elif ckpt_path.endswith(".safetensors"):
+            ckpt_dict = safetensors.torch.load_file(ckpt_path)
+        else:
+            raise ValueError(f"Invalid checkpoint path: {ckpt_path}")
+
+        if "state_dict" in ckpt_dict.keys():
+            ckpt_dict = ckpt_dict["state_dict"]
+
+        missing_keys, unexpected_keys = self.load_state_dict(ckpt_dict, strict=False)
+        print(f"Missing keys: {missing_keys}")
+        print(f"Unexpected keys: {unexpected_keys}")
+
 
 class Encoder(nn.Module):
     def __init__(
@@ -578,25 +593,25 @@ class Encoder(nn.Module):
             padding=conv_padding
         )
 
-    def forward(self, x):
-        h = self.conv_in(x)
+    def forward(self, x, enable_cp=True):
+        h = self.conv_in(x, enable_cp=enable_cp)
 
         for i_level in range(self.num_resolutions):
             for i_block in range(self.num_res_blocks):
-                h = self.down[i_level].block[i_block](h)
+                h = self.down[i_level].block[i_block](h, enable_cp=enable_cp)
                 if len(self.down[i_level].attn) > 0:
                     h = self.down[i_level].attn[i_block](h)
             if i_level != self.num_resolutions - 1:
                 h = self.down[i_level].downsample(h)
 
-        h = self.mid.block_1(h)
+        h = self.mid.block_1(h, enable_cp=enable_cp)
         if self.enbale_attn1:
-            h = self.mid.attn_1(h)
-        h = self.mid.block_2(h)
-        h = self.norm_out(h)
+            h = self.mid.attn_1(h, enable_cp=enable_cp)
+        h = self.mid.block_2(h, enable_cp=enable_cp)
+        h = self.norm_out(h, enable_cp=enable_cp)
         if self.enable_nonlinearity:
             h = self.nonlinearity(h)
-        h = self.conv_out(h)
+        h = self.conv_out(h, enable_cp=enable_cp)
         return h
 
 
@@ -727,24 +742,26 @@ class Decoder(nn.Module):
             block_in, 3, kernel_size=3, padding=conv_padding
         )
 
-    def forward(self, z):
+    def forward(self, z, **kwargs):
+        zq = z
+
         h = self.conv_in(z)
-        h = self.mid.block_1(h)
+        h = self.mid.block_1(h, zq=zq)
         if self.enable_attention:
             h = self.mid.attn_1(h)
-        h = self.mid.block_2(h)
+        h = self.mid.block_2(h, zq=zq)
 
         for i_level in reversed(range(self.num_resolutions)):
             for i_block in range(self.num_res_blocks + 1):
-                h = self.up[i_level].block[i_block](h)
+                h = self.up[i_level].block[i_block](h, zq=zq)
                 if len(self.up[i_level].attn) > 0:
-                    h = self.up[i_level].attn[i_block](h)
+                    h = self.up[i_level].attn[i_block](h, zq=zq)
             if hasattr(self.up[i_level], "upsample"):
                 h = self.up[i_level].upsample(h)
             if hasattr(self.up[i_level], "time_upsample"):
                 h = self.up[i_level].time_upsample(h)
 
-        h = self.norm_out(h)
+        h = self.norm_out(h, zq=zq)
         if self.enable_nonlinearity:
             h = self.nonlinearity(h)
         h = self.conv_out(h)
