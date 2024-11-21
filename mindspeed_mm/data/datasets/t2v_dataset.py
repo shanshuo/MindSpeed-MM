@@ -208,7 +208,16 @@ class T2VDataset(MMBaseDataset):
         if self.data_storage_mode == "standard":
             sample = self.data_samples[index]
             if self.use_feature_data:
-                raise NotImplementedError("Not support now.")
+                path, texts_path = sample[FILE_INFO], sample[CAPTIONS]
+                if self.data_folder:
+                    path = os.path.join(self.data_folder, path)
+                    texts_path = os.path.join(self.data_folder, texts_path)
+                video_value = self.get_data_from_feature_data(path)
+                texts = self.get_data_from_feature_data(texts_path)
+                examples[VIDEO] = video_value
+                examples[TEXT] = texts
+                examples[PROMPT_IDS] = texts
+                examples[PROMPT_MASK] = texts
             else:
                 path, texts = sample[FILE_INFO], sample[CAPTIONS]
                 if self.data_folder:
@@ -234,7 +243,9 @@ class T2VDataset(MMBaseDataset):
             )
         return examples
 
-    def get_data_from_feature_data(self, sample):
+    def get_data_from_feature_data(self, feature_path):
+        if feature_path.endswith(".pt"):
+            return torch.load(feature_path)
         raise NotImplementedError("Not implemented.")
 
     def get_merge_data(self, examples, index):
