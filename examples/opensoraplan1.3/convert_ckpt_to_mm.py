@@ -90,7 +90,7 @@ def split_by_tp(state_dicts, tp_size):
     return return_dicts
 
 
-def save_by_tp(state_dicts, save_dir, latest_checkpointed_iteration='release', exists_ok=False):
+def save_by_tp(state_dicts, save_dir, mode="train", latest_checkpointed_iteration="release", exists_ok=False):
     if os.path.exists(save_dir):
         if not exists_ok:
             print(f"save dir: {save_dir} exists, please check.")
@@ -99,8 +99,8 @@ def save_by_tp(state_dicts, save_dir, latest_checkpointed_iteration='release', e
         os.makedirs(save_dir)
 
     flags = os.O_WRONLY | os.O_CREAT
-    mode = stat.S_IWUSR | stat.S_IRUSR
-    with os.fdopen(os.open(os.path.join(save_dir, 'latest_checkpointed_iteration.txt'), flags, mode), 'w') as fout:
+    stat_mode = stat.S_IWUSR | stat.S_IRUSR
+    with os.fdopen(os.open(os.path.join(save_dir, 'latest_checkpointed_iteration.txt'), flags, stat_mode), 'w') as fout:
         fout.write(latest_checkpointed_iteration)
     if latest_checkpointed_iteration == 'release':
         directory = 'release'
@@ -111,7 +111,12 @@ def save_by_tp(state_dicts, save_dir, latest_checkpointed_iteration='release', e
         os.makedirs(os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}"))
         save_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
         save_dict = {}
-        save_dict['model'] = state_dict
+        if mode == "train":
+            save_dict["model"] = state_dict
+        elif mode == "inference":
+            save_dict = state_dict
+        else:
+            raise ValueError(f"unsupported mode: {mode}")
         torch.save(save_dict, save_path)
 
 
@@ -130,6 +135,8 @@ if __name__ == "__main__":
     # 参数配置
     TP_SIZE = 1
 
+    MODE = "train"   # 转换权重的用途，默认为用于训练: "train"; 若用于推理, 需改为"inference"
+
     dit_hg_weight_path = "local downloaded open sora plan weight path"
     dit_mm_save_dir = "dir to save dit weights after transfer to MindSpeed-MM"
 
@@ -140,7 +147,7 @@ if __name__ == "__main__":
     dit_state_dict = load_from_hf(dit_hg_weight_path)
     dit_state_dict = convert_hg_to_mm(dit_state_dict)
     dit_state_dicts = split_by_tp(dit_state_dict, TP_SIZE)
-    save_by_tp(dit_state_dicts, dit_mm_save_dir, exists_ok=False)
+    save_by_tp(dit_state_dicts, dit_mm_save_dir, mode=MODE, exists_ok=False)
 
     # 转换VAE权重
     vae_state_dict = load_from_hf(vae_hg_weight_path)

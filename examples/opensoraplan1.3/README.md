@@ -8,10 +8,13 @@
 - [环境安装](#jump1)
   - [仓库拉取](#jump1.1)
   - [环境搭建](#jump1.2)
+  - [Decord安装](#jump1.3)
 - [权重下载及转换](#jump2)
   - [权重下载](#jump2.1)
+  - [权重转换](#jump2.2)
 - [数据集准备及处理](#jump3)
   - [数据集下载](#jump3.1)
+  - [数据集处理](#jump3.2)
 - [预训练](#jump4)
   - [准备工作](#jump4.1)
   - [配置参数](#jump4.2)
@@ -85,6 +88,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install -e .
 ```
 
+<a id="jump1.3"></a>
 #### 3. Decord搭建
 
 【X86版安装】
@@ -123,12 +127,12 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 
 首先修改 examples/opensoraplan1.3/convert_ckpt_to_mm.py 参数
 
-    TP_SIZE = 1  # TP（Tensor Parallel）size，需要和训练脚本的CP保持一致
+    TP_SIZE = 1  # TP（Tensor Parallel）size，需要和训练脚本的TP保持一致
     dit_hg_weight_path = "raw_ckpt/open-sora-plan/any93x640x640/" #huggingface下载的dit预训练权重路径
-    dit_mm_save_dir = "mm_ckpt/open-sora-plan/checkpoint" #转换到MindSpeed-MM的dit权重存放路径
+    dit_mm_save_dir = "mm_ckpt/open-sora-plan/pretrained-checkpoint-dit" #转换到MindSpeed-MM的dit权重存放路径
 
     vae_hg_weight_path = "raw_ckpt/vae/wfvae.ckpt"  #huggingface下载的vae预训练权重路径
-    vae_mm_save_dir = "mm_ckpt/open-sora-plan/checkpoint/wfvae" #转换到MindSpeed-MM的vae权重存放路径
+    vae_mm_save_dir = "mm_ckpt/open-sora-plan/pretrained-checkpoint-wfvae" #转换到MindSpeed-MM的vae权重存放路径
 ---
 
 启动脚本
@@ -138,9 +142,9 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
     python examples/opensoraplan1.3/convert_ckpt_to_mm.py
 ---
 
-同步修改examples/opensoraplan1.3/pretrain_t2v.sh中的--load参数，该路径为转换后或者切分后的权重，注意--load配置的是转换到MindSpeed-MM后的dit权重路径，vae权重路径在pretrain_t2v_model.json中配置
+同步修改examples/opensoraplan1.3/t2v/pretrain_t2v.sh中的--load参数，该路径为转换后或者切分后的权重，注意--load配置的是转换到MindSpeed-MM后的dit权重路径，vae权重路径在pretrain_t2v_model.json中配置
 
-    --load "mm_ckpt/open-sora-plan/checkpoint"
+    LOAD_PATH="mm_ckpt/open-sora-plan/pretrained-checkpoint-dit"
 
 ---
 
@@ -152,22 +156,31 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 
 #### 1. 数据集下载
 
-用户需自行获取并解压[pixabay_v2](https://huggingface.co/datasets/LanguageBind/Open-Sora-Plan-v1.1.0/tree/main/pixabay_v2_tar)数据集，获取数据结构如下：
+用户需自行获取并解压[pixabay_v2](https://huggingface.co/datasets/LanguageBind/Open-Sora-Plan-v1.1.0/tree/main/pixabay_v2_tar)数据集和对应[标注文件](https://huggingface.co/datasets/LanguageBind/Open-Sora-Plan-v1.2.0/tree/main/anno_json)，获取数据结构如下：
 
    ```
    $pixabay_v2
-   ├── annotation.json
+   ├── v1.1.0_HQ_part3.json
    ├── folder_01
    ├── ├── video0.mp4
    ├── ├── video1.mp4
    ├── ├── ...
-   ├── ├── annotation.json
    ├── folder_02
    ├── folder_03
    └── ...
    ```
 
 ---
+<a id="jump3.2"></a>
+
+#### 2. 数据集处理
+根据实际下载的数据，过滤标注文件，删去标注的json文件中未下载的部分；
+修改data.txt中的路径，示例如下:
+   ```
+/data/open-sora-plan/dataset;/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
+   ```
+---
+其中，第一个路径为数据集的根目录，第二个路径为标注文件的路径。
 
 <a id="jump4"></a>
 
@@ -211,11 +224,15 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 <a id="jump4.3"></a>
 
 #### 3. 启动预训练
-
+t2v(文生视频):
 ```shell
-    bash examples/opensoraplan1.2/pretrain_t2v.sh
+    bash examples/opensoraplan1.3/t2v/pretrain_t2v.sh
 ```
 
+i2v(图生视频):
+```shell
+    bash examples/opensoraplan1.3/i2v/pretrain_i2v.sh
+```
 **注意**：
 
 - 多机训练需在多个终端同时启动预训练脚本(每个终端的预训练脚本只有NODE_RANK参数不同，其他参数均相同)
@@ -229,4 +246,25 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 
 <a id="jump5.1"></a>
 
-即将推出
+#### 1. 准备工作
+
+参考上述的权重下载及转换章节，推理所需的预训练权重需要到huggingface中下载，以及参考上面的权重转换步骤进行转换。
+
+注意：推理转换权重时候，脚本中需要设置 `MODE = "inference"`
+<a id="jump5.2"></a>
+
+#### 2. 配置参数
+
+将准备好的权重传入到inference_t2v_model.json中，更改其中的路径，包括from_pretrained，自定义的prompt可以传入到prompt字段中
+
+<a id="jump5.3"></a>
+
+#### 3. 启动推理
+t2v 启动推理脚本
+
+```shell
+examples/opensoraplan1.3/t2v/inference_t2v.sh
+```
+i2v coming soon ...
+
+---

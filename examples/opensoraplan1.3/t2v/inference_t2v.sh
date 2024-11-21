@@ -16,7 +16,7 @@ CP=1
 MBS=1
 GBS=1
 
-MM_MODEL="examples/opensoraplan1.3/inference_t2v_model.json"
+MM_MODEL="examples/opensoraplan1.3/t2v/inference_t2v_model.json"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \

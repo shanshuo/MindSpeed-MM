@@ -7,7 +7,7 @@
     "load_text_features": false,
     "predictor": {
         "model_id": "videoditsparse",
-        "from_pretrained": "./weights/sparsedit/sparsedit_mm.pth",
+        "from_pretrained": null,
         "dtype": "bf16",
         "num_layers" : 32,
         "num_heads": 24,

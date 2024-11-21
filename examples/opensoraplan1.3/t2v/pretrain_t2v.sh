@@ -21,9 +21,11 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_DATA="./examples/opensoraplan1.3/data.json"
-MM_MODEL="./examples/opensoraplan1.3/pretrain_t2v_model.json"
+MM_DATA="./examples/opensoraplan1.3/t2v/data.json"
+MM_MODEL="./examples/opensoraplan1.3/t2v/pretrain_t2v_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
+LOAD_PATH="your_converted_dit_ckpt_dir"
+SAVE_PATH="your_ckpt_path_to_save"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
@@ -64,6 +66,7 @@ GPT_ARGS="
     --clip-grad 1.0 \
     --train-iters 5000 \
     --no-gradient-accumulation-fusion \
+    --load $LOAD_PATH \
     --no-load-optim \
     --no-load-rng \
     --no-save-optim \
@@ -83,6 +86,7 @@ OUTPUT_ARGS="
     --save-interval 10000 \
     --eval-interval 10000 \
     --eval-iters 10 \
+    --save $SAVE_PATH \
 "
 
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)
@@ -95,5 +99,5 @@ torchrun $DISTRIBUTED_ARGS pretrain_sora.py \
 
 chmod 440 logs/train_${logfile}.log
 STEP_TIME=`grep "elapsed time per iteration" logs/train_${logfile}.log | awk -F ':' '{print$5}' | awk -F '|' '{print$1}' | head -n 200 | tail -n 100 | awk '{sum+=$1} END {if (NR != 0) printf("%.1f",sum/NR)}'`
-FPS=`awk 'BEGIN{printf "%.3f\n", '${GBS}'*1000/'${STEP_TIME}'}'`
-echo "Elapsed Time Per iteration: $STEP_TIME, Average FPS: $FPS"
+PERF=`awk 'BEGIN{printf "%.3f\n", '${GBS}'*1000/'${STEP_TIME}'}'`
+echo "Elapsed Time Per iteration: $STEP_TIME, Average Samples per Second: $PERF"

@@ -2,7 +2,7 @@
 	"dataset_param": {
 		"dataset_type": "t2v",
 		"basic_parameters": {
-			"data_path": "data_path",
+			"data_path": "./examples/opensoraplan1.3/data.txt",
 			"data_folder": "",
 			"data_storage_mode": "combine"
 		},
@@ -58,7 +58,7 @@
 		"tokenizer_config": {
 			"hub_backend": "hf",
 			"autotokenizer_name": "AutoTokenizer",
-			"from_pretrained": "your model path"
+			"from_pretrained": "./weights/google/mt5-xxl"
 		}
 	},
 	"dataloader_param": {
@@ -66,9 +66,9 @@
 		"sampler_type": "LengthGroupedSampler",
 		"batch_size": 1,
 		"num_workers": 4,
-		"shuffle": true,
+		"shuffle": false,
 		"drop_last": true,
-		"pin_memory": false,
+		"pin_memory": true,
 		"group_frame": false,
 		"group_resolution": false,
 		"group_data": true,
