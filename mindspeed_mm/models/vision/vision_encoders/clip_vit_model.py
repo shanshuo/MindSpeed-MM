@@ -31,9 +31,11 @@ class CLIPViT(MultiModalModule):
     """
 
     def __init__(
-            self,
-            config: TransformerConfig,
-            transformer_layer_spec: ModuleSpec,
+        self,
+        config: TransformerConfig,
+        transformer_layer_spec: ModuleSpec,
+        pre_process: bool = True,
+        post_process: bool = True,
     ) -> None:
         super().__init__(config=config)
         self.device = get_device(config.device)

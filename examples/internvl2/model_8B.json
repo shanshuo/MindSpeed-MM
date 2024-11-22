@@ -11,7 +11,7 @@
     "img_context_token_id": 92546,
     "text_decoder": {
         "num_layers": 32,
-        "pipeline_layer_index": [0, 6, 15, 24],
+        "pipeline_num_layers": [6, 9, 9, 8],
         "hidden_size": 4096,
         "num_attention_heads": 32,
         "num_query_groups": 8,
@@ -52,6 +52,7 @@
         "vision_encoder": {
             "model_id": "InternViT",
             "num_layers": 24,
+            "pipeline_num_layers": [24, 0, 0, 0],
             "hidden_size": 1024,
             "ffn_hidden_size": 4096,
             "num_attention_heads": 16,
@@ -83,7 +84,12 @@
             "ps_version": "v2",
             "is_freeze": true
         },
-        "vision_projector": null
+        "vision_projector": {
+            "model_id": "InternVLMLP",
+            "downsample_ratio": 0.5,
+            "vit_hidden_size": 1024,
+            "llm_hidden_size": 4096
+        }
     },
     "text_encoder": null,
     "video_encoder": null

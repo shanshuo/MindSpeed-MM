@@ -79,7 +79,6 @@ GPT_ARGS="
     --no-save-rng \
     --use-distributed-optimizer \
     --bf16 \
-    --load $LOAD_PATH \
     --use-flash-attn \
     --use-fused-rotary-pos-emb \
     --variable-seq-lengths \

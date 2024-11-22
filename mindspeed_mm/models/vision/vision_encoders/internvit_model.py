@@ -239,7 +239,12 @@ class InternVitSelfAttention(SelfAttention):
 
 
 class InternVisionEmbeddings(nn.Module):
-    def __init__(self, config, image_size=448, patch_size=14):
+    def __init__(
+        self,
+        config,
+        image_size=448,
+        patch_size=14
+    ):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -311,29 +316,39 @@ class InternVitTransformerBlock(TransformerBlock):
 
 
 class InternViT(MultiModalModule):
-
-    def __init__(self, config: TransformerConfig,
-                 transformer_layer_spec: ModuleSpec,
-                 image_size=448,
-                 patch_size=14):
-        super().__init__(config)
+    def __init__(
+        self,
+        config: TransformerConfig,
+        transformer_layer_spec: ModuleSpec,
+        image_size: int = 448,
+        patch_size: int = 14,
+        pre_process: bool = True,
+        post_process: bool = True,
+    ):
+        super().__init__(config=config)
         self.config = config
         self.image_size = image_size
         self.patch_size = patch_size
+        self.pre_process = pre_process
+        self.post_process = post_process
+
         self.select_layer = config.select_layer
         self.downsample_ratio = config.downsample_ratio
         self.ps_version = config.ps_version
 
-        self.embeddings = InternVisionEmbeddings(config, self.image_size, self.patch_size)
+        self.seq_length = 1 + (self.image_size // self.patch_size) ** 2
+        if self.pre_process:
+            self.embeddings = InternVisionEmbeddings(config, self.image_size, self.patch_size)
         self.encoder = InternVitTransformerBlock(
             config=config,
             spec=transformer_layer_spec,
-            pre_process=True,
-            post_process=False
+            post_layer_norm=False,
+            pre_process=self.pre_process,
+            post_process=self.post_process,
         )
 
     def set_input_tensor(self, input_tensor):
-        return super().set_input_tensor(input_tensor)
+        self.encoder.set_input_tensor(input_tensor)
 
     def resize_pos_embeddings(self, old_size, new_size, patch_size):
         pos_emb = self.embeddings.position_embedding
@@ -375,39 +390,41 @@ class InternViT(MultiModalModule):
         return vit_embeds
     
     def forward(
-            self,
-            pixel_values: Optional[torch.FloatTensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-            pixel_embeds: Optional[torch.FloatTensor] = None,
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        pixel_embeds: Optional[torch.FloatTensor] = None,
     ):
+        if self.pre_process:
+            if pixel_values is None and pixel_embeds is None:
+                raise ValueError('You have to specify pixel_values or pixel_embeds')
 
-        if pixel_values is None and pixel_embeds is None:
-            raise ValueError('You have to specify pixel_values or pixel_embeds')
-
-        if pixel_embeds is not None:
-            hidden_states = pixel_embeds
-        else:
-            if len(pixel_values.shape) == 4:
-                hidden_states = self.embeddings(pixel_values)
+            if pixel_embeds is not None:
+                hidden_states = pixel_embeds
             else:
-                raise ValueError(f'wrong pixel_values size: {pixel_values.shape}')
-        
-        seq_length = hidden_states.shape[1]
+                if len(pixel_values.shape) == 4:
+                    hidden_states = self.embeddings(pixel_values)
+                else:
+                    raise ValueError(f'wrong pixel_values size: {pixel_values.shape}')
+            hidden_states = hidden_states.transpose(0, 1)
+        else:
+            hidden_states = None
+
         if attention_mask is None:
             attention_mask = torch.ones(
-                1, 1, seq_length, seq_length
-            ).to(hidden_states.device)
+                1, 1, self.seq_length, self.seq_length, device=pixel_values.device
+            )
             attention_mask = attention_mask < 0.5
 
-        hidden_states = hidden_states.transpose(0, 1)
         encoder_outputs = self.encoder(hidden_states, attention_mask)
-        encoder_outputs = encoder_outputs.transpose(0, 1)
 
-        if self.select_layer == -1:
-            vit_embeds = encoder_outputs
-        else:
-            vit_embeds = encoder_outputs[self.select_layer]
-        
-        vit_embeds = self.extract_feature(vit_embeds)
+        if self.post_process:
+            encoder_outputs = encoder_outputs.transpose(0, 1)
+            if self.select_layer == -1:
+                vit_embeds = encoder_outputs
+            else:
+                vit_embeds = encoder_outputs[self.select_layer]
+            vit_embeds = self.extract_feature(vit_embeds)
+            return vit_embeds
 
-        return vit_embeds
+        return encoder_outputs

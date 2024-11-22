@@ -1,24 +1,32 @@
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
 
 import torch
-from torch import nn
 
-from .projectors.multimodal_projector import MultimodalProjector
+from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.core.transformer.spec_utils import ModuleSpec
+
+from mindspeed_mm.models.common.module import MultiModalModule
 from .vision_encoders.clip_vit_model import CLIPViT
 from .vision_encoders.internvit_model import InternViT
 from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
+from .projectors.multimodal_projector import MultimodalProjector
+from .projectors.internvl_mlp import InternVLMLP
 
 
-VISION_MODEL_MAPPINGS = {
+VISION_ENCODER_MAPPINGS = {
     "clip": CLIPViT,
     "InternViT": InternViT,
-    "mlp": MultimodalProjector,
     "qwen2vit": Qwen2VLViT,
-    "lnmlp": MultimodalProjector
+}
+
+VISION_PROJECTION_MAPPINGS = {
+    "mlp": MultimodalProjector,
+    "InternVLMLP": InternVLMLP,
+    "lnmlp": MultimodalProjector,
 }
 
 
-class VisionModel(nn.Module):
+class VisionModel(MultiModalModule):
     """
     Instantiate a vision encoder model from config.
 
@@ -30,17 +38,31 @@ class VisionModel(nn.Module):
             "drop_vision_class_token": (bool),  # Drop vision class token(s) before input to the text decoder.
         }
     """
-    def __init__(self, config, encoder_transformer_layer_spec=None, projector_layer_spec=None):
-        super().__init__()
-        self.add_projector = config.vision_projector is not None
-        self.encoder = VISION_MODEL_MAPPINGS[config.vision_encoder.model_id](
-            config.vision_encoder,
-            encoder_transformer_layer_spec
-        )
+    def __init__(
+        self,
+        config: TransformerConfig,
+        encoder_transformer_layer_spec: ModuleSpec = None,
+        projector_layer_spec: ModuleSpec = None,
+        pre_process: bool = True,
+        post_process: bool = True,
+    ) -> None:
+        super().__init__(config=config)
+        self.pre_process = pre_process
+        self.post_process = post_process
+        self.add_encoder = config.vision_encoder is not None
+        self.add_projector = config.vision_projector is not None and self.post_process
+
+        if self.add_encoder:
+            self.encoder = VISION_ENCODER_MAPPINGS[config.vision_encoder.model_id](
+                config=config.vision_encoder,
+                transformer_layer_spec=encoder_transformer_layer_spec,
+                pre_process=self.pre_process,
+                post_process=self.post_process,
+            )
         if self.add_projector:
-            self.projector = VISION_MODEL_MAPPINGS[config.vision_projector.model_id](
-                config.vision_projector,
-                projector_layer_spec
+            self.projector = VISION_PROJECTION_MAPPINGS[config.vision_projector.model_id](
+                config=config.vision_projector,
+                transformer_layer_spec=projector_layer_spec,
             )
 
     def set_input_tensor(self, input_tensor):
@@ -72,10 +94,10 @@ class VisionModel(nn.Module):
                 param.requires_grad = False
 
     def forward(self, images: torch.Tensor) -> torch.Tensor:
-        image_embeddings = self.encoder(images)
+        if self.add_encoder:
+            image_embeddings = self.encoder(images)
         if self.add_projector:
             image_embeddings = self.projector(image_embeddings)
-
         return image_embeddings
     
     
