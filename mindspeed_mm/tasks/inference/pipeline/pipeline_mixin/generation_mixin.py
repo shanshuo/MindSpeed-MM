@@ -456,8 +456,6 @@ class GenerationMixin:
         else:
             min_tokens_to_keep = 1
 
-        # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
-        # all samplers can be found in `generation_utils_samplers.py`
         if generation_config.temperature is not None and generation_config.temperature != 1.0:
             warpers.append(TemperatureLogitsWarper(generation_config.temperature))
         if generation_config.top_k is not None and generation_config.top_k != 0:
