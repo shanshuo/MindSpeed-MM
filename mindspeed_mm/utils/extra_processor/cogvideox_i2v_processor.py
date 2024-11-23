@@ -52,5 +52,5 @@ class CogVideoXI2VProcessor:
                     dim=2
                 )
 
-        return {"image_latents": image_latents}
+        return {"masked_video": image_latents}
         

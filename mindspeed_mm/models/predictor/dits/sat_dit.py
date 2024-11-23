@@ -197,8 +197,8 @@ class SatDiT(MultiModalModule):
         frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
         height, width = latents.shape[-2] // self.patch_size_h, latents.shape[-1] // self.patch_size_w
 
-        if "image_latents" in kwargs.keys() and kwargs["image_latents"] is not None:
-            latents = torch.cat([latents, kwargs["image_latents"]], dim=1)
+        if "masked_video" in kwargs.keys() and kwargs["masked_video"] is not None:
+            latents = torch.cat([latents, kwargs["masked_video"]], dim=1)
         
         added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
         latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \

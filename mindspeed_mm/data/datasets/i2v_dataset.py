@@ -14,6 +14,7 @@ from mindspeed_mm.data.data_utils.constants import (
     PROMPT_MASK_2,
     TEXT,
     VIDEO,
+    MASKED_VIDEO
 )
 from mindspeed_mm.data.data_utils.data_transform import (
     MaskGenerator,
@@ -43,6 +44,7 @@ def type_ratio_normalize(mask_type_ratio_dict):
 
 I2VOutputData = {
     VIDEO: [],
+    MASKED_VIDEO: [],
     TEXT: [],
     PROMPT_IDS: [],
     PROMPT_MASK: [],
@@ -120,6 +122,26 @@ class I2VDataset(T2VDataset):
 
         if self.data_storage_mode == "combine":
             examples = self.get_merge_data(examples, index)
+        elif self.data_storage_mode == "standard":
+            sample = self.data_samples[index]
+            if self.use_feature_data:
+                video_path, masked_video_path, text_path = sample[FILE_INFO], sample[MASKED_VIDEO], sample[CAPTIONS]
+                if self.data_folder:
+                    video_path = os.path.join(self.data_folder, video_path)
+                    masked_video_path = os.path.join(self.data_folder, masked_video_path)
+                    text_path = os.path.join(self.data_folder, text_path)
+                    video_value = self.get_data_from_feature_data(video_path)
+                    masked_video_value = self.get_data_from_feature_data(masked_video_path)
+                    texts = self.get_data_from_feature_data(text_path)
+                    examples[VIDEO] = video_value
+                    examples[MASKED_VIDEO] = masked_video_value
+                    examples[TEXT] = texts
+                    examples[PROMPT_IDS] = texts
+                    examples[PROMPT_MASK] = texts
+            else:
+                raise NotImplementedError(
+                f"Not support now: data_storage_mode={self.data_storage_mode} and use_feature_data=false"
+            )
         else:
             raise NotImplementedError(
                 f"Not support now: data_storage_mode={self.data_storage_mode}."
