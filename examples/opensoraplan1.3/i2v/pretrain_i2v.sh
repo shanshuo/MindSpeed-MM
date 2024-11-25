@@ -22,7 +22,7 @@ MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
 MM_DATA="./examples/opensoraplan1.3/i2v/data_i2v.json"
-MM_MODEL="./examples/opensoraplan1.3/i2v/model_i2v_opensoraplan1_3.json"
+MM_MODEL="./examples/opensoraplan1.3/i2v/pretrain_i2v_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="your_converted_dit_ckpt_dir"
 SAVE_PATH="your_ckpt_path_to_save"

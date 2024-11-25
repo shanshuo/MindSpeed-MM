@@ -257,6 +257,8 @@ i2v(图生视频):
 
 将准备好的权重传入到inference_t2v_model.json中，更改其中的路径，包括from_pretrained，自定义的prompt可以传入到prompt字段中
 
+对于i2v任务，除了上述prompt，还需要将自定义的图片数据传入inference_i2v_model.json中的conditional_pixel_values_path字段中
+
 <a id="jump5.3"></a>
 
 #### 3. 启动推理
@@ -265,6 +267,10 @@ t2v 启动推理脚本
 ```shell
 examples/opensoraplan1.3/t2v/inference_t2v.sh
 ```
-i2v coming soon ...
+i2v 启动推理脚本
+
+```shell
+examples/opensoraplan1.3/i2v/inference_i2v.sh
+```
 
 ---

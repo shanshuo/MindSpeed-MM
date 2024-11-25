@@ -5,6 +5,8 @@
 import PIL
 import torch
 from mindspeed_mm.data.data_utils.utils import TextProcesser
+from mindspeed_mm.utils.mask_utils import STR_TO_TYPE
+from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import is_image_file, is_video_file
 
 
 class InputsCheckMixin:
@@ -59,6 +61,25 @@ class InputsCheckMixin:
         if not isinstance(prompt, (tuple, list)):
             prompt = [prompt]
         return [InputsCheckMixin._preprocess_text(prompt, clean, to_lower) for prompt in prompt]
+
+    @staticmethod
+    def i2v_prompt_checks(conditional_pixel_values_path, mask_type):
+        if conditional_pixel_values_path is None:
+            raise ValueError("conditional_pixel_values_path should be provided")
+        else:
+            if not isinstance(conditional_pixel_values_path, list) or not isinstance(conditional_pixel_values_path[0],
+                                                                                     str):
+                raise ValueError("conditional_pixel_values_path should be a list of strings")
+
+        if not is_image_file(conditional_pixel_values_path[0]) and not is_video_file(conditional_pixel_values_path[0]):
+            raise ValueError("conditional_pixel_values_path should be an image or video file path")
+
+        if is_video_file(conditional_pixel_values_path[0]) and len(conditional_pixel_values_path) > 1:
+            raise ValueError(
+                "conditional_pixel_values_path should be a list of image file paths or a single video file path")
+
+        if mask_type is not None and mask_type not in STR_TO_TYPE.keys() and mask_type not in STR_TO_TYPE.values():
+            raise ValueError(f"Invalid mask type: {mask_type}")
 
     def image_prompt_checks(self, image_prompt, ):
         if (
