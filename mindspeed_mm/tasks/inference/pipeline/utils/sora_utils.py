@@ -2,9 +2,17 @@ import os
 import math
 
 import torch
+import numpy as np
 from torchvision.io import write_video
 from diffusers.utils import load_image
+from einops import rearrange
+import decord
 import imageio
+
+from torchvision.transforms import Compose, Lambda
+
+from mindspeed_mm.data.data_utils.data_transform import CenterCropResizeVideo, SpatialStrideCropVideo, ToTensorAfterResize, maxhwresize
+from mindspeed_mm.utils.mask_utils import STR_TO_TYPE, TYPE_TO_STR, MaskType
 
 
 def save_videos(videos, start_index, save_path, fps):
@@ -15,7 +23,7 @@ def save_videos(videos, start_index, save_path, fps):
             write_video(save_path_i, video, fps=fps, video_codec="h264")
     elif videos.ndim == 4:
         save_path = os.path.join(save_path, f"video_{start_index}.mp4")
-        write_video(save_path, video, fps=fps, video_codec="h264")
+        write_video(save_path, videos, fps=fps, video_codec="h264")
     else:
         raise ValueError("The video must be in either [b, t, h, w, c] or [t, h, w, c] format.")
 
@@ -69,3 +77,110 @@ def load_images(image=None):
             return images
     else:
         raise FileNotFoundError(f"The image path {image} does not exist")
+
+
+def load_conditional_pixel_values(conditional_pixel_values_path):
+    if os.path.exists(conditional_pixel_values_path):
+        with open(conditional_pixel_values_path, "r") as f:
+            conditional_pixel_values = [line.strip().split(",") for line in f.readlines()]
+        return conditional_pixel_values
+    else:
+        return [conditional_pixel_values_path]
+
+
+def is_video_file(file_path):
+    video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.mpeg', '.mpg', '.3gp'}
+    file_extension = os.path.splitext(file_path)[1].lower()
+    return file_extension in video_extensions
+
+
+def is_image_file(file_path):
+    image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.gif', '.tiff', '.webp'}
+    file_extension = os.path.splitext(file_path)[1].lower()
+    return file_extension in image_extensions
+
+
+def open_video(file_path, start_frame_idx, num_frames, frame_interval=1):
+    decord_vr = decord.VideoReader(file_path, ctx=decord.cpu(0), num_threads=1)
+
+    total_frames = len(decord_vr)
+    frame_indices = list(
+        range(start_frame_idx, min(start_frame_idx + num_frames * frame_interval, total_frames), frame_interval))
+
+    if len(frame_indices) == 0:
+        raise ValueError("No frames selected. Check your start_frame_idx and num_frames.")
+
+    if len(frame_indices) < num_frames:
+        raise ValueError(
+            f"Requested {num_frames} frames but only {len(frame_indices)} frames are available, please adjust the start_frame_idx and num_frames or decrease the frame_interval.")
+
+    video_data = decord_vr.get_batch(frame_indices).asnumpy()
+    video_data = torch.from_numpy(video_data)
+    video_data = video_data.permute(0, 3, 1, 2)  # (T, H, W, C) -> (T C H W)
+    return video_data
+
+
+def get_resize_transform(
+    ori_height,
+    ori_width,
+    height=None,
+    width=None,
+    crop_for_hw=False,
+    hw_stride=32,
+    max_hxw=236544,  # 480 x 480
+):
+    if crop_for_hw:
+        transform = CenterCropResizeVideo((height, width))
+    else:
+        new_height, new_width = maxhwresize(ori_height, ori_width, max_hxw)
+        transform = Compose(
+            [
+                CenterCropResizeVideo((new_height, new_width)),
+                # We use CenterCropResizeVideo to share the same height and width, ensuring that the shape of the crop remains consistent when multiple images are captured
+                SpatialStrideCropVideo(stride=hw_stride),
+            ]
+        )
+    return transform
+
+
+def get_video_transform():
+    norm_fun = Lambda(lambda x: 2. * x - 1.)
+    transform = Compose([
+        ToTensorAfterResize(),
+        norm_fun
+    ])
+    return transform
+
+
+def get_pixel_values(file_path, num_frames):
+    if is_image_file(file_path[0]):
+        pixel_values = [load_image(path) for path in file_path]
+        pixel_values = [torch.from_numpy(np.array(image)) for image in pixel_values]
+        pixel_values = [rearrange(image, 'h w c -> c h w').unsqueeze(0) for image in pixel_values]
+    elif is_video_file(file_path[0]):
+        pixel_values = [open_video(video_path, 0, num_frames) for video_path in file_path]
+    return pixel_values
+
+
+def get_mask_type_cond_indices(mask_type, conditional_pixel_values_path, conditional_pixel_values_indices,
+                               num_frames):
+    if mask_type is not None and mask_type in STR_TO_TYPE.keys():
+        mask_type = STR_TO_TYPE[mask_type]
+    if is_image_file(conditional_pixel_values_path[0]):
+        if len(conditional_pixel_values_path) == 1:
+            mask_type = MaskType.i2v if mask_type is None else mask_type
+            if num_frames > 1:
+                conditional_pixel_values_indices = [
+                    0] if conditional_pixel_values_indices is None else conditional_pixel_values_indices
+        elif len(conditional_pixel_values_path) == 2:
+            mask_type = MaskType.transition if mask_type is None else mask_type
+            if num_frames > 1:
+                conditional_pixel_values_indices = [0,
+                                                    -1] if conditional_pixel_values_indices is None else conditional_pixel_values_indices
+        else:
+            if num_frames > 1:
+                mask_type = MaskType.random_temporal if mask_type is None else mask_type
+    elif is_video_file(conditional_pixel_values_path[0]):
+        # When the input is a video, video continuation is executed by default, with a continuation rate of double
+        mask_type = MaskType.continuation if mask_type is None else mask_type
+    return mask_type, conditional_pixel_values_indices

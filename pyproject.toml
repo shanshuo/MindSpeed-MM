@@ -24,7 +24,8 @@ dependencies = [
     "accelerate==0.32.1",
     "pandarallel",
     "datasets",
-    "qwen_vl_utils"
+    "qwen_vl_utils",
+    "imageio"
 ]
 
 [build-system]

@@ -172,10 +172,16 @@ class I2VDataset(T2VDataset):
         if file_type == "video":
             frame_indice = sample["sample_frame_index"]
             vframes, _, is_decord_read = self.video_reader(file_path)
+            start_frame_idx = sample.get("start_frame_idx", 0)
+            clip_total_frames = sample.get("num_frames", -1)
+            resolution_crop = tuple(sample.get("crop", (None, None, None, None)))
             video = self.video_processer(
                 vframes,
                 is_decord_read=is_decord_read,
                 predefine_num_frames=len(frame_indice),
+                start_frame_idx=start_frame_idx,
+                clip_total_frames=clip_total_frames,
+                resolution_crop=resolution_crop
             )
             video = video.permute(1, 0, 2, 3)
             inpaint_cond_data = self.mask_processor(video, mask_type_ratio_dict=self.mask_type_ratio_dict_video)
