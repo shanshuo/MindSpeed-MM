@@ -16,7 +16,7 @@ from mindspeed_mm.data.data_utils.func_utils.template import get_template_and_fi
 class DataCollatorForLlava(object):
     """Collate examples for supervised fine-tuning."""
 
-    def __init__(self, pad_token_id, model_max_length):
+    def __init__(self, pad_token_id, model_max_length, **kwargs):
         self.pad_token_id = pad_token_id
         self.model_max_length = model_max_length
         self.ignore_index = MODEL_CONSTANTS['llava']['IGNORE_INDEX']
@@ -50,7 +50,7 @@ class DataCollatorForLlava(object):
 
 
 class DataCollatorForInternvl(object):
-    def __init__(self, pad_id):
+    def __init__(self, pad_id, **kwargs):
         self.pad_id = pad_id
         self.ignore_index = MODEL_CONSTANTS['internvl']['IGNORE_INDEX']
 
@@ -106,7 +106,7 @@ class DataCollatorForInternvl(object):
 
 @dataclass
 class DataCollatorSpeechSeq2SeqWithPadding:
-    def __init__(self, processor_name_or_path, language, task):
+    def __init__(self, processor_name_or_path, language, task, **kwargs):
         self.processor = WhisperProcessor.from_pretrained(
             processor_name_or_path,
             language=language,
@@ -146,7 +146,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
 
 
 class DataCollatorForQwen2vl:
-    def __init__(self, ignore_pad_token_for_loss: bool, dataset_param=None):
+    def __init__(self, ignore_pad_token_for_loss: bool, dataset_param=None, **kwargs):
         process_args = ProcessorArguments(**dataset_param.preprocess_parameters.to_dict())
         tokenizer_module = load_tokenizer(process_args)
         tokenizer = tokenizer_module.get('tokenizer')
