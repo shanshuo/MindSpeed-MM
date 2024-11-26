@@ -6,8 +6,11 @@ import numpy as np
 from torchvision.io import write_video
 from diffusers.utils import load_image
 from einops import rearrange
-import decord
 import imageio
+try:
+    import decord
+except ImportError:
+    print("Failed to import decord module.")
 
 from torchvision.transforms import Compose, Lambda
 
