@@ -193,11 +193,12 @@ class MultiHeadSparseAttentionSBH(nn.Module):
             q = all_to_all_SBH(q, sp_group, scatter_dim=1, gather_dim=0)
             k = all_to_all_SBH(k, sp_group, scatter_dim=1, gather_dim=0)
             v = all_to_all_SBH(v, sp_group, scatter_dim=1, gather_dim=0)
-        q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
-        k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
 
         if not self.is_cross_attn:
             # require the shape of (ntokens x batch_size x nheads x dim)
+            q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+            k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+
             pos_thw = self.position_getter(batch_size, t=total_frames, h=height, w=width, device=q.device)
             q = self.rope(q, pos_thw)
             k = self.rope(k, pos_thw)

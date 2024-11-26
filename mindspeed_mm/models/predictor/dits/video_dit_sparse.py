@@ -165,6 +165,11 @@ class VideoDitSparse(MultiModalModule):
         )
         prompt_mask_sparse_1d_group = prompt_mask_sparse_1d
 
+        if (video_mask_sparse_1d == False).all():
+            video_mask_sparse_1d = None
+        if (video_mask_sparse_1d_group == False).all():
+            video_mask_sparse_1d_group = None
+        
         return {
             False: (video_mask_sparse_1d, prompt_mask_sparse_1d),
             True: (video_mask_sparse_1d_group, prompt_mask_sparse_1d_group)
@@ -227,6 +232,9 @@ class VideoDitSparse(MultiModalModule):
         for sparse_n in [1, 4]:
             sparse_mask[sparse_n] = self.prepare_sparse_mask(video_mask, prompt_mask, sparse_n)
 
+        if (video_mask == 0).all():
+            video_mask = None
+        
         if self.sequence_parallel:
             latents = tensor_parallel.scatter_to_sequence_parallel_region(latents)
             prompt = tensor_parallel.scatter_to_sequence_parallel_region(prompt)
