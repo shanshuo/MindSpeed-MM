@@ -326,9 +326,13 @@ class Qwen2VLViT(MultiModalModule):
     """
 
     def __init__(
-            self,
-            config: TransformerConfig,
-            transformer_layer_spec: ModuleSpec,
+        self,
+        config: TransformerConfig,
+        transformer_layer_spec: ModuleSpec,
+        pre_process: bool = True,
+        post_process: bool = True,
+        *args,
+        **kwargs,
     ) -> None:
         super().__init__(config=config)
 

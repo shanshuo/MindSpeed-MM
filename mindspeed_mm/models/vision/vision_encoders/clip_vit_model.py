@@ -36,6 +36,8 @@ class CLIPViT(MultiModalModule):
         transformer_layer_spec: ModuleSpec,
         pre_process: bool = True,
         post_process: bool = True,
+        *args,
+        **kwargs,
     ) -> None:
         super().__init__(config=config)
         self.device = get_device(config.device)

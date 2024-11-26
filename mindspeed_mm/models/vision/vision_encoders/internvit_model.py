@@ -324,6 +324,8 @@ class InternViT(MultiModalModule):
         patch_size: int = 14,
         pre_process: bool = True,
         post_process: bool = True,
+        *args,
+        **kwargs,
     ):
         super().__init__(config=config)
         self.config = config

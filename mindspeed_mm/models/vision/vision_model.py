@@ -62,7 +62,7 @@ class VisionModel(MultiModalModule):
         if self.add_projector:
             self.projector = VISION_PROJECTION_MAPPINGS[config.vision_projector.model_id](
                 config=config.vision_projector,
-                transformer_layer_spec=projector_layer_spec,
+                submodules=projector_layer_spec,
             )
 
     def set_input_tensor(self, input_tensor):

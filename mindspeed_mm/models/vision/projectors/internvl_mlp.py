@@ -11,7 +11,7 @@ class InternVLMLP(MultiModalModule):
     def __init__(
         self,
         config: TransformerConfig,
-        transformer_layer_spec: ModuleSpec,
+        submodules: ModuleSpec,
     ):
         super().__init__(config=config)
         

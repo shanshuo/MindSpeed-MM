@@ -22,9 +22,9 @@ class MultimodalProjector(MultiModalModule):
         input_size (int): Input size from feature encoder.
     """ 
     def __init__(
-            self,
-            config: TransformerConfig,
-            submodules: MLPSubmodules,
+        self,
+        config: TransformerConfig,
+        submodules: MLPSubmodules,
     ):
         super().__init__(config=config)
         self.projector_type = config.model_id
