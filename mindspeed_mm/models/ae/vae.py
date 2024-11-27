@@ -26,8 +26,8 @@ class VideoAutoencoderKL(nn.Module):
         super().__init__()
         self.module = AutoencoderKL.from_pretrained(from_pretrained,
                                                     subfolder="vae",
-                                                    cache_dir=None,
-                                                    local_files_only=False)
+                                                    cache_dir=None, 
+                                                    local_files_only=True)
         self.out_channels = self.module.config.latent_channels
         self.micro_batch_size = micro_batch_size
         self.patch_size = patch_size
@@ -223,4 +223,4 @@ class VideoAutoencoderKLCogVideoX(nn.Module):
         **kwargs,
     ):
         super().__init__()
-        self.module = AutoencoderKLCogVideoX.from_pretrained(from_pretrained, torch_dtype=dtype)
+        self.module = AutoencoderKLCogVideoX.from_pretrained(from_pretrained, torch_dtype=dtype, local_files_only=True)

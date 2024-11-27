@@ -17,7 +17,7 @@ def load_models(args):
     tokenizer = Tokenizer(args.mm.model.tokenizer).get_tokenizer()
     model = model_provider()
     tokenizer.add_tokens([MODEL_CONSTANTS["llava"]["IMAGE_PATCH_TOKEN"]], special_tokens=True)
-    image_processor = CLIPImageProcessor.from_pretrained(args.mm.model.image_processer_path)
+    image_processor = CLIPImageProcessor.from_pretrained(args.mm.model.image_processer_path, local_files_only=True)
     model.to(dtype=args.mm.model.dtype, device=torch.device(args.mm.model.device))
     return tokenizer, model, image_processor
 

@@ -293,14 +293,14 @@ class SdxlPretrainModels(nn.Module):
     def save_text_encoder(self, model_type, path):
         if model_type == 1:
             text_encoder_bak = CLIPTextModel.from_pretrained(
-                self.args.pretrained_model_name_or_path, subfolder="text_encoder"
+                self.args.pretrained_model_name_or_path, subfolder="text_encoder", local_files_only=True
             ).to("npu")
             text_encoder_bak.load_state_dict(
                 self.text_encoder1.state_dict(), strict=False
             )
         else:
             text_encoder_bak = CLIPTextModelWithProjection.from_pretrained(
-                self.args.pretrained_model_name_or_path, subfolder="text_encoder_2"
+                self.args.pretrained_model_name_or_path, subfolder="text_encoder_2", local_files_only=True
             ).to("npu")
             text_encoder_bak.load_state_dict(
                 self.text_encoder2.state_dict(), strict=False

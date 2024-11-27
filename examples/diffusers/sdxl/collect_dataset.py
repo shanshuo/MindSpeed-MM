@@ -2364,16 +2364,16 @@ def load_tokenizer(args: argparse.Namespace):
         if os.path.exists(local_tokenizer_path):
             print(f"load tokenizer from cache: {local_tokenizer_path}")
             tokenizer = CLIPTokenizer.from_pretrained(
-                local_tokenizer_path
+                local_tokenizer_path, local_files_only=True
             )  # same for v1 and v2
 
     if tokenizer is None:
         if args.v2:
             tokenizer = CLIPTokenizer.from_pretrained(
-                original_path, subfolder="tokenizer"
+                original_path, subfolder="tokenizer", local_files_only=True
             )
         else:
-            tokenizer = CLIPTokenizer.from_pretrained(original_path)
+            tokenizer = CLIPTokenizer.from_pretrained(original_path, local_files_only=True)
 
     if hasattr(args, "max_token_length") and args.max_token_length is not None:
         print(f"update token length: {args.max_token_length}")

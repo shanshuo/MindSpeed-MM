@@ -149,7 +149,7 @@ def import_model_class_from_model_name_or_path(
     pretrained_model_name_or_path: str, revision: str, subfolder: str = "text_encoder"
 ):
     text_encoder_config = PretrainedConfig.from_pretrained(
-        pretrained_model_name_or_path, subfolder=subfolder, revision=revision
+        pretrained_model_name_or_path, subfolder=subfolder, revision=revision, local_files_only=True
     )
     model_class = text_encoder_config.architectures[0]
 
@@ -680,13 +680,15 @@ def main(args):
         args.pretrained_model_name_or_path,
         subfolder="tokenizer",
         revision=args.revision,
-        use_fast=False,
+        use_fast=False, 
+        local_files_only=True,
     )
     tokenizer_two = AutoTokenizer.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="tokenizer_2",
         revision=args.revision,
-        use_fast=False,
+        use_fast=False, 
+        local_files_only=True,
     )
 
     # import correct text encoder classes
@@ -699,20 +701,22 @@ def main(args):
 
     # Load scheduler and models
     noise_scheduler = DDPMScheduler.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="scheduler"
+        args.pretrained_model_name_or_path, subfolder="scheduler", local_files_only=True
     )
     # Check for terminal SNR in combination with SNR Gamma
     text_encoder_one = text_encoder_cls_one.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="text_encoder",
         revision=args.revision,
-        variant=args.variant,
+        variant=args.variant, 
+        local_files_only=True,
     )
     text_encoder_two = text_encoder_cls_two.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="text_encoder_2",
         revision=args.revision,
-        variant=args.variant,
+        variant=args.variant, 
+        local_files_only=True,
     )
     vae_path = (
         args.pretrained_model_name_or_path
@@ -723,13 +727,15 @@ def main(args):
         vae_path,
         subfolder="vae" if args.pretrained_vae_model_name_or_path is None else None,
         revision=args.revision,
-        variant=args.variant,
+        variant=args.variant, 
+        local_files_only=True,
     )
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="unet",
         revision=args.revision,
-        variant=args.variant,
+        variant=args.variant, 
+        local_files_only=True,
     )
 
     # Freeze vae and text encoders.
@@ -811,13 +817,13 @@ def main(args):
 
                 # load diffusers style into model
                 unet_load_model = UNet2DConditionModel.from_pretrained(
-                    input_dir, subfolder="unet"
+                    input_dir, subfolder="unet", local_files_only=True
                 )
                 tex1_load_model = CLIPTextModel.from_pretrained(
-                    input_dir, subfolder="text_encoder"
+                    input_dir, subfolder="text_encoder", local_files_only=True
                 )
                 tex2_load_model = CLIPTextModelWithProjection.from_pretrained(
-                    input_dir, subfolder="text_encoder_2"
+                    input_dir, subfolder="text_encoder_2", local_files_only=True
                 )
 
                 model.unet.register_to_config(**unet_load_model.config)
@@ -1198,13 +1204,13 @@ def main(args):
         unet = accelerator.unwrap_model(sdxl_model.unet)
         text_encoder = accelerator.unwrap_model(sdxl_model.text_encoder1)
         text_encoder_bak = CLIPTextModel.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="text_encoder"
+            args.pretrained_model_name_or_path, subfolder="text_encoder", local_files_only=True
         )
         text_encoder_bak.load_state_dict(text_encoder.state_dict(), strict=False)
 
         text_encoder_2 = accelerator.unwrap_model(sdxl_model.text_encoder2)
         text_encoder_2_bak = CLIPTextModelWithProjection.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="text_encoder_2"
+            args.pretrained_model_name_or_path, subfolder="text_encoder_2", local_files_only=True
         )
         text_encoder_2_bak.load_state_dict(text_encoder_2.state_dict(), strict=False)
 
@@ -1214,7 +1220,8 @@ def main(args):
             subfolder="vae" if args.pretrained_vae_model_name_or_path is None else None,
             revision=args.revision,
             variant=args.variant,
-            torch_dtype=weight_dtype,
+            torch_dtype=weight_dtype, 
+            local_files_only=True,
         )
         pipeline = StableDiffusionXLPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
@@ -1224,7 +1231,8 @@ def main(args):
             text_encoder_2=text_encoder_2_bak,
             revision=args.revision,
             variant=args.variant,
-            torch_dtype=weight_dtype,
+            torch_dtype=weight_dtype, 
+            local_files_only=True,
         )
         if args.prediction_type is not None:
             scheduler_args = {"prediction_type": args.prediction_type}
