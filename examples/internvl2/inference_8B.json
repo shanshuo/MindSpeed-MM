@@ -96,7 +96,7 @@
         "from_pretrained": "OpenGVLab/InternVL2-8B",
         "model_max_length": 4096,
         "add_eos_token": false,
-        "trust_remote_code": true,
+        "trust_remote_code": false,
         "use_fast": false
     },
     "generation_config":{

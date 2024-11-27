@@ -40,7 +40,7 @@ class AudioDataset(Dataset):
             dataset_name_or_path,
             language,
             split="train+validation",
-            trust_remote_code=True,
+            trust_remote_code=False,
         )
         train_dataset = train_dataset.remove_columns(
             [

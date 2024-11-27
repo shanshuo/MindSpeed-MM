@@ -28,7 +28,7 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
         cache_dir=data_args.cache_dir,
         token=None,
         streaming=data_args.streaming,
-        trust_remote_code=True,
+        trust_remote_code=False,
     )
     # -----------------convert to sharegpt ---------------------------------------------------------------------------
     convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, dataset_dir=data_args.dataset_dir)
