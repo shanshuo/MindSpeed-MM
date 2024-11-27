@@ -13,12 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Pretrain Whisper."""
-from dataclasses import dataclass
-from typing import Any, Dict, List, Union
-
 import mindspeed.megatron_adaptor
 import torch
-from datasets import Audio, load_dataset
 from megatron.core import mpu
 from megatron.core.enums import ModelType
 from megatron.training import get_args, print_rank_0
@@ -26,19 +22,10 @@ from megatron.training.utils import (
     average_losses_across_data_parallel_group,
     unwrap_model,
 )
-from torch.utils.data import DataLoader
-from transformers import WhisperProcessor
 
 from mindspeed_mm.configs.config import mm_extra_args_provider
 from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
-from mindspeed_mm.data.data_utils.constants import (
-    PROMPT_IDS,
-    PROMPT_MASK,
-    VIDEO,
-    VIDEO_MASK,
-)
 from mindspeed_mm.data.data_utils.utils import build_iterations
-from mindspeed_mm.data.dataloader.sampler import StatefulDistributedSampler
 from mindspeed_mm.models.whisper.whisper_model import WhisperForConditionalGeneration_mm
 from mindspeed_mm.training import pretrain
 
