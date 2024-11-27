@@ -1,17 +1,26 @@
 import os
 import stat
-from safetensors.torch import load_file
+from pathlib import Path
+
 import torch
+from safetensors.torch import load_file
 
 
-def convert_hg_to_mm(_hg_ckpt_dir, _llm_path, _vit_hidden_size, _vit_attention_heads_num):
+def load_from_hf(_load_dir):
+    # Load Huggingface model 。
+    load_dir = Path(_load_dir)
+    state_dict = {}
+    for safe_path in load_dir.glob("*.safetensors"):
+        state_dict.update(load_file(str(safe_path), device='cpu'))
+    return state_dict
+
+
+def convert_hg_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num):
     hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
-    file_path = os.path.join(_hg_ckpt_dir, 'model-00001-of-00005.safetensors')
-    params_visual = load_file(file_path, device='cpu')
     new_params = {}
-    for key, value in params_visual.items():
+    for key, value in _state_dict.items():
         new_key = None
-        #visual 权重转换部分
+        # visual 权重转换部分
         if key.startswith('visual'):
             if 'merger' in key:
                 if 'visual.merger.mlp.0' in key:
@@ -38,9 +47,15 @@ def convert_hg_to_mm(_hg_ckpt_dir, _llm_path, _vit_hidden_size, _vit_attention_h
                 v_ = value[_vit_hidden_size * 2:_vit_hidden_size * 3, :]
                 i = 0
                 for j in range(_vit_attention_heads_num):
-                    res[i * hiddensize_per_head:(i + 1) * hiddensize_per_head, :] = q_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head, :]
-                    res[(i + 1) * hiddensize_per_head:(i + 2) * hiddensize_per_head, :] = k_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head, :]
-                    res[(i + 2) * hiddensize_per_head:(i + 3) * hiddensize_per_head, :] = v_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head, :]
+                    res[i * hiddensize_per_head:(i + 1) * hiddensize_per_head, :] = q_[j * hiddensize_per_head:(
+                                                                                                                       j + 1) * hiddensize_per_head,
+                                                                                    :]
+                    res[(i + 1) * hiddensize_per_head:(i + 2) * hiddensize_per_head, :] = k_[j * hiddensize_per_head:(
+                                                                                                                             j + 1) * hiddensize_per_head,
+                                                                                          :]
+                    res[(i + 2) * hiddensize_per_head:(i + 3) * hiddensize_per_head, :] = v_[j * hiddensize_per_head:(
+                                                                                                                             j + 1) * hiddensize_per_head,
+                                                                                          :]
                     i = i + 3
                 new_params[new_key] = res
 
@@ -52,17 +67,122 @@ def convert_hg_to_mm(_hg_ckpt_dir, _llm_path, _vit_hidden_size, _vit_attention_h
 
                 i = 0
                 for j in range(_vit_attention_heads_num):
-                    res[i * hiddensize_per_head:(i + 1) * hiddensize_per_head] = q_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head]
-                    res[(i + 1) * hiddensize_per_head:(i + 2) * hiddensize_per_head] = k_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head]
-                    res[(i + 2) * hiddensize_per_head:(i + 3) * hiddensize_per_head] = v_[j * hiddensize_per_head:(j + 1) * hiddensize_per_head]
+                    res[i * hiddensize_per_head:(i + 1) * hiddensize_per_head] = q_[j * hiddensize_per_head:(
+                                                                                                                    j + 1) * hiddensize_per_head]
+                    res[(i + 1) * hiddensize_per_head:(i + 2) * hiddensize_per_head] = k_[j * hiddensize_per_head:(
+                                                                                                                          j + 1) * hiddensize_per_head]
+                    res[(i + 2) * hiddensize_per_head:(i + 3) * hiddensize_per_head] = v_[j * hiddensize_per_head:(
+                                                                                                                          j + 1) * hiddensize_per_head]
                     i = i + 3
                 new_params[new_key] = res
             else:
                 new_params[new_key] = value
+        else:
+            if key.startswith('lm_head'):
+                new_key = key.replace('lm_head', 'output_layer')
+            elif key.startswith('model'):
+                new_key = key.replace('model.layers', 'decoder.layers')
+                new_key = new_key.replace('self_attn.o_proj.weight', 'self_attention.linear_proj.weight')
+                new_key = new_key.replace('self_attn.q_proj.weight', 'self_attention.linear_q.weight')
+                new_key = new_key.replace('self_attn.k_proj.weight', 'self_attention.linear_k.weight')
+                new_key = new_key.replace('self_attn.v_proj.weight', 'self_attention.linear_v.weight')
+                new_key = new_key.replace('self_attn.q_proj.bias', 'self_attention.linear_q.bias')
+                new_key = new_key.replace('self_attn.k_proj.bias', 'self_attention.linear_k.bias')
+                new_key = new_key.replace('self_attn.v_proj.bias', 'self_attention.linear_v.bias')
+                new_key = new_key.replace('post_attention_layernorm.weight', 'pre_mlp_layernorm.weight')
+                new_key = new_key.replace('mlp.gate_proj.weight', 'mlp.linear_fc1_gate.weight')
+                new_key = new_key.replace('mlp.up_proj.weight', 'mlp.linear_fc1_up.weight')
+                new_key = new_key.replace('mlp.down_proj.weight', 'mlp.linear_fc2.weight')
+                new_key = new_key.replace('model.norm.weight', 'decoder.final_layernorm.weight')
+                new_key = new_key.replace('model.embed_tokens.weight', 'embedding.word_embeddings.weight')
 
-    llm_ckpt = torch.load(_llm_path, map_location='cpu')['model']
-    for k, v in llm_ckpt.items():
-        new_params[k] = v          
+            new_params[new_key] = value
+    for i in range(_num_layers):
+        # 合并gate up
+        gate_name = f'decoder.layers.{i}.mlp.linear_fc1_gate.weight'
+        up_name = f'decoder.layers.{i}.mlp.linear_fc1_up.weight'
+        fc1_name = f'decoder.layers.{i}.mlp.linear_fc1.weight'
+        # 如果权重名字在新字典中，则获取对应权重值
+        # 合并 w1 和 w3
+        if gate_name in new_params.keys():
+            gate_proj_weight = new_params[gate_name]
+        if up_name in new_params.keys():
+            up_proj_weight = new_params[up_name]
+        # 将 w1 和 w3 沿着第0维度进行拼接
+        linear_fc1 = torch.cat([gate_proj_weight, up_proj_weight], dim=0)
+
+        new_params[fc1_name] = linear_fc1
+        # 移除合并前的权重
+        if gate_name in new_params:
+            new_params.pop(gate_name)
+        if up_name in new_params:
+            new_params.pop(up_name)
+
+    for i in range(_num_layers):
+        # 合并q k v weight
+        attention_q = f'decoder.layers.{i}.self_attention.linear_q.weight'
+        attention_k = f'decoder.layers.{i}.self_attention.linear_k.weight'
+        attention_v = f'decoder.layers.{i}.self_attention.linear_v.weight'
+        attention_qkv = f'decoder.layers.{i}.self_attention.linear_qkv.weight'
+        if attention_q in new_params.keys():
+            attention_q_weight = new_params[attention_q]
+        if attention_k in new_params.keys():
+            attention_k_weight = new_params[attention_k]
+        if attention_v in new_params.keys():
+            attention_v_weight = new_params[attention_v]
+
+        q_chunks = torch.chunk(attention_q_weight, 4, dim=0)
+        k_chunks = torch.chunk(attention_k_weight, 4, dim=0)
+        v_chunks = torch.chunk(attention_v_weight, 4, dim=0)
+        all_chunks = []
+        for j in range(4):
+            all_chunks.append(q_chunks[j])
+            all_chunks.append(k_chunks[j])
+            all_chunks.append(v_chunks[j])
+        concatenated_tensor = torch.cat(all_chunks, dim=0)
+        new_params[attention_qkv] = concatenated_tensor
+        if attention_q in new_params:
+            new_params.pop(attention_q)
+        if attention_k in new_params:
+            new_params.pop(attention_k)
+        if attention_v in new_params:
+            new_params.pop(attention_v)
+
+    for i in range(_num_layers):
+        # 合并q k v bias
+        attention_q1 = f'decoder.layers.{i}.self_attention.linear_q.bias'
+        attention_k1 = f'decoder.layers.{i}.self_attention.linear_k.bias'
+        attention_v1 = f'decoder.layers.{i}.self_attention.linear_v.bias'
+        attention_qkv1 = f'decoder.layers.{i}.self_attention.linear_qkv.bias'
+        if attention_q1 in new_params.keys():
+            attention_q_bias = new_params[attention_q1]
+        else:
+            continue
+        if attention_k1 in new_params.keys():
+            attention_k_bias = new_params[attention_k1]
+        else:
+            continue
+        if attention_v1 in new_params.keys():
+            attention_v_bias = new_params[attention_v1]
+        else:
+            continue
+
+        q_chunks1 = torch.chunk(attention_q_bias, 4, dim=0)
+        k_chunks1 = torch.chunk(attention_k_bias, 4, dim=0)
+        v_chunks1 = torch.chunk(attention_v_bias, 4, dim=0)
+        all_chunks1 = []
+        for j in range(4):
+            all_chunks1.append(q_chunks1[j])
+            all_chunks1.append(k_chunks1[j])
+            all_chunks1.append(v_chunks1[j])
+        concatenated_tensor1 = torch.cat(all_chunks1, dim=0)
+        new_params[attention_qkv1] = concatenated_tensor1
+        if attention_q1 in new_params:
+            new_params.pop(attention_q1)
+        if attention_k1 in new_params:
+            new_params.pop(attention_k1)
+        if attention_v1 in new_params:
+            new_params.pop(attention_v1)
 
     return new_params
 
@@ -121,7 +241,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
             return
     else:
         os.makedirs(_save_dir)
-    
+
     flags = os.O_WRONLY | os.O_CREAT
     mode = stat.S_IWUSR | stat.S_IRUSR
     with os.fdopen(os.open(os.path.join(_save_dir, 'latest_checkpointed_iteration.txt'), flags, mode), 'w') as fout:
@@ -131,7 +251,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
         directory = 'release'
     else:
         directory = 'iter_{:07d}'.format(_lastest_checkpointed_iteration)
-    
+
     if len(_state_dicts) > 1:
         for pp_rank, _state_dict in enumerate(_state_dicts):
             tp_rank = 0
@@ -151,15 +271,15 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
 
 
 if __name__ == "__main__":
-    hg_ckpt_dir = "raw_ckpt/Qwen2-VL-7B-Instruct"
-    mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'  
+    hg_ckpt_dir = "Qwen2-VL-7B-Instruct"
+    mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'
     pipeline_layer_index = [0, 0, 10, 20]
     num_layers = 28
-    llm_path = 'llm_path/Qwen2-VL-7B-Instruct/inter_0000001/mp_rank/model_optim_rng.pt'
 
     vit_hidden_size = 1280
     vit_attention_heads_num = 16
 
-    state_dict = convert_hg_to_mm(hg_ckpt_dir, llm_path, vit_hidden_size, vit_attention_heads_num)
+    state_dict = load_from_hf(_load_dir=hg_ckpt_dir)
+    state_dict = convert_hg_to_mm(state_dict, num_layers, vit_hidden_size, vit_attention_heads_num)
     state_dicts = split_by_pp(state_dict, num_layers, pipeline_layer_index)
     save_by_pp(state_dicts, mm_save_dir, _exists_ok=True)

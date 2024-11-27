@@ -16,7 +16,7 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
     dataset_attr = DatasetAttr(**dataset_param["attr"])
     tokenizer_module = load_tokenizer(process_args)
     tokenizer = tokenizer_module['tokenizer']
-    processor = AutoProcessor.from_pretrained(process_args.model_name_or_path)
+    processor = AutoProcessor.from_pretrained(process_args.model_name_or_path, local_files_only=True)
     template = get_template_and_fix_tokenizer(tokenizer, data_args.template)
     # -----------------load dataset from file-------------------------------------------------------------------------
     dataset = load_dataset(
@@ -28,7 +28,6 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
         cache_dir=data_args.cache_dir,
         token=None,
         streaming=data_args.streaming,
-        trust_remote_code=True,
     )
     # -----------------convert to sharegpt ---------------------------------------------------------------------------
     convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, dataset_dir=data_args.dataset_dir)
