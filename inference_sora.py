@@ -73,8 +73,8 @@ def main():
     for i in range(0, len(prompts), args.micro_batch_size):
         # == prepare batch prompts ==
         batch_prompts = prompts[i: i + args.micro_batch_size]
+        kwargs = {}
         if conditional_pixel_values_path:
-            kwargs = {}
             batch_pixel_values_path = conditional_pixel_values_path[i: i + args.micro_batch_size]
             kwargs.update({"conditional_pixel_values_path": batch_pixel_values_path,
                            "mask_type": mask_type,
