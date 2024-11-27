@@ -61,7 +61,8 @@
     "pipeline_config": {
         "version": "v1.3",
         "use_attention_mask": true,
-        "input_size": [93, 352, 640]
+        "input_size": [93, 352, 640],
+        "model_type": "t2v"
     },
     "micro_batch_size": 1,
     "frame_interval":1,
