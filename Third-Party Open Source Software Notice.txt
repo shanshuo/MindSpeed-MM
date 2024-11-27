@@ -362,3 +362,11 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Copyright Notice included in the software: 
 Copyright (c) 2022, the respective contributors, as shown by the AUTHORS file. All rights reserved.
+
+Software Notice
+Software VLMEvalKit
+License: Apache License 2.0
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2023 VLMEvalKit Authors. All rights reserved.
