@@ -110,7 +110,8 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         self.processor = WhisperProcessor.from_pretrained(
             processor_name_or_path,
             language=language,
-            task=task,
+            task=task, 
+            local_files_only=True,
         )
 
     def __call__(

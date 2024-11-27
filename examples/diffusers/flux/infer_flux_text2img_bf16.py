@@ -28,7 +28,7 @@ PROMPT = [
 seed_list = [8, 23, 42, 1334]
 
 # pipeline 设置
-pipe = FluxPipeline.from_pretrained(MODEL_PATH, torch_dtype=torch.bfloat16)
+pipe = FluxPipeline.from_pretrained(MODEL_PATH, torch_dtype=torch.bfloat16, local_files_only=True)
 pipe = pipe.to(DEVICE)
 
 # 输出图片

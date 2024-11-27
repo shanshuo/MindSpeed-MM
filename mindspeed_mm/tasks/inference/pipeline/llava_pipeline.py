@@ -18,7 +18,7 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         self.infer_config = infer_config
         self.tokenizer = Tokenizer(infer_config.tokenizer).get_tokenizer()
         self.tokenizer.add_tokens([MODEL_CONSTANTS["llava"]["IMAGE_PATCH_TOKEN"]], special_tokens=True)
-        self.image_processor = CLIPImageProcessor.from_pretrained(infer_config.image_processer_path)
+        self.image_processor = CLIPImageProcessor.from_pretrained(infer_config.image_processer_path, local_files_only=True)
         self.vlmodel = model_provider()
         self.device = infer_config.device
         self.dtype = infer_config.dtype

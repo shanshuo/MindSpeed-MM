@@ -16,7 +16,7 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
     dataset_attr = DatasetAttr(**dataset_param["attr"])
     tokenizer_module = load_tokenizer(process_args)
     tokenizer = tokenizer_module['tokenizer']
-    processor = AutoProcessor.from_pretrained(process_args.model_name_or_path)
+    processor = AutoProcessor.from_pretrained(process_args.model_name_or_path, local_files_only=True)
     template = get_template_and_fix_tokenizer(tokenizer, data_args.template)
     # -----------------load dataset from file-------------------------------------------------------------------------
     dataset = load_dataset(

@@ -8,7 +8,7 @@ from transformers import AutoModelForCausalLM
 
 def load_from_hf(_load_dir):
     # Load Huggingface model.
-    hf_model = AutoModelForCausalLM.from_pretrained(_load_dir, device_map='cpu', trust_remote_code=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(_load_dir, device_map='cpu', trust_remote_code=True, local_files_only=True)
     print(hf_model)
     return hf_model.state_dict()
 

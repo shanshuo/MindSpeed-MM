@@ -383,16 +383,17 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
 
     Note: including inplace operation of model_args.
     """
-    config = AutoConfig.from_pretrained(model_args.model_name_or_path)
+    config = AutoConfig.from_pretrained(model_args.model_name_or_path, local_files_only=True)
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.model_name_or_path,
         use_fast=model_args.use_fast_tokenizer,
         split_special_tokens=model_args.split_special_tokens,
-        padding_side="right"
+        padding_side="right", 
+        local_files_only=True
     )
 
     try:
-        processor = AutoProcessor.from_pretrained(model_args.model_name_or_path)
+        processor = AutoProcessor.from_pretrained(model_args.model_name_or_path, local_files_only=True)
         setattr(processor, "tokenizer", tokenizer)
         setattr(processor, "image_seqlen", get_image_seqlen(config))
         setattr(processor, "image_resolution", model_args.image_resolution)
