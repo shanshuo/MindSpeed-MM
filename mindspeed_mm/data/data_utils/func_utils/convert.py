@@ -61,7 +61,7 @@ def convert_sharegpt(
     broken_data = False
     for turn_idx, message in enumerate(messages):
         if message[dataset_attr.role_tag] not in accept_tags[turn_idx % 2]:
-            logger.warning("Invalid role tag in {}.".format(messages))
+            logger.warning("Invalid role tag in %s.", messages)
             broken_data = True
 
         aligned_messages.append(
@@ -70,7 +70,7 @@ def convert_sharegpt(
         )
     invalid = len(aligned_messages) % 2 != 0
     if invalid:
-        logger.warning("Invalid message count in {}.".format(messages))
+        logger.warning("Invalid message count in %s.", messages)
         broken_data = True
 
 
@@ -234,8 +234,7 @@ def preprocess_supervised_dataset(
     model_inputs = defaultdict(list)
     for i in range(len(examples["_prompt"])):
         if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) != 1:
-            logger.warning("Dropped invalid example: {}".format(
-                examples["_prompt"][i] + examples["_response"][i]))
+            logger.warning("Dropped invalid example: %s", examples["_prompt"][i] + examples["_response"][i])
             continue
         params = EncodeSupervisedParams(images=examples["_images"][i] or [],
                                         videos=examples["_videos"][i] or [],
@@ -403,7 +402,7 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
         setattr(processor, "video_maxlen", model_args.video_maxlen)
         setattr(processor, "vision_feature_select_strategy", get_vision_feature_select_strategy(config))
     except Exception as e:
-        logger.warning("Processor was not found: {}.".format(e))
+        logger.warning("Processor was not found: %s.", e)
         processor = None
 
     # Avoid load tokenizer, see:

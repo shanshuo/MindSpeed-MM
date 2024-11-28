@@ -90,6 +90,7 @@
     conda activate test
 
     # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
+    # 下载路径参考 https://www.hiascend.com/document/detail/zh/Pytorch/60RC3/configandinstg/instg/insg_0001.html
     pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
     
@@ -131,50 +132,16 @@
 MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分 (目前只支持 7B 和 特定的切分方式)。
 
 以Qwen2VL-7B为例
-首先通过 [ModelLink](https://gitee.com/ascend/ModelLink) 的权重转换工具将 Qwen2VL-7B语言模型部分的权重转换到 megatron 支持的格式：
-```
-git clone https://gitee.com/ascend/ModelLink
-cd ModelLink
-```
-将 modellink/tasks/checkpoint/models.py 的第393行
-```
-self.module = [AutoModelForCausalLM.from_pretrained(load_dir, device_map=device_map, trust_remote_code=trust_remote_code)]
-```
-改为：
-```
-from transformers import Qwen2VLForConditionalGeneration
-self.module = [Qwen2VLForConditionalGeneration.from_pretrained(load_dir, device_map=device_map, trust_remote_code=trust_remote_code)]
-```
-创建权重转换脚本 modelconvert.sh
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-```
-python convert_ckpt.py \
-    --use-mcore-models \
-    --model-type GPT \
-    --load-model-type hf \
-    --save-model-type mg \
-    --target-tensor-parallel-size 1 \
-    --target-tensor-parallel-size 1 \
-    --add-qkv-bias \
-    --load-dir hf_path/Qwen2-VL-7B-Instruct \
-    --save-dir llm_path/Qwen2-VL-7B-Instruct \
-    --tokenizer-model hf_path/Qwen2-VL-7B-Instruct/tokenizer.json \
-    --model-type-hf llama2 \
-    --params-dtype bf16
-```
-然后执行
-```
-bash modelconvert.sh
-```
 
-第二步，修改qwen2vl_convert_to_mm_ckpt.py中的load_dir、save_dir、pipeline_layer_index、num_layers、llm_path 如下：
+
+修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```
 hg_ckpt_dir = 'hf_path/Qwen2-VL-7B-Instruct' # huggingface权重目录
 mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'  # 转换后保存目录
-pipeline_layer_index = [0, 0, 10, 20]     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。
-num_layers=28                   # 模型结构层数
-llm_path = 'llm_path/Qwen2-VL-7B-Instruct/inter_0000001/mp_rank/model_optim_rng.pt' # 第一步用 ModelLink 保存的模型路径
+pipeline_layer_index = [0, 0, 10, 20]     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
+
+num_layers=28                   # 语言模型结构层数
 ```
   
 启动脚本
@@ -184,7 +151,8 @@ llm_path = 'llm_path/Qwen2-VL-7B-Instruct/inter_0000001/mp_rank/model_optim_rng.
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
   python examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py
   ```
-同步修改examples/qwen2vl/finetune_qwen2vl_7b.sh中的LOAD_PATH参数，该路径为转换后或者切分后的权重，注意与原始权重 hf_path/Qwen2-VL-7B-Instruct进行区分。
+
+如果需要用转换后模型训练的话，同步修改examples/qwen2vl/finetune_qwen2vl_7b.sh中的LOAD_PATH参数，该路径为转换后或者切分后的权重，注意与原始权重 hf_path/Qwen2-VL-7B-Instruct进行区分。
 
 ```
 LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
@@ -338,3 +306,25 @@ pip install qwen_vl_utils
     bash examples/qwen2vl/inference_qwen2vl_7b.sh
 ```
 注：单卡推理需打开FA，否则可能会显存不足报错，开关--use-flash-attn 默认已开，确保FA步骤完成即可。
+
+<a id="jump5"></a>
+
+## 权重转换
+MindSpeed-MM修改了部分原始网络的结构名称，在微调后，可使用examples/qwen2vl/qwen2vl_convert_to_hg.py脚本对微调后的权重进行转换，将权重名称修改为与原始网络一致。
+#### 1.修改路径
+
+修改qwen2vl_convert_to_hg.py中的如下内容,与实际保持一致：
+```
+mm_save_dir = "/data/MindSpeed-MM/save_dir" # 微调后保存的权重目录
+hg_save_dir = "Qwen2-VL-7B-Save"            # 转换后保存目录
+index_json_path = "Qwen2-VL-7B-Instruct/model.safetensors.index.json" # 原始模型文件夹中的model.safetensors.index.json文件
+num_layers = 28                             # 模型结构层数
+```
+
+#### 2.执行转换脚本
+```
+python examples/qwen2vl/qwen2vl_convert_to_hg.py
+```
+
+
+
