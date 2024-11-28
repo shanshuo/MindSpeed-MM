@@ -28,14 +28,40 @@
 
 【模型开发时推荐使用配套的环境版本】
 
-|           软件            | [版本](https://www.hiascend.com/zh/) |
-| :-----------------------: |:----------------------------------:|
-|          Python           |                3.8                 |
-|          Driver           |         AscendHDK 24.1.RC3          |
-|         Firmware          |         AscendHDK 24.1.RC3          |
-|           CANN            |             CANN 8.0.RC3             |
-|           Torch           |            2.1.0            |
-|         Torch_npu         |           release v6.0.RC3           |
+<table border="0">
+  <tr>
+    <th>软件</th>
+    <th>版本</th>
+    <th>安装指南</th>
+  </tr>
+  <tr>
+    <td> Python </td>
+    <td> 3.8 </td>
+  </tr>
+  <tr>
+    <td> Driver </td>
+    <td> AscendHDK 24.1.RC3 </td>
+    <td rowspan="2">《<a href="https://www.hiascend.com/document/detail/zh/canncommercial/80RC3/softwareinst/instg/instg_0003.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit">驱动固件安装指南</a> 》</td>
+  </tr>
+  <tr>
+    <td> Firmware </td>
+    <td> AscendHDK 24.1.RC3 </td>
+  </tr>
+  <tr>
+    <td> CANN </td>
+    <td> CANN 8.0.RC3 </td>
+    <td>《<a href="https://www.hiascend.com/document/detail/zh/canncommercial/80RC3/softwareinst/instg/instg_0000.html">CANN 软件安装指南</a> 》</td>
+  </tr>
+  <tr>
+    <td> Torch </td>
+    <td> 2.1.0 </td>
+    <td rowspan="2">《<a href="https://www.hiascend.com/document/detail/zh/Pytorch/60RC3/configandinstg/instg/insg_0001.html">Ascend Extension for PyTorch 配置与安装</a> 》</td>
+  </tr>
+  <tr>
+    <td> Torch_npu </td>
+    <td> release v6.0.RC3 </td>
+  </tr>
+</table>
 
 <a id="jump1.1"></a>
 
