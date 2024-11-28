@@ -1,15 +1,13 @@
-Network="FluxDreambooth"
+Network="FluxLora"
 
-model_name="black-forest-labs/FLUX.1-dev" #FLUX预训练模型地址
-instance_dir="dog"
-batch_size=16
+model_name="black-forest-labs/FLUX.1-dev" 
+dataset_name="pokemon-blip-captions"
+batch_size=8
 max_train_steps=5000
 mixed_precision="bf16"
-resolution=256
-gradient_accumulation_steps=4
-config_file="${mixed_precision}_accelerate_config.yaml"
-
-export TOKENIZERS_PARALLELISM=false
+resolution=512
+gradient_accumulation_steps=1
+config_file="pretrain_${mixed_precision}_accelerate_config.yaml"
 
 for para in $*; do
   if [[ $para == --model_name* ]]; then
@@ -31,16 +29,6 @@ for para in $*; do
   fi
 done
 
-export ASCEND_SLOG_PRINT_TO_STDOUT=0
-export ASCEND_GLOBAL_LOG_LEVEL=3
-export ASCEND_GLOBAL_EVENT_ENABLE=0
-export TASK_QUEUE_ENABLE=2
-export COMBINED_ENABLE=1
-export HCCL_WHITELIST_DISABLE=1
-export HCCL_CONNECT_TIMEOUT=1200
-export HOST_CACHE_CAPACITY=20
-export ACLNN_CACHE_LIMIT=100000
-
 # cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径
 cur_path=$(pwd)
 cur_path_last_dirname=${cur_path##*/}
@@ -53,6 +41,7 @@ else
 fi
 
 echo ${test_path_dir}
+# source ${test_path_dir}/env_npu.sh
 
 #创建DeviceID输出目录，不需要修改
 output_path=${cur_path}/logs
@@ -64,29 +53,27 @@ start_time=$(date +%s)
 echo "start_time: ${start_time}"
 
 accelerate launch --config_file ${config_file} \
-  ./train_dreambooth_flux.py \
+  train_dreambooth_lora_flux_advanced.py \
   --pretrained_model_name_or_path=$model_name  \
-  --instance_data_dir=$instance_dir \
-  --instance_prompt="a photo of sks dog" \
+  --dataset_name=$dataset_name \
+  --output_dir=$output_path \
+  --instance_prompt="a photo of pokemon" \
   --resolution=$resolution \
   --train_batch_size=$batch_size \
-  --guidance_scale=1 \
   --gradient_checkpointing \
   --mixed_precision=$mixed_precision \
-  --max_grad_norm=1 \
   --gradient_accumulation_steps=$gradient_accumulation_steps \
-  --learning_rate=1e-05 \
+  --learning_rate=1e-06 \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \
   --max_train_steps=$max_train_steps \
-  --validation_prompt="A photo of sks dog in a bucket" \
-  --validation_epochs=200 \
-  --checkpointing_steps=50000 \
+  --validation_prompt="A photo of pokemon in a bucket" \
+  --validation_epochs=500 \
+  --checkpointing_steps=5001 \
   --seed="0" \
-  --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_FLUX.log 2>&1 &
+  --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_flux_dreambooth_lora.log 2>&1 &
 wait
-chmod 440 ${output_path}/train_${mixed_precision}_FLUX.log
-
+chmod 440 ${output_path}/train_${mixed_precision}_flux_dreambooth_lora.log
 #训练结束时间，不需要修改
 end_time=$(date +%s)
 e2e_time=$(($end_time - $start_time))
@@ -95,15 +82,17 @@ e2e_time=$(($end_time - $start_time))
 echo "------------------ Final result ------------------"
 
 #输出性能FPS，需要模型审视修改
-FPS=$(grep "FPS: " ${output_path}/train_${mixed_precision}_FLUX.log | awk '{print $NF}' | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+FPS=$(grep "FPS: " ${output_path}/train_${mixed_precision}_flux_dreambooth_lora.log | awk '{print $NF}' | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
 
+#获取性能数据，不需要修改
+#吞吐量
 ActualFPS=$(awk 'BEGIN{printf "%.2f\n", '${FPS}'}')
 
 #打印，不需要修改
 echo "Final Performance images/sec : $ActualFPS"
 
 #loss值，不需要修改
-ActualLoss=$(grep -o "loss=[0-9.]*" ${output_path}/train_${mixed_precision}_FLUX.log | awk 'END {print $NF}')
+ActualLoss=$(grep -o "loss=[0-9.]*" ${output_path}/train_${mixed_precision}_flux_dreambooth_lora.log | awk 'END {print $NF}')
 
 #打印，不需要修改
 echo "Final Train Loss : ${ActualLoss}"

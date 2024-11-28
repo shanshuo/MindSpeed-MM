@@ -101,7 +101,23 @@
 
 1. 【准备微调数据集】
 
-    - 只包含图片的训练数据集，如非deepspeed脚本使用训练数据集dog:[下载地址](https://huggingface.co/datasets/diffusers/dog-example)，并将dog文件夹转移到`examples/dreambooth/`目录下
+    - 用户需自行获取并解压[pokemon-blip-captions](https://gitee.com/hf-datasets/pokemon-blip-captions)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
+    
+    ```shell
+    dataset_name="pokemon-blip-captions" # 数据集 路径
+    ```
+
+   - pokemon-blip-captions数据集格式如下:
+
+    ```shell
+    pokemon-blip-captions
+    ├── dataset_infos.json
+    ├── README.MD
+    └── data
+          └── train-001.parquet
+    ```
+    
+    - 只包含图片的训练数据集，如deepspeed脚本使用训练数据集dog:[下载地址](https://huggingface.co/datasets/diffusers/dog-example)，并将dog文件夹转移到`examples/dreambooth/`目录下
 
     ```shell
     input_dir="dog" # 数据集路径
@@ -222,10 +238,17 @@
 
 3. 【启动 FLUX 微调脚本】
 
-    本任务主要提供finetune_flux_dreambooth_deepspeed_bf16.sh脚本，该脚本为FLUX微调脚本，支持多卡训练。
+    本任务主要提供flux_dreambooth与flux_dreambooth_lora微调脚本，支持多卡训练。
 
+    启动FLUX dreambooth微调脚本
+    
     ```shell
     bash finetune_flux_dreambooth_deepspeed_bf16.sh 
+    ```
+    启动FLUX dreambooth_lora微调脚本
+    
+    ```shell
+    bash finetune_flux_dreambooth_lora_deepspeed_bf16.sh
     ```
 
 ### 性能
@@ -283,6 +306,24 @@ vim infer_flux_text2img_bf16.py # 进入运行推理的Python文件
 
       ```shell
       python infer_flux_text2img_dreambooth_bf16.py
+      ```
+    【lora微调FLUX模型推理】
+
+  ```shell
+  vim infer_flux_text2img_lora_bf16.py
+  ```
+
+  1. 修改路径
+
+      ```python
+      MODEL_PATH = "./FLUX"  # Flux 模型路径
+      LORA_WEIGHTS = "./output/pytorch_lora_weights.safetensors"  # LoRA权重路径
+      ```
+
+  2. 运行代码
+
+      ```shell
+      python infer_flux_text2img_lora_bf16.py
       ```
 
 <a id="jump3"></a>

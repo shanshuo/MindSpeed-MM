@@ -38,7 +38,7 @@ else
   test_path_dir=${cur_path}
 fi
 
-output_path=${cur_path}/output/${ASCEND_DEVICE_ID}
+output_path=${cur_path}/logs
 
 
 mkdir -p ${output_path}
@@ -67,9 +67,9 @@ accelerate launch --config_file ./sdxl/accelerate_deepspeed_config.yaml \
  --pretrained_vae_model_name_or_path=$vae_name \
  --seed=1234 \
  --enable_npu_flash_attention \
- --output_dir=${output_path} > ${output_path}train_${mixed_precision}_sdxl_controlnet_deepspeed.log 2>&1 &
+ --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_sdxl_controlnet_deepspeed.log 2>&1 &
 wait
-
+chmod 440 ${output_path}/train_${mixed_precision}_sdxl_controlnet_deepspeed.log
 
 
 #训练结束时间，不需要修改
