@@ -6,8 +6,8 @@ import numpy as np
 import pandas as pd
 
 from mindspeed_mm.tasks.evaluation.eval_impl.impl_base import BaseEvalImpl
-from mindspeed_mm.tasks.evaluation.utils.string_utils import is_list_in_str, dict2dataframe, process_line, logger_rank_0
-from mindspeed_mm.tasks.evaluation.utils.analysis_utils import hit_calculate
+from mindspeed_mm.tasks.evaluation.utils.string_utils import is_list_in_str, dict2dataframe, logger_rank_0
+from mindspeed_mm.tasks.evaluation.utils.analysis_utils import hit_calculate, process_line
 
 
 class VQAEvalImpl(BaseEvalImpl):
