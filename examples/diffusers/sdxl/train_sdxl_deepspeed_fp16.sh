@@ -59,7 +59,7 @@ fi
 echo ${test_path_dir}
 
 #创建DeviceID输出目录，不需要修改
-output_path=${cur_path}/test/output/${ASCEND_DEVICE_ID}
+output_path=${cur_path}/logs
 
 mkdir -p ${output_path}
 
@@ -82,8 +82,9 @@ accelerate launch --config_file ${config_file} \
   --enable_npu_flash_attention \
   --mixed_precision=$mixed_precision \
   --checkpointing_steps=500 \
-  --output_dir=${output_path} > ${output_path}train_${mixed_precision}.log 2>&1 &
+  --output_dir=${output_path} > ${output_path}/train_${mixed_precision}.log 2>&1 &
 wait
+chmod 440 ${output_path}/train_${mixed_precision}.log
 
 #训练结束时间，不需要修改
 end_time=$(date +%s)

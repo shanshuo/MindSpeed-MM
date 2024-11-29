@@ -17,7 +17,7 @@ else
   test_path_dir=${cur_path}
 fi
 
-output_path=${cur_path}/test/output/${ASCEND_DEVICE_ID}
+output_path=${cur_path}/logs
 
 echo ${output_path}
 mkdir -p ${output_path}
@@ -42,7 +42,7 @@ accelerate launch ./examples/dreambooth/train_dreambooth_sd3.py \
   --max_train_steps=$max_train_steps \
   --seed="0" > ${output_path}/train_${mixed_precision}_sd3_dreambooth.log 2>&1 &
 wait
-
+chmod 440 ${output_path}/train_${mixed_precision}_sd3_dreambooth.log
 
 #训练结束时间，不需要修改
 end_time=$(date +%s)

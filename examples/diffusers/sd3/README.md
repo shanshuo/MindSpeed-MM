@@ -104,7 +104,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     ```shell
     git clone https://github.com/huggingface/diffusers.git -b v0.30.0
     cd diffusers
-    git checkout e2ead7cdcc00859533e6bec7b0707a6fb0efef0a
+    git checkout 94643fac8a27345f695500085d78cc8fa01f5fa9
     cp -r ../MindSpeed-MM/examples/diffusers/sd3 ./sd3
     ```
 

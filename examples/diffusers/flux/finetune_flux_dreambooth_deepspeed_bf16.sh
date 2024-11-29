@@ -40,6 +40,7 @@ export HCCL_WHITELIST_DISABLE=1
 export HCCL_CONNECT_TIMEOUT=1200
 export HOST_CACHE_CAPACITY=20
 export ACLNN_CACHE_LIMIT=100000
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
 # cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径
 cur_path=$(pwd)
@@ -55,7 +56,7 @@ fi
 echo ${test_path_dir}
 
 #创建DeviceID输出目录，不需要修改
-output_path=${cur_path}/output_FLUX_${mixed_precision}/${ASCEND_DEVICE_ID}
+output_path=${cur_path}/logs
 
 mkdir -p ${output_path}
 
@@ -85,7 +86,7 @@ accelerate launch --config_file ${config_file} \
   --seed="0" \
   --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_FLUX.log 2>&1 &
 wait
-
+chmod 440 ${output_path}/train_${mixed_precision}_FLUX.log
 
 #训练结束时间，不需要修改
 end_time=$(date +%s)

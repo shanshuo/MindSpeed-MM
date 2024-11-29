@@ -47,7 +47,7 @@ fi
 echo ${test_path_dir}
 
 #创建DeviceID输出目录，不需要修改
-output_path=${cur_path}/test/output/${ASCEND_DEVICE_ID}
+output_path=${cur_path}/logs
 
 mkdir -p ${output_path}
 
@@ -74,7 +74,7 @@ accelerate launch --config_file ${config_file} \
   --checkpointing_steps=500 \
   --output_dir=${output_path} > ${output_path}train_${mixed_precision}_sd3_dreambooth_deepspeed.log 2>&1 &
 wait
-
+chmod 440 ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log
 #训练结束时间，不需要修改
 end_time=$(date +%s)
 e2e_time=$(($end_time - $start_time))
