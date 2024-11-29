@@ -21,7 +21,7 @@ class Qwen2VlPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         self.model.eval()
         self.model.to(dtype=infer_config.dtype, device=infer_config.device)
 
-        self.image_processor = AutoProcessor.from_pretrained(infer_config.tokenizer.from_pretrained)
+        self.image_processor = AutoProcessor.from_pretrained(infer_config.tokenizer.from_pretrained, local_files_only=True)
         self.generation_config = infer_config.generation_config
         self.model_config = infer_config.text_decoder
         self.main_input_name = 'input_ids'

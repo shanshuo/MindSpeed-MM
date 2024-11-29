@@ -13,9 +13,9 @@ controlnet_path = "/diffusion/model"
 output_path = "./sdxl_controlnet_NPU"
 os.makedirs(output_path, exist_ok=True)
 
-controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=torch.float32)
+controlnet = ControlNetModel.from_pretrained(controlnet_path, torch_dtype=torch.float32, local_files_only=True)
 pipe = StableDiffusionXLControlNetPipeline.from_pretrained(
-    base_model_path, controlnet=controlnet, torch_dtype=torch.float32
+    base_model_path, controlnet=controlnet, torch_dtype=torch.float32, local_files_only=True
 )
 
 # speed up diffusion process with faster scheduler and memory optimization

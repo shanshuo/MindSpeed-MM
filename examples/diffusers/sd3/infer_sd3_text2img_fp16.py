@@ -1,10 +1,11 @@
 # Copyright 2024 Huawei Technologies Co., Ltd
+# Copyright 2024 Stability AI, The HuggingFace Team and The InstantX Team. All rights reserved.
 
 import torch
 from diffusers import StableDiffusion3Pipeline
 
 pipe = StableDiffusion3Pipeline.from_pretrained("stabilityai/stable-diffusion-3-medium-diffusers",
-                                                torch_dtype=torch.float16)
+                                                torch_dtype=torch.float16, local_files_only=True)
 pipe = pipe.to("npu")
 
 image = pipe(

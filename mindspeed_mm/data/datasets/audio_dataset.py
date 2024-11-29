@@ -59,7 +59,8 @@ class AudioDataset(Dataset):
         processor = WhisperProcessor.from_pretrained(
             processor_name_or_path,
             language=processor_language,
-            task=task,
+            task=task, 
+            local_files_only=True,
         )
         feature_extractor = processor.feature_extractor
         tokenizer = processor.tokenizer

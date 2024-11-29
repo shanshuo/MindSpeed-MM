@@ -14,7 +14,7 @@ output_path = "./sdxl_lora_NPU"
 os.makedirs(output_path, exist_ok=True)
 
 model_path = "/diffusion/model"
-pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float32)
+pipe = DiffusionPipeline.from_pretrained("stabilityai/stable-diffusion-xl-base-1.0", torch_dtype=torch.float32, local_files_only=True)
 pipe.to("npu")
 pipe.load_lora_weights(model_path)
 

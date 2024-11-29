@@ -18,22 +18,24 @@ VAE_NAME = "madebyollin/sdxl-vae-fp16-fix"
 time = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
 print("start time: " + time)
 
-depth_estimator = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas").to("npu")
-feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas")
+depth_estimator = DPTForDepthEstimation.from_pretrained("Intel/dpt-hybrid-midas", local_files_only=True).to("npu")
+feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-hybrid-midas", local_files_only=True)
 controlnet = ControlNetModel.from_pretrained(
          "diffusers/controlnet-depth-sdxl-1.0-small",
          variant="fp16",
          use_safetensors=True,
-         torch_dtype=torch.float16,
+         torch_dtype=torch.float16, 
+         local_files_only=True,
 ).to("npu")
-vae = AutoencoderKL.from_pretrained(VAE_NAME, torch_dtype=torch.float16).to("npu")
+vae = AutoencoderKL.from_pretrained(VAE_NAME, torch_dtype=torch.float16, local_files_only=True).to("npu")
 pipe = StableDiffusionXLControlNetImg2ImgPipeline.from_pretrained(
          MODEL_NAME,
          controlnet=controlnet,
          vae=vae,
          variant="fp16",
          use_safetensors=True,
-         torch_dtype=torch.float16,
+         torch_dtype=torch.float16, 
+         local_files_only=True,
 ).to("npu")
 pipe.enable_model_cpu_offload()
 
