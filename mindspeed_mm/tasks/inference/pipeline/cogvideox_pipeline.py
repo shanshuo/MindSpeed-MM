@@ -186,7 +186,7 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         model_kwargs = {"prompt": prompt_embeds.unsqueeze(1),
                         "prompt_mask": prompt_embeds_attention_mask,
-                        "image_latents": image_latents}
+                        "masked_video": image_latents}
 
         self.scheduler.guidance_scale = self.guidance_scale
         latents = self.scheduler.sample(model=self.predict_model, shape=shape, latents=latents,

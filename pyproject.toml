@@ -25,7 +25,8 @@ dependencies = [
     "pandarallel",
     "datasets",
     "qwen_vl_utils",
-    "imageio"
+    "imageio",
+    "imageio-ffmpeg"
 ]
 
 [build-system]
