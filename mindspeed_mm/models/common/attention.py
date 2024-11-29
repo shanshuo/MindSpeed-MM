@@ -171,8 +171,8 @@ class MultiHeadSparseAttentionSBH(nn.Module):
             **kwargs: Additional keyword arguments to pass along
         """
 
-        sequence_length, batch_size, _ = query.shape
         q, _ = self.proj_q(query)
+        sequence_length, batch_size, _ = q.shape
 
         if key is None:
             key = query
