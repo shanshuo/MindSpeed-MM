@@ -3,7 +3,6 @@ import math
 
 import torch
 import numpy as np
-from torchvision.io import write_video
 from diffusers.utils import load_image
 from einops import rearrange
 import imageio
@@ -23,10 +22,10 @@ def save_videos(videos, start_index, save_path, fps):
     if isinstance(videos, (list, tuple)) or videos.ndim == 5:  # [b, t, h, w, c]
         for i, video in enumerate(videos):
             save_path_i = os.path.join(save_path, f"video_{start_index + i}.mp4")
-            write_video(save_path_i, video, fps=fps, video_codec="h264")
+            imageio.mimwrite(save_path_i, video, fps=fps, quality=6)
     elif videos.ndim == 4:
         save_path = os.path.join(save_path, f"video_{start_index}.mp4")
-        write_video(save_path, videos, fps=fps, video_codec="h264")
+        imageio.mimwrite(save_path, video, fps=fps, quality=6)
     else:
         raise ValueError("The video must be in either [b, t, h, w, c] or [t, h, w, c] format.")
 
