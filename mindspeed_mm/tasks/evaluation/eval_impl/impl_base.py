@@ -12,7 +12,7 @@ from mindspeed_mm.tasks.evaluation.utils.analysis_utils import mmmu_open_questio
 from mindspeed_mm.tasks.evaluation.utils.string_utils import logger_rank_0
 from mindspeed_mm.tasks.evaluation.utils.file_utils import load_pkl, save_pkl, save_csv
 from mindspeed_mm.tasks.evaluation.eval_prompt.build_prompt_base import BasePromptTemplate
-from mindspeed_mm.tasks.evaluation.eval_datastes.datasets_base import BaseEvalDataset
+from mindspeed_mm.tasks.evaluation.eval_datasets.datasets_base import BaseEvalDataset
 
 
 class BaseEvalImpl:
