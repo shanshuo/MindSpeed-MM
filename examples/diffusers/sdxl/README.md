@@ -252,6 +252,7 @@
           break
         accelerator.print("")
         ```
+    5. 【FPS打印方式请参考train_text_to_image_sdxl_pretrain.py】
 
 3. 【启动 SDXL 预训练脚本】
 

@@ -3,6 +3,7 @@ Network="StableDiffusion3DreamboothLoRA"
 model_name="stabilityai/stable-diffusion-3-medium-diffusers"
 input_dir="dog"
 batch_size=8
+num_processors=8
 max_train_steps=5000
 mixed_precision="fp16"
 resolution=512
@@ -53,7 +54,10 @@ e2e_time=$(($end_time - $start_time))
 echo "------------------ Final result ------------------"
 
 #输出性能FPS，需要模型审视修改
-FPS=$(grep "FPS: " ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log | awk '{print $NF}' | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+AverageIts=$(grep -o "[0-9.]*/it" ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+
+echo "Average s/it: ${AverageIts}"
+FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'/'${AverageIts}'}')
 
 #获取性能数据，不需要修改
 #吞吐量
@@ -75,9 +79,6 @@ BatchSize=${batch_size}
 DeviceType=$(uname -m)
 CaseName=${Network}_bs${BatchSize}_'8p'_'acc'
 
-#单迭代训练时长
-TrainingTime=$(awk 'BEGIN{printf "%.2f\n", '${batch_size}'*8/'${FPS}'}')
-
 #关键信息打印到${CaseName}.log中，不需要修改
 echo "Network = ${Network}" >${output_path}/${CaseName}.log
 echo "BatchSize = ${BatchSize}" >>${output_path}/${CaseName}.log
@@ -87,3 +88,4 @@ echo "ActualFPS = ${ActualFPS}" >>${output_path}/${CaseName}.log
 echo "TrainingTime = ${TrainingTime}" >>${output_path}/${CaseName}.log
 echo "ActualLoss = ${ActualLoss}" >>${output_path}/${CaseName}.log
 echo "E2ETrainingTime = ${e2e_time}" >>${output_path}/${CaseName}.log
+echo "TrainingTime = ${AverageIts}" >>${output_path}/${CaseName}.log

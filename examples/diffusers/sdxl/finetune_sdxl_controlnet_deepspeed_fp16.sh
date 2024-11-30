@@ -4,6 +4,7 @@ model_name="stabilityai/stable-diffusion-xl-base-1.0"
 vae_name="madebyollin/sdxl-vae-fp16-fix"
 dataset_name="fusing/fill50k"
 batch_size=5
+num_processors=8
 max_train_steps=2000
 checkpointing_steps=2000
 validation_steps=2000
@@ -102,7 +103,7 @@ DeviceType=$(uname -m)
 CaseName=${Network}_bs${BatchSize}_'8p'_'acc'
 
 #单迭代训练时长
-TrainingTime=$(awk 'BEGIN{printf "%.2f\n", '${batch_size}'*8/'${FPS}'}')
+TrainingTime=$(awk 'BEGIN{printf "%.2f\n", '${batch_size}'* '${num_processors}'/'${FPS}'}')
 
 #关键信息打印到${CaseName}.log中，不需要修改
 echo "Network = ${Network}" >${output_path}/${CaseName}.log
