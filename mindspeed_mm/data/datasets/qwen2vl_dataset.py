@@ -1,7 +1,7 @@
 from functools import partial
 
 from datasets import load_dataset
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, ConcatDataset
 from transformers import AutoProcessor
 
 from mindspeed_mm.data.data_utils.func_utils.convert import DataArguments, DatasetAttr, load_tokenizer, \
@@ -76,6 +76,10 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
 
 class Qwen2vlDataset(Dataset):
     def __init__(self, basic_param, preprocess_param, dataset_param):
+        dataset_paths = basic_param.get('dataset', '').split(',')
+        self.dataset = ConcatDataset([get_qwen2vl_dataset(
+            {**basic_param, **{'dataset': data_path}}, preprocess_param, dataset_param)
+            for data_path in dataset_paths])
         self.dataset = get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param)
         super().__init__()
 

@@ -6,17 +6,18 @@ import torch
 from safetensors.torch import save_file
 
 
-def rename_pp_parameter(param_name: str, model_dir: Path) -> str:
+def rename_pp_parameter(param_name: str, model_dir: Path, pp_list:list[int]) -> str:
     if param_name.startswith('decoder.layers'):
         index = int(model_dir.parent.stem.split('_')[-1])
-        index = (index - 1) * 10
+        # 比如pp_list = [0,0,10,20],当读取到最后一个.pt文件，此时index=3，该文件中存放的是第20到第27层
+        index = pp_list[index]
         name_li = param_name.split('.')
         name_li[2] = str(index + int(name_li[2]))
         param_name = '.'.join(name_li)
     return param_name
 
 
-def load_from_mm(_load_dir):
+def load_from_mm(_load_dir, pp_index):
     LATEST_TXT = "latest_checkpointed_iteration.txt"
     mm_save_dir = Path(_load_dir)
     save_iteration = mm_save_dir.joinpath(LATEST_TXT).read_text()
@@ -26,7 +27,7 @@ def load_from_mm(_load_dir):
     for pt_path in save_iter_dir.glob("*/*.pt"):
         print(str(pt_path).center(100, '_'))
         state_dict.update(
-            {rename_pp_parameter(param, pt_path): tensor for param, tensor in torch.load(pt_path)['model'].items()})
+            {rename_pp_parameter(param, pt_path, pp_index): tensor for param, tensor in torch.load(pt_path)['model'].items()})
     for key, value in state_dict.items():
         print(key)
 
@@ -200,12 +201,13 @@ if __name__ == "__main__":
     mm_save_dir = "/data/MindSpeed-MM/save_dir"
     hg_save_dir = "Qwen2-VL-7B-Save"
     index_json_path = "Qwen2-VL-7B-Instruct/model.safetensors.index.json"
+
+    pp_index_ = [0, 0, 10, 20]
     num_layers = 28
 
     vit_hidden_size = 1280
     vit_attention_heads_num = 16
-
-    state_dict = load_from_mm(mm_save_dir)
+    state_dict = load_from_mm(mm_save_dir, pp_index_)
     state_dict = convert_mm_to_hg(state_dict, vit_hidden_size, vit_attention_heads_num)
     state_dicts = split_by_index_json(state_dict, index_json_path)
     save_by_index_json(state_dicts, hg_save_dir)

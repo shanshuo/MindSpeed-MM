@@ -52,6 +52,7 @@ class Qwen2VLModel(LanguageModule):
         self.share_embeddings_and_output_weights = False
         self.position_embedding_type = mm_config.text_decoder.position_embedding_type
         self.img_context_token_id = mm_config.img_context_token_id
+        self.vocab_size = mm_config.text_decoder.padded_vocab_size
 
         # initialize pipeline parallel configs
         self.pp_size = mpu.get_pipeline_model_parallel_world_size()
@@ -221,7 +222,7 @@ class Qwen2VLModel(LanguageModule):
         shift_labels = labels[..., 1:].contiguous()
 
         loss_fct = CrossEntropyLoss()
-        shift_logits = shift_logits.view(-1, 152064)
+        shift_logits = shift_logits.view(-1, self.vocab_size//get_args().tensor_model_parallel_size)
         shift_labels = shift_labels.view(-1)
 
         shift_labels = shift_labels.to(shift_logits.device)
