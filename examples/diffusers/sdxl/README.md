@@ -252,7 +252,8 @@
           break
         accelerator.print("")
         ```
-
+    5. 【FPS打印方式请参考train_text_to_image_sdxl_pretrain.py】
+    
 3. 【启动 SDXL 预训练脚本】
 
     本任务主要提供**混精fp16**和**混精bf16**两种**8卡**训练脚本，默认使用**deepspeed**分布式训练。
