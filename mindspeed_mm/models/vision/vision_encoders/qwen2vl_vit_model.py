@@ -40,6 +40,7 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     )
     if use_fused_rope:
         import torch_npu
+        cos, sin = cos[:1], sin[:1]
         q_embed = torch_npu.npu_rotary_mul(q, cos, sin)
         k_embed = torch_npu.npu_rotary_mul(k, cos, sin)
     else:
@@ -135,7 +136,7 @@ class Qwen2vlSelfAttention(SelfAttention):
         # otherwise, only relative positional embedding takes effect
         if rotary_pos_emb is not None:
             cos, sin = rotary_pos_emb[0], rotary_pos_emb[1]
-            query, key = apply_multimodal_rotary_pos_emb(query, key, cos, sin, [16, 24, 24])
+            query, key = apply_multimodal_rotary_pos_emb(query, key, cos, sin, [16, 24, 24], use_fused_rope=self.config.use_fused_rotary_pos_emb)
         query = query.permute(2, 0, 1, 3).contiguous()
         key = key.permute(2, 0, 1, 3).contiguous()
         
@@ -233,8 +234,8 @@ class Qwen2vlVitSelfAttention(SelfAttention):
         # absolute positional embedding.
         # otherwise, only relative positional embedding takes effect
         if rotary_pos_emb is not None:
-            query = apply_rotary_pos_emb_vision(query.transpose(0, 1), rotary_pos_emb[0]).transpose(0, 1)
-            key = apply_rotary_pos_emb_vision(key.transpose(0, 1), rotary_pos_emb[0]).transpose(0, 1)
+            query = apply_rotary_pos_emb_vision(query.transpose(0, 1), rotary_pos_emb[0], use_fused_rope=self.config.use_fused_rotary_pos_emb).transpose(0, 1)
+            key = apply_rotary_pos_emb_vision(key.transpose(0, 1), rotary_pos_emb[0], use_fused_rope=self.config.use_fused_rotary_pos_emb).transpose(0, 1)
 
         # ==================================
         # core attention computation
@@ -326,9 +327,13 @@ class Qwen2VLViT(MultiModalModule):
     """
 
     def __init__(
-            self,
-            config: TransformerConfig,
-            transformer_layer_spec: ModuleSpec,
+        self,
+        config: TransformerConfig,
+        transformer_layer_spec: ModuleSpec,
+        pre_process: bool = True,
+        post_process: bool = True,
+        *args,
+        **kwargs,
     ) -> None:
         super().__init__(config=config)
 
