@@ -225,7 +225,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             data_list = data_list[::self.dp_group_nums]
             latents = []
             for data in data_list:
-                latents.append(self._encode(x))
+                latents.append(self._encode(data))
             return latents[get_context_parallel_group_rank() % self.dp_group_nums]
 
         elif self.dp_group_nums % self.cp_size == 0 and self.cp_size < self.dp_group_nums:
@@ -233,14 +233,25 @@ class ContextParallelCasualVAE(MultiModalModule):
             bs = x.shape[0]
             data_list = self._bs_split_and_pad(x, self.dp_group_nums // self.cp_size)
             data = data_list[get_context_parallel_rank() % (self.dp_group_nums // self.cp_size)]
-            _latent = self._encode(data)
-            latents = [torch.empty_like(_latent) for _ in range(self.dp_group_nums)]
-            latents[get_context_parallel_rank() % (self.dp_group_nums // self.cp_size)] = _latent
 
-            # dit only supports tensor model parallel now, context parallel and pipeline parallel is not supported yet.
-            torch.distributed.all_gather(latents, _latent, group=mpu.get_tensor_model_parallel_group())
+            _latent = self._encode(data)
+
+            if mpu.get_tensor_model_parallel_world_size() > 1:
+                latents_tp = [torch.empty_like(_latent) for _ in range(mpu.get_tensor_model_parallel_world_size())]
+                torch.distributed.all_gather(latents_tp, _latent, group=mpu.get_tensor_model_parallel_group())
+                latents_tp = torch.cat(latents_tp, dim=0)
+            else:
+                latents_tp = _latent
+
+            if mpu.get_context_parallel_world_size() > 1:
+                latents_cp = [torch.empty_like(latents_tp) for _ in range(mpu.get_context_parallel_world_size())]
+                torch.distributed.all_gather(latents_cp, latents_tp, group=mpu.get_context_parallel_group())
+                latents = torch.cat(latents_cp, dim=0)
+            else:
+                latents = latents_tp
+
             latents = latents[::self.cp_size]
-            return torch.cat(latents, dim=0)[:bs]
+            return latents[:bs]
 
         elif self.cp_size == self.dp_group_nums:
             return self._encode(x)

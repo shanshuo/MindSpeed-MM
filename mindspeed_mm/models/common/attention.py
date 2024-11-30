@@ -377,7 +377,7 @@ class SelfAttentionBSH(nn.Module):
     def __init__(
         self,
         query_dim: int,
-        key_dim: int,
+        key_dim: Optional[int],
         num_heads: int,
         head_dim: int,
         dropout: float = 0.0,
@@ -485,6 +485,142 @@ class SelfAttentionBSH(nn.Module):
         out = self.dropout(out)
         if input_ndim == 4:
             out = out.transpose(-1, -2).reshape(b, c, h, w)
+        return out
+
+
+class ParallelSelfAttentionSBH(nn.Module):
+    """
+    A context parallel multi-head attention layer for self-atten, layout "SBH".
+
+    Args:
+        query_dim: The number of channels in the query.
+        key_dim: The number of channels in the key, defaults to `query_dim`.
+        num_heads: The number of heads to use for multi-head attention.
+        head_dim: The number of channels in each head.
+        dropout: The dropout probability to use.
+        proj_qkv_bias: Whether to use bias in qkv projection.
+        proj_out_bias: Whether to use bias in out projection.
+        use_rope: Whether to use rope
+        interpolation_scale: The scale of interpolation.
+
+    """
+
+    def __init__(
+        self,
+        query_dim: int,
+        key_dim: int,
+        num_heads: int,
+        head_dim: int,
+        dropout: float = 0.0,
+        proj_qkv_bias: bool = False,
+        proj_out_bias: bool = True,
+        use_rope: bool = False,
+        rope: Optional[nn.Module] = None,
+        qk_ln: bool = False,
+        interpolation_scale: Tuple[int] = (1, 1, 1),
+    ):
+        super().__init__()
+        self.num_heads = num_heads
+        self.head_dim = head_dim
+        self.inner_dim = self.num_heads * self.head_dim
+        self.qk_ln = qk_ln
+        self.use_rope = use_rope
+        self.rope = rope
+        if self.qk_ln:
+            self.q_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+            self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+
+        key_dim = key_dim if key_dim is not None else query_dim
+
+        args = get_args()
+        config = core_transformer_config_from_args(args)
+        self.tp_size = mpu.get_tensor_model_parallel_world_size()
+        self.sp_size = mpu.get_context_parallel_world_size()
+        self.num_attention_heads_per_partition = core.utils.divide(num_heads, self.tp_size)
+        self.num_attention_heads_per_partition_per_cp = core.utils.divide(
+            self.num_attention_heads_per_partition, self.sp_size)
+
+        self.proj_qkv = tensor_parallel.ColumnParallelLinear(
+            query_dim,
+            self.inner_dim * 3,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_qkv_bias,
+            gather_output=False
+        )
+
+        self.proj_out = tensor_parallel.RowParallelLinear(
+            query_dim,
+            self.inner_dim,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_qkv_bias,
+            input_is_parallel=True,
+            skip_bias_add=False
+        )
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None,
+        frames: Optional[int] = None,
+        height: Optional[int] = None,
+        width: Optional[int] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            query: The hidden states of the query.
+            key: The hidden states of the key.
+            mask: The attention mask to use.
+            **kwargs: Additional keyword arguments to pass along
+        """
+        sequence_length, batch_size, _ = query.shape
+
+        q, k, v = self.proj_qkv(query)[0].chunk(3, dim=2)
+        q = q.view(-1, self.num_attention_heads_per_partition, self.head_dim)
+        k = k.view(-1, self.num_attention_heads_per_partition, self.head_dim)
+        v = v.view(-1, self.num_attention_heads_per_partition, self.head_dim)
+        sp_group = mpu.get_context_parallel_group()
+        q = all_to_all_SBH(q, sp_group, scatter_dim=1, gather_dim=0)
+        k = all_to_all_SBH(k, sp_group, scatter_dim=1, gather_dim=0)
+        v = all_to_all_SBH(v, sp_group, scatter_dim=1, gather_dim=0)
+        q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+
+        if self.qk_ln:
+            q = self.q_norm(q)
+            k = self.k_norm(k)
+
+        if self.use_rope and self.rope is not None:
+            _q = q.clone()
+            _k = k.clone()
+            _q[self.rope.text_length:] = self.rope.rotary(
+                q.transpose(0, 2)[:, :, self.rope.text_length:]).transpose(0, 2)
+            _k[self.rope.text_length:] = self.rope.rotary(
+                k.transpose(0, 2)[:, :, self.rope.text_length:]).transpose(0, 2)
+            q = _q
+            k = _k
+        q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        v = v.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+
+        out = torch_npu.npu_fusion_attention(
+            q,
+            k,
+            v,
+            head_num=self.num_attention_heads_per_partition_per_cp,
+            atten_mask=mask,
+            input_layout="SBH",
+            scale=1 / math.sqrt(self.head_dim)
+        )[0]
+
+        out = out.view(-1, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        out = all_to_all_SBH(out, sp_group, scatter_dim=0, gather_dim=1).view(sequence_length, batch_size, -1)
+        out, _ = self.proj_out(out)
+        out = self.dropout(out)
         return out
 
 
