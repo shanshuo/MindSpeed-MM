@@ -56,7 +56,8 @@
         "guidance_scale":7.5,
         "prediction_type": "v_prediction",
         "rescale_betas_zero_snr": true,
-        "device": "npu"
+        "device": "npu",
+        "timestep_spacing": "trailing"
     },
     "pipeline_config": {
         "version": "v1.3",
