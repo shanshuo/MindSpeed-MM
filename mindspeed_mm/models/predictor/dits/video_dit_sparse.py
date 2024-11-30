@@ -637,6 +637,12 @@ class VideoDitSparseI2V(VideoDitSparse):
         input_hidden_states = hidden_states
         input_masked_hidden_states = kwargs.get(MASKED_VIDEO, None)
         input_mask = kwargs.get(INPUT_MASK, None)
+        if self.training and mpu.get_context_parallel_world_size() > 1:
+            input_masked_hidden_states = split_forward_gather_backward(input_masked_hidden_states,
+                                                                       mpu.get_context_parallel_group(),
+                                                                       dim=2, grad_scale='down')
+            input_mask = split_forward_gather_backward(input_mask, mpu.get_context_parallel_group(),
+                                                       dim=2, grad_scale='down')
         input_hidden_states = self.pos_embed(input_hidden_states.to(self.dtype))
 
         input_masked_hidden_states = self.pos_embed_masked_hidden_states[0](input_masked_hidden_states.to(self.dtype))
