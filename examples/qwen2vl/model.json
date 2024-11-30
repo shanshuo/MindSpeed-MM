@@ -26,7 +26,8 @@
             "params_dtype": "bf16",
             "apply_rope_fusion": true,
             "activation_func": "quick_gelu",
-            "freeze": true
+            "freeze": true,
+            "use_fused_rotary_pos_emb": true
         },
         "vision_projector": {
             "model_id": "lnmlp",
