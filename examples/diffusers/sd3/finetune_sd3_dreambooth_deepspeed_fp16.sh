@@ -85,7 +85,7 @@ e2e_time=$(($end_time - $start_time))
 echo "------------------ Final result ------------------"
 
 #输出性能FPS，需要模型审视修改
-AverageIts=$(grep -o "[0-9.]*/it" ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+AverageIts=$(grep -o "[0-9.]*s/it" ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
 
 echo "Average s/it: ${AverageIts}"
 FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'/'${AverageIts}'}')
