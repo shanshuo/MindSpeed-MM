@@ -10,25 +10,28 @@ export CUDA_DEVICE_MAX_CONNECTIONS=1
 export HOST_CACHE_CAPACITY=20
 export ACLNN_CACHE_LIMIT=100000
 
-GPUS_PER_NODE=8
-MASTER_ADDR=localhost
+GPUS_PER_NODE=16
 MASTER_PORT=6000
-NNODES=1
-NODE_RANK=0
+HOSTFILE='./hostfile'
+NODEADDR=$(hostname -I | awk -F " " '{print$1}')
+NODE_RANK=$(awk '{ranks[$1]=(FNR-1);}END{print ranks["'$NODEADDR'"];}' $HOSTFILE)
+NNODES=$(wc -l $HOSTFILE)
+MASTER_ADDR=$(head -n 1 $HOSTFILE | awk '{print $1;}')
+
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
 MBS=1
-GRAD_ACC_STEP=16
+GRAD_ACC_STEP=128
 TP=1
-PP=1
+PP=16
 CP=1
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
-MM_DATA="./examples/internvl2/data_2B.json"
-MM_MODEL="./examples/internvl2/model_2B.json"
+MM_DATA="./examples/internvl2/data_76B.json"
+MM_MODEL="./examples/internvl2/model_76B.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="pretrained/InternVL2-2B"
+LOAD_PATH="InternVL2-76B_pp16"
 SAVE_PATH="save_dir"
 
 MM_ARGS="
@@ -51,24 +54,24 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 24 \
-    --hidden-size 2048 \
+    --num-layers 80 \
+    --hidden-size 8192 \
     --num-attention-heads 16 \
-    --seq-length 4096 \
-    --max-position-embeddings 4096 \
+    --seq-length 8192 \
+    --max-position-embeddings 8192 \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --tokenizer-type NullTokenizer \
-    --vocab-size 92553 \
+    --vocab-size 128258 \
     --position-embedding-type rope \
     --rotary-base 100000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 4e-5 \
+    --lr 1e-5 \
     --min-lr 0.0 \
     --train-iters 5000 \
     --lr-decay-style cosine \
-    --weight-decay 0.05 \
+    --weight-decay 0.01 \
     --clip-grad 1.0 \
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
@@ -77,14 +80,11 @@ GPT_ARGS="
     --no-load-rng \
     --no-save-optim \
     --no-save-rng \
-    --use-distributed-optimizer \
     --bf16 \
-    --load $LOAD_PATH \
+    --use-distributed-optimizer \
     --use-flash-attn \
-    --use-fused-rotary-pos-emb \
     --variable-seq-lengths \
-    --normalization RMSNorm \
-    --use-fused-rmsnorm \
+    --load $LOAD_PATH \
 "
 
 OUTPUT_ARGS="

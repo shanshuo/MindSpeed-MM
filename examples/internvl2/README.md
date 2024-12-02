@@ -123,6 +123,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 - [InternVL2-2B](https://huggingface.co/OpenGVLab/InternVL2-2B/tree/main)；
 - [InternVL2-8B](https://huggingface.co/OpenGVLab/InternVL2-8B/tree/main)；
+- [InternVL2-Llama3-76B](https://huggingface.co/OpenGVLab/InternVL2-Llama3-76B/tree/main)；
 
 将模型权重保存在`raw_ckpt/InternVL2-2B`目录。
 
@@ -132,13 +133,13 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
 
-以InternVL2-2B为例，修改`inernvl_convert_to_mm_ckpt.py`中的`load_dir`、`save_dir`、`pipeline_layer_index`、`num_layers`如下：
+以InternVL2-2B为例，`inernvl_convert_to_mm_ckpt.py`的入参`load_dir`、`save_dir`、`pipeline_layer_index`、`num_layers`如下：
 
-```python
-  hg_ckpt_dir = 'raw_ckpt/InternVL2-2B' # huggingface权重目录
-  mm_save_dir = 'ckpt/InternVL2-2B'  # 转换后保存目录
-  pipeline_layer_index = None     # None表示不进行pp切分；若要进行pp切分，则需要传入一个列表，例如[0, 3, 13, 23]
-  num_layers=24                   # 模型结构层数
+```shell
+  --model-size 2B
+  --load-dir raw_ckpt/InternVL2-2B # huggingface权重目录
+  --save-dir pretrained/InternVL2-2B  # 转换后保存目录
+  --trust-remote-code True  # 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
 ```
 
 启动脚本
@@ -146,13 +147,17 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
 ```shell
   # 根据实际情况修改 ascend-toolkit 路径
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
-  python examples/internvl2/internvl_convert_to_mm_ckpt.py
+  python examples/internvl2/internvl_convert_to_mm_ckpt.py \
+    --model-size 2B \
+    --load-dir raw_ckpt/InternVL2-2B \
+    --save-dir pretrained/InternVL2-2B \
+    --trust-remote-code True
 ```
 
 同步修改`examples/internvl2/finetune_internvl2_2b.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重`raw_ckpt/InternVL2-2B`进行区分。
 
 ```shell
-LOAD_PATH="ckpt/InternVL2-2B"
+LOAD_PATH="pretrained/InternVL2-2B"
 ```
 
 ---

@@ -28,7 +28,7 @@ GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 MM_DATA="./examples/internvl2/data_8B.json"
 MM_MODEL="./examples/internvl2/model_8B.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="InternVL2-8B_pp4"
+LOAD_PATH="pretrained/InternVL2-8B_pp4"
 SAVE_PATH="save_dir"
 
 MM_ARGS="

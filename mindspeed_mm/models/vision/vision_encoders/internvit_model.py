@@ -65,6 +65,10 @@ class InternVitTransformerLayer(TransformerLayer):
         if config.normalization == 'LayerNorm':
             self.input_layernorm = torch.nn.LayerNorm(config.hidden_size, config.layernorm_epsilon)
             self.pre_mlp_layernorm = torch.nn.LayerNorm(config.hidden_size, config.layernorm_epsilon)
+        elif config.normalization == 'RMSNorm':
+            self.input_layernorm = InternRMSNorm(config.hidden_size, config.layernorm_epsilon)
+            self.pre_mlp_layernorm = InternRMSNorm(config.hidden_size, config.layernorm_epsilon)
+            
 
         # InternViT新增可学习参数
         self.ls1 = nn.Parameter(config.initializer_factor * torch.ones(config.hidden_size))
