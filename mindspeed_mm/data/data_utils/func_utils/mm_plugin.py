@@ -1,3 +1,4 @@
+import os
 import math
 from copy import deepcopy
 from dataclasses import dataclass
@@ -7,8 +8,8 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, TypedDi
 import numpy as np
 from typing_extensions import override
 
-VIDEO_PLACEHOLDER = "<video>"
-IMAGE_PLACEHOLDER = "<image>"
+VIDEO_PLACEHOLDER = os.getenv("VIDEO_PLACEHOLDER", "<video>")
+IMAGE_PLACEHOLDER = os.getenv("IMAGE_PLACEHOLDER", "<image>")
 IGNORE_INDEX = -100
 
 from PIL import Image

@@ -80,7 +80,6 @@ class Qwen2vlDataset(Dataset):
         self.dataset = ConcatDataset([get_qwen2vl_dataset(
             {**basic_param, **{'dataset': data_path}}, preprocess_param, dataset_param)
             for data_path in dataset_paths])
-        self.dataset = get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param)
         super().__init__()
 
     def __getitem__(self, index):
