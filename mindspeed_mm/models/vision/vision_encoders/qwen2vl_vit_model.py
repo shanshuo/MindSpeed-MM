@@ -16,16 +16,18 @@ from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.training import get_args
 
 from mindspeed_mm.models.common.module import MultiModalModule
+
 try:
     from mindspeed.utils import set_actual_seq_len
 except ImportError:
     set_actual_seq_len = None
 
+
 # Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
+    x2 = x[..., x.shape[-1] // 2:]
     return torch.cat((-x2, x1), dim=-1)
 
 
@@ -73,7 +75,7 @@ class Qwen2VLRotaryEmbedding_llm(Qwen2VLRotaryEmbedding):
     def forward(self, x_device, x_dtype, position_ids):
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x_device)
-        
+
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()
         device_type = x_device.type
@@ -85,7 +87,7 @@ class Qwen2VLRotaryEmbedding_llm(Qwen2VLRotaryEmbedding):
             sin = emb.sin()
         cos = cos * self.attention_scaling
         sin = sin * self.attention_scaling
-        return cos.to(dtype=x_dtype), sin.to(dtype=x_dtype)
+        return torch.concat((cos, sin), dim=-1).to(dtype=x_dtype)
 
 
 class Qwen2vlSelfAttention(SelfAttention):
@@ -135,11 +137,13 @@ class Qwen2vlSelfAttention(SelfAttention):
         # absolute positional embedding.
         # otherwise, only relative positional embedding takes effect
         if rotary_pos_emb is not None:
-            cos, sin = rotary_pos_emb[0], rotary_pos_emb[1]
-            query, key = apply_multimodal_rotary_pos_emb(query, key, cos, sin, [16, 24, 24], use_fused_rope=self.config.use_fused_rotary_pos_emb)
+            half_dim = rotary_pos_emb.shape[-1] // 2
+            cos, sin = rotary_pos_emb[..., :half_dim], rotary_pos_emb[..., half_dim:]
+            query, key = apply_multimodal_rotary_pos_emb(query, key, cos, sin, [16, 24, 24],
+                                                         use_fused_rope=self.config.use_fused_rotary_pos_emb)
         query = query.permute(2, 0, 1, 3).contiguous()
         key = key.permute(2, 0, 1, 3).contiguous()
-        
+
         # ==================================
         # core attention computation
         # ==================================
@@ -234,8 +238,10 @@ class Qwen2vlVitSelfAttention(SelfAttention):
         # absolute positional embedding.
         # otherwise, only relative positional embedding takes effect
         if rotary_pos_emb is not None:
-            query = apply_rotary_pos_emb_vision(query.transpose(0, 1), rotary_pos_emb[0], use_fused_rope=self.config.use_fused_rotary_pos_emb).transpose(0, 1)
-            key = apply_rotary_pos_emb_vision(key.transpose(0, 1), rotary_pos_emb[0], use_fused_rope=self.config.use_fused_rotary_pos_emb).transpose(0, 1)
+            query = apply_rotary_pos_emb_vision(query.transpose(0, 1), rotary_pos_emb[0],
+                                                use_fused_rope=self.config.use_fused_rotary_pos_emb).transpose(0, 1)
+            key = apply_rotary_pos_emb_vision(key.transpose(0, 1), rotary_pos_emb[0],
+                                              use_fused_rope=self.config.use_fused_rotary_pos_emb).transpose(0, 1)
 
         # ==================================
         # core attention computation
@@ -327,13 +333,13 @@ class Qwen2VLViT(MultiModalModule):
     """
 
     def __init__(
-        self,
-        config: TransformerConfig,
-        transformer_layer_spec: ModuleSpec,
-        pre_process: bool = True,
-        post_process: bool = True,
-        *args,
-        **kwargs,
+            self,
+            config: TransformerConfig,
+            transformer_layer_spec: ModuleSpec,
+            pre_process: bool = True,
+            post_process: bool = True,
+            *args,
+            **kwargs,
     ) -> None:
         super().__init__(config=config)
 
@@ -387,7 +393,7 @@ class Qwen2VLViT(MultiModalModule):
 
     def set_input_tensor(self, input_tensor: torch.Tensor) -> None:
         """
-        Sets pinput tensor to the model. only used when vit crop to multi pipeline, coming soon. 
+        Sets pinput tensor to the model. only used when vit crop to multi pipeline, coming soon.
 
         Args:
             input_tensor (torch.Tensor):Sets the input tensor for the model.
@@ -407,7 +413,7 @@ class Qwen2VLViT(MultiModalModule):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
         hidden_states = hidden_states.unsqueeze(1)
-        
+
         seq_len = hidden_states.shape[0]
         attention_mask = torch.full(
             [1, seq_len, seq_len], torch.finfo(hidden_states.dtype).min, device=hidden_states.device,

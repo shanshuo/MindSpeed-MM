@@ -183,6 +183,9 @@ LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
    ```
 
 ---
+当前支持读取多个数据集，配置方式为`data.json`中
+dataset_param->basic_parameters->dataset
+从"./data/mllm_format_llava_instruct_data.json"修改为"./data/mllm_format_llava_instruct_data.json,./data/mllm_format_llava_instruct_data2.json"
 
 <a id="jump4"></a>
 
