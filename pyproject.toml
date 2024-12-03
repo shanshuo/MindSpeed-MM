@@ -26,7 +26,8 @@ dependencies = [
     "datasets",
     "qwen_vl_utils",
     "imageio",
-    "imageio-ffmpeg"
+    "imageio-ffmpeg",
+    "peft==0.7.1"
 ]
 
 [build-system]

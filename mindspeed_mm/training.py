@@ -44,6 +44,7 @@ from megatron.training.utils import (
 
 from mindspeed_mm.configs.config import merge_mm_args
 from mindspeed_mm.tools.profiler import Profiler
+from mindspeed_mm.arguments import extra_args_provider_decorator
 
 _TRAIN_START_TIME = time.time()
 
@@ -86,7 +87,7 @@ def pretrain(
         args_defaults: a dictionary from argument-name to argument-value. It
             to set already parse arguments.
     """
-
+    extra_args_provider = extra_args_provider_decorator(extra_args_provider)
     # Initalize and get arguments, timers, and Tensorboard writer.
     initialize_megatron(
         extra_args_provider=extra_args_provider, args_defaults=args_defaults
@@ -102,7 +103,7 @@ def pretrain(
 
     if args.log_progress:
         append_to_progress_log("Starting job")
-    
+
     torch.backends.cuda.matmul.allow_tf32 = getattr(args.mm.model, "allow_tf32", False)
     torch.npu.config.allow_internal_format = getattr(args.mm.model, "allow_internal_format", False)
 

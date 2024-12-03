@@ -31,3 +31,6 @@ __all__ = [
     "get_dtype",
     "video_to_image", "cast_tuple", "pretrain", "train"
 ]
+
+from mindspeed_mm.tasks.finetune.lora.lora_patch import apply_patches
+apply_patches()

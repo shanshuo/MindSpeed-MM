@@ -1,4 +1,5 @@
-# Copyright (c) 2024 Huawei Technologies Co., Ltd.
+# coding=utf-8
+# Copyright (c) 2024, HUAWEI CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 
 from functools import wraps
 import megatron
@@ -27,7 +29,7 @@ def model_provider_func_wrapper(model_provider_func):
         model = model_provider_func(*args, **kwargs)
         args = get_args()
         if is_enable_lora():
-            from peft import LoraConfig, get_peft_model, PeftModel, LoraModel
+            from peft import LoraConfig, get_peft_model
             config = core_transformer_config_from_args(args)
             lora_config = LoraConfig(
                 r=args.lora_r,
@@ -52,7 +54,7 @@ def _load_base_checkpoint_wrapper(fn):
     def wrapper(*args, **kwargs):
         state_dict, checkpoint_name, release = fn(*args, **kwargs)
 
-        if is_enable_lora():
+        if is_enable_lora() and state_dict is not None:
             args = get_args()
             state_dict_lora, checkpoint_name_lora, release_lora = fn(args.lora_load, **kwargs)
             merge_dicts(state_dict, state_dict_lora)
