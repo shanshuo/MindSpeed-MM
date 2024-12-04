@@ -1,22 +1,25 @@
-Network="FluxDreambooth"
 
-model_name="black-forest-labs/FLUX.1-dev" #FLUX预训练模型地址
-instance_dir="dog"
-batch_size=16
+# 网络名称,同目录名称,需要模型审视修改
+Network="StableDiffusion3Dreambooth"
+
+scripts_path="./sd3"
+
+# 预训练模型
+model_name="stabilityai/stable-diffusion-3.5-large"
+dataset_name="pokemon-blip-captions"
+# input_dir="dog"
+batch_size=8
 num_processors=8
-max_train_steps=5000
-mixed_precision="bf16"
-resolution=256
-gradient_accumulation_steps=4
-config_file="${mixed_precision}_accelerate_config.yaml"
+max_train_steps=2000
+mixed_precision="fp16"
+resolution=512
+gradient_accumulation_steps=1
+config_file="${scripts_path}/${mixed_precision}_accelerate_config.yaml"
 
-export TOKENIZERS_PARALLELISM=false
-
+#如果使用 input_dir="dog"，请修改dataset_name为input_dir
 for para in $*; do
   if [[ $para == --model_name* ]]; then
     model_name=$(echo ${para#*=})
-  elif [[ $para == --dataset_name* ]]; then
-    dataset_name=$(echo ${para#*=})
   elif [[ $para == --batch_size* ]]; then
     batch_size=$(echo ${para#*=})
   elif [[ $para == --max_train_steps* ]]; then
@@ -25,8 +28,8 @@ for para in $*; do
     mixed_precision=$(echo ${para#*=})
   elif [[ $para == --resolution* ]]; then
     resolution=$(echo ${para#*=})
-  elif [[ $para == --gradient_accumulation_steps* ]]; then
-    gradient_accumulation_steps=$(echo ${para#*=})
+  elif [[ $para == --dataset_name* ]]; then
+    dataset_name=$(echo ${para#*=})
   elif [[ $para == --config_file* ]]; then
     config_file=$(echo ${para#*=})
   fi
@@ -51,7 +54,7 @@ if [ x"${cur_path_last_dirname}" == x"test" ]; then
   cd ..
   cur_path=$(pwd)
 else
-  test_path_dir=${cur_path}
+  test_path_dir=${cur_path}/test
 fi
 
 echo ${test_path_dir}
@@ -65,29 +68,27 @@ mkdir -p ${output_path}
 start_time=$(date +%s)
 echo "start_time: ${start_time}"
 
+#如果数据集为pokemon或其他，需要把 sks dog 修改为pokemon或其他
 accelerate launch --config_file ${config_file} \
-  ./train_dreambooth_flux.py \
-  --pretrained_model_name_or_path=$model_name  \
-  --instance_data_dir=$instance_dir \
-  --instance_prompt="a photo of sks dog" \
-  --resolution=$resolution \
+  ./examples/dreambooth/train_dreambooth_lora_sd3.py \
+  --pretrained_model_name_or_path=$model_name \
+  --dataset_name=$dataset_name --caption_column="text" \
+  --instance_prompt="A photo of pokemon" \
   --train_batch_size=$batch_size \
-  --guidance_scale=1 \
-  --gradient_checkpointing \
-  --mixed_precision=$mixed_precision \
-  --max_grad_norm=1 \
+  --resolution=$resolution --random_flip \
   --gradient_accumulation_steps=$gradient_accumulation_steps \
-  --learning_rate=1e-05 \
-  --lr_scheduler="constant" \
-  --lr_warmup_steps=0 \
+  --gradient_checkpointing \
   --max_train_steps=$max_train_steps \
+  --learning_rate=1e-05 --lr_scheduler="constant_with_warmup" --lr_warmup_steps=0 \
+  --max_grad_norm=1 \
   --validation_prompt="A photo of sks dog in a bucket" \
-  --validation_epochs=200 \
-  --checkpointing_steps=50000 \
+  --validation_epochs=25 \
+  --mixed_precision=$mixed_precision \
+  --checkpointing_steps=500 \
   --seed="0" \
-  --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_FLUX.log 2>&1 &
+  --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log 2>&1 &
 wait
-chmod 440 ${output_path}/train_${mixed_precision}_FLUX.log
+chmod 440 ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log
 
 #训练结束时间，不需要修改
 end_time=$(date +%s)
@@ -97,10 +98,10 @@ e2e_time=$(($end_time - $start_time))
 echo "------------------ Final result ------------------"
 
 #输出性能FPS，需要模型审视修改
-AverageIts=$(grep -o "[0-9.]*s/it" ${output_path}/train_${mixed_precision}_FLUX.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+AverageIts=$(grep -o "[0-9.]*s/it" ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
 
 if [ -z "$AverageIts" ] || [ "$(echo "$AverageIts == 0" | bc)" -eq 1 ]; then
-  AverageIts=$(grep -o "[0-9.]*it/s" ${output_path}/train_${mixed_precision}_FLUX.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+  AverageIts=$(grep -o "[0-9.]*it/s" ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
   echo "Average it/s: ${AverageIts}"
   FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'*'${AverageIts}'}')
 else
@@ -109,21 +110,21 @@ else
 fi
 
 #获取性能数据，不需要修改
-#吞吐量
+# - 吞吐量
 ActualFPS=$(awk 'BEGIN{printf "%.2f\n", '${FPS}'}')
 
-#打印，不需要修改
+# - 打印，不需要修改
 echo "Final Performance images/sec : $ActualFPS"
 
-#loss值，不需要修改
-ActualLoss=$(grep -o "loss=[0-9.]*" ${output_path}/train_${mixed_precision}_FLUX.log | awk 'END {print $NF}')
+# - loss值，不需要修改
+ActualLoss=$(grep -o "loss=[0-9.]*" ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | awk 'END {print $NF}')
 
-#打印，不需要修改
+# - 打印，不需要修改
 echo "Final Train Loss : ${ActualLoss}"
 echo "E2E Training Duration sec : $e2e_time"
 
 #性能看护结果汇总
-#训练用例信息，不需要修改
+# - 训练用例信息，不需要修改
 BatchSize=${batch_size}
 DeviceType=$(uname -m)
 CaseName=${Network}_bs${BatchSize}_'8p'_'acc'

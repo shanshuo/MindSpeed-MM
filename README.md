@@ -137,7 +137,7 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Test】</td>
     </tr>
     <tr>
-      <td rowspan="6"> 图像生成 </td>
+      <td rowspan="7"> 图像生成 </td>
       <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sdxl">SDXL</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/5956b68a6927126daffc2c5a6d1a9a189defe288">3.5B</a></td>
       <td>预训练</td>
@@ -159,7 +159,7 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/94643fac8a27345f695500085d78cc8fa01f5fa9">2B</a></td>
       <td>全参微调</td>
       <td> 1x8</td>
@@ -170,12 +170,23 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Pass】</td>
     </tr>
     <tr>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3.5</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/94643fac8a27345f695500085d78cc8fa01f5fa9">2B</a></td>
       <td>全参微调</td>
-      <td> 1x8</td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 26.20 (FPS)</td>
+      <td> 28.33 (FPS)</td>
+      <td> 【昇腾】【NAIE】 </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/huggingface/diffusers/tree/94643fac8a27345f695500085d78cc8fa01f5fa9">2B</a></td>
+      <td>Lora微调</td>
+      <td> 1x8 </td>
       <td> FP16 </td>
-      <td> 16.57 (FPS)</td>
-      <td> 16.36 (FPS)</td>
+      <td> 47.93 (FPS)</td>
+      <td> 47.95 (FPS)</td>
       <td> 【昇腾】【NAIE】 </td>
       <td>【Pass】</td>
     </tr>

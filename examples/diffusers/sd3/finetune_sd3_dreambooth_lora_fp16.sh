@@ -19,6 +19,17 @@ else
   test_path_dir=${cur_path}
 fi
 
+export ASCEND_SLOG_PRINT_TO_STDOUT=0
+export ASCEND_GLOBAL_LOG_LEVEL=3
+export ASCEND_GLOBAL_EVENT_ENABLE=0
+export TASK_QUEUE_ENABLE=2
+export COMBINED_ENABLE=1
+export HCCL_WHITELIST_DISABLE=1
+export HCCL_CONNECT_TIMEOUT=1200
+export HOST_CACHE_CAPACITY=20
+export ACLNN_CACHE_LIMIT=100000
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+
 output_path=${cur_path}/logs
 
 echo ${output_path}
@@ -56,7 +67,7 @@ echo "------------------ Final result ------------------"
 #输出性能FPS，需要模型审视修改
 AverageIts=$(grep -o "[0-9.]*s/it" ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
 
-if [ "$(echo "$AverageIts == 0")" ]; then
+if [ -z "$AverageIts" ] || [ "$(echo "$AverageIts == 0" | bc)" -eq 1 ]; then
   AverageIts=$(grep -o "[0-9.]*it/s" ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
   echo "Average it/s: ${AverageIts}"
   FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'*'${AverageIts}'}')
