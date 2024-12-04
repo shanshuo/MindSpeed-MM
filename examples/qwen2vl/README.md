@@ -84,6 +84,8 @@
 
 #### 2. 环境搭建
 
+torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
+
 ```bash
     # python3.10
     conda create -n test python=3.10
@@ -101,7 +103,7 @@
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
     # checkout commit from MindSpeed core_r0.6.0
-    git checkout e9b34c97f62e628c8feb211c83ee4f493536ec11
+    git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
     pip install -r requirements.txt 
     pip3 install -e .
     cd ..
@@ -110,9 +112,6 @@
     
     # 安装其余依赖库
     pip install -e .
-    #备注：当前需要修改下MindSpeed文件MindSpeed/mindspeed/core/transformer/transformer.py的376行，修改如下：
-    #is_recompute_activation = should_recompute_activation(self.layer_number)
-    is_recompute_activation = should_recompute_activation(getattr(self, 'layer_number', None))
 ```
 
 ## 权重下载及转换
@@ -122,24 +121,34 @@
 #### 1. 权重下载
 
 从Huggingface库下载对应的模型权重:
--  模型地址: [Qwen2-VL-7B](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/tree/main)；
+- 模型地址: [Qwen2-VL-2B](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/tree/main)；
 
- 将下载的模型权重保存到本地的`ckpt/hf_path/Qwen2-VL-7B-Instruct`目录下。
+- 模型地址: [Qwen2-VL-7B](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/tree/main)；
+
+ 将下载的模型权重保存到本地的`ckpt/hf_path/Qwen2-VL-*B-Instruct`目录下。(*表示对应的尺寸)
 <a id="jump2.2"></a>
 
 #### 2. 权重转换
 
-MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分 (目前只支持 7B 和 特定的切分方式)。
+MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分 (目前只支持7B和2B特定的切分方式)。
 
 以Qwen2VL-7B为例
-
-
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```
-hg_ckpt_dir = 'hf_path/Qwen2-VL-7B-Instruct' # huggingface权重目录
-mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'  # 转换后保存目录
+hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct' # huggingface权重目录
+mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后保存目录
 pipeline_layer_index = [0, 0, 10, 20]     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
+
+num_layers=28                   # 语言模型结构层数
+```
+以Qwen2VL-2B为例
+修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
+
+```
+hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct' # huggingface权重目录
+mm_save_dir = 'ckpt/mm_path/Qwen2-VL-2B-Instruct'  # 转换后保存目录
+pipeline_layer_index = None     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
 
 num_layers=28                   # 语言模型结构层数
 ```
@@ -171,6 +180,7 @@ LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
 (2)获取图片数据集的描述文件（[LLaVA-Instruct-150K](https://huggingface.co/datasets/liuhaotian/LLaVA-Instruct-150K/tree/main)），下载至./data/路径下;
 
 (3)在./data路径下新建文件mllm_format_llava_instruct_data.json，运行数据转换脚本python examples/qwen2vl/llava_instruct_2_mllm_demo_format.py;
+
    ```
    $playground
    ├── data
@@ -258,6 +268,7 @@ OUTPUT_ARGS="
 
 若需要加载指定迭代次数的权重、优化器等状态，需将加载路径`LOAD_PATH`设置为保存文件夹路径`LOAD_PATH="save_dir"`，并修改`latest_checkpointed_iteration.txt`文件内容为指定迭代次数
 (此功能coming soon)
+
 ```
 $save_dir
    ├── latest_checkpointed_iteration.txt

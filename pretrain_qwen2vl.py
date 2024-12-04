@@ -88,12 +88,6 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     return train_dataloader, val_dataloader, test_dataloader
 
 
-def test_dataset():
-    train_dataloader, _, _ = train_valid_test_datasets_provider(None)
-    data = next(train_dataloader)
-
-
-
 if __name__ == "__main__":
     train_valid_test_datasets_provider.is_distributed = True
     pretrain(

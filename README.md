@@ -215,7 +215,7 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Test】</td>
     </tr>
     <tr>
-      <td rowspan="6"> 多模态理解 </td>
+      <td rowspan="7"> 多模态理解 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/llava1.5">LLaVA 1.5</a></td>
       <td><a href="https://github.com/haotian-liu/LLaVA">7B</a></td>
       <td>预训练</td>
@@ -258,13 +258,23 @@ MindSpeed-MM已发布版本维护策略：
       <td>【Coming Soon】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2vl">Qwen2-VL</a></td>
+      <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2vl">Qwen2-VL</a></td>
+      <td><a href="https://qwen2.org/vl/">2B</a></td>
+      <td>微调</td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 34.15 (Samples per Second) </td>
+      <td> 34.88 (Samples per Second) </td>
+      <td> 【昇腾】【NAIE】 </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
       <td><a href="https://qwen2.org/vl/">7B</a></td>
       <td>微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 14.416 (s/step) </td>
-      <td> 16.473 (s/step) </td>
+      <td> 13.28 (Samples per Second)  </td>
+      <td> 11.66 (Samples per Second)  </td>
       <td> 【昇腾】【NAIE】 </td>
       <td>【Test】</td>
     </tr>
