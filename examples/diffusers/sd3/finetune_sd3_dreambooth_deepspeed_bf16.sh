@@ -13,6 +13,7 @@ num_processors=8
 max_train_steps=2000
 mixed_precision="bf16"
 resolution=1024
+gradient_accumulation_steps=1
 config_file="${scripts_path}/${mixed_precision}_accelerate_config.yaml"
 
 #如果使用 input_dir="dog"，请修改dataset_name为input_dir
@@ -33,6 +34,17 @@ for para in $*; do
     config_file=$(echo ${para#*=})
   fi
 done
+
+export ASCEND_SLOG_PRINT_TO_STDOUT=0
+export ASCEND_GLOBAL_LOG_LEVEL=3
+export ASCEND_GLOBAL_EVENT_ENABLE=0
+export TASK_QUEUE_ENABLE=2
+export COMBINED_ENABLE=1
+export HCCL_WHITELIST_DISABLE=1
+export HCCL_CONNECT_TIMEOUT=1200
+export HOST_CACHE_CAPACITY=20
+export ACLNN_CACHE_LIMIT=100000
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
 # cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径
 cur_path=$(pwd)
@@ -64,7 +76,7 @@ accelerate launch --config_file ${config_file} \
   --instance_prompt="A photo of sks dog" \
   --train_batch_size=$batch_size \
   --resolution=$resolution --random_flip \
-  --gradient_accumulation_steps=1 \
+  --gradient_accumulation_steps=$gradient_accumulation_steps \
   --gradient_checkpointing \
   --max_train_steps=$max_train_steps \
   --learning_rate=1e-05 --lr_scheduler="constant_with_warmup" --lr_warmup_steps=0 \
@@ -86,7 +98,7 @@ echo "------------------ Final result ------------------"
 #输出性能FPS，需要模型审视修改
 AverageIts=$(grep -o "[0-9.]*s/it" ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
 
-if [ "$(echo "$AverageIts == 0")" ]; then
+if [ -z "$AverageIts" ] || [ "$(echo "$AverageIts == 0" | bc)" -eq 1 ]; then
   AverageIts=$(grep -o "[0-9.]*it/s" ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
   echo "Average it/s: ${AverageIts}"
   FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'*'${AverageIts}'}')

@@ -5,14 +5,14 @@ Network="StableDiffusion3Dreambooth"
 scripts_path="./sd3"
 
 # 预训练模型
-model_name="stabilityai/stable-diffusion-3-medium-diffusers"
+model_name="stabilityai/stable-diffusion-3.5-large"
 dataset_name="pokemon-blip-captions"
 # input_dir="dog"
-batch_size=4
+batch_size=8
 num_processors=8
 max_train_steps=2000
 mixed_precision="fp16"
-resolution=1024
+resolution=512
 gradient_accumulation_steps=1
 config_file="${scripts_path}/${mixed_precision}_accelerate_config.yaml"
 
@@ -70,10 +70,10 @@ echo "start_time: ${start_time}"
 
 #如果数据集为pokemon或其他，需要把 sks dog 修改为pokemon或其他
 accelerate launch --config_file ${config_file} \
-  ./examples/dreambooth/train_dreambooth_sd3.py \
+  ./examples/dreambooth/train_dreambooth_lora_sd3.py \
   --pretrained_model_name_or_path=$model_name \
   --dataset_name=$dataset_name --caption_column="text" \
-  --instance_prompt="A photo of sks dog" \
+  --instance_prompt="A photo of pokemon" \
   --train_batch_size=$batch_size \
   --resolution=$resolution --random_flip \
   --gradient_accumulation_steps=$gradient_accumulation_steps \
@@ -85,6 +85,7 @@ accelerate launch --config_file ${config_file} \
   --validation_epochs=25 \
   --mixed_precision=$mixed_precision \
   --checkpointing_steps=500 \
+  --seed="0" \
   --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log 2>&1 &
 wait
 chmod 440 ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log
