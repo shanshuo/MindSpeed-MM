@@ -49,7 +49,7 @@ class Qwen2VLModel(LanguageModule):
         self.add_image_encoder = mm_config.image_encoder is not None
         self.add_video_encoder = mm_config.video_encoder is not None
         self.add_text_decoder = mm_config.text_decoder is not None
-        self.share_embeddings_and_output_weights = False
+        self.share_embeddings_and_output_weights = not mm_config.text_decoder.untie_embeddings_and_output_weights
         self.position_embedding_type = mm_config.text_decoder.position_embedding_type
         self.img_context_token_id = mm_config.img_context_token_id
         self.vocab_size = mm_config.text_decoder.padded_vocab_size
@@ -339,7 +339,10 @@ class Qwen2VLModel(LanguageModule):
                 return inputs_embeddings
 
             if self.post_process:
-                logits, _ = self.output_layer(hidden_states)
+                output_weight = None
+                if self.share_embeddings_and_output_weights:
+                    output_weight = self.shared_embedding_or_output_weight()
+                logits, _ = self.output_layer(hidden_states, weight=output_weight)
                 logits = logits.transpose(0, 1).contiguous().float()
                 return {
                     "loss": None if labels is None else self.compute_loss(logits, labels),

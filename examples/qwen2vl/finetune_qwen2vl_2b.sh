@@ -21,18 +21,18 @@ NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 
-MM_DATA="./examples/qwen2vl/data_7b.json"
-MM_MODEL="./examples/qwen2vl/model_7b.json"
+MM_DATA="./examples/qwen2vl/data_2b.json"
+MM_MODEL="./examples/qwen2vl/model_2b.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
 SAVE_PATH="save_dir"
 
 TP=1
-PP=4
+PP=1
 CP=1
 SEQ_LEN=1024
 MBS=1
-GRAD_ACC_STEP=96
+GRAD_ACC_STEP=24
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
@@ -49,12 +49,12 @@ GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
     --num-layers 28 \
-    --num-layer-list 0,0,10,20 \
-    --hidden-size 3584 \
-    --ffn-hidden-size 18944 \
-    --num-attention-heads 28 \
+    --num-layer-list 28 \
+    --hidden-size 1536 \
+    --ffn-hidden-size 8960 \
+    --num-attention-heads 12 \
     --tokenizer-type NullTokenizer \
-    --vocab-size 152064 \
+    --vocab-size 151936 \
     --seq-length ${SEQ_LEN} \
     --max-position-embeddings 32768 \
     --micro-batch-size ${MBS} \
@@ -63,7 +63,6 @@ GPT_ARGS="
     --rotary-base 1000000 \
     --lr 1.0e-5 \
     --lr-decay-style cosine \
-    --untie-embeddings-and-output-weights \
     --disable-bias-linear \
     --attention-dropout 0.0 \
     --init-method-std 0.01 \
@@ -96,6 +95,7 @@ GPT_ARGS="
     --num-query-groups 4 \
     --bf16 \
     --load $LOAD_PATH \
+    --use-distributed-optimizer \
     --variable-seq-lengths \
     --enable-one-logger
 "
