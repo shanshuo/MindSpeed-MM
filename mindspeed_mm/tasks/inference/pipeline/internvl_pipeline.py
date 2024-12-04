@@ -33,7 +33,6 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         self.prepare_model(infer_config.device, infer_config.dtype)
 
         self.image_encoder = self.infer_model.image_encoder
-        self.vit_proj = self.infer_model.vit_proj
 
         # prepare for generate
         self.device = infer_config.device
@@ -136,7 +135,6 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
                 vit_embeds = visual_features
             else:
                 vit_embeds = self.image_encoder(pixel_values)
-                vit_embeds = self.infer_model.vit_proj(vit_embeds)
         if return_ids:
             streamer = None
         else:
@@ -256,7 +254,6 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
         if pixel_values is not None:
             vit_embeds = self.image_encoder(pixel_values)
-            vit_embeds = self.infer_model.vit_proj(vit_embeds)
         self.vit_embeds = vit_embeds
         generation_output = self.generate(
             input_ids=input_ids,
