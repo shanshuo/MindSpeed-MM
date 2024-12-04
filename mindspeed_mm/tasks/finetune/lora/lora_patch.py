@@ -30,6 +30,7 @@ def model_provider_func_wrapper(model_provider_func):
         args = get_args()
         if is_enable_lora():
             from peft import LoraConfig, get_peft_model
+            from peft.tuners.tuners_utils import check_target_module_exists
             config = core_transformer_config_from_args(args)
             lora_config = LoraConfig(
                 r=args.lora_r,
@@ -40,6 +41,16 @@ def model_provider_func_wrapper(model_provider_func):
                 megatron_config=config,
                 megatron_core="megatron.core",
             )
+
+            freeze_params = [name for name, param in model.named_parameters() if not param.requires_grad]
+            trainable_target_modules = []
+            for module_name, _ in model.named_modules():
+                if not check_target_module_exists(lora_config, module_name):
+                    continue
+                if not any(param_name.startswith(module_name) for param_name in freeze_params):
+                    trainable_target_modules.append(module_name)
+            lora_config.target_modules = trainable_target_modules
+
             model = get_peft_model(model, lora_config)
             model.add_module('module', model.get_base_model())
             model.print_trainable_parameters()
