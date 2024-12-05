@@ -74,6 +74,8 @@
 
 1. 软件与驱动安装
 
+    torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
+
     ```bash
     # python3.8
     conda create -n test python=3.8
@@ -183,25 +185,19 @@
     --checkpointing_steps=50000 \ # 修改50000步为所需要步数
     ```
 
-    【如需保存checkpointing请修改代码（1669行-1693行）】
+    【如需保存checkpointing请修改代码】
 
     ```shell
-    vim examples/dreambooth/train_dreambooth_flux.py
+    vim examples/dreambooth/train_dreambooth_flux.py #（1669行附近）
+    vim examples/dreambooth/train_dreambooth_lora_flux.py #（1788行附近）
     ```
 
-    comment或删掉掉`if accelerator.is_main_process:`，并将其下面一行至`logger.info(f"Saved state to {save_path}")` 可选择然后SHIFT+TAB
-
-    > **说明：**
-    > 如1669行为if accelerator.is_main_process:, 将1670行至1693行前移
-    >
-
-    添加`accelerator.wait_for_everyone()`在 `save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")`上。如以下所示：
+    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
+    - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`
 
     ```python
-    accelerator.wait_for_everyone()
-    save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
-    accelerator.save_state(save_path)
-    logger.info(f"Saved state to {save_path}")
+    from accelerate import Accelerator, DistributedType
+    if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
     ```
 
     更改shell脚本：
@@ -240,11 +236,14 @@
         vim src/diffusers/models/embeddings.py
         ```
 
-    2. 打开`train_dreambooth_flux.py`文件并在62行附近添加代码
+    2. 打开`train_dreambooth_flux.py`或`train_dreambooth_lora_flux.py`文件
+
+        - 在62行附近添加代码
 
         ```shell
         cd examples/dreambooth/ # 从diffusers目录进入dreambooth目录
         vim train_dreambooth_flux.py # 进入Python文件
+        vim train_dreambooth_lora_flux.py # 进入Python文件
         ```
 
         ```python
@@ -252,6 +251,13 @@
         from patch_flux import TorchPatcher, config_gc
         TorchPatcher.apply_patch()
         config_gc()
+        ```
+
+        - 在log_validation里修改`pipeline = pipeline.to(accelerator.device)`，`train_dreambooth_flux.py`在171行附近`train_dreambooth_lora_flux.py`在180行附近
+
+        ```python
+        # 修改pipeline为：
+        pipeline = pipeline.to(accelerator.device, dtype=torch_dtype)
         ```
 
     3. 【Optional】Ubuntu系统需在1701行附近 添加 `accelerator.print("")`
