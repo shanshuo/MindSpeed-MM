@@ -16,11 +16,23 @@
 
 from functools import wraps
 import megatron
+import megatron.core
 from megatron.core.enums import ModelType
+import megatron.core.transformer
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
 
-from .utils import is_enable_lora, merge_dicts
+from .utils import is_enable_lora, merge_dicts, modify_keys_with_dict
+
+
+def unrap_model_wrapper(fn):
+    @wraps(fn)
+    def wrapper(model, module_instances=None):
+        if not module_instances:
+            module_instances = megatron.training.utils.ALL_MODULE_WRAPPER_CLASSNAMES
+        return fn(model, module_instances)
+
+    return wrapper
 
 
 def model_provider_func_wrapper(model_provider_func):
@@ -29,7 +41,7 @@ def model_provider_func_wrapper(model_provider_func):
         model = model_provider_func(*args, **kwargs)
         args = get_args()
         if is_enable_lora():
-            from peft import LoraConfig, get_peft_model
+            from peft import LoraConfig, get_peft_model, PeftModel, LoraModel
             from peft.tuners.tuners_utils import check_target_module_exists
             config = core_transformer_config_from_args(args)
             lora_config = LoraConfig(
@@ -49,11 +61,18 @@ def model_provider_func_wrapper(model_provider_func):
                     continue
                 if not any(param_name.startswith(module_name) for param_name in freeze_params):
                     trainable_target_modules.append(module_name)
+
+            args.lora_trainable_target_modules = trainable_target_modules
+            if not trainable_target_modules:
+                return model
             lora_config.target_modules = trainable_target_modules
 
             model = get_peft_model(model, lora_config)
             model.add_module('module', model.get_base_model())
             model.print_trainable_parameters()
+            megatron.training.utils.ALL_MODULE_WRAPPER_CLASSNAMES = tuple(
+                list(megatron.training.utils.ALL_MODULE_WRAPPER_CLASSNAMES) + [PeftModel, LoraModel]
+            )
 
         return model
 
@@ -67,8 +86,12 @@ def _load_base_checkpoint_wrapper(fn):
 
         if is_enable_lora() and state_dict is not None:
             args = get_args()
-            state_dict_lora, checkpoint_name_lora, release_lora = fn(args.lora_load, **kwargs)
-            merge_dicts(state_dict, state_dict_lora)
+            exclude_words = ['base_layer', 'lora_', 'norm']
+            state_dict['model'] = modify_keys_with_dict(state_dict['model'], exclude_words)
+
+            if args.lora_load is not None:
+                state_dict_lora, checkpoint_name_lora, release_lora = fn(args.lora_load, **kwargs)
+                merge_dicts(state_dict, state_dict_lora)
         return state_dict, checkpoint_name, release
 
     return wrapper
@@ -124,3 +147,8 @@ def apply_patches():
     megatron.legacy.model.transformer.ParallelTransformer.state_dict_for_save_checkpoint \
         = state_dict_for_save_checkpoint_wrapper(
         megatron.legacy.model.transformer.ParallelTransformer.state_dict_for_save_checkpoint)
+    megatron.core.transformer.module.MegatronModule.state_dict_for_save_checkpoint \
+        = state_dict_for_save_checkpoint_wrapper(
+        megatron.core.transformer.module.MegatronModule.state_dict_for_save_checkpoint)
+    megatron.training.checkpointing.unwrap_model = unrap_model_wrapper(megatron.training.checkpointing.unwrap_model)
+    megatron.training.training.unwrap_model = unrap_model_wrapper(megatron.training.training.unwrap_model)

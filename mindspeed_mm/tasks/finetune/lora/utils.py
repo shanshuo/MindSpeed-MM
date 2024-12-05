@@ -32,3 +32,23 @@ def merge_dicts(statedict1, statedict2):
         else:
             result[key] = value
     return result
+
+
+def modify_keys_with_dict(dictionary, exclude_words):
+    args = get_args()
+    modified_dict = {}
+    for key, value in dictionary.items():
+        key_str = str(key)
+        not_exclude_word = not any(exclude_word in key_str for exclude_word in exclude_words)
+        is_target_module_bias = any(target_module + '.bias' in key_str for target_module in args.lora_trainable_target_modules)
+        is_target_module_weight = any(target_module + '.weight' in key_str for target_module in args.lora_trainable_target_modules)
+
+        new_key = key_str
+        if not_exclude_word and (is_target_module_bias or is_target_module_weight):
+            if 'weight' in key_str:
+                new_key = key_str.replace('weight', 'base_layer.weight')
+            elif 'bias' in key_str:
+                new_key = key_str.replace('bias', 'base_layer.bias')
+        modified_dict[new_key] = value
+
+    return modified_dict
