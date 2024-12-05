@@ -244,7 +244,22 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
     ```
 
-5. 【启动 SD3 微调脚本】
+5. 【修改文件】
+
+    ```shell
+    vim examples/dreambooth/train_dreambooth_sd3.py
+    # 或
+    vim examples/dreambooth/train_dreambooth_lora_sd3.py
+    ```
+
+    在log_validation里修改`pipeline = pipeline.to(accelerator.device)`，`train_dreambooth_sd3.py`在174行附近`train_dreambooth_lora_sd3.py`在198行附近
+
+    ```python
+    # 修改pipeline为：
+    pipeline = pipeline.to(accelerator.device, dtype=torch_dtype)
+    ```
+
+6. 【启动 SD3 微调脚本】
 
     本任务主要提供**混精fp16**和**混精bf16**dreambooth和dreambooth+lora的**8卡**训练脚本，使用与不使用**deepspeed**分布式训练。
 

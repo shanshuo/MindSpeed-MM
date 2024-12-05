@@ -74,7 +74,7 @@
 
 1. 软件与驱动安装
 
-torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
+    torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
     ```bash
     # python3.8
@@ -129,8 +129,8 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 1. 【准备微调数据集】
 
-    - 用户需自行获取[pokemon-blip-captions](https://gitee.com/hf-datasets/pokemon-blip-captions)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
-    
+    - 用户需自行获取并解压[pokemon-blip-captions](https://gitee.com/hf-datasets/pokemon-blip-captions)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
+
     ```shell
     dataset_name="pokemon-blip-captions" # 数据集 路径
     ```
@@ -144,7 +144,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     └── data
           └── train-001.parquet
     ```
-    
+
     - 只包含图片的训练数据集，如deepspeed脚本使用训练数据集dog:[下载地址](https://huggingface.co/datasets/diffusers/dog-example)，并将dog文件夹转移到`examples/dreambooth/`目录下
 
     ```shell
@@ -185,25 +185,19 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     --checkpointing_steps=50000 \ # 修改50000步为所需要步数
     ```
 
-    【如需保存checkpointing请修改代码（1669行-1693行）】
+    【如需保存checkpointing请修改代码】
 
     ```shell
-    vim examples/dreambooth/train_dreambooth_flux.py
+    vim examples/dreambooth/train_dreambooth_flux.py #（1669行附近）
+    vim examples/dreambooth/train_dreambooth_lora_flux.py #（1788行附近）
     ```
 
-    comment或删掉掉`if accelerator.is_main_process:`，并将其下面一行至`logger.info(f"Saved state to {save_path}")` 可选择然后SHIFT+TAB
-
-    > **说明：**
-    > 如1669行为if accelerator.is_main_process:, 将1670行至1693行前移
-    >
-
-    添加`accelerator.wait_for_everyone()`在 `save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")`上。如以下所示：
+    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
+    - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`
 
     ```python
-    accelerator.wait_for_everyone()
-    save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
-    accelerator.save_state(save_path)
-    logger.info(f"Saved state to {save_path}")
+    from accelerate import Accelerator, DistributedType
+    if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
     ```
 
     更改shell脚本：
@@ -242,11 +236,14 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
         vim src/diffusers/models/embeddings.py
         ```
 
-    2. 打开`train_dreambooth_flux.py`文件并在62行附近添加代码
+    2. 打开`train_dreambooth_flux.py`或`train_dreambooth_lora_flux.py`文件
+
+        - 在62行附近添加代码
 
         ```shell
         cd examples/dreambooth/ # 从diffusers目录进入dreambooth目录
         vim train_dreambooth_flux.py # 进入Python文件
+        vim train_dreambooth_lora_flux.py # 进入Python文件
         ```
 
         ```python
@@ -254,6 +251,13 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
         from patch_flux import TorchPatcher, config_gc
         TorchPatcher.apply_patch()
         config_gc()
+        ```
+
+        - 在log_validation里修改`pipeline = pipeline.to(accelerator.device)`，`train_dreambooth_flux.py`在171行附近`train_dreambooth_lora_flux.py`在180行附近
+
+        ```python
+        # 修改pipeline为：
+        pipeline = pipeline.to(accelerator.device, dtype=torch_dtype)
         ```
 
     3. 【Optional】Ubuntu系统需在1701行附近 添加 `accelerator.print("")`
@@ -269,12 +273,13 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     本任务主要提供flux_dreambooth与flux_dreambooth_lora微调脚本，支持多卡训练。
 
     启动FLUX dreambooth微调脚本
-    
+
     ```shell
     bash finetune_flux_dreambooth_deepspeed_bf16.sh 
     ```
+
     启动FLUX dreambooth_lora微调脚本
-    
+
     ```shell
     bash finetune_flux_dreambooth_lora_deepspeed_bf16.sh
     ```
@@ -335,6 +340,7 @@ vim infer_flux_text2img_bf16.py # 进入运行推理的Python文件
       ```shell
       python infer_flux_text2img_dreambooth_bf16.py
       ```
+
   【lora微调FLUX模型推理】
 
   ```shell
