@@ -285,7 +285,22 @@ i2v(图生视频):
 
 参考上述的权重下载及转换章节，推理所需的预训练权重需要到huggingface中下载，以及参考上面的权重转换步骤进行转换。
 
-注意：推理转换权重时候，脚本中需要设置 `MODE = "inference"`
+注意：使用tp训练后保存的模型无法直接进行推理，需要使用`merge_from_tp.py`脚本进行转换
+
+首先修改 examples/opensoraplan1.3/merge_from_tp.py 参数
+
+    dit_hg_weight_path = "mm_ckpt/open-sora-plan/pretrained-checkpoint-dit" #tp切分训练后的权重路径
+    dit_mm_save_dir = "mm_ckpt/open-sora-plan/pretrained-checkpoint-dit" #合并后的权重存放路径
+    MODE = "model" #选择使用model权重或者ema_model权重
+---
+
+
+启动脚本
+
+    # 根据实际情况修改 ascend-toolkit 路径
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
+    python examples/opensoraplan1.3/merge_from_tp.py
+---
 <a id="jump5.2"></a>
 
 #### 2. 配置参数

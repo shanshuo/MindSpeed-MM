@@ -77,6 +77,7 @@ GPT_ARGS="
     --bf16 \
     --use-distributed-optimizer \
     --optimization-level 2 \
+    --optimizer-selection fused_ema_adamw \
 "
 
 MM_ARGS="
