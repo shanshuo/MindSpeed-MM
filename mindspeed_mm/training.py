@@ -20,11 +20,12 @@ from megatron.training.global_vars import (
     get_tensorboard_writer,
     get_wandb_writer,
     get_one_logger,
+)
+from megatron.core.num_microbatches_calculator import (
     get_num_microbatches,
     update_num_microbatches,
 )
 from megatron.training.training import (
-    get_num_microbatches,
     training_log,
     evaluate_and_print_results,
     save_checkpoint_and_time,

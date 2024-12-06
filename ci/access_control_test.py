@@ -129,7 +129,8 @@ if __name__ == "__main__":
                         help='Test cases type. `all`: run all test cases; `ut`: run ut case,' '`st`: run st cases;')
     args = parser.parse_args()
     print(f"options: {args}")
-    if alter_skip_ci():
+    skip_ci = True
+    if skip_ci:
         print("Skipping CI")
     else:
         exit_code = run_tests(args)

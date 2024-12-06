@@ -397,6 +397,7 @@ class WFVAE(MultiModalModule):
             h = self.tile_encode(coeffs)
         else:
             h = self.encoder(coeffs)
+            self._empty_causal_cached(self.encoder)
             if self.use_quant_layer:
                 h = self.quant_conv(h)
 
@@ -478,35 +479,3 @@ class WFVAE(MultiModalModule):
 
     def disable_tiling(self):
         self.enable_tiling(False)
-
-    def init_from_ckpt(self, path, ignore_keys=None):
-        if ignore_keys is None:
-            ignore_keys = list()
-        sd = torch.load(path, map_location="cpu")
-        print("init from " + path)
-
-        if (
-                "ema_state_dict" in sd
-                and len(sd["ema_state_dict"]) > 0
-                and os.environ.get("NOT_USE_EMA_MODEL", 0) == 0
-        ):
-            print("Load from ema model!")
-            sd = sd["ema_state_dict"]
-            sd = {key.replace("module.", ""): value for key, value in sd.items()}
-        elif "state_dict" in sd:
-            print("Load from normal model!")
-            if "gen_model" in sd["state_dict"]:
-                sd = sd["state_dict"]["gen_model"]
-            else:
-                sd = sd["state_dict"]
-
-        keys = list(sd.keys())
-
-        for k in keys:
-            for ik in ignore_keys:
-                if k.startswith(ik):
-                    print("Deleting key {} from state_dict.".format(k))
-                    del sd[k]
-
-        missing_keys, unexpected_keys = self.load_state_dict(sd, strict=False)
-        print(missing_keys, unexpected_keys)

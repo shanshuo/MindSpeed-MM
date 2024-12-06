@@ -7,6 +7,8 @@ export TASK_QUEUE_ENABLE=1
 export COMBINED_ENABLE=1
 export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
+export MULTI_STREAM_MEMOry_REUSE=1
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
 GPUS_PER_NODE=8
 MASTER_ADDR=localhost
@@ -19,9 +21,10 @@ TP=1
 PP=1
 CP=1
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
+ACC=1
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP*$ACC))
 
-MM_DATA="./examples/opensoraplan1.3/t2v/data.json"
+MM_DATA="./examples/opensoraplan1.3/t2v/data_dynamic_resolution.json"
 MM_MODEL="./examples/opensoraplan1.3/t2v/pretrain_t2v_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="your_converted_dit_ckpt_dir"
@@ -73,6 +76,7 @@ GPT_ARGS="
     --no-save-rng \
     --bf16 \
     --use-distributed-optimizer \
+    --optimization-level 2 \
 "
 
 MM_ARGS="

@@ -73,11 +73,12 @@
 ```shell
     git clone https://gitee.com/ascend/MindSpeed-MM.git 
     git clone https://github.com/NVIDIA/Megatron-LM.git
+    git clone https://gitee.com/ascend/MindSpeed.git
     cd Megatron-LM
-    git checkout core_r0.6.0
+    git checkout core_r0.8.0
     cp -r megatron ../MindSpeed-MM/
     cd ..
-    cd MindSpeed-MM
+
 ```
 
 <a id="jump1.2"></a>
@@ -101,15 +102,15 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh 
 
-    # 安装加速库
-    git clone https://gitee.com/ascend/MindSpeed.git
+    # 安装加速库MindSpeed core 0.8.0 使用MindSpeed master分支
     cd MindSpeed
-    git checkout 5dc1e83b
+    git checkout master
     pip install -r requirements.txt 
-    pip3 install -e .
-    cd ..
-
+    pip install -e .
+    
     # 安装其余依赖库
+    cd ../MindSpeed-MM
+    git checkout core_r0.8.0_dev
     pip install -e .
 ```
 
@@ -202,7 +203,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 根据实际下载的数据，过滤标注文件，删去标注的json文件中未下载的部分；
 修改data.txt中的路径，示例如下:
    ```
-/data/open-sora-plan/dataset;/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
+/data/open-sora-plan/dataset,/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
    ```
 ---
 其中，第一个路径为数据集的根目录，第二个路径为标注文件的路径。
@@ -221,8 +222,17 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 
 #### 2. 配置参数
 
-需根据实际情况修改`pretrain_t2v_model.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
+需根据实际情况修改`pretrain_t2v_model.json`、`data_xx.json`和启动脚本`pretrain_xxx.sh`中的权重和数据集路径，包括`from_pretrained`、`data_path`等字段。
 
+【动态/固定分辨率】
+- 支持使用动态分辨率或固定分辨率进行训练，默认为动态分辨率训练，如切换需修改启动脚本pretrain_xxx.sh
+```shell
+    # 以t2v实例，使用动态分辨率训练
+    MM_DATA="./examples/opensoraplan1.3/t2v/data_dynamic_resolution.json"
+    
+    # 以t2v实例，使用固定分辨率训练
+    MM_DATA="./examples/opensoraplan1.3/t2v/data_static_resolution.json"
+```
 【单机运行】
 
 ```shell
