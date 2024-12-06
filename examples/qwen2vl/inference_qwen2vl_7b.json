@@ -88,11 +88,8 @@
         "layernorm_epsilon": 1e-06,
         "add_bias_linear":false,
         "add_qkv_bias": true,
-        "tensor_model_parallel_size": 1,
-        "pipeline_model_parallel_size": 1,
         "sequence_parallel": false,
         "tokenizer_type": "PretrainedFromHF",
-        "tokenizer_name_or_path": "ckpt/Qwen2-VL-7B-Instruct",
         "is_encoder_decoder": false
     },
     "text_encoder": null,
@@ -172,6 +169,5 @@
     },
     "image_processer_path": "ckpt/Qwen2-VL-7B-Instruct/preprocessor_config.json",
     "image_path": "examples/qwen2vl/demo.jpeg",
-    "prompts": "Describe this image and keep it within 100 words.",
-    "from_pretrained_with_deal": "ckpt/Qwen2-VL-7B-Instruct/model_optim_rng.pt"
+    "prompts": "Describe this image and keep it within 100 words."
 }

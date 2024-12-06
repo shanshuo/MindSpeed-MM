@@ -66,6 +66,11 @@ if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
     from transformers.generation.streamers import BaseStreamer
 from mindspeed_mm.configs.config import ConfigReader as GenerationConfig
+from megatron.core import mpu
+from megatron.inference.text_generation.communication import (
+    copy_from_last_to_first_pipeline_stage,
+    broadcast_from_last_pipeline_stage,
+)
 
 
 class ExplicitEnum(str, Enum):
@@ -1076,64 +1081,81 @@ class GenerationMixin:
         # keep track of which sequences are already finished
         unfinished_sequences = torch.ones(input_ids.shape[0], dtype=torch.long, device=input_ids.device)
 
+        done = torch.zeros(1, dtype=torch.uint8, device=torch.cuda.current_device())
+        input_ids_length = input_ids.shape[-1]
+
         this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
+        # Using broadcast for synchronization requires that the shapes on all ranks be consistent.
+        # Therefore, padding should be done according to the maximum generated sequence length.
+        input_ids_padding = torch.nn.functional.pad(input_ids, (0, stopping_criteria.max_length - input_ids_length),
+                                                    "constant", 0)
         while True:
-
-            # prepare model inputs
+            input_ids = input_ids_padding[:, :input_ids_length]
             model_kwargs["input_ids"] = input_ids
             model_kwargs = self.prepare_inputs_for_generation(**model_kwargs)
 
             outputs = self.model(
                 **model_kwargs,
             )
+            input_ids_length += 1
+            if mpu.is_pipeline_last_stage():
 
-            if synced_gpus and this_peer_finished:
-                continue  # don't waste resources running the code we don't need
+                if synced_gpus and this_peer_finished:
+                    continue  # don't waste resources running the code we don't need
 
-            if isinstance(outputs, dict) and "logits" in outputs:
-                outputs = outputs["logits"]
+                if isinstance(outputs, dict) and "logits" in outputs:
+                    outputs = outputs["logits"]
 
-            next_token_logits = outputs[:, -1, :]
-            # pre-process distribution
-            next_token_scores = logits_processor(input_ids, next_token_logits)
-            next_token_scores = logits_warper(input_ids, next_token_scores)
+                next_token_logits = outputs[:, -1, :]
+                # pre-process distribution
+                next_token_scores = logits_processor(input_ids, next_token_logits)
+                next_token_scores = logits_warper(input_ids, next_token_scores)
 
-            # sample
-            probs = nn.functional.softmax(next_token_scores, dim=-1)
-            next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+                # sample
+                probs = nn.functional.softmax(next_token_scores, dim=-1)
+                next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
 
-            # finished sentences should have their next token be a padding token
-            if eos_token_id is not None:
-                if pad_token_id is None:
-                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+                # finished sentences should have their next token be a padding token
+                if eos_token_id is not None:
+                    if pad_token_id is None:
+                        raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                    next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
-            # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            if streamer is not None:
-                streamer.put(next_tokens.cpu())
-            # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
-                )
+                # update generated ids, model inputs, and length for next step
+                input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
 
-                # stop when each sentence is finished
-                if unfinished_sequences.max() == 0:
+                if streamer is not None:
+                    streamer.put(next_tokens.cpu())
+                # if eos_token was found in one sentence, set sentence to finished
+                if eos_token_id_tensor is not None:
+                    unfinished_sequences = unfinished_sequences.mul(
+                        next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(
+                            dim=0)
+                    )
+
+                    # stop when each sentence is finished
+                    if unfinished_sequences.max() == 0:
+                        this_peer_finished = True
+
+                # stop if we exceed the maximum length
+                if stopping_criteria(input_ids, scores):
                     this_peer_finished = True
-
-            # stop if we exceed the maximum length
-            if stopping_criteria(input_ids, scores):
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
+                input_ids_padding = torch.nn.functional.pad(input_ids,
+                                                            (0, stopping_criteria.max_length - input_ids_length),
+                                                            "constant", 0)
+                if this_peer_finished and not synced_gpus:
+                    done = torch.ones(1, dtype=torch.uint8, device=torch.cuda.current_device())
+            # if finish the inference, send 'done' to each rank
+            done = broadcast_from_last_pipeline_stage(1, torch.uint8, done)
+            if done:
                 break
+            copy_from_last_to_first_pipeline_stage(input_ids_padding.size(), torch.int64, input_ids_padding)
+        if mpu.is_pipeline_last_stage():
+            if streamer is not None:
+                streamer.end()
 
-        if streamer is not None:
-            streamer.end()
-
-        return input_ids
+            return input_ids
 
     def greedy_search(
         self,
@@ -1240,18 +1262,8 @@ class GenerationMixin:
         )
 
         # init attention / hidden states / scores tuples
-        raw_logits = () if (return_dict_in_generate and output_logits) else None
-        scores = () if (return_dict_in_generate and output_scores) else None
-        decoder_attentions = () if (return_dict_in_generate and output_attentions) else None
-        cross_attentions = () if (return_dict_in_generate and output_attentions) else None
-        decoder_hidden_states = () if (return_dict_in_generate and output_hidden_states) else None
 
-        # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        if return_dict_in_generate and self.model_config.is_encoder_decoder:
-            encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-            encoder_hidden_states = (
-                model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-            )
+        scores = () if (return_dict_in_generate and output_scores) else None
 
         # keep track of which sequences are already finished
         batch_size, cur_len = input_ids.shape
@@ -1260,54 +1272,75 @@ class GenerationMixin:
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
 
+        done = torch.zeros(1, dtype=torch.uint8, device=torch.cuda.current_device())
+        input_ids_length = input_ids.shape[-1]
+
+        this_peer_finished = False  # used by synced_gpus only
+        # auto-regressive generation
+        # Using broadcast for synchronization requires that the shapes on all ranks be consistent.
+        # Therefore, padding should be done according to the maximum generated sequence length.
+        input_ids_padding = torch.nn.functional.pad(input_ids, (0, stopping_criteria.max_length - input_ids_length),
+                                                    "constant", 0)
+
         while True:
             # prepare model inputs
+            input_ids = input_ids_padding[:, :input_ids_length]
             model_kwargs["input_ids"] = input_ids
             model_kwargs = self.prepare_inputs_for_generation(**model_kwargs)
             # forward pass to get next token
             outputs = self.model(
                 **model_kwargs
             )
-            if isinstance(outputs, dict) and "logits" in outputs:
-                outputs = outputs["logits"]
-            if synced_gpus and this_peer_finished:
-                continue  # don't waste resources running the code we don't need
+            input_ids_length += 1
+            if mpu.is_pipeline_last_stage():
+                if synced_gpus and this_peer_finished:
+                    continue  # don't waste resources running the code we don't need
+                if isinstance(outputs, dict) and "logits" in outputs:
+                    outputs = outputs["logits"]
+                next_token_logits = outputs[:, -1, :]
 
-            next_token_logits = outputs[:, -1, :]
+                # pre-process distribution
+                next_tokens_scores = logits_processor(input_ids, next_token_logits)
 
-            # pre-process distribution
-            next_tokens_scores = logits_processor(input_ids, next_token_logits)
+                # argmax
+                next_tokens = torch.argmax(next_tokens_scores, dim=-1)
 
-            # argmax
-            next_tokens = torch.argmax(next_tokens_scores, dim=-1)
+                # finished sentences should have their next token be a padding token
+                if eos_token_id is not None:
+                    if pad_token_id is None:
+                        raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
+                    next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
 
-            # finished sentences should have their next token be a padding token
-            if eos_token_id is not None:
-                if pad_token_id is None:
-                    raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
+                # update generated ids, model inputs, and length for next step
+                input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+                if streamer is not None:
+                    streamer.put(next_tokens.cpu())
 
-            # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-            if streamer is not None:
-                streamer.put(next_tokens.cpu())
+                # if eos_token was found in one sentence, set sentence to finished
+                if eos_token_id_tensor is not None:
+                    unfinished_sequences = unfinished_sequences.mul(
+                        next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(
+                            dim=0)
+                    )
 
-            # if eos_token was found in one sentence, set sentence to finished
-            if eos_token_id_tensor is not None:
-                unfinished_sequences = unfinished_sequences.mul(
-                    next_tokens.tile(eos_token_id_tensor.shape[0], 1).ne(eos_token_id_tensor.unsqueeze(1)).prod(dim=0)
-                )
+                    if unfinished_sequences.max() == 0:
+                        this_peer_finished = True
 
-                if unfinished_sequences.max() == 0:
+                if stopping_criteria(input_ids, scores):
                     this_peer_finished = True
 
-            if stopping_criteria(input_ids, scores):
-                this_peer_finished = True
-
-            if this_peer_finished and not synced_gpus:
+                input_ids_padding = torch.nn.functional.pad(input_ids,
+                                                            (0, stopping_criteria.max_length - input_ids_length),
+                                                            "constant", 0)
+                if this_peer_finished and not synced_gpus:
+                    done = torch.ones(1, dtype=torch.uint8, device=torch.cuda.current_device())
+            # if finish the inference, send 'done' to each rank
+            done = broadcast_from_last_pipeline_stage(1, torch.uint8, done)
+            if done:
                 break
+            copy_from_last_to_first_pipeline_stage(input_ids_padding.size(), torch.int64, input_ids_padding)
+        if mpu.is_pipeline_last_stage():
+            if streamer is not None:
+                streamer.end()
 
-        if streamer is not None:
-            streamer.end()
-
-        return input_ids
+            return input_ids

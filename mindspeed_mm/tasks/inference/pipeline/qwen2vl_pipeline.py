@@ -6,25 +6,20 @@ from qwen_vl_utils import process_vision_info
 from transformers.generation.streamers import TextStreamer
 
 from pretrain_qwen2vl import model_provider
-from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MMEncoderMixin
-from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.generation_mixin import GenerationMixin
 from mindspeed_mm.models.text_encoder import Tokenizer
 
+from mindspeed_mm.tasks.inference.pipeline.parallel_wrapper import ParallelWrapper
 
-class Qwen2VlPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
+
+class Qwen2VlPipeline(GenerationMixin):
 
     def __init__(self, infer_config):
         self.infer_config = infer_config
         self.tokenizer = Tokenizer(infer_config.tokenizer).get_tokenizer()
-
-        self.model = model_provider()
-        state_dict = torch.load(infer_config.from_pretrained_with_deal, map_location='cpu')
-        self.model.load_state_dict(state_dict=state_dict["model"])
-        self.model.eval()
-        self.model.to(dtype=infer_config.dtype, device=infer_config.device)
-
-        self.image_processor = AutoProcessor.from_pretrained(infer_config.tokenizer.from_pretrained, local_files_only=True)
+        self.model = ParallelWrapper(model_provider)
+        self.image_processor = AutoProcessor.from_pretrained(infer_config.tokenizer.from_pretrained,
+                                                             local_files_only=True)
         self.generation_config = infer_config.generation_config
         self.model_config = infer_config.text_decoder
         self.main_input_name = 'input_ids'
@@ -56,7 +51,7 @@ class Qwen2VlPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
                                       temperature=self.generation_config.temperature,
                                       max_new_tokens=self.generation_config.max_new_tokens,
                                       streamer=streamer)
-        if return_ids:
+        if return_ids and generated_ids is not None:
             generated_ids = [
                 output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
             ]
@@ -93,7 +88,7 @@ class Qwen2VlPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
             return_tensors="pt",
         )
         inputs = inputs.to(self.infer_config.device)
-        inputs['pixel_values'] = inputs['pixel_values'].type(torch.bfloat16)
+        inputs['pixel_values'] = inputs['pixel_values'].type(torch.bfloat16).unsqueeze(0)
         return inputs
 
     def prepare_inputs_for_generation(self, **kwargs):

@@ -303,24 +303,32 @@ $save_dir
 
 <a id="jump5"></a>
 
-## 推理（单卡）
-#### 1、准备工作（以微调环境为基础，包括环境安装、权重下载及转换-不切分）
+## 推理
+#### 1、准备工作（以微调环境为基础，包括环境安装、权重下载及转换-目前支持PP切分的推理）
 追加安装：
 ```
 pip install qwen_vl_utils
 ```
-注：权重转换步骤中，pipeline_layer_index = None
+注：如果使用huggingface下载的原始权重，需要权重转换，权重转换步骤中，如果不使用PP推理，则pipeline_layer_index = None；如果使用PP推理，要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，则pipeline_layer_index = [0, 0, 10, 20]
 
+注：如果使用的MindSpeed-MM中保存的权重则无需进行转换，可直接加载(需要保证与训练的切分一致)。
 #### 2、配置参数
-根据实际情况修改inference_qwen2vl_7b.json中的路径配置，包括tokenizer_name_or_path、from_pretrained、image_processer_path、from_pretrained_with_deal。需注意
-1、配置的路径为从huggingface下载的原始Qwen2-VL-7B-Instruct路径
-2、from_pretrained_with_deal 需根据实际情况配置权重文件路径(不切分)
+根据实际情况修改examples/qwen2vl/inference_qwen2vl_7b.json和examples/qwen2vl/inference_qwen2vl_7b.sh中的路径配置，包括tokenizer的加载路径tokenizer_name_or_path、以及图片处理器的路径image_processer_path。需注意
+
+1、tokenizer_name_or_path配置的路径为从huggingface下载的原始Qwen2-VL-7B-Instruct路径。
+
+2、shell文件中的LOAD_PATH的路径为经过权重转换后的模型路径(可PP切分)。
 
 #### 3、启动推理
 ```shell
     bash examples/qwen2vl/inference_qwen2vl_7b.sh
 ```
-注：单卡推理需打开FA，否则可能会显存不足报错，开关--use-flash-attn 默认已开，确保FA步骤完成即可。
+注：单卡推理需打开FA，否则可能会显存不足报错，开关--use-flash-attn 默认已开，确保FA步骤完成即可。如果使用多卡推理则需要调整相应的PP参数和NPU使用数量的NPUS_PER_NODE参数。以PP4为例，shell修改参数如下：
+
+```shell
+NPUS_PER_NODE=4 # 可用几张卡 要大于 PP*TP*CP
+PP=4 #PP并行参数
+```
 
 <a id="jump5"></a>
 
