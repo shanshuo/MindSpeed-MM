@@ -196,14 +196,7 @@ class WfCausalConv3d(nn.Module):
         else:
             self.causal_cached.append(x[:, :, 0:0, :, :])
 
-        if x.dtype not in [torch.float16, torch.bfloat16]:
-            dtype = x.dtype
-            with torch.cuda.amp.autocast(enabled=False):
-                x = self.conv.to(device=x.device, dtype=torch.bfloat16)(x.to(torch.bfloat16))
-                x = x.to(dtype)
-                return torch_npu.npu_format_cast(x, 2)
-        else:
-            return self.conv(x)
+        return self.conv(x)
 
 
 def _fake_cp_pass_from_previous_rank(input_, dim, kernel_size, cache_padding=None):

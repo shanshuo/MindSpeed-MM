@@ -104,7 +104,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
     # 安装加速库MindSpeed core 0.8.0 使用MindSpeed master分支
     cd MindSpeed
-    git checkout master
+    git checkout 82f94ca
     pip install -r requirements.txt 
     pip install -e .
     

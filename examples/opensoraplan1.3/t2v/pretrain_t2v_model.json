@@ -63,6 +63,9 @@
         "vae_scale_factor":[4,8,8],
         "use_tiling": false,
         "connect_res_layer_num": 2
+    },
+    "patch": {
+        "ae_float32": true
     }
 }
 

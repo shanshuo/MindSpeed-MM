@@ -165,6 +165,11 @@ class VideoDitSparse(MultiModalModule):
         )
         prompt_mask_sparse_1d_group = prompt_mask_sparse_1d
 
+        if (video_mask_sparse_1d == False).all():
+            video_mask_sparse_1d = None
+        if (video_mask_sparse_1d_group == False).all():
+            video_mask_sparse_1d_group = None
+        
         return {
             False: (video_mask_sparse_1d, prompt_mask_sparse_1d),
             True: (video_mask_sparse_1d_group, prompt_mask_sparse_1d_group)
@@ -227,6 +232,9 @@ class VideoDitSparse(MultiModalModule):
         for sparse_n in [1, 4]:
             sparse_mask[sparse_n] = self.prepare_sparse_mask(video_mask, prompt_mask, sparse_n)
 
+        if (video_mask == 0).all():
+            video_mask = None
+        
         if self.sequence_parallel:
             latents = tensor_parallel.scatter_to_sequence_parallel_region(latents)
             prompt = tensor_parallel.scatter_to_sequence_parallel_region(prompt)
@@ -274,9 +282,6 @@ class VideoDitSparse(MultiModalModule):
                                 height=height,
                                 width=width,
                             )
-        
-        # To (b, t*h*w, h) or (b, t//sp*h*w, h)
-        latents = rearrange(latents, 's b h -> b s h', b=batch_size).contiguous()
 
         # 3. Output
         output = self._get_output_for_patched_inputs(
@@ -403,13 +408,18 @@ class VideoDitSparse(MultiModalModule):
     def _get_output_for_patched_inputs(
             self, latents, timestep, embedded_timestep, num_frames, height, width
     ):
+        batch_size = latents.shape[1]
         shift, scale = (self.scale_shift_table[None] + embedded_timestep[:, None]).chunk(2, dim=1)
         latents = self.norm_out(latents)
         # Modulation
         latents = latents * (1 + scale) + shift
+        # From (t//sp*h*w, b, h) to (t*h*w, b, h)
         if self.sequence_parallel:
             latents = tensor_parallel.gather_from_sequence_parallel_region(latents,
                                                                            tensor_parallel_output_grad=False)
+            
+        # To (b, t*h*w, h)
+        latents = rearrange(latents, 's b h -> b s h', b=batch_size).contiguous()
         latents = self.proj_out(latents)
         latents = latents.squeeze(1)
 
