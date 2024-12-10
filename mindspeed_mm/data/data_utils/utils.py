@@ -595,9 +595,8 @@ class VideoProcesser:
 
                         i["resolution"].update(dict(sample_height=sample_h, sample_width=sample_w))
 
-
-
-            if path.endswith(".mp4"):
+            ext = os.path.splitext(path)[-1].lower()
+            if ext.lower() in VID_EXTENSIONS:
                 # ======no fps and duration=====
                 duration = i.get("duration", None)
                 fps = i.get("fps", None)
@@ -645,7 +644,7 @@ class VideoProcesser:
                 i["sample_num_frames"] = len(i["sample_frame_index"])
 
                 new_cap_list.append(i)
-            elif path.endswith(".jpg"):  # image
+            elif ext.lower() in IMG_EXTENSIONS:  # image
                 cnt_img += 1
 
                 i["sample_frame_index"] = [0]
@@ -653,7 +652,7 @@ class VideoProcesser:
                 new_cap_list.append(i)
             else:
                 raise NameError(
-                    f"Unknown file extention {path.split('.')[-1]}, only support .mp4 for video and .jpg for image"
+                    f"Unknown file extention {path.split('.')[-1]}"
                 )
             
             sample_num_frames.append(i["sample_num_frames"])
@@ -735,7 +734,7 @@ class ImageProcesser:
         self.max_dynamic_patch = max_dynamic_patch
         self.use_thumbnail = use_thumbnail
 
-    def __call__(self, image_path, mode, num_image):
+    def __call__(self, image_path, mode="", num_image=1):
         if self.image_processer_type == "image2video":
             image = self.image_to_video(image_path)
         elif self.image_processer_type == "image2image":
@@ -750,8 +749,10 @@ class ImageProcesser:
 
     def image_to_video(self, image_path):
         image = self.image_reader(image_path)
+        image = torch.from_numpy(np.array(image))  # [h, w, c]
+        image = rearrange(image, "h w c -> c h w").unsqueeze(0)  # [1 c h w]
         image = self.image_transforms(image)
-        video = image.unsqueeze(0).repeat(self.num_frames, 1, 1, 1)
+        video = image.repeat(self.num_frames, 1, 1, 1)
         video = video.permute(1, 0, 2, 3)  # TCHW -> CTHW
         return video
 
