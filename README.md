@@ -33,19 +33,19 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 已支持特性概览
 
-| 模型 \ 特性 | TP | TP-[SP](https://arxiv.org/abs/2105.13120) | VPP | PP | CP | Distributed Optimizer | Recomputation |
-|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
-| CogVideoX-T2V | ✔ |  |  |  | CP (Ulysses) | ✔ | ✔ |
-| CogVideoX-I2V | ✔ |  |  |  | CP (Ulysses) | ✔ | ✔ |
-| Opensora1.2 |  |  |  |  | DSP | ✔ | ✔ |
-| OpensoraPlan1.3-T2V | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ |
-| OpensoraPlan1.3-I2V | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ |
-| InternVL2-2B |  |  | ✔ | ✔ |  | ✔ | ✔ |
-| InternVL2-8B |  |  | ✔ | ✔ |  | ✔ | ✔ |
-| InternVL2-76B |  |  | ✔ | ✔ |  | ✔ | ✔ |
-| Qwen2VL-2B |  |  |  | ✔ |  | ✔ | ✔ |
-| Qwen2VL-7B |  |  |  | ✔ |  | ✔ | ✔ |
-| Qwen2VL-72B |  |  |  | ✔ |  | ✔ | ✔ |
+| 模型 \ 特性 | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/virtual-pipeline-parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
+|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
+| CogVideoX-T2V | ✔ |  |  |  | CP (Ulysses) | ✔ | ✔ |  |
+| CogVideoX-I2V | ✔ |  |  |  | CP (Ulysses) | ✔ | ✔ |  |
+| Opensora1.2 |  |  |  |  | DSP | ✔ | ✔ |  |
+| OpensoraPlan1.3-T2V | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ |  |
+| OpensoraPlan1.3-I2V | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ |  |
+| InternVL2-2B |  |  | ✔ | ✔ |  | ✔ | ✔ | ✔ |
+| InternVL2-8B |  |  | ✔ | ✔ |  | ✔ | ✔ | ✔ |
+| InternVL2-76B |  |  | ✔ | ✔ |  | ✔ | ✔ | ✔ |
+| Qwen2VL-2B |  |  |  | ✔ |  | ✔ | ✔ | ✔ |
+| Qwen2VL-7B |  |  |  | ✔ |  | ✔ | ✔ | ✔ |
+| Qwen2VL-72B |  |  |  | ✔ |  | ✔ | ✔ | ✔ |
 
 备注：
 
@@ -58,14 +58,14 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 * CP (Ring Attention): Context Parallel with [Ring Attention](https://arxiv.org/abs/2310.01889)
 * Distributed Optimizer: [Zero Redundancy Optimizer](https://arxiv.org/abs/1910.02054) (ZeRO)
 * Recomputation: Reducing Activation [Recomputation](https://arxiv.org/abs/2205.05198)
-
+* LoRA: [Low-Rank Adaptation](https://arxiv.org/abs/2106.09685)
 ---
 
 ## 研发中的特性与模型
 
 * 【新模型】 CogVideoX 1.5: [5B](https://huggingface.co/THUDM/CogVideoX1.5-5B)
 * 【新模型】 MiniCPM-V 2.6: [8B](https://huggingface.co/openbmb/MiniCPM-V-2_6)
-* 【新模型】 WF-VAE: [WF-VAE](https://https://arxiv.org/abs/2411.17459) training
+* 【新模型】 WF-VAE: [WF-VAE](https://arxiv.org/abs/2411.17459) training
 * 【模型特性】 CogVideoX: PP, TP+SP
 * 【模型特性】 OpensoraPlan1.3: PP, CP (Ring Attention)
 * 【模型特性】 Qwen2VL: TP, VPP, CP (Ulysses & Ring Attention)
