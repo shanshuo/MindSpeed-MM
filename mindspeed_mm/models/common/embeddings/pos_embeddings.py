@@ -9,6 +9,8 @@ import torch
 from torch import nn, einsum, broadcast_tensors, Tensor
 from torch.cuda.amp import autocast
 
+from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
+
 
 def get_3d_sincos_pos_embed(
     embed_dim,
@@ -545,11 +547,12 @@ class Rotary3DPositionEmbedding(nn.Module):
             self.pos_embedding = None
 
     def rotary(self, t):
+        # input shape: bnsd
         seq_len = t.shape[2]
         freqs_cos = self.freqs_cos[:seq_len].unsqueeze(0).unsqueeze(0)
         freqs_sin = self.freqs_sin[:seq_len].unsqueeze(0).unsqueeze(0)
 
-        return t * freqs_cos + rotate_half(t) * freqs_sin
+        return npu_rotary_position_embedding(t, freqs_cos, freqs_sin)
 
     def position_embedding_forward(self, position_ids, **kwargs):
         if self.pos_embedding is not None:
@@ -558,5 +561,6 @@ class Rotary3DPositionEmbedding(nn.Module):
             return None
 
     def forward(self, x):
-        x[:, self.text_length:] = self.rotary(x.transpose(1, 2)[:, :, self.text_length:]).transpose(1, 2)
+        # input shape: bnsd
+        x[:, :, self.text_length:] = self.rotary(x[:, :, self.text_length:])
         return x

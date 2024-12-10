@@ -62,6 +62,14 @@ def get_layer_mapping(i: int) -> Dict:
     return layer_mapping
 
 
+def remove_layers(
+    state_dict: Dict[str, Any],
+    remove_keys: List
+):
+    for remove_key in remove_keys:
+        state_dict.pop(remove_key)
+
+
 def split_by_tp(state_dict: Dict[str, Any], tp_size: int = 2, num_layers: int = 42) -> List[Dict]:
     if tp_size <= 1:
         return [state_dict, ]
@@ -193,6 +201,7 @@ def get_args():
     parser.add_argument("--source_path", type=str, default="./transformer/1/mp_rank_00_model_states.pt", help="Source path of checkpoint")
     parser.add_argument("--target_path", type=str, default="./ckpt/sat_dit/", help="Save path of MM checkpoint")
     parser.add_argument("--task", type=str, default="t2v", choices=["t2v", "i2v"], help="Task type")
+    parser.add_argument("--remove_pos_emb", type=bool, default=False, help="remove_pos_emb")
     parser.add_argument("--mode", type=str, default="split", choices=["split", "merge"], 
         help="Split mode is used to split the pretrained weights according to tp_size before training, \
         and Merge mode is used to merge weights based on tp_size after training is completed")
@@ -213,6 +222,15 @@ if __name__ == "__main__":
         for i in range(args.num_layers):
             CONVERT_MAPPING.update(get_layer_mapping(i))
         update_state_dict_inplace(source_state_dict, CONVERT_MAPPING)
+
+        # remove dummy layers
+        remove_keys = set(source_state_dict.keys()) - set(CONVERT_MAPPING.values())
+        remove_layers(source_state_dict, remove_keys)
+
+        if args.remove_pos_emb:
+            remove_layers(source_state_dict, ["pos_embed.freq_cos", "pos_embed.freq_sin"])
+            if args.task == "i2v":
+                remove_layers(source_state_dict, ["pos_embed.pos_embedding"])
 
         state_dicts = split_by_tp(source_state_dict, tp_size=args.tp_size, num_layers=args.num_layers)
         save_by_tp(state_dicts, args.target_path)

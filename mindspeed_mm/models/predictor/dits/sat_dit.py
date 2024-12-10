@@ -16,7 +16,7 @@ from mindspeed_mm.models.common.embeddings.pos_embeddings import Rotary3DPositio
 from mindspeed_mm.models.common.embeddings.time_embeddings import TimeStepEmbedding
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.embeddings.patch_embeddings import VideoPatchEmbed2D, VideoPatch2D
-from mindspeed_mm.models.common.attention import SelfAttentionBSH, ParallelSelfAttentionSBH
+from mindspeed_mm.models.common.attention import SelfAttentionBNSD, ParallelSelfAttentionSBH
 
 
 class SatDiT(MultiModalModule):
@@ -490,7 +490,7 @@ class VideoDiTBlock(nn.Module):
         if self.enable_sequence_parallelism:
             attention = ParallelSelfAttentionSBH
         else:
-            attention = SelfAttentionBSH
+            attention = SelfAttentionBNSD
 
         self.self_atten = attention(
             query_dim=dim,

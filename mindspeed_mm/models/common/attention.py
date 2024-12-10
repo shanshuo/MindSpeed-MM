@@ -357,7 +357,7 @@ class MultiHeadAttentionBSH(nn.Module):
         return out
 
 
-class SelfAttentionBSH(nn.Module):
+class SelfAttentionBNSD(nn.Module):
     """
     A multi-head attention layer for self-atten, layout "BSH".
 
@@ -458,8 +458,9 @@ class SelfAttentionBSH(nn.Module):
 
         q, k, v = self.proj_qkv(query)[0].chunk(3, dim=2)
 
-        q = q.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim)
-        k = k.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        q = q.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim).transpose(1, 2)
+        k = k.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim).transpose(1, 2)
+        v = v.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim).transpose(1, 2)
 
         if self.qk_ln:
             q = self.q_norm(q)
@@ -468,8 +469,6 @@ class SelfAttentionBSH(nn.Module):
         if self.use_rope and self.rope is not None:
             q = self.rope(q)
             k = self.rope(k)
-        q = q.view(b, -1, self.num_attention_heads_per_partition_per_cp * self.head_dim)
-        k = k.view(b, -1, self.num_attention_heads_per_partition_per_cp * self.head_dim)
 
         out = torch_npu.npu_fusion_attention(
             q,
@@ -477,10 +476,11 @@ class SelfAttentionBSH(nn.Module):
             v,
             head_num=self.num_attention_heads_per_partition_per_cp,
             atten_mask=mask,
-            input_layout="BSH",
+            input_layout="BNSD",
             scale=1 / math.sqrt(self.head_dim)
         )[0]
-
+        
+        out = out.transpose(1, 2).reshape(b, -1, self.num_attention_heads_per_partition_per_cp * self.head_dim)
         out, _ = self.proj_out(out)
         out = self.dropout(out)
         if input_ndim == 4:
@@ -595,14 +595,9 @@ class ParallelSelfAttentionSBH(nn.Module):
             k = self.k_norm(k)
 
         if self.use_rope and self.rope is not None:
-            _q = q.clone()
-            _k = k.clone()
-            _q[self.rope.text_length:] = self.rope.rotary(
-                q.transpose(0, 2)[:, :, self.rope.text_length:]).transpose(0, 2)
-            _k[self.rope.text_length:] = self.rope.rotary(
-                k.transpose(0, 2)[:, :, self.rope.text_length:]).transpose(0, 2)
-            q = _q
-            k = _k
+            q = self.rope(q.transpose(0, 1)).transpose(0, 1)
+            k = self.rope(k.transpose(0, 1)).transpose(0, 1)
+            
         q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
         k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
         v = v.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
