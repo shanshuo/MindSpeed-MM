@@ -7,61 +7,105 @@ import re
 import torch
 from transformers import AutoModelForCausalLM, AutoConfig
 
+
 def load_from_hf(load_dir, trust_remote_code):
     # Load Huggingface model.
-    hf_model = AutoModelForCausalLM.from_pretrained(load_dir, device_map='cpu', trust_remote_code=trust_remote_code, local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(load_dir, device_map='cpu', trust_remote_code=trust_remote_code,
+                                                    local_files_only=True)
     print(hf_model)
     config = AutoConfig.from_pretrained(load_dir, trust_remote_code=trust_remote_code)
     global llm_arch
     llm_arch = config.llm_config.architectures[0]
     return hf_model
 
-def get_model_config(model_size):
+
+def get_model_config(model_size, enable_vpp):
     if model_size == '2B':
-        pp_size = 1
-        vit_num_layers = 24
-        vit_pipeline_num_layers = [24,]
-        llm_num_layers = 24
-        llm_pipeline_num_layers = [24,]
+        if not enable_vpp:
+            pp_size = 1
+            vp_size = 1
+            vit_num_layers = 24
+            vit_pipeline_num_layers = [24, ]
+            llm_num_layers = 24
+            llm_pipeline_num_layers = [24, ]
+        else:
+            raise ValueError("Configure the PP layer count to be greater than 2 for 2B model before enabling VPP.")
     elif model_size == '8B':
-        pp_size = 4
         vit_num_layers = 24
-        vit_pipeline_num_layers = [24, 0, 0, 0]
         llm_num_layers = 32
-        llm_pipeline_num_layers = [6, 9, 9, 8]
+        if not enable_vpp:
+            pp_size = 4
+            vp_size = 1
+            vit_pipeline_num_layers = [24, 0, 0, 0]
+            llm_pipeline_num_layers = [6, 9, 9, 8]
+        else:
+            pp_size = 4
+            vp_size = 3
+            vit_pipeline_num_layers = [[6, 7, 7, 4], [0, 0, 0, 0], [0, 0, 0, 0]]
+            llm_pipeline_num_layers = [[0, 0, 0, 1], [4, 4, 4, 4], [4, 4, 4, 3]]
     elif model_size == '26B':
-        pp_size = 8
         vit_num_layers = 45
-        vit_pipeline_num_layers = [14, 16, 15, 0, 0, 0, 0, 0]
         llm_num_layers = 48
-        llm_pipeline_num_layers = [0, 0, 0, 9, 10, 10, 10, 10, 9]
+        if not enable_vpp:
+            pp_size = 8
+            vp_size = 1
+            vit_pipeline_num_layers = [26, 19, 0, 0, 0, 0, 0, 0]
+            llm_pipeline_num_layers = [0, 2, 8, 8, 8, 8, 8, 6]
+        else:
+            pp_size = 8
+            vp_size = 2
+            vit_pipeline_num_layers = [[13, 13, 13, 6, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0]]
+            llm_pipeline_num_layers = [[0, 0, 0, 1, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4, 4, 3]]
     elif model_size == '76B':
-        pp_size = 16
         vit_num_layers = 45
-        vit_pipeline_num_layers = [11, 12, 12, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         llm_num_layers = 80
-        llm_pipeline_num_layers = [0, 0, 0, 1, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6]
+        if not enable_vpp:
+            pp_size = 16
+            vp_size = 1
+            vit_pipeline_num_layers = [11, 12, 12, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+            llm_pipeline_num_layers = [0, 0, 0, 1, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6]
+        else:
+            pp_size = 16
+            vp_size = 2
+            vit_pipeline_num_layers = [[7, 7, 7, 7, 7, 7, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                                       [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]
+            llm_pipeline_num_layers = [[0, 0, 0, 0, 0, 0, 1, 4, 4, 4, 4, 4, 4, 3, 3, 3],
+                                       [3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 1]]
     else:
         raise ValueError(f'Unsupported model size: {model_size}')
-    return pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers
+    return pp_size, vp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers
 
-def merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers):
-    if len(vit_pipeline_num_layers) != pp_size:
-        raise AssertionError(f'length of vit_pipeline_num_layers must be equal to pp_size, '
-                             f'but got {len(vit_pipeline_num_layers)} and {pp_size}.')
-    if sum(vit_pipeline_num_layers) != vit_num_layers:
-        raise AssertionError(f'sum of vit_pipeline_num_layers must be equal to vit_num_layers, '
-                             f'but got {sum(vit_pipeline_num_layers)} and {vit_num_layers}.')
-    if len(llm_pipeline_num_layers) != pp_size:
-        raise AssertionError(f'length of llm_pipeline_num_layers must be equal to pp_size, '
-                             f'but got {len(llm_pipeline_num_layers)} and {pp_size}.')
-    if sum(llm_pipeline_num_layers) != llm_num_layers:
-        raise AssertionError(f'sum of llm_pipeline_num_layers must be equal to llm_num_layers, '
-                             f'but got {sum(llm_pipeline_num_layers)} and {llm_num_layers}.')
+
+def merge_pp_index(pp_size, vp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers):
+    # Flatten the vit and llm layers for VPP
+    if vp_size > 1:
+        vit_pipeline_num_layers_flat = [item for sublist in vit_pipeline_num_layers for item in sublist]
+        llm_pipeline_num_layers_flat = [item for sublist in llm_pipeline_num_layers for item in sublist]
+    else:
+        vit_pipeline_num_layers_flat = vit_pipeline_num_layers
+        llm_pipeline_num_layers_flat = llm_pipeline_num_layers
+
+    # Validation for flattened lists
+    expected_length = pp_size * vp_size
+    if len(vit_pipeline_num_layers_flat) != expected_length:
+        raise AssertionError(f'Length of vit_pipeline_num_layers_flat must be equal to pp_size * vp_size, '
+                             f'but got {len(vit_pipeline_num_layers_flat)} and {expected_length}.')
+    if sum(vit_pipeline_num_layers_flat) != vit_num_layers:
+        raise AssertionError(f'Sum of vit_pipeline_num_layers_flat must be equal to vit_num_layers, '
+                             f'but got {sum(vit_pipeline_num_layers_flat)} and {vit_num_layers}.')
+    if len(llm_pipeline_num_layers_flat) != expected_length:
+        raise AssertionError(f'Length of llm_pipeline_num_layers_flat must be equal to pp_size * vp_size, '
+                             f'but got {len(llm_pipeline_num_layers_flat)} and {expected_length}.')
+    if sum(llm_pipeline_num_layers_flat) != llm_num_layers:
+        raise AssertionError(f'Sum of llm_pipeline_num_layers_flat must be equal to llm_num_layers, '
+                             f'but got {sum(llm_pipeline_num_layers_flat)} and {llm_num_layers}.')
+
+    # Generate split method
     split_method = []
-    for vit_num, llm_num in zip(vit_pipeline_num_layers, llm_pipeline_num_layers):
+    for vit_num, llm_num in zip(vit_pipeline_num_layers_flat, llm_pipeline_num_layers_flat):
         split_method.append((vit_num, llm_num))
     return split_method
+
 
 def merge_qkv(wq, wk, wv, hn=64, ng=8):
     dq, d = wq.shape
@@ -77,7 +121,8 @@ def merge_qkv(wq, wk, wv, hn=64, ng=8):
             i += 2
         i += 1
     return qkv
-            
+
+
 def convert_hg_to_mm(_state_dict, _num_layers):
     new_dict = {}
     for key, value in _state_dict.items():
@@ -139,7 +184,7 @@ def convert_hg_to_mm(_state_dict, _num_layers):
             k_name = f'text_decoder.decoder.layers.{i}.self_attention.wk.weight'
             v_name = f'text_decoder.decoder.layers.{i}.self_attention.wv.weight'
             qkv_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_qkv.weight'
-            
+
             if q_name in new_dict.keys():
                 wq = new_dict[q_name]
             else:
@@ -157,7 +202,7 @@ def convert_hg_to_mm(_state_dict, _num_layers):
             new_dict.pop(q_name)
             new_dict.pop(k_name)
             new_dict.pop(v_name)
-            
+
             print(f'merge {q_name}, {k_name}, {v_name} to {qkv_name}')
 
     # 合并mlp的gate和up权重
@@ -182,10 +227,11 @@ def convert_hg_to_mm(_state_dict, _num_layers):
 
     return new_dict
 
+
 def split_model_by_pipeline(state_dict, pp_split):
     if pp_split is None or len(pp_split) <= 1:
         return [state_dict], {}
-    
+
     pp_size = len(pp_split)
     vit_range = [0, 0]
     llm_range = [pp_size - 1, pp_size - 1]
@@ -196,7 +242,7 @@ def split_model_by_pipeline(state_dict, pp_split):
             llm_range[0] = pp_rank
     print(f'vit range: {vit_range[0]}~{vit_range[1]}')
     print(f'llm range: {llm_range[0]}~{llm_range[1]}')
-    
+
     vit_start_idx = 0
     llm_start_idx = 0
     return_dicts = []
@@ -244,9 +290,9 @@ def split_model_by_pipeline(state_dict, pp_split):
         llm_start_idx = llm_end_idx
         return_dicts.append(new_dict)
     return return_dicts, copy_dict
-                    
 
-def save_by_pp(_state_dicts, _save_dir, _latest_checkpointed_iteration='release', _exists_ok=False):
+
+def save_by_pp(_state_dicts, pp_size, vp_size, _save_dir, _latest_checkpointed_iteration='release', _exists_ok=False):
     if os.path.exists(_save_dir):
         if not _exists_ok:
             print(f'save dir: {_save_dir} exists, please check.')
@@ -261,15 +307,22 @@ def save_by_pp(_state_dicts, _save_dir, _latest_checkpointed_iteration='release'
     if _latest_checkpointed_iteration == 'release':
         directory = 'release'
     else:
-        directory = 'iter_{:07d}'.format(_latest_checkpointed_iteration)
+        directory = 'iter_{:07d}'.format(int(_latest_checkpointed_iteration))
 
-    if len(_state_dicts) > 1:
-        for pp_rank, _state_dict in enumerate(_state_dicts):
+    os.makedirs(os.path.join(_save_dir, directory), exist_ok=True)
+
+    if pp_size > 1:
+        for pp_rank in range(pp_size):
             tp_rank = 0
             os.makedirs(os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}'))
             save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}', 'model_optim_rng.pt')
             save_dict = {}
-            save_dict['model'] = _state_dict
+            if vp_size > 1:
+                # Collect VP state dicts for this PP rank
+                save_dict = {f'model{vp_idx}': _state_dicts[vp_idx * pp_size + pp_rank] for vp_idx in range(vp_size)}
+                save_dict['checkpoint_version'] = 3.0
+            else:
+                save_dict = {'model': _state_dicts[pp_rank]}
             torch.save(save_dict, save_path)
     else:
         _state_dict = _state_dicts[0]
@@ -280,26 +333,31 @@ def save_by_pp(_state_dicts, _save_dir, _latest_checkpointed_iteration='release'
         save_dict['model'] = _state_dict
         torch.save(save_dict, save_path)
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Megatron Checkpoint Utility Arguments',
                                      allow_abbrev=False,
                                      conflict_handler='resolve')
     parser.add_argument('--model-size', type=str, required=True,
                         help='model size, 2B/8B/26B/76B')
+    parser.add_argument('--vpp', type=bool, default=False,
+                        help='Whether or not to split the weights into VPP weights')
     parser.add_argument('--load-dir', type=str, required=True,
                         help='HuggingFace weight path for loading')
     parser.add_argument('--save-dir', type=str, required=True,
                         help='MindSpeed-MM weight path for saving')
     parser.add_argument('--trust-remote-code', type=str, required=True, default=False,
-                        help='Whetheror not to allow HuggingFace API to execute code')
+                        help='Whether or not to allow HuggingFace API to execute code')
     args, unrecognized_args = parser.parse_known_args()
     if unrecognized_args:
         print(f"Unrecognized Args: {unrecognized_args}")
 
     hf_model = load_from_hf(args.load_dir, args.trust_remote_code)
     state_dict = hf_model.state_dict()
-    pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers = get_model_config(args.model_size)
-    pp_split = merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers)
+    pp_size, vp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers = get_model_config(
+        args.model_size, args.vpp)
+    pp_split = merge_pp_index(pp_size, vp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers,
+                              llm_pipeline_num_layers)
     print(50 * '*')
     for key, value in state_dict.items():
         print(key, value.shape)
@@ -314,4 +372,4 @@ if __name__ == '__main__':
         print(20 * '#', f'stage {rank}', 20 * '#')
         for key, value in pipeline_state_dict.items():
             print(key, value.shape)
-    save_by_pp(pipeline_state_dicts, args.save_dir)
+    save_by_pp(pipeline_state_dicts, pp_size, vp_size, args.save_dir, _exists_ok=True)

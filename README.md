@@ -33,7 +33,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 已支持特性概览
 
-| 模型 \ 特性 | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/virtual-pipeline-parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
+| 模型 \ 特性 | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
 |:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|:------:|
 | CogVideoX-T2V | ✔ |  |  |  | CP (Ulysses) | ✔ | ✔ |  |
 | CogVideoX-I2V | ✔ |  |  |  | CP (Ulysses) | ✔ | ✔ |  |

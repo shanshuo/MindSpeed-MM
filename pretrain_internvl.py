@@ -21,6 +21,7 @@ from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.utils.utils import get_dtype
 from mindspeed_mm.models.internvl_model import InternVLModel
 from mindspeed_mm.utils.transformer_model_config import get_model_config
+from mindspeed_mm.patchs import vpp_patches
 
 
 def model_provider(pre_process=True, post_process=True):
@@ -44,7 +45,7 @@ def get_batch_on_this_tp_rank(data_iterator):
             torch.distributed.broadcast(item, mpu.get_tensor_model_parallel_src_rank(),
                                         group=mpu.get_tensor_model_parallel_group()
                                         )
-            
+
     if mpu.get_tensor_model_parallel_rank() == 0:
         if data_iterator is not None:
             batch = next(data_iterator)
@@ -64,7 +65,7 @@ def get_batch_on_this_tp_rank(data_iterator):
 
     else:
         raise NotImplementedError
-    
+
     batch = {
         'input_ids': input_ids,
         'labels': labels,
@@ -144,6 +145,6 @@ if __name__ == "__main__":
         ModelType.encoder_or_decoder,
         forward_step,
         extra_args_provider=mm_extra_args_provider,
-        args_defaults={"dataloader_type": "external", 
+        args_defaults={"dataloader_type": "external",
                        "vision_pretraining": False}
     )

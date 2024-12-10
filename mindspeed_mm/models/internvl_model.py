@@ -60,10 +60,11 @@ class InternVLModel(MultiModalModule):
         
         # initialize pipeline prarallel configs
         self.pp_size = mpu.get_pipeline_model_parallel_world_size()
-        if mpu.get_virtual_pipeline_model_parallel_world_size() is not None:
-            raise NotImplementedError("Not support virtual_pipeline_model_parallel now")
-        else:
-            self.pp_rank = mpu.get_pipeline_model_parallel_rank()
+        self.enable_vp = mpu.get_virtual_pipeline_model_parallel_world_size() is not None
+        if self.enable_vp:
+            self.vp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
+            self.vp_size = mpu.get_virtual_pipeline_model_parallel_world_size()
+        self.pp_rank = mpu.get_pipeline_model_parallel_rank()
 
         if self.add_text_encoder:
             self.text_encoder = TextEncoder(config.text_encoder).get_model()
@@ -74,7 +75,6 @@ class InternVLModel(MultiModalModule):
         if self.add_text_decoder:
             self.text_decoder = self._build_text_decoder_model(config.text_decoder)
 
-
     def _build_image_encoder_model(self, config):
         transformer_layer_spec = get_vit_layer_spec(config.vision_encoder)
         if self.pp_size <= 1:
@@ -82,19 +82,39 @@ class InternVLModel(MultiModalModule):
                 config=config,
                 encoder_transformer_layer_spec=transformer_layer_spec
             )
-        if self.pp_size != len(config.vision_encoder.pipeline_num_layers):
-            raise ValueError(f"length of vision_encoder.pipeline_num_layers must equal to pipeline-model-parallel-size, "
-                             f"but got vision_encoder.pipeline_num_layers length:{len(config.vision_encoder.pipeline_num_layers)} "
-                             f"and pipeline-model-parallel-size:{self.pp_size}.")
+        if self.enable_vp:
+            if self.pp_size * self.vp_size != len(config.vision_encoder.pipeline_num_layers) * len(
+                    config.vision_encoder.pipeline_num_layers[0]):
+                raise ValueError(
+                    f"The product of pipeline-model-parallel-size and vpp-size must equal to the total number of stage in vision_encoder.pipeline_num_layers, "
+                    f"but got pipeline-model-parallel-size: {self.pp_size}, vpp-size: {self.vp_size}, "
+                    f"and total number of stage in vision_encoder.pipeline_num_layers: {len(config.vision_encoder.pipeline_num_layers) * len(config.vision_encoder.pipeline_num_layers[0])}.")
+        elif self.pp_size != len(config.vision_encoder.pipeline_num_layers):
+            raise ValueError(
+                f"length of vision_encoder.pipeline_num_layers must equal to pipeline-model-parallel-size, "
+                f"but got vision_encoder.pipeline_num_layers length:{len(config.vision_encoder.pipeline_num_layers)} "
+                f"and pipeline-model-parallel-size:{self.pp_size}.")
 
-        local_num_layers = config.vision_encoder.pipeline_num_layers[self.pp_rank]
+        if self.enable_vp:
+            local_num_layers = config.vision_encoder.pipeline_num_layers[self.vp_rank][self.pp_rank]
+        else:
+            local_num_layers = config.vision_encoder.pipeline_num_layers[self.pp_rank]
+
         if local_num_layers == 0:
             self.add_image_encoder = False
             return None
 
-        pipeline_start_index = sum(config.vision_encoder.pipeline_num_layers[:self.pp_rank])
-        pipeline_end_index = sum(config.vision_encoder.pipeline_num_layers[:self.pp_rank + 1])
-        
+        if self.enable_vp:
+            pipeline_start_index = sum(
+                sum(vp_layer) for vp_layer in config.vision_encoder.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.vision_encoder.pipeline_num_layers[self.vp_rank][:self.pp_rank])
+            pipeline_end_index = sum(
+                sum(vp_layer) for vp_layer in config.vision_encoder.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.vision_encoder.pipeline_num_layers[self.vp_rank][:self.pp_rank + 1])
+        else:
+            pipeline_start_index = sum(config.vision_encoder.pipeline_num_layers[:self.pp_rank])
+            pipeline_end_index = sum(config.vision_encoder.pipeline_num_layers[:self.pp_rank + 1])
+
         pre_process = pipeline_start_index == 0
         post_process = pipeline_end_index == config.vision_encoder.num_layers
         
@@ -105,8 +125,10 @@ class InternVLModel(MultiModalModule):
             post_process:{post_process},\
             local_num_layers:{local_num_layers}"
         )
-        # num_layers will be divided by pp_size in TransformerBlock from megatron.core
+        # num_layers will be divided by pp_size and vp_size in TransformerBlock from megatron.core
         config.vision_encoder.num_layers = self.pp_size * local_num_layers
+        if self.enable_vp:
+            config.vision_encoder.num_layers *= self.vp_size
         return VisionModel(
             config=config,
             encoder_transformer_layer_spec=transformer_layer_spec,
@@ -130,19 +152,36 @@ class InternVLModel(MultiModalModule):
                 post_process=self.post_process,
                 fp16_lm_cross_entropy=config.fp16_lm_cross_entropy
             )
-        if self.pp_size != len(config.pipeline_num_layers):
+        if self.enable_vp:
+            if self.pp_size * self.vp_size != len(config.pipeline_num_layers) * len(config.pipeline_num_layers[0]):
+                raise ValueError(
+                    f"The product of pipeline-model-parallel-size and vpp-size must equal to the total number of stage in pipeline_num_layers, "
+                    f"but got pipeline-model-parallel-size: {self.pp_size}, vpp-size: {self.vp_size}, "
+                    f"and total number of stage in pipeline_num_layers: {len(config.pipeline_num_layers) * len(config.pipeline_num_layers[0])}.")
+        elif self.pp_size != len(config.pipeline_num_layers):
             raise ValueError(f"length of pipeline_num_layers must equal to pipeline-model-parallel-size, "
                              f"but got pipeline_num_layers length:{len(config.pipeline_num_layers)} "
                              f"and pipeline-model-parallel-size:{self.pp_size}.")
 
-        local_num_layers = config.pipeline_num_layers[self.pp_rank]
+        if self.enable_vp:
+            local_num_layers = config.pipeline_num_layers[self.vp_rank][self.pp_rank]
+        else:
+            local_num_layers = config.pipeline_num_layers[self.pp_rank]
+
         if local_num_layers == 0:
             self.add_text_decoder = False
             return None
 
-        pipeline_start_index = sum(config.pipeline_num_layers[:self.pp_rank])
-        pipeline_end_index = sum(config.pipeline_num_layers[:self.pp_rank + 1])
-        
+        if self.enable_vp:
+            pipeline_start_index = sum(
+                sum(vp_layer) for vp_layer in config.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.pipeline_num_layers[self.vp_rank][:self.pp_rank])
+            pipeline_end_index = sum(sum(vp_layer) for vp_layer in config.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.pipeline_num_layers[self.vp_rank][:self.pp_rank + 1])
+        else:
+            pipeline_start_index = sum(config.pipeline_num_layers[:self.pp_rank])
+            pipeline_end_index = sum(config.pipeline_num_layers[:self.pp_rank + 1])
+
         pre_process = pipeline_start_index == 0
         post_process = pipeline_end_index == config.num_layers
 
@@ -153,8 +192,10 @@ class InternVLModel(MultiModalModule):
             post_process:{post_process},\
             local_num_layers:{local_num_layers}"
         )
-        # num_layers will be divided by pp_size in TransformerBlock from megatron.core
+        # num_layers will be divided by pp_size and vp_size in TransformerBlock from megatron.core
         config.num_layers = self.pp_size * local_num_layers
+        if self.enable_vp:
+            config.num_layers *= self.vp_size
         return GPTModel(
             config=config,
             transformer_layer_spec=transformer_layer_spec,
