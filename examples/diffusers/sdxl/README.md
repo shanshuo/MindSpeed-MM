@@ -143,7 +143,7 @@
 
 1. 【准备预训练数据集】
 
-    用户需自行获取并解压laion_sx数据集（目前数据集暂已下架，可选其他数据集）与[pokemon-blip-captions](https://gitee.com/hf-datasets/pokemon-blip-captions)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
+    用户需自行获取并解压laion_sx数据集（目前数据集暂已下架，可选其他数据集）与[pokemon-blip-captions](https://huggingface.co/datasets/lambdalabs/pokemon-blip-captions/tree/main)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
 
     修改`pretrain_sdxl_deepspeed_**16.sh`的dataset_name为`laion_sx`的绝对路径
 
@@ -252,8 +252,9 @@
           break
         accelerator.print("")
         ```
+
     5. 【FPS打印方式请参考train_text_to_image_sdxl_pretrain.py】
-    
+
 3. 【启动 SDXL 预训练脚本】
 
     本任务主要提供**混精fp16**和**混精bf16**两种**8卡**训练脚本，默认使用**deepspeed**分布式训练。
