@@ -72,6 +72,9 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --bf16 \
+    --recompute-granularity full \
+    --recompute-method block \
+    --recompute-num-layers 32 \
     --use-distributed-optimizer \
     --sequence-parallel \
 "
