@@ -51,7 +51,7 @@ from packaging import version
 import tokenizers
 
 from mindspeed_mm.data.data_utils.data_transform import (
-    TemporalRandomCrop, 
+    TemporalRandomCrop,
     Expand2Square,
     get_params,
     calculate_statistics,
@@ -333,7 +333,7 @@ class VideoProcesser:
             self.min_hxw = min_hxw
             self.force_resolution = force_resolution
             self.seed = seed
-            self.generator = torch.Generator().manual_seed(self.seed) 
+            self.generator = torch.Generator().manual_seed(self.seed)
             self.hw_stride = hw_stride
             self.hw_aspect_thr = hw_aspect_thr
             self.ae_stride_t = ae_stride_t
@@ -558,7 +558,7 @@ class VideoProcesser:
                         if height <= 0 or width <= 0:
                             cnt_no_resolution += 1
                             continue
-                        
+
                         tr_h, tr_w = maxhwresize(height, width, self.max_hxw)
                         _, _, sample_h, sample_w = get_params(tr_h, tr_w, self.hw_stride)
 
@@ -570,9 +570,9 @@ class VideoProcesser:
                             continue
                         # filter aspect
                         is_pick = filter_resolution(
-                            sample_h, 
-                            sample_w, 
-                            max_h_div_w_ratio=self.hw_aspect_thr, 
+                            sample_h,
+                            sample_w,
+                            max_h_div_w_ratio=self.hw_aspect_thr,
                             min_h_div_w_ratio=1 / self.hw_aspect_thr
                         )
                         if not is_pick:
@@ -583,9 +583,9 @@ class VideoProcesser:
                     else:
                         aspect = self.max_height / self.max_width
                         is_pick = filter_resolution(
-                            height, 
-                            width, 
-                            max_h_div_w_ratio=self.hw_aspect_thr * aspect, 
+                            height,
+                            width,
+                            max_h_div_w_ratio=self.hw_aspect_thr * aspect,
                             min_h_div_w_ratio=1 / self.hw_aspect_thr * aspect
                         )
                         if not is_pick:
@@ -595,9 +595,8 @@ class VideoProcesser:
 
                         i["resolution"].update(dict(sample_height=sample_h, sample_width=sample_w))
 
-
-
-            if path.endswith(".mp4"):
+            ext = os.path.splitext(path)[-1].lower()
+            if ext.lower() in VID_EXTENSIONS:
                 # ======no fps and duration=====
                 duration = i.get("duration", None)
                 fps = i.get("fps", None)
@@ -645,7 +644,7 @@ class VideoProcesser:
                 i["sample_num_frames"] = len(i["sample_frame_index"])
 
                 new_cap_list.append(i)
-            elif path.endswith(".jpg"):  # image
+            elif ext.lower() in IMG_EXTENSIONS:  # image
                 cnt_img += 1
 
                 i["sample_frame_index"] = [0]
@@ -653,9 +652,9 @@ class VideoProcesser:
                 new_cap_list.append(i)
             else:
                 raise NameError(
-                    f"Unknown file extention {path.split('.')[-1]}, only support .mp4 for video and .jpg for image"
+                    f"Unknown file extention {path.split('.')[-1]}"
                 )
-            
+
             sample_num_frames.append(i["sample_num_frames"])
             sample_size.append(f"{len(i['sample_frame_index'])}x{sample_h}x{sample_w}")
 
@@ -685,12 +684,12 @@ class VideoProcesser:
                 f"Mean: {stats_aesthetic.get('mean')}, Var: {stats_aesthetic.get('variance')}, Std: {stats_aesthetic.get('std_dev')}\n"
                 f"Min: {stats_aesthetic.get('min')}, Max: {stats_aesthetic.get('max')}"
             )
-            
+
         return new_cap_list, sample_num_frames, sample_size
 
     def find_closest_y(self, x, vae_stride_t=4, model_ds_t=1):
         if x < self.min_num_frames:
-            return -1  
+            return -1
         for y in range(x, self.min_num_frames - 1, -1):
             if (y - 1) % vae_stride_t == 0 and ((y - 1) // vae_stride_t + 1) % model_ds_t == 0:
                 # 4, 8: y in [29, 61, 93, 125, 157, 189, 221, 253, 285, 317, 349, 381, 413, 445, 477, 509, ...]
@@ -735,7 +734,7 @@ class ImageProcesser:
         self.max_dynamic_patch = max_dynamic_patch
         self.use_thumbnail = use_thumbnail
 
-    def __call__(self, image_path, mode, num_image):
+    def __call__(self, image_path, mode="", num_image=1):
         if self.image_processer_type == "image2video":
             image = self.image_to_video(image_path)
         elif self.image_processer_type == "image2image":
@@ -750,8 +749,10 @@ class ImageProcesser:
 
     def image_to_video(self, image_path):
         image = self.image_reader(image_path)
+        image = torch.from_numpy(np.array(image))  # [h, w, c]
+        image = rearrange(image, "h w c -> c h w").unsqueeze(0)  # [1 c h w]
         image = self.image_transforms(image)
-        video = image.unsqueeze(0).repeat(self.num_frames, 1, 1, 1)
+        video = image.repeat(self.num_frames, 1, 1, 1)
         video = video.permute(1, 0, 2, 3)  # TCHW -> CTHW
         return video
 
@@ -1552,7 +1553,7 @@ def build_iterations(train_dl=None, val_dl=None, test_dl=None, iterator_type="cy
         while True:
             for x in dl:
                 yield x
-    
+
     def _get_iterator(dataloader, iter_type=iterator_type):
         """Return dataset iterator."""
         if iter_type == "single":
@@ -1561,7 +1562,7 @@ def build_iterations(train_dl=None, val_dl=None, test_dl=None, iterator_type="cy
             return iter(_cyclic_iter(dataloader))
         else:
             raise NotImplementedError("unexpected iterator type")
-    
+
     if train_dl is not None:
         train_data_iterator = _get_iterator(train_dl)
     else:
