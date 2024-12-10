@@ -356,7 +356,7 @@ class MultiHeadAttentionBSH(nn.Module):
         return out
 
 
-class SelfAttentionBSH(nn.Module):
+class SelfAttentionBNSD(nn.Module):
     """
     A multi-head attention layer for self-atten, layout "BSH".
 
@@ -376,7 +376,7 @@ class SelfAttentionBSH(nn.Module):
     def __init__(
         self,
         query_dim: int,
-        key_dim: int,
+        key_dim: Optional[int],
         num_heads: int,
         head_dim: int,
         dropout: float = 0.0,
@@ -457,8 +457,9 @@ class SelfAttentionBSH(nn.Module):
 
         q, k, v = self.proj_qkv(query)[0].chunk(3, dim=2)
 
-        q = q.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim)
-        k = k.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        q = q.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim).transpose(1, 2)
+        k = k.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim).transpose(1, 2)
+        v = v.view(b, -1, self.num_attention_heads_per_partition_per_cp, self.head_dim).transpose(1, 2)
 
         if self.qk_ln:
             q = self.q_norm(q)
@@ -467,8 +468,6 @@ class SelfAttentionBSH(nn.Module):
         if self.use_rope and self.rope is not None:
             q = self.rope(q)
             k = self.rope(k)
-        q = q.view(b, -1, self.num_attention_heads_per_partition_per_cp * self.head_dim)
-        k = k.view(b, -1, self.num_attention_heads_per_partition_per_cp * self.head_dim)
 
         out = torch_npu.npu_fusion_attention(
             q,
@@ -476,10 +475,11 @@ class SelfAttentionBSH(nn.Module):
             v,
             head_num=self.num_attention_heads_per_partition_per_cp,
             atten_mask=mask,
-            input_layout="BSH",
+            input_layout="BNSD",
             scale=1 / math.sqrt(self.head_dim)
         )[0]
-
+        
+        out = out.transpose(1, 2).reshape(b, -1, self.num_attention_heads_per_partition_per_cp * self.head_dim)
         out, _ = self.proj_out(out)
         out = self.dropout(out)
         if input_ndim == 4:

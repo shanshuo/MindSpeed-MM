@@ -72,7 +72,9 @@ GPT_ARGS="
     --recompute-granularity full \
     --recompute-method block \
     --recompute-num-layers 42 \
-    --use-distributed-optimizer
+    --use-distributed-optimizer \
+    --overlap-grad-reduce \
+    --overlap-param-gather
 "
 
 MM_ARGS="
