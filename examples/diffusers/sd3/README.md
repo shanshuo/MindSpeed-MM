@@ -128,7 +128,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 1. 【准备微调数据集】
 
-    用户需自行获取并解压[pokemon-blip-captions](https://gitee.com/hf-datasets/pokemon-blip-captions)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
+    用户需自行获取并解压[pokemon-blip-captions](https://huggingface.co/datasets/lambdalabs/pokemon-blip-captions/tree/main)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
 
     ```shell
     vim sd3/finetune_sd3_dreambooth_deepspeed_**16.sh
