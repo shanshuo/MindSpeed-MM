@@ -141,7 +141,7 @@
 
 1. 【准备预训练数据集】
 
-    用户需自行获取并解压laion_sx数据集（目前数据集暂已下架，可选其他数据集）与[pokemon-blip-captions](https://gitee.com/hf-datasets/pokemon-blip-captions)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
+    用户需自行获取并解压laion_sx数据集（目前数据集暂已下架，可选其他数据集）与[pokemon-blip-captions](https://huggingface.co/datasets/lambdalabs/pokemon-blip-captions/tree/main)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
 
     修改`pretrain_sdxl_deepspeed_**16.sh`的dataset_name为`laion_sx`的绝对路径
 
@@ -250,8 +250,9 @@
           break
         accelerator.print("")
         ```
+
     5. 【FPS打印方式请参考train_text_to_image_sdxl_pretrain.py】
-    
+
 3. 【启动 SDXL 预训练脚本】
 
     本任务主要提供**混精fp16**和**混精bf16**两种**8卡**训练脚本，默认使用**deepspeed**分布式训练。
@@ -411,20 +412,20 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
  【运行推理的脚本】
 
 - 单机单卡推理,脚本配置
-  * sdxl/sdxl_text2img_lora_infer.py
-    * model_path配置为lora微调的输出目录 ，即用户在sdxl_text2img_lora_deepspeed.sh中指定的output_path
-    * "stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
-  * sdxl/sdxl_text2img_controlnet_infer.py
-    * base_model_path配置为"stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
-    * controlnet_path配置为controlnet微调输出的结果路径，即用户在sdxl_text2img_controlnet_deepspeed.sh中指定的output_path 
-  * sdxl/sdxl_text2img_infer.py 
-    * "/diffusion/sdxl/pretrained/"配置为"stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
-    * "/diffusion/sdxl/pretrained/"也可以配置为微调输出的结果路径, 即微调脚本中指定的output_path
-  * sdxl/sdxl_img2img_infer.py
-    * MODEL_NAME配置为 "stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
-    * VAE_NAME 配置为 "madebyollin/sdxl-vae-fp16-fix", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix)
-    * "Intel/dpt-hybrid-midas", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/Intel/dpt-hybrid-midas)
-    * "diffusers/controlnet-depth-sdxl-1.0-small", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0-small)
+  - sdxl/sdxl_text2img_lora_infer.py
+    - model_path配置为lora微调的输出目录 ，即用户在sdxl_text2img_lora_deepspeed.sh中指定的output_path
+    - "stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+  - sdxl/sdxl_text2img_controlnet_infer.py
+    - base_model_path配置为"stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+    - controlnet_path配置为controlnet微调输出的结果路径，即用户在sdxl_text2img_controlnet_deepspeed.sh中指定的output_path
+  - sdxl/sdxl_text2img_infer.py
+    - "/diffusion/sdxl/pretrained/"配置为"stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+    - "/diffusion/sdxl/pretrained/"也可以配置为微调输出的结果路径, 即微调脚本中指定的output_path
+  - sdxl/sdxl_img2img_infer.py
+    - MODEL_NAME配置为 "stabilityai/stable-diffusion-xl-base-1.0"，无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0)
+    - VAE_NAME 配置为 "madebyollin/sdxl-vae-fp16-fix", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/madebyollin/sdxl-vae-fp16-fix)
+    - "Intel/dpt-hybrid-midas", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/Intel/dpt-hybrid-midas)
+    - "diffusers/controlnet-depth-sdxl-1.0-small", 无网络时，用户可访问huggingface官网自行[下载](https://huggingface.co/diffusers/controlnet-depth-sdxl-1.0-small)
 
 - 调用推理脚本
 
