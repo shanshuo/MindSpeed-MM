@@ -275,9 +275,6 @@ class VideoDitSparse(MultiModalModule):
                                 width=width,
                             )
         
-        # To (b, t*h*w, h) or (b, t//sp*h*w, h)
-        latents = rearrange(latents, 's b h -> b s h', b=batch_size).contiguous()
-
         # 3. Output
         output = self._get_output_for_patched_inputs(
             latents=latents,
@@ -403,13 +400,18 @@ class VideoDitSparse(MultiModalModule):
     def _get_output_for_patched_inputs(
             self, latents, timestep, embedded_timestep, num_frames, height, width
     ):
+        batch_size = latents.shape[1]
         shift, scale = (self.scale_shift_table[None] + embedded_timestep[:, None]).chunk(2, dim=1)
         latents = self.norm_out(latents)
         # Modulation
         latents = latents * (1 + scale) + shift
+        # From (t//sp*h*w, b, h) to (t*h*w, b, h)
         if self.sequence_parallel:
             latents = tensor_parallel.gather_from_sequence_parallel_region(latents,
                                                                            tensor_parallel_output_grad=False)
+        
+        # To (b, t*h*w, h)
+        latents = rearrange(latents, 's b h -> b s h', b=batch_size).contiguous()
         latents = self.proj_out(latents)
         latents = latents.squeeze(1)
 

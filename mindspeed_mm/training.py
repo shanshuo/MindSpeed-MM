@@ -44,6 +44,7 @@ from megatron.training.utils import (
 
 from mindspeed_mm.configs.config import merge_mm_args
 from mindspeed_mm.tools.profiler import Profiler
+from mindspeed_mm.patchs import PatchesManager
 
 _TRAIN_START_TIME = time.time()
 
@@ -100,6 +101,9 @@ def pretrain(
     merge_mm_args(args)
     timers = get_timers()
 
+    # apply patches
+    PatchesManager.apply_patches_from_config()
+    
     if args.log_progress:
         append_to_progress_log("Starting job")
     
