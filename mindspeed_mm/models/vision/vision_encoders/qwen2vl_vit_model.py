@@ -105,6 +105,8 @@ class Qwen2vlSelfAttention(SelfAttention):
             attn_mask_type=attn_mask_type
         )
 
+        self.mrope_section = config.mrope_section
+
     def forward(
             self,
             hidden_states,
@@ -139,7 +141,7 @@ class Qwen2vlSelfAttention(SelfAttention):
         if rotary_pos_emb is not None:
             half_dim = rotary_pos_emb.shape[-1] // 2
             cos, sin = rotary_pos_emb[..., :half_dim], rotary_pos_emb[..., half_dim:]
-            query, key = apply_multimodal_rotary_pos_emb(query, key, cos, sin, [16, 24, 24],
+            query, key = apply_multimodal_rotary_pos_emb(query, key, cos, sin, self.mrope_section,
                                                          use_fused_rope=self.config.use_fused_rotary_pos_emb)
         query = query.permute(2, 0, 1, 3).contiguous()
         key = key.permute(2, 0, 1, 3).contiguous()
@@ -345,12 +347,16 @@ class Qwen2VLViT(MultiModalModule):
 
         self.config = config
         self.spatial_merge_size = config.spatial_merge_size
-        self.patch_embed = PatchEmbed(
-            patch_size=config.patch_size,
-            temporal_patch_size=config.temporal_patch_size,
-            in_channels=config.in_channels,
-            embed_dim=config.hidden_size,
-        )
+        self.pre_process = pre_process
+        self.post_process = post_process
+
+        if self.pre_process:
+            self.patch_embed = PatchEmbed(
+                patch_size=config.patch_size,
+                temporal_patch_size=config.temporal_patch_size,
+                in_channels=config.in_channels,
+                embed_dim=config.hidden_size,
+            )
 
         head_dim = config.hidden_size // config.num_attention_heads
         self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
@@ -358,8 +364,9 @@ class Qwen2VLViT(MultiModalModule):
         self.blocks = TransformerBlock(
             config=config,
             spec=transformer_layer_spec,
-            pre_process=True,
-            post_process=False,
+            post_layer_norm=False,
+            pre_process=self.pre_process,
+            post_process=self.post_process,
         )
 
     def rot_pos_emb(self, grid_thw):
@@ -400,23 +407,32 @@ class Qwen2VLViT(MultiModalModule):
         """
         self.blocks.set_input_tensor(input_tensor)
 
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+    def forward(self, images: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
         """
         Forward function of the Qwen2VL ViT Model. This function passes the input tensors
         through the embedding layer and then the transformer.
 
         """
-        hidden_states = self.patch_embed(hidden_states)
+        if self.pre_process:
+            if images is None or grid_thw is None:
+                raise ValueError('You have to specify pixel_values and grid_thw')
+            else:
+                hidden_states = self.patch_embed(images)
+                hidden_states = hidden_states.unsqueeze(1)
+        else:
+            hidden_states = None
+
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
+        
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0, dtype=torch.int32
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        hidden_states = hidden_states.unsqueeze(1)
+        
 
-        seq_len = hidden_states.shape[0]
+        seq_len = images.shape[0]
         attention_mask = torch.full(
-            [1, seq_len, seq_len], torch.finfo(hidden_states.dtype).min, device=hidden_states.device,
+            [1, seq_len, seq_len], torch.finfo(images.dtype).min, device=images.device,
             dtype=torch.bool
         )
         for i in range(1, len(cu_seqlens)):

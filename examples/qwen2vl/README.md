@@ -20,7 +20,7 @@
   - [准备工作](#jump5.1)
   - [配置参数](#jump5.2)
   - [启动推理](#jump5.3)
-
+- [注意事项](#jump6)
 ---
 <a id="jump1"></a>
 
@@ -136,21 +136,29 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```
-hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct' # huggingface权重目录
+hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后保存目录
-pipeline_layer_index = [0, 0, 10, 20]     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
-
-num_layers=28                   # 语言模型结构层数
+vit_hidden_size = 1280  # vit的隐藏层size
+vit_attention_heads_num = 16  # vit的注意力heads数
+pp_size = 4  # 切分的PPstage数量
+vit_num_layers = 32  # vit的总层数
+vit_pipeline_num_layers = [32, 0, 0, 0]  # vit在每个卡上切分的层数，和为 vit_num_layers
+llm_num_layers = 28  #LLM的总层数
+llm_pipeline_num_layers = [1, 6, 11, 10]  # LLM在每个卡上切分的层数，和为 llm_num_layers
 ```
 以Qwen2VL-2B为例
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```
-hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct' # huggingface权重目录
+hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-2B-Instruct'  # 转换后保存目录
-pipeline_layer_index = None     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
-
-num_layers=28                   # 语言模型结构层数
+vit_hidden_size = 1280  # vit的隐藏层size
+vit_attention_heads_num = 16  # vit的注意力heads数
+pp_size = 1  # 2B不需要切分PP
+vit_num_layers = 32  # vit的总层数
+vit_pipeline_num_layers = [32]  # vit在每个卡上切分的层数，和为vit_num_layers
+llm_num_layers = 28  #LLM的总层数
+llm_pipeline_num_layers = [28]  # LLM在每个卡上切分的层数，和为llm_num_layers
 ```
   
 启动脚本
@@ -309,7 +317,7 @@ $save_dir
 ```
 pip install qwen_vl_utils
 ```
-注：如果使用huggingface下载的原始权重，需要权重转换，权重转换步骤中，如果不使用PP推理，则pipeline_layer_index = None；如果使用PP推理，要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，则pipeline_layer_index = [0, 0, 10, 20]
+注：如果使用huggingface下载的原始权重，需要权重转换，权重转换步骤中，根据具体需求设置PP切分的参数。
 
 注：如果使用的MindSpeed-MM中保存的权重则无需进行转换，可直接加载(需要保证与训练的切分一致)。
 #### 2、配置参数
@@ -330,24 +338,11 @@ NPUS_PER_NODE=4 # 可用几张卡 要大于 PP*TP*CP
 PP=4 #PP并行参数
 ```
 
-<a id="jump5"></a>
+<a id="jump6"></a>
 
-## 权重转换
-MindSpeed-MM修改了部分原始网络的结构名称，在微调后，可使用examples/qwen2vl/qwen2vl_convert_to_hg.py脚本对微调后的权重进行转换，将权重名称修改为与原始网络一致。
-#### 1.修改路径
-
-修改qwen2vl_convert_to_hg.py中的如下内容,与实际保持一致：
-```
-mm_save_dir = "/data/MindSpeed-MM/save_dir" # 微调后保存的权重目录
-hg_save_dir = "Qwen2-VL-7B-Save"            # 转换后保存目录
-index_json_path = "Qwen2-VL-7B-Instruct/model.safetensors.index.json" # 原始模型文件夹中的model.safetensors.index.json文件
-num_layers = 28                             # 模型结构层数
-```
-
-#### 2.执行转换脚本
-```
-python examples/qwen2vl/qwen2vl_convert_to_hg.py
-```
+## 注意事项：
+1. 在使用流水线并行策略进行多机训练可能会出现卡住现象，可参考[此处](https://gitee.com/ascend/MindSpeed/pulls/1627/files)修改。
+2. 模型相关参数在examples/qwen2vl/model_xb.json 修改，训练相关参数在 finetune_xx.sh修改。
 
 
 

@@ -14,6 +14,7 @@
 # limitations under the License.
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reversed.
 # Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
+from copy import deepcopy
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 from megatron.training import get_args
@@ -25,6 +26,8 @@ from megatron.core.distributed import DistributedDataParallel as LocalDDP
 from megatron.legacy.model import Float16Module as MegatronFloat16Module
 from megatron.training.utils import unwrap_model
 
+from mindspeed_mm.utils.transformer_model_config import get_model_config
+
 
 class ParallelWrapper:
 
@@ -35,10 +38,11 @@ class ParallelWrapper:
         self.model = unwrap_model(model, (torchDDP, LocalDDP, MegatronFloat16Module))[0].eval()
         # Pipelining arguments.
         args = get_args()
-        self.seq_length = args.seq_length
+        vlm_config = deepcopy(args.mm.model)
+        self.text_decoder_config = get_model_config(vlm_config.text_decoder)
         self.pipeline_size_larger_than_one = args.pipeline_model_parallel_size > 1
         # Threshold of pipelining.
-        self.pipelining_batch_x_seqlen = args.inference_batch_times_seqlen_threshold
+        self.pipelining_batch_x_seqlen = getattr(self.text_decoder_config, 'inference_batch_times_seqlen_threshold', 512)
 
     def __call__(self, **kwargs):
         """Invocation of the forward methods. """
@@ -163,7 +167,9 @@ def _allocate_recv_buffer(batch_size, sequence_length):
     if mpu.is_pipeline_first_stage():
         return None
     args = get_args()
-    recv_size = (sequence_length, batch_size, args.hidden_size)
+    vlm_config = deepcopy(args.mm.model)
+    text_decoder_config = get_model_config(vlm_config.text_decoder)
+    recv_size = (sequence_length, batch_size, text_decoder_config.hidden_size)
     return torch.empty(recv_size,
                        dtype=_get_recv_buffer_dtype(args),
                        device=torch.cuda.current_device())

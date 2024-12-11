@@ -1,6 +1,7 @@
 import os
 import stat
 from pathlib import Path
+from copy import deepcopy
 
 import torch
 from safetensors.torch import load_file
@@ -79,9 +80,9 @@ def convert_hg_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
                 new_params[new_key] = value
         else:
             if key.startswith('lm_head'):
-                new_key = key.replace('lm_head', 'output_layer')
+                new_key = key.replace('lm_head', 'text_decoder.output_layer')
             elif key.startswith('model'):
-                new_key = key.replace('model.layers', 'decoder.layers')
+                new_key = key.replace('model.layers', 'text_decoder.decoder.layers')
                 new_key = new_key.replace('self_attn.o_proj.weight', 'self_attention.linear_proj.weight')
                 new_key = new_key.replace('self_attn.q_proj.weight', 'self_attention.linear_q.weight')
                 new_key = new_key.replace('self_attn.k_proj.weight', 'self_attention.linear_k.weight')
@@ -93,15 +94,15 @@ def convert_hg_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
                 new_key = new_key.replace('mlp.gate_proj.weight', 'mlp.linear_fc1_gate.weight')
                 new_key = new_key.replace('mlp.up_proj.weight', 'mlp.linear_fc1_up.weight')
                 new_key = new_key.replace('mlp.down_proj.weight', 'mlp.linear_fc2.weight')
-                new_key = new_key.replace('model.norm.weight', 'decoder.final_layernorm.weight')
-                new_key = new_key.replace('model.embed_tokens.weight', 'embedding.word_embeddings.weight')
+                new_key = new_key.replace('model.norm.weight', 'text_decoder.decoder.final_layernorm.weight')
+                new_key = new_key.replace('model.embed_tokens.weight', 'text_decoder.embedding.word_embeddings.weight')
 
             new_params[new_key] = value
     for i in range(_num_layers):
         # 合并gate up
-        gate_name = f'decoder.layers.{i}.mlp.linear_fc1_gate.weight'
-        up_name = f'decoder.layers.{i}.mlp.linear_fc1_up.weight'
-        fc1_name = f'decoder.layers.{i}.mlp.linear_fc1.weight'
+        gate_name = f'text_decoder.decoder.layers.{i}.mlp.linear_fc1_gate.weight'
+        up_name = f'text_decoder.decoder.layers.{i}.mlp.linear_fc1_up.weight'
+        fc1_name = f'text_decoder.decoder.layers.{i}.mlp.linear_fc1.weight'
         # 如果权重名字在新字典中，则获取对应权重值
         # 合并 w1 和 w3
         if gate_name in new_params.keys():
@@ -120,10 +121,10 @@ def convert_hg_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
 
     for i in range(_num_layers):
         # 合并q k v weight
-        attention_q = f'decoder.layers.{i}.self_attention.linear_q.weight'
-        attention_k = f'decoder.layers.{i}.self_attention.linear_k.weight'
-        attention_v = f'decoder.layers.{i}.self_attention.linear_v.weight'
-        attention_qkv = f'decoder.layers.{i}.self_attention.linear_qkv.weight'
+        attention_q = f'text_decoder.decoder.layers.{i}.self_attention.linear_q.weight'
+        attention_k = f'text_decoder.decoder.layers.{i}.self_attention.linear_k.weight'
+        attention_v = f'text_decoder.decoder.layers.{i}.self_attention.linear_v.weight'
+        attention_qkv = f'text_decoder.decoder.layers.{i}.self_attention.linear_qkv.weight'
         if attention_q in new_params.keys():
             attention_q_weight = new_params[attention_q]
         if attention_k in new_params.keys():
@@ -150,10 +151,10 @@ def convert_hg_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
 
     for i in range(_num_layers):
         # 合并q k v bias
-        attention_q1 = f'decoder.layers.{i}.self_attention.linear_q.bias'
-        attention_k1 = f'decoder.layers.{i}.self_attention.linear_k.bias'
-        attention_v1 = f'decoder.layers.{i}.self_attention.linear_v.bias'
-        attention_qkv1 = f'decoder.layers.{i}.self_attention.linear_qkv.bias'
+        attention_q1 = f'text_decoder.decoder.layers.{i}.self_attention.linear_q.bias'
+        attention_k1 = f'text_decoder.decoder.layers.{i}.self_attention.linear_k.bias'
+        attention_v1 = f'text_decoder.decoder.layers.{i}.self_attention.linear_v.bias'
+        attention_qkv1 = f'text_decoder.decoder.layers.{i}.self_attention.linear_qkv.bias'
         if attention_q1 in new_params.keys():
             attention_q_bias = new_params[attention_q1]
         else:
@@ -186,54 +187,87 @@ def convert_hg_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
 
     return new_params
 
+def merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers):
+    if len(vit_pipeline_num_layers) != pp_size:
+        raise AssertionError(f'length of vit_pipeline_num_layers must be equal to pp_size, '
+                             f'but got {len(vit_pipeline_num_layers)} and {pp_size}.')
+    if sum(vit_pipeline_num_layers) != vit_num_layers:
+        raise AssertionError(f'sum of vit_pipeline_num_layers must be equal to vit_num_layers, '
+                             f'but got {sum(vit_pipeline_num_layers)} and {vit_num_layers}.')
+    if len(llm_pipeline_num_layers) != pp_size:
+        raise AssertionError(f'length of llm_pipeline_num_layers must be equal to pp_size, '
+                             f'but got {len(llm_pipeline_num_layers)} and {pp_size}.')
+    if sum(llm_pipeline_num_layers) != llm_num_layers:
+        raise AssertionError(f'sum of llm_pipeline_num_layers must be equal to llm_num_layers, '
+                             f'but got {sum(llm_pipeline_num_layers)} and {llm_num_layers}.')
+    split_method = []
+    for vit_num, llm_num in zip(vit_pipeline_num_layers, llm_pipeline_num_layers):
+        split_method.append((vit_num, llm_num))
+    return split_method
 
-def split_by_pp(_state_dict, _num_layers, _pipeline_layer_index=None):
-    if _pipeline_layer_index is None:
-        return [_state_dict, ]
+def split_model_by_pipeline(state_dict, pp_split):
+    if pp_split is None or len(pp_split) <= 1:
+        return [state_dict], {}
+    
+    pp_size = len(pp_split)
+    vit_range = [0, 0]
+    llm_range = [pp_size - 1, pp_size - 1]
+    for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
+        if vit_num > 0 and pp_rank > vit_range[1]:
+            vit_range[1] = pp_rank
+        if llm_num > 0 and pp_rank < llm_range[0]:
+            llm_range[0] = pp_rank
+    print(f'vit range: {vit_range[0]}~{vit_range[1]}')
+    print(f'llm range: {llm_range[0]}~{llm_range[1]}')
+    
+    vit_start_idx = 0
+    llm_start_idx = 0
     return_dicts = []
-
-    for pp_rank, _ in enumerate(_pipeline_layer_index):
-        is_first = False
-        is_last = False
-
-        if pp_rank == 0:
-            is_first = True
-        elif pp_rank == len(_pipeline_layer_index) - 1:
-            is_last = True
-
-        pp_start_index = _pipeline_layer_index[pp_rank]
-        if is_last:
-            pp_end_index = _num_layers
-        else:
-            pp_end_index = _pipeline_layer_index[pp_rank + 1]
-
+    copy_dict = deepcopy(state_dict)
+    for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
+        vit_end_idx = vit_start_idx + vit_num
+        llm_end_idx = llm_start_idx + llm_num
         new_dict = {}
-        for key, value in _state_dict.items():
-            if key.startswith('image_encoder'):
-                if is_first:
+        for key, value in state_dict.items():
+            if key.startswith('image_encoder.encoder.patch_embed.'):
+                if pp_rank == vit_range[0]:
                     new_dict[key] = value
-            elif key.startswith('embedding.word_embeddings'):
-                if is_first:
-                    new_dict[key] = value
-            elif key.startswith('decoder.final_layernorm'):
-                if is_last:
-                    new_dict[key] = value
-            elif key.startswith('output_layer'):
-                if is_last:
-                    new_dict[key] = value
-            elif key.startswith('decoder.layers.'):
-                layer = int(key.split('.')[2])
-                if layer >= pp_start_index and layer < pp_end_index:
-                    new_layer = layer - pp_start_index
-                    key_li = key.split('.')
-                    key_li[2] = str(new_layer)
-                    new_key = '.'.join(key_li)
+                    copy_dict.pop(key)
+            elif key.startswith('image_encoder.encoder.blocks.layers.'):
+                layer_idx = int(key.split('.')[4])
+                if vit_start_idx <= layer_idx < vit_end_idx and vit_range[0] <= pp_rank <= vit_range[1]:
+                    new_idx = layer_idx - vit_start_idx
+                    new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
                     new_dict[new_key] = value
-
+                    copy_dict.pop(key)
+            elif key.startswith('image_encoder.projector.'):
+                if pp_rank == vit_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.embedding.'):
+                if pp_rank == llm_range[0]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.decoder.layers.'):
+                layer_idx = int(key.split('.')[3])
+                if llm_start_idx <= layer_idx < llm_end_idx and llm_range[0] <= pp_rank <= llm_range[1]:
+                    new_idx = layer_idx - llm_start_idx
+                    new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
+                    new_dict[new_key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.decoder.final_layernorm.'):
+                if pp_rank == llm_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.output_layer.'):
+                if pp_rank == llm_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+        vit_start_idx = vit_end_idx
+        llm_start_idx = llm_end_idx
         return_dicts.append(new_dict)
-    return return_dicts
-
-
+    return return_dicts, copy_dict
+    
 def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release', _exists_ok=False):
     if os.path.exists(_save_dir):
         if not _exists_ok:
@@ -273,13 +307,27 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
 if __name__ == "__main__":
     hg_ckpt_dir = "Qwen2-VL-7B-Instruct"
     mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'
-    pipeline_layer_index = [0, 0, 10, 20]
-    num_layers = 28
-
+    
     vit_hidden_size = 1280
     vit_attention_heads_num = 16
 
-    state_dict = load_from_hf(_load_dir=hg_ckpt_dir)
-    state_dict = convert_hg_to_mm(state_dict, num_layers, vit_hidden_size, vit_attention_heads_num)
-    state_dicts = split_by_pp(state_dict, num_layers, pipeline_layer_index)
+    #for 7B
+    pp_size = 4
+    vit_num_layers = 32
+    vit_pipeline_num_layers = [32, 0, 0, 0]
+    llm_num_layers = 28
+    llm_pipeline_num_layers = [1, 6, 11, 10]
+
+    state_dict = load_from_hf(hg_ckpt_dir)
+    state_dict = convert_hg_to_mm(state_dict, llm_num_layers, vit_hidden_size, vit_attention_heads_num)
+    pp_split = merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers)
+    state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
+    if len(remains) > 0:
+        print(remains)
+        raise RuntimeWarning("There are some weights ungrouped.")
+
+    for rank, pipeline_state_dict in enumerate(state_dicts):
+        print(20 * '#', f'stage {rank}', 20 * '#')
+        for key, value in pipeline_state_dict.items():
+            print(key, value.shape)
     save_by_pp(state_dicts, mm_save_dir, _exists_ok=True)

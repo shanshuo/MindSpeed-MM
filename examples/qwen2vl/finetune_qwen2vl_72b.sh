@@ -54,56 +54,41 @@ DISTRIBUTED_ARGS="
     --master_port $MASTER_PORT
 "
 
+# GPT_ARGS中模型相关参数具体配置在example/qwen2vl/model_xb.json中，训练相关参数配置在这里
 GPT_ARGS="
     --use-mcore-models \
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
-    --num-layers 28 \
-    --num-layer-list 0,0,10,20 \
-    --hidden-size 3584 \
-    --ffn-hidden-size 18944 \
-    --num-attention-heads 28 \
-    --tokenizer-type NullTokenizer \
-    --vocab-size 152064 \
-    --seq-length ${SEQ_LEN} \
-    --max-position-embeddings 32768 \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
+    --num-layers 1 \
+    --hidden-size 1 \
+    --ffn-hidden-size 1 \
+    --num-attention-heads 1 \
+    --tokenizer-type NullTokenizer \
+    --vocab-size 1 \
+    --seq-length 1 \
+    --max-position-embeddings 1 \
     --make-vocab-size-divisible-by 1 \
-    --rotary-base 1000000 \
-    --lr 1.0e-5 \
-    --lr-decay-style cosine \
-    --untie-embeddings-and-output-weights \
-    --disable-bias-linear \
-    --attention-dropout 0.0 \
     --init-method-std 0.01 \
-    --hidden-dropout 0.0 \
-    --position-embedding-type rope \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
-    --norm-epsilon 1e-6 \
     --swiglu \
-    --use-fused-rotary-pos-emb \
-    --use-rotary-position-embeddings \
     --use-fused-swiglu \
-    --no-masked-softmax-fusion \
-    --attention-softmax-in-fp32 \
+    --lr 1.0e-5 \
+    --lr-decay-style cosine \
     --weight-decay 0 \
     --train-iters 10000 \
     --lr-warmup-fraction 0.1 \
     --clip-grad 0.0 \
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
-    --add-qkv-bias \
-    --initial-loss-scale 4096 \
     --no-gradient-accumulation-fusion \
     --no-load-optim \
     --no-load-rng \
     --no-save-optim \
     --no-save-rng \
     --seed 42 \
-    --group-query-attention \
-    --num-query-groups 4 \
     --bf16 \
     --load $LOAD_PATH \
     --variable-seq-lengths \

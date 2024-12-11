@@ -1,5 +1,5 @@
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
-"""Pretrain SoRA."""
+"""Pretrain QWEN2VL."""
 from copy import deepcopy
 
 import mindspeed.megatron_adaptor  # noqa
@@ -32,9 +32,10 @@ def model_provider(pre_process=True, post_process=True):
     vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
 
     model = Qwen2VLModel(vlm_config)
-    for name, parameters in model.named_parameters():
-        if name.startswith('image_encoder'):
-            parameters.requires_grad = False
+
+    model.freeze(freeze_image_encoder=getattr(vlm_config.image_encoder.vision_encoder, 'freeze', True), \
+        freeze_image_projection=getattr(vlm_config.image_encoder.vision_projector, 'freeze', True))
+
     return model
 
 
@@ -96,5 +97,5 @@ if __name__ == "__main__":
         ModelType.encoder_or_decoder,
         forward_step,
         extra_args_provider=mm_extra_args_provider,
-        args_defaults={"dataloader_type": "external", "vision_pretraining": False},
+        args_defaults={"dataloader_type": "external"},
     )
