@@ -56,6 +56,9 @@ MindSpeed-MM LoRA微调使能方法：
 ### 注意事项
 
 - **冻结模块**：多模态模型中可能存在部分模块参数冻结的情况，冻结的模块不会参与 LoRA 微调。
+
+- **重计算**：LoRA 当前不支持[重计算](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md)，启动任务时需去除启动脚本和模型配置文件中重计算相关的参数。
+
 ## 参考文献
 
 - [LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/abs/2106.09685)
