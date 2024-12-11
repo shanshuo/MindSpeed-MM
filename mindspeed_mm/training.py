@@ -126,6 +126,8 @@ def pretrain(
     print_datetime("after megatron is initialized")
 
     args = get_args()
+    if args.save_interval == 0 or args.log_interval == 0 or args.eval_interval == 0:
+        raise ValueError()
     timers = get_timers()
 
     one_logger = get_one_logger()

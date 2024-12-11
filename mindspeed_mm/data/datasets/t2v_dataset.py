@@ -115,6 +115,7 @@ class T2VDataset(MMBaseDataset):
         self.batch_size = vid_img_process.get("batch_size", 1)
         self.seed = vid_img_process.get("seed", 42)
         self.hw_aspect_thr = vid_img_process.get("hw_aspect_thr", 1.5)
+        self.hw_aspect_thr = 1.5 if self.hw_aspect_thr == 0 else self.hw_aspect_thr
         self.min_num_frames = vid_img_process.get("min_num_frames", 29)
         self.use_aesthetic = vid_img_process.get("use_aesthetic", False) 
 

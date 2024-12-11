@@ -18,6 +18,16 @@ else
   test_path_dir=${cur_path}
 fi
 
+export ASCEND_SLOG_PRINT_TO_STDOUT=0
+export ASCEND_GLOBAL_LOG_LEVEL=3
+export ASCEND_GLOBAL_EVENT_ENABLE=0
+export TASK_QUEUE_ENABLE=2
+export COMBINED_ENABLE=1
+export HCCL_WHITELIST_DISABLE=1
+export HCCL_CONNECT_TIMEOUT=1200
+export ACLNN_CACHE_LIMIT=100000
+export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+
 output_path=${cur_path}/logs
 
 echo ${output_path}

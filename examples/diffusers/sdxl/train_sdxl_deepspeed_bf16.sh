@@ -42,9 +42,7 @@ export TASK_QUEUE_ENABLE=2
 export COMBINED_ENABLE=1
 export HCCL_WHITELIST_DISABLE=1
 export HCCL_CONNECT_TIMEOUT=1200
-export HOST_CACHE_CAPACITY=20
 export ACLNN_CACHE_LIMIT=100000
-export HCCL_BUFFER_SIZE=200
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
 # cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径

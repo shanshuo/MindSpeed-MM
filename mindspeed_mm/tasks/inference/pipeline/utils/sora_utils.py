@@ -6,6 +6,7 @@ import numpy as np
 from diffusers.utils import load_image
 from einops import rearrange
 import imageio
+
 try:
     import decord
 except ImportError:
@@ -13,7 +14,8 @@ except ImportError:
 
 from torchvision.transforms import Compose, Lambda
 
-from mindspeed_mm.data.data_utils.data_transform import CenterCropResizeVideo, SpatialStrideCropVideo, ToTensorAfterResize, maxhwresize
+from mindspeed_mm.data.data_utils.data_transform import CenterCropResizeVideo, SpatialStrideCropVideo, \
+    ToTensorAfterResize, maxhwresize
 from mindspeed_mm.utils.mask_utils import STR_TO_TYPE, TYPE_TO_STR, MaskType
 
 
@@ -52,30 +54,47 @@ def save_video_grid(videos, save_path, fps, nrow=None):
         start_r = (padding + h) * r
         start_c = (padding + w) * c
         video_grid[:, start_r: start_r + h, start_c: start_c + w] = videos[i]
-    
+
     imageio.mimwrite(os.path.join(save_path, "video_grid.mp4"), video_grid, fps=fps, quality=6)
 
 
 def load_prompts(prompt):
     if os.path.exists(prompt):
         with open(prompt, "r") as f:
-            prompts = [line.strip() for line in f.readlines()]
+            lines = f.readlines()
+            if len(lines) > 100:
+                print("The file has more than 100 lines of prompts, we can only proceed the first 100")
+                lines = lines[:100]
+            prompts = [line.strip() for line in lines]
         return prompts
     else:
         return [prompt]
 
 
+def safe_load_image(path):
+    # safe load the image to check the image size (<=100M)
+    file_size = os.path.getsize(path)
+    if file_size > 100 * 1024 * 1024:
+        raise ValueError("The image has to be less than 100M")
+    else:
+        return load_image(path)
+
+
 def load_images(image=None):
     if image is None:
-        print("The input image is None, excute text to video task")
+        print("The input image is None, execute text to video task")
         return None
-    
+
     if os.path.exists(image):
         if os.path.splitext(image)[-1].lower() in [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff"]:
-            return [load_image(image)]
+            return [safe_load_image(image)]
         else:
             with open(image, "r") as f:
-                images = [load_image(line.strip()) for line in f.readlines()]
+                lines = f.readlines()
+                if len(lines) > 100:
+                    print("The file has more than 100 lines of images, we can only proceed the first 100")
+                    lines = lines[:100]
+                images = [safe_load_image(line.strip()) for line in lines]
             return images
     else:
         raise FileNotFoundError(f"The image path {image} does not exist")
@@ -84,7 +103,11 @@ def load_images(image=None):
 def load_conditional_pixel_values(conditional_pixel_values_path):
     if os.path.exists(conditional_pixel_values_path):
         with open(conditional_pixel_values_path, "r") as f:
-            conditional_pixel_values = [line.strip().split(",") for line in f.readlines()]
+            lines = f.readlines()
+            if len(lines) > 100:
+                print("The file has more than 100 lines of images, we can only proceed the first 100")
+                lines = lines[:100]
+            conditional_pixel_values = [line.strip().split(",") for line in lines]
         return conditional_pixel_values
     else:
         return [conditional_pixel_values_path]
@@ -123,13 +146,13 @@ def open_video(file_path, start_frame_idx, num_frames, frame_interval=1):
 
 
 def get_resize_transform(
-    ori_height,
-    ori_width,
-    height=None,
-    width=None,
-    crop_for_hw=False,
-    hw_stride=32,
-    max_hxw=236544,  # 480 x 480
+        ori_height,
+        ori_width,
+        height=None,
+        width=None,
+        crop_for_hw=False,
+        hw_stride=32,
+        max_hxw=236544,  # 480 x 480
 ):
     if crop_for_hw:
         transform = CenterCropResizeVideo((height, width))
@@ -156,7 +179,7 @@ def get_video_transform():
 
 def get_pixel_values(file_path, num_frames):
     if is_image_file(file_path[0]):
-        pixel_values = [load_image(path) for path in file_path]
+        pixel_values = [safe_load_image(path) for path in file_path]
         pixel_values = [torch.from_numpy(np.array(image)) for image in pixel_values]
         pixel_values = [rearrange(image, 'h w c -> c h w').unsqueeze(0) for image in pixel_values]
     elif is_video_file(file_path[0]):
