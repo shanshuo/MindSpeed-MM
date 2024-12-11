@@ -69,7 +69,7 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git 
+    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git 
     git clone https://github.com/NVIDIA/Megatron-LM.git
     cd Megatron-LM
     git checkout core_r0.6.0
@@ -226,6 +226,7 @@
 #### 2. 配置参数
 
 打开下面的json文件
+
 ```
 examples/opensora1.2/inference_model_102x720x1280.json
 ```

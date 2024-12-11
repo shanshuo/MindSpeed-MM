@@ -40,7 +40,7 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import transformers
-from accelerate import Accelerator
+from accelerate import Accelerator, DistributedType
 from accelerate.logging import get_logger
 from accelerate.utils import ProjectConfiguration, set_seed
 from diffusers import (
@@ -1140,45 +1140,46 @@ def main(args):
                 progress_bar.update(1)
                 global_step += 1
                 train_loss = 0.0
-
-                if global_step % args.checkpointing_steps == 0:
-                    # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
-                    if args.checkpoints_total_limit is not None:
-                        checkpoints = os.listdir(args.output_dir)
-                        checkpoints = [
-                            d for d in checkpoints if d.startswith("checkpoint")
-                        ]
-                        checkpoints = sorted(
-                            checkpoints, key=lambda x: int(x.split("-")[1])
-                        )
-
-                        # before we save the new checkpoint, we need to have at _most_ `checkpoints_total_limit - 1` checkpoints
-                        if len(checkpoints) >= args.checkpoints_total_limit:
-                            num_to_remove = (
-                                len(checkpoints) - args.checkpoints_total_limit + 1
-                            )
-                            removing_checkpoints = checkpoints[0:num_to_remove]
-                            logger.info(
-                                "%d checkpoints already exist, removing %d checkpoints",
-                                (len(checkpoints), len(removing_checkpoints)),
-                            )
-                            logger.info(
-                                "removing checkpoints: %s",
-                                ", ".join(removing_checkpoints),
+                
+                if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
+                    if global_step % args.checkpointing_steps == 0:
+                        # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
+                        if args.checkpoints_total_limit is not None:
+                            checkpoints = os.listdir(args.output_dir)
+                            checkpoints = [
+                                d for d in checkpoints if d.startswith("checkpoint")
+                            ]
+                            checkpoints = sorted(
+                                checkpoints, key=lambda x: int(x.split("-")[1])
                             )
 
-                            for removing_checkpoint in removing_checkpoints:
-                                removing_checkpoint = os.path.join(
-                                    args.output_dir, removing_checkpoint
+                            # before we save the new checkpoint, we need to have at _most_ `checkpoints_total_limit - 1` checkpoints
+                            if len(checkpoints) >= args.checkpoints_total_limit:
+                                num_to_remove = (
+                                    len(checkpoints) - args.checkpoints_total_limit + 1
                                 )
-                                shutil.rmtree(removing_checkpoint)
+                                removing_checkpoints = checkpoints[0:num_to_remove]
+                                logger.info(
+                                    "%d checkpoints already exist, removing %d checkpoints",
+                                    (len(checkpoints), len(removing_checkpoints)),
+                                )
+                                logger.info(
+                                    "removing checkpoints: %s",
+                                    ", ".join(removing_checkpoints),
+                                )
 
-                    save_path = os.path.join(
-                        args.output_dir, f"checkpoint-{global_step}"
-                    )
-                    accelerator.save_state(save_path)
-                    accelerator.wait_for_everyone()
-                    logger.info("Saved state to %s", save_path)
+                                for removing_checkpoint in removing_checkpoints:
+                                    removing_checkpoint = os.path.join(
+                                        args.output_dir, removing_checkpoint
+                                    )
+                                    shutil.rmtree(removing_checkpoint)
+
+                        save_path = os.path.join(
+                            args.output_dir, f"checkpoint-{global_step}"
+                        )
+                        accelerator.save_state(save_path)
+                        accelerator.wait_for_everyone()
+                        logger.info("Saved state to %s", save_path)
 
             profile.end()
             logs = {

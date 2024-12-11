@@ -71,7 +71,7 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git 
+    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git 
     git clone https://github.com/NVIDIA/Megatron-LM.git
     cd Megatron-LM
     git checkout core_r0.6.0
@@ -114,6 +114,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 ```
 
 <a id="jump1.3"></a>
+
 #### 3. Decord搭建
 
 【X86版安装】
@@ -199,11 +200,14 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 <a id="jump3.2"></a>
 
 #### 2. 数据集处理
+
 根据实际下载的数据，过滤标注文件，删去标注的json文件中未下载的部分；
 修改data.txt中的路径，示例如下:
+
    ```
 /data/open-sora-plan/dataset;/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
    ```
+
 ---
 其中，第一个路径为数据集的根目录，第二个路径为标注文件的路径。
 
@@ -249,15 +253,19 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 <a id="jump4.3"></a>
 
 #### 3. 启动预训练
+
 t2v(文生视频):
+
 ```shell
     bash examples/opensoraplan1.3/t2v/pretrain_t2v.sh
 ```
 
 i2v(图生视频):
+
 ```shell
     bash examples/opensoraplan1.3/i2v/pretrain_i2v.sh
 ```
+
 **注意**：
 
 - 多机训练需在多个终端同时启动预训练脚本(每个终端的预训练脚本只有NODE_RANK参数不同，其他参数均相同)
@@ -287,11 +295,13 @@ i2v(图生视频):
 <a id="jump5.3"></a>
 
 #### 3. 启动推理
+
 t2v 启动推理脚本
 
 ```shell
 examples/opensoraplan1.3/t2v/inference_t2v.sh
 ```
+
 i2v 启动推理脚本
 
 ```shell

@@ -4,31 +4,34 @@
 </p>
 
 ## 目录
+
 - [CogVideoX 使用指南](#cogvideox-使用指南)
   - [目录](#目录)
   - [支持任务列表](#支持任务列表)
   - [环境安装](#环境安装)
-      - [仓库拉取](#仓库拉取)
-      - [环境搭建](#环境搭建)
-      - [Decord搭建](#decord搭建)
+    - [仓库拉取](#仓库拉取)
+    - [环境搭建](#环境搭建)
+    - [Decord搭建](#decord搭建)
   - [权重下载及转换](#权重下载及转换)
-      - [VAE下载](#vae下载)
-      - [transformer文件下载](#transformer文件下载)
-      - [T5模型下载](#t5模型下载)
-      - [权重转换](#权重转换)
+    - [VAE下载](#vae下载)
+    - [transformer文件下载](#transformer文件下载)
+    - [T5模型下载](#t5模型下载)
+    - [权重转换](#权重转换)
   - [数据集准备及处理](#数据集准备及处理)
   - [预训练](#预训练)
-      - [准备工作](#准备工作)
-      - [配置参数](#配置参数)
-      - [启动预训练](#启动预训练)
+    - [准备工作](#准备工作)
+    - [配置参数](#配置参数)
+    - [启动预训练](#启动预训练)
   - [推理](#推理)
-      - [准备工作](#准备工作-1)
-      - [配置参数](#配置参数-1)
-      - [启动推理](#启动推理)
+    - [准备工作](#准备工作-1)
+    - [配置参数](#配置参数-1)
+    - [启动推理](#启动推理)
 
 ---
 <a id="jump1"></a>
+
 ## 支持任务列表
+
 支持以下模型任务类型
 
 |      模型      | 任务类型 | 任务列表 | 是否支持 |
@@ -39,6 +42,7 @@
 | CogVideoX-5B | i2v  |在线推理 | ✔ |
 
 <a id="jump2"></a>
+
 ## 环境安装
 
 【模型开发时推荐使用配套的环境版本】
@@ -79,10 +83,11 @@
 </table>
 
 <a id="jump2.1"></a>
+
 #### 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git 
+    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git 
     git clone https://github.com/NVIDIA/Megatron-LM.git
     cd Megatron-LM
     git checkout core_r0.6.0
@@ -90,9 +95,10 @@
     cd ..
     cd MindSpeed-MM
 ```
-<a id="jump2.2"></a>
-#### 环境搭建
 
+<a id="jump2.2"></a>
+
+#### 环境搭建
 
 torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
@@ -123,7 +129,9 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     # 安装其余依赖库
     pip install -e .
 ```
+
 <a id="jump2.3"></a>
+
 #### Decord搭建
 
 【X86版安装】
@@ -140,23 +148,30 @@ pip install decord==0.6.0
 
 ---
 <a id="jump3"></a>
+
 ## 权重下载及转换
 
 <a id="jump3.1"></a>
+
 #### VAE下载
 
-+ [VAE下载链接](https://cloud.tsinghua.edu.cn/f/fdba7608a49c463ba754/?dl=1)
+- [VAE下载链接](https://cloud.tsinghua.edu.cn/f/fdba7608a49c463ba754/?dl=1)
 
 <a id="jump3.2"></a>
+
 #### transformer文件下载
+
 + [CogVideoX-5B-t2v](https://cloud.tsinghua.edu.cn/d/fcef5b3904294a6885e5/?p=%2F&mode=list)
-+ [CogVideoX-5B-i2v](https://cloud.tsinghua.edu.cn/d/5cc62a2d6e7d45c0a2f6/?p=%2F1&mode=list)
+- [CogVideoX-5B-i2v](https://cloud.tsinghua.edu.cn/d/5cc62a2d6e7d45c0a2f6/?p=%2F1&mode=list)
 
 <a id="jump3.3"></a>
+
 #### T5模型下载
+
 仅需下载tokenizer和text_encoder目录的内容：[下载链接](https://huggingface.co/THUDM/CogVideoX-5b/tree/main)
 
 预训练权重结构如下：
+
    ```
    CogVideoX-5B
    ├── text_encoder
@@ -178,17 +193,22 @@ pip install decord==0.6.0
    ```
 
 <a id="jump3.4"></a>
+
 #### 权重转换
+
 权重转换source_path参数请配置transformer权重文件的路径：
+
 ```bash
 python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --mode split
 ```
 
 ---
 <a id="jump4"></a>
+
 ## 数据集准备及处理
 
 数据集格式应该如下：
+
 ```
 .
 ├── data.jsonl
@@ -201,9 +221,11 @@ python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your so
     ├── 2.mp4
     ├── ...
 ```
+
 每个 txt 与视频同名，为视频的标签。视频与标签应该一一对应。
 
 data.jsonl文件内容如下示例：
+
 ```
 {"file": "dataPath/1.mp4", "captions": "Content from 1.txt"}
 {...}
@@ -212,17 +234,23 @@ data.jsonl文件内容如下示例：
 
 ---
 <a id="jump5"></a>
+
 ## 预训练
 
 <a id="jump5.1"></a>
+
 #### 准备工作
+
 配置脚本前需要完成前置准备工作，包括：**环境安装**、**权重下载及转换**、**数据集准备及处理**，详情可查看对应章节。
 
 <a id="jump5.2"></a>
+
 #### 配置参数
+
 需根据实际任务情况修改`model_cogvideox.json`、`model_cogvideox_i2v.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
 
 在sh启动脚本中可以修改运行卡数：
+
 ```shell
     GPUS_PER_NODE=8
     MASTER_ADDR=locahost
@@ -231,28 +259,37 @@ data.jsonl文件内容如下示例：
     NODE_RANK=0  
     WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 ```
+
 <a id="jump5.3"></a>
+
 #### 启动预训练
 
 t2v任务启动预训练
+
 ```shell
     bash examples/cogvideox/pretrain_cogvideox_t2v.sh
 ```
+
 i2v任务启动预训练
+
 ```shell
     bash examples/cogvideox/pretrain_cogvideox_i2v.sh
 ```
+
 ---
 
 <a id="jump6"></a>
+
 ## 推理
 
 <a id="jump6.1"></a>
+
 #### 准备工作
 
 在开始之前，请确认环境准备、模型权重下载已完成
 
 <a id="jump6.2"></a>
+
 #### 配置参数
 
 检查如下配置是否完成
@@ -263,11 +300,13 @@ i2v任务启动预训练
 |   examples/cogvideox/samples_prompts.txt   |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
 
 如果使用训练后保存的权重进行推理，需要使用脚本进行转换，权重转换source_path参数请配置训练时的保存路径
+
 ```bash
 python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --mode merge
 ```
 
 <a id="jump6.3"></a>
+
 #### 启动推理
 
 ```bash

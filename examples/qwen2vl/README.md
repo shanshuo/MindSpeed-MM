@@ -68,7 +68,7 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git 
+    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git 
     git clone https://github.com/NVIDIA/Megatron-LM.git
     cd Megatron-LM
     git checkout core_r0.6.0
@@ -121,6 +121,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 #### 1. 权重下载
 
 从Huggingface库下载对应的模型权重:
+
 - 模型地址: [Qwen2-VL-2B](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/tree/main)；
 
 - 模型地址: [Qwen2-VL-7B](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/tree/main)；
@@ -142,6 +143,7 @@ pipeline_layer_index = [0, 0, 10, 20]     # None表示不进行pp切分, 用原�
 
 num_layers=28                   # 语言模型结构层数
 ```
+
 以Qwen2VL-2B为例
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
@@ -303,31 +305,41 @@ $save_dir
 <a id="jump5"></a>
 
 ## 推理（单卡）
+
 #### 1、准备工作（以微调环境为基础，包括环境安装、权重下载及转换-不切分）
+
 追加安装：
+
 ```
 pip install qwen_vl_utils
 ```
+
 注：权重转换步骤中，pipeline_layer_index = None
 
 #### 2、配置参数
+
 根据实际情况修改inference_qwen2vl_7b.json中的路径配置，包括tokenizer_name_or_path、from_pretrained、image_processer_path、from_pretrained_with_deal。需注意
 1、配置的路径为从huggingface下载的原始Qwen2-VL-7B-Instruct路径
 2、from_pretrained_with_deal 需根据实际情况配置权重文件路径(不切分)
 
 #### 3、启动推理
+
 ```shell
     bash examples/qwen2vl/inference_qwen2vl_7b.sh
 ```
+
 注：单卡推理需打开FA，否则可能会显存不足报错，开关--use-flash-attn 默认已开，确保FA步骤完成即可。
 
 <a id="jump5"></a>
 
 ## 权重转换
+
 MindSpeed-MM修改了部分原始网络的结构名称，在微调后，可使用examples/qwen2vl/qwen2vl_convert_to_hg.py脚本对微调后的权重进行转换，将权重名称修改为与原始网络一致。
+
 #### 1.修改路径
 
 修改qwen2vl_convert_to_hg.py中的如下内容,与实际保持一致：
+
 ```
 mm_save_dir = "/data/MindSpeed-MM/save_dir" # 微调后保存的权重目录
 hg_save_dir = "Qwen2-VL-7B-Save"            # 转换后保存目录
@@ -336,9 +348,7 @@ num_layers = 28                             # 模型结构层数
 ```
 
 #### 2.执行转换脚本
+
 ```
 python examples/qwen2vl/qwen2vl_convert_to_hg.py
 ```
-
-
-

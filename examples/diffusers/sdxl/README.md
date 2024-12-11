@@ -97,7 +97,7 @@
 2. 克隆仓库到本地服务器
 
     ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git
+    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git
     ```
 
 3. 模型搭建

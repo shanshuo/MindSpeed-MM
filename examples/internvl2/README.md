@@ -68,7 +68,7 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git 
+    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git 
     git clone https://github.com/NVIDIA/Megatron-LM.git
     cd Megatron-LM
     git checkout core_r0.6.0
@@ -282,13 +282,16 @@ $save_dir
 ## 推理
 
 #### 1. 准备工作
+
 配置脚本前需要完成前置准备工作，包括：环境安装、权重下载及转换，详情可查看对应章节。
 
 #### 2. 配置参数
+
 【参数配置】
 
 修改inference_xx.json文件，包括`image_path`、`prompt`、`from_pretrained`以及tokenizer的`from_pretrained`等字段。
 以InternVL2-2B为例，按实际情况修改inference_2B.json，注意tokenizer_config的权重路径为转换前的权重路径。
+
 ```json
 {   
     "image_path": "./examples/internvl2/view.jpg",
@@ -305,14 +308,17 @@ $save_dir
     ...
 }
 ```
+
 【启动脚本配置】
 按实际情况修改inference_internvl.sh脚本，
+
 ```shell
     # 根据实际情况修改 ascend-toolkit 路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh 
     ...
     MM_MODEL="./examples/internvl2/inference_2B.json"
 ```
+
 #### 3. 启动推理
 
 ```shell
