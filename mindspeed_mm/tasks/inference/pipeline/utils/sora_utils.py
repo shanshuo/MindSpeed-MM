@@ -139,6 +139,9 @@ def open_video(file_path, start_frame_idx, num_frames, frame_interval=1):
         raise ValueError(
             f"Requested {num_frames} frames but only {len(frame_indices)} frames are available, please adjust the start_frame_idx and num_frames or decrease the frame_interval.")
 
+    if len(frame_indices) > 1000:
+        raise ValueError("Frames has to be less than or equal to 1000")
+
     video_data = decord_vr.get_batch(frame_indices).asnumpy()
     video_data = torch.from_numpy(video_data)
     video_data = video_data.permute(0, 3, 1, 2)  # (T, H, W, C) -> (T C H W)
