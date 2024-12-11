@@ -76,12 +76,12 @@ class DataFileReader:
     def __call__(self, data_path, return_type="list"):
         if self.data_storage_mode == "standard":
             return self.get_datasamples(data_path, return_type=return_type)
-        elif self.data_storage_mode == "combine":
+        elif self.data_storage_mode == "combine" or self.data_storage_mode == "sorafeatured":
             return self.get_cap_list(data_path)
         else:
             raise NotImplementedError("Not support now.")
 
-    def get_datasamples(self, data_path, return_type="list"):
+    def get_datasamples(self, data_path, return_type="list"):        
         if data_path.endswith(".csv"):
             data_out = pd.read_csv(data_path)
             if return_type == "list":
@@ -324,8 +324,8 @@ class VideoProcesser:
 
         self.max_height = max_height
         self.max_width = max_width
-
-        if self.data_storage_mode == "combine":
+        
+        if self.data_storage_mode == "combine" or self.data_storage_mode == "sorafeatured":
             self.train_fps = train_fps
             self.speed_factor = speed_factor
             self.drop_short_ratio = drop_short_ratio

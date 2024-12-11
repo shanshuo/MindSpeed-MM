@@ -28,6 +28,7 @@ from mindspeed_mm.data.data_utils.bucket import Bucket
 from mindspeed_mm.data.data_utils.aspect_ratio import get_num_pixels
 from mindspeed_mm.data.data_utils.utils import format_numel_str
 
+import warnings
 
 def pad_to_multiple(number, ds_stride):
     remainder = number % ds_stride
@@ -68,6 +69,8 @@ class Collate:
         ae_stride_t: int = 4,
         patch_size: int = 2,
         patch_size_t: int = 1,
+        use_video_feature: bool = False,
+        use_text_feature: bool = False
     ):
         self.batch_size = batch_size
         self.group_frame = group_frame
@@ -86,6 +89,9 @@ class Collate:
 
         self.num_frames = num_frames
         self.max_thw = (self.num_frames, self.max_height, self.max_width)
+        
+        self.use_video_feature = use_video_feature
+        self.use_text_feature = use_text_feature
 
     def package(self, batch):
         batch_tubes = [i.get(VIDEO, None) for i in batch]  # b [c t h w]
@@ -94,41 +100,98 @@ class Collate:
         input_ids_2 = [i.get(PROMPT_IDS_2, None) for i in batch]  # b [1 l]
         cond_mask_2 = [i.get(PROMPT_MASK_2, None) for i in batch]  # b [1 l]
     
-        if all([i is None for i in input_ids_2]):
+        if all([i is None or not any(i) for i in input_ids_2]):
             input_ids_2 = None
-        if all([i is None for i in cond_mask_2]):
+        if all([i is None or not any(i) for i in cond_mask_2]):
             cond_mask_2 = None
-        return batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2
+        return batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2    
+    
+    def package_feature(self, batch):
+        batch_tubes = []
+        input_ids = []
+        cond_mask = []
+        input_ids_2 = []
+        cond_mask_2 = []
+        for i in batch:
+            if i.get(VIDEO).dim() == 4:
+                batch_tubes.append(i.get(VIDEO, None)) # b [c t h w]
+            else:
+                raise ValueError(f"video shape must have dim 4, but got {i.get(VIDEO).dim()}")
 
+            if i.get(PROMPT_IDS).dim() == 2 or i.get(PROMPT_IDS).dim() == 3:
+                input_ids.append(i.get(PROMPT_IDS, None))  # b [1 l]
+            else:
+                raise ValueError(f"prompt shape must have dim 2 for non featured data or 3 for featured data, but got {i.get(PROMPT_IDS).dim()}")
+            
+            if i.get(PROMPT_MASK, None) is None or i.get(PROMPT_MASK).dim() == 2:
+                cond_mask.append(i.get(PROMPT_MASK, None))  # b [1 l]
+            else:
+                raise ValueError(f"prompt mask must be None or have dim 2 for non featured and featured data, but got {i.get(PROMPT_MASK).dim()}")
+            
+        if not self.use_text_feature:
+            input_ids_2 = [i.get(PROMPT_IDS_2, None) for i in batch]  # b [1 l]
+            cond_mask_2 = [i.get(PROMPT_MASK_2, None) for i in batch]  # b [1 l]   
+        else:
+            input_ids_2 = [None]
+            cond_mask_2 = [None]
+            warnings.warn("input_ids_2 and cond_mask_2 features are not supported yet and will be None for now", FutureWarning)
+
+        if all([i is None or not any(i) for i in input_ids_2]):
+            input_ids_2 = None
+        if all([i is None or not any(i) for i in cond_mask_2]):
+            cond_mask_2 = None
+            
+        if i.get(VIDEO_MASK, None) is None or i.get(VIDEO_MASK).dim() == 3:
+            video_mask = [i.get(VIDEO_MASK, None) for i in batch]
+            if all([i is None or not any(i) for i in video_mask]):
+                video_mask = None
+        else:
+            raise ValueError(f"video_mask shape must be None or have dim 3, but got {i.get(VIDEO_MASK).dim()}")
+        return batch_tubes, video_mask, input_ids, cond_mask, input_ids_2, cond_mask_2
+        
     def __call__(self, batch):
-        batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.package(batch)
+        if not self.use_video_feature:
+            batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.package(batch)
 
-        ds_stride = self.ae_stride * self.patch_size
-        t_ds_stride = self.ae_stride_t * self.patch_size_t
+            ds_stride = self.ae_stride * self.patch_size
+            t_ds_stride = self.ae_stride_t * self.patch_size_t
 
-        processed_res = self.process(
-            batch_tubes,
-            input_ids,
-            cond_mask,
-            input_ids_2,
-            cond_mask_2,
-            t_ds_stride,
-            ds_stride,
-            self.max_thw,
-            self.ae_stride_thw,
-        )
-        if torch.any(torch.isnan(processed_res.pad_batch_tubes)):
-            raise AssertionError("after pad_batch_tubes.")
-        return {
-            VIDEO: processed_res.pad_batch_tubes,
-            PROMPT_IDS: processed_res.input_ids,
-            VIDEO_MASK: processed_res.attention_mask,
-            PROMPT_MASK: processed_res.cond_mask,
-            PROMPT_IDS_2: processed_res.input_ids_2,
-            PROMPT_MASK_2: processed_res.cond_mask_2,
-            MASKED_VIDEO: processed_res.masked_video,
-            INPUT_MASK: processed_res.input_mask,
-        }
+            processed_res = self.process(
+                batch_tubes,
+                input_ids,
+                cond_mask,
+                input_ids_2,
+                cond_mask_2,
+                t_ds_stride,
+                ds_stride,
+                self.max_thw,
+                self.ae_stride_thw,
+            )
+            if torch.any(torch.isnan(processed_res.pad_batch_tubes)):
+                raise AssertionError("after pad_batch_tubes.")
+            return {
+                VIDEO: processed_res.pad_batch_tubes,
+                PROMPT_IDS: processed_res.input_ids,
+                VIDEO_MASK: processed_res.attention_mask,
+                PROMPT_MASK: processed_res.cond_mask,
+                PROMPT_IDS_2: processed_res.input_ids_2,
+                PROMPT_MASK_2: processed_res.cond_mask_2,
+                MASKED_VIDEO: processed_res.masked_video,
+                INPUT_MASK: processed_res.input_mask,
+            }
+        else:
+            batch_tubes, video_mask, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.package_feature(batch)
+            return {
+                VIDEO: torch.stack(batch_tubes),
+                PROMPT_IDS: torch.stack(input_ids),
+                VIDEO_MASK: torch.stack(video_mask) if video_mask else None,
+                PROMPT_MASK: torch.stack(cond_mask) if cond_mask else None,
+                PROMPT_IDS_2: torch.stack(input_ids_2) if input_ids_2 else None,
+                PROMPT_MASK_2: torch.stack(cond_mask_2) if cond_mask_2 else None,
+                MASKED_VIDEO: None,
+                INPUT_MASK: None,
+            }
+            
 
     def process(
         self,

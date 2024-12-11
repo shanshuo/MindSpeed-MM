@@ -5,6 +5,7 @@ import os
 import random
 from typing import Union
 from concurrent.futures import ThreadPoolExecutor
+import warnings
 
 import torch
 import numpy as np
@@ -18,7 +19,8 @@ from mindspeed_mm.data.data_utils.constants import (
     PROMPT_IDS_2,
     TEXT,
     VIDEO,
-    IMG_FPS
+    IMG_FPS,
+    VIDEO_MASK
 )
 from mindspeed_mm.data.data_utils.utils import (
     VID_EXTENSIONS,
@@ -174,8 +176,11 @@ class T2VDataset(MMBaseDataset):
                 support_chinese=support_chinese,
                 cfg=self.cfg,
             )
+        
+        self.use_text_feature = basic_param.get("use_text_feature", False)
+        self.use_video_feature = basic_param.get("use_video_feature", False)
 
-        if self.data_storage_mode == "combine":
+        if self.data_storage_mode == "combine" or (self.data_storage_mode == "sorafeatured" and not self.use_video_feature):
             self.dataset_prog = DataSetProg()
             dataloader_num_workers = vid_img_process.get("dataloader_num_workers", 1)
             self.data_samples, self.sample_num_frames, self.sample_size = (
@@ -206,6 +211,7 @@ class T2VDataset(MMBaseDataset):
     def getitem(self, index):
         # init output data
         examples = T2VOutputData
+        
         if self.data_storage_mode == "standard":
             sample = self.data_samples[index]
             if self.use_feature_data:
@@ -235,7 +241,34 @@ class T2VDataset(MMBaseDataset):
                     examples[PROMPT_IDS], examples[PROMPT_MASK] = (
                         prompt_ids,
                         prompt_mask,
-                    )
+                    )        
+        elif self.data_storage_mode == "sorafeatured":
+            sample = self.data_samples[index]
+            
+            if self.use_video_feature:
+                video_path = sample['path']
+                if self.data_folder:
+                    video_path = os.path.join(self.data_folder, video_path)
+                video_value = self.get_data_from_feature_data(video_path)
+                examples[VIDEO] = video_value['latents']
+                examples[VIDEO_MASK] = video_value['video_mask'] if 'video_mask' in video_value.keys() else None
+                file_type = 'video' 
+                warnings("Only extracted video feature with aesthetic is supported for now", FutureWarning)
+            else:
+                examples, file_type = self.get_video_data(examples, index)
+                
+            if self.use_text_feature:
+                texts_path = sample['cap']
+                if self.data_folder:
+                    texts_path = os.path.join(self.data_folder, texts_path)
+                texts_value = self.get_data_from_feature_data(texts_path)
+                examples[PROMPT_IDS] = texts_value['prompt']
+                examples[PROMPT_MASK] = texts_value['prompt_mask']
+                examples[PROMPT_IDS_2] = texts_value['prompt_2'] if 'prompt_2' in texts_value.keys() else None
+                examples[PROMPT_MASK_2] = texts_value['prompt_2_mask'] if 'prompt_2_mask' in texts_value.keys() else None
+            else:
+                examples = self.get_text_data(examples, sample, file_type)
+                
         elif self.data_storage_mode == "combine":
             examples = self.get_merge_data(examples, index)
         else:
@@ -249,6 +282,42 @@ class T2VDataset(MMBaseDataset):
             return torch.load(feature_path, map_location=torch.device('cpu'))
         raise NotImplementedError("Not implemented.")
 
+    def get_video_data(self, examples, index):
+        sample = self.dataset_prog.cap_list[index]
+        file_path = sample["path"]
+        if not os.path.exists(file_path):
+            raise AssertionError(f"file {file_path} do not exist!")
+        file_type = self.get_type(file_path)
+        if file_type == "video":
+            frame_indice = sample["sample_frame_index"]
+            vframes, _, is_decord_read = self.video_reader(file_path)
+            video = self.video_processer(
+                vframes,
+                is_decord_read=is_decord_read,
+                predefine_num_frames=len(frame_indice),
+            )
+            examples[VIDEO] = video
+        elif file_type == "image":
+            image = self.image_processer(file_path)
+            examples[VIDEO] = image
+        return examples, file_type
+    
+    def get_text_data(self, examples, sample, file_type='video'):
+        text = sample["cap"]
+        if not isinstance(text, list):
+            text = [text]
+        text = [random.choice(text)]
+        if self.use_aesthetic:
+            if sample.get('aesthetic', None) is not None or sample.get('aes', None) is not None:
+                aes = sample.get('aesthetic', None) or sample.get('aes', None)
+                if file_type == "video":
+                    text = [add_aesthetic_notice_video(text[0], aes)]
+                elif file_type == "image":
+                    text = [add_aesthetic_notice_image(text[0], aes)]
+        prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2 = self.get_text_processer(text)# tokenizer, tokenizer_2
+        examples[PROMPT_IDS], examples[PROMPT_MASK], examples[PROMPT_IDS_2], examples[PROMPT_MASK_2] = prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2       
+        return examples
+        
     def get_merge_data(self, examples, index):
         sample = self.dataset_prog.cap_list[index]
         file_path = sample["path"]
