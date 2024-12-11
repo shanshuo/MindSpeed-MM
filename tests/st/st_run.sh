@@ -36,7 +36,7 @@ for test_case in "$SHELL_SCRIPTS_DIR"/*.sh; do
     bash $test_case | tee "$GENERATE_LOG_DIR/$file_name_prefix.log"
     SCRIPT_EXITCODE=${PIPESTATUS[0]}
     if [ $SCRIPT_EXITCODE -ne 0 ]; then
-        echo "Script has failed. Exit!"
+        echo "Script $file_name has failed. Exit!"
         exit 1
     fi
 
