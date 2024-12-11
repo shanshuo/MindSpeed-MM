@@ -16,17 +16,22 @@ from megatron.training import get_args
 from mindspeed.optimizer.adamw import AdamW
 from mindspeed.patch_utils import MindSpeedPatchesManager as pm
 
-from . import diffusers_patches
-from . import transformers_patches
+from mindspeed_mm.patchs import diffusers_patches
+from mindspeed_mm.patchs import transformers_patches
+from mindspeed_mm.patchs import models_patches
 
 
 class PatchesManager:
     configs = {
-        "t5_attention": ("transformers.models.t5.modeling_t5.T5Attention.forward", transformers_patches.t5_forward),
-        "t5_layer_norm": ("transformers.models.t5.modeling_t5.T5LayerNorm", transformers_patches.NpuRMSNorm),
-        "t5_gelu": ("transformers.activations.NewGELUActivation", transformers_patches.ApproximateGELU),
-        "diffusers_geglu": ("diffusers.models.activations.GEGLU.forward", diffusers_patches.geglu_forward),
-        "torch_adamw": ("torch.optim.AdamW", AdamW)
+        "t5_attention": [("transformers.models.t5.modeling_t5.T5Attention.forward", transformers_patches.t5_forward)],
+        "t5_layer_norm": [("transformers.models.t5.modeling_t5.T5LayerNorm", transformers_patches.NpuRMSNorm)],
+        "t5_gelu": [("transformers.activations.NewGELUActivation", transformers_patches.ApproximateGELU)],
+        "diffusers_geglu": [("diffusers.models.activations.GEGLU.forward", diffusers_patches.geglu_forward)],
+        "torch_adamw": [("torch.optim.AdamW", AdamW)],
+        "ae_float32": [
+            ("megatron.legacy.model.module.Float16Module.__init__", models_patches.float16Module_init),
+            ("megatron.legacy.model.module.Float16Module.forward", models_patches.float16Module_forward)
+        ]
     }
 
     @staticmethod
@@ -39,10 +44,12 @@ class PatchesManager:
 
     @staticmethod
     def apply_patches_from_config():
-        cfg = get_args().mm.patches
-        for key in cfg.keys() & PatchesManager.configs.keys():
-            if not cfg.get(key):
-                continue
-            orig_func_name, new_func = PatchesManager.configs[key]
-            PatchesManager.register_patch(orig_func_name, new_func)
+        cfg = get_args().mm.model
+        if hasattr(cfg, "patch"):
+            cfg = cfg.patch.to_dict()
+            for key in cfg.keys() & PatchesManager.configs.keys():
+                if not cfg.get(key):
+                    continue
+                for orig_func_name, new_func in PatchesManager.configs[key]:
+                    PatchesManager.register_patch(orig_func_name, new_func)
         PatchesManager.apply_patches()
