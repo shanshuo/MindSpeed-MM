@@ -89,18 +89,16 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
     ```shell
     # 克隆仓库
-    git clone https://gitee.com/ascend/MindSpeed-MM.git
+    git clone --branch 1.0.RC3 https://gitee.com/ascend/MindSpeed-MM.git
     cd examples/diffusers/kolors
     ```
 
 3. 运行推理的脚本
 
     ```shell
-
-# 将下面环境变量路径修改为真实路径，下面为参考路径
-
-   source /usr/local/Ascend/ascend-toolkit/set_env.sh
-   python infer_kolors_fp16.py
+    # 将下面环境变量路径修改为真实路径，下面为参考路径
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
+    python infer_kolors_fp16.py
 
    ```
 
