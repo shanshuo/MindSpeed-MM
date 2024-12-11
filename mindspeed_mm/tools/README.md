@@ -4,9 +4,11 @@
         <b>简体中文</b> |
 </p>
 
-- [Profiling采集](#jump1)
-  - [静态采集](#静态采集)
-  - [动态采集](#动态采集)
+- [MindSpeed-MM 工具库使用指南](#mindspeed-mm-工具库使用指南)
+  - [Profiling采集工具](#profiling采集工具)
+    - [静态采集](#静态采集)
+    - [动态采集](#动态采集)
+  - [Sora类模型特征提取](#sora类模型特征提取)
 
 ## <a id="jump1"></a>Profiling采集工具
 
@@ -84,3 +86,21 @@ prof.stop()
     - `config_path`目录下会自动记录`dynamic_profile`的维测日志
 
 动态采集的具体参数、入参表、及具体操作步骤等请[参考链接](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha001/devaids/devtools/profiling/atlasprofiling_16_0033.html#ZH-CN_TOPIC_0000002046667974__section17272160135118)
+
+## <a id="sorafeature"></a>Sora类模型特征提取
+[feature_extraction](./feature_extraction)目录下工具可用于提取视频和文本特征并保存，目前支持单batch静态数据集特征提取。按需修改[tools.json](./tools.json)文件。
+
+```bash
+--extract_video_feature # 是否提取视频特征
+--extract_text_feature  # 是否提取文本特征
+--save_path             # 特征数据存储路径
+```
+
+使用前按需修改[feature_extraction_t2v.sh](./feature_extraction/feature_extraction_t2v.sh)文件中对应模型数据集和配置文件（VAE、T5）路径。
+
+```bash
+--MM_DATA       # 数据配置文件路径(.json)
+--MM_MODEL      # 模型配置文件路径(.json)
+```
+
+配置完成后，调用[feature_extraction_t2v.sh](./feature_extraction/feature_extraction_t2v.sh)即可提取数据特征。

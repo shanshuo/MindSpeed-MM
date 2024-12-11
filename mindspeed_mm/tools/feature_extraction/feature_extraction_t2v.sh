@@ -91,7 +91,7 @@ OUTPUT_ARGS="
 
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)
 mkdir -p logs
-torchrun $DISTRIBUTED_ARGS ./examples/cogvideox/get_sora_feature.py \
+torchrun $DISTRIBUTED_ARGS ./mindspeed_mm/tools/feature_extraction/get_sora_feature.py \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \

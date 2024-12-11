@@ -17,5 +17,10 @@
         "dynamic_param": {
             "config_path": "path to dynamic config folder"
         }
+    },
+    "sorafeature":{
+        "extract_video_feature": true,
+        "extract_text_feature": true,
+        "save_path": "./extracted_feature"
     }
 }

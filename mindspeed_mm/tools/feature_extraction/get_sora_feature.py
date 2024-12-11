@@ -1,5 +1,6 @@
 import os
 import time
+from numpy import save
 import torch
 import mindspeed.megatron_adaptor
 
@@ -23,6 +24,8 @@ from mindspeed_mm.data.data_utils.constants import (
     PROMPT_MASK_2, 
 )
 
+import uuid
+
 if is_npu_available():
     import torch_npu
     from torch_npu.contrib import transfer_to_npu
@@ -35,11 +38,20 @@ def prepare_model(args, device):
     return vae, text_encoder
 
 
-def main(extract_video_feature=True, extract_text_feature=True):
+def extract_feature():
+    
     initialize_megatron(extra_args_provider=mm_extra_args_provider, args_defaults={})
     args = get_args()
     merge_mm_args(args)
 
+    extract_video_feature = args.mm.tool.sorafeature.extract_video_feature
+    extract_text_feature = args.mm.tool.sorafeature.extract_text_feature
+    
+    save_path = args.mm.tool.sorafeature.save_path
+    
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+    
     set_jit_fusion_options()
     torch.set_grad_enabled(False)
     dtype = get_dtype(args.mm.model.ae.dtype)
@@ -61,6 +73,7 @@ def main(extract_video_feature=True, extract_text_feature=True):
         prompt_ids = batch.pop(PROMPT_IDS).to(device)
         prompt_mask = batch.pop(PROMPT_MASK).to(device)
         
+        
         if extract_video_feature:
             latents = vae.encode(video)[0]
         else:
@@ -74,7 +87,6 @@ def main(extract_video_feature=True, extract_text_feature=True):
             prompt = hidden_states["last_hidden_state"].view(B, N, L, -1)
         else:
             prompt = prompt_ids
-            prompt_mask = prompt_mask
         
         data_to_save = {
             "latents": latents.squeeze(0),
@@ -83,14 +95,12 @@ def main(extract_video_feature=True, extract_text_feature=True):
         }
     
         loca = time.strftime('%Y-%m-%d-%H-%M-%S')
-        pt_name = "feature" + loca + ".pt"
-        torch.save(data_to_save, "save_path" + pt_name)
+        pt_name = "/feature" + loca + "-" + uuid.uuid4().hex + ".pt"
+        torch.save(data_to_save, save_path + pt_name)
 
     duration = time.time() - start_time
     print(f"Feature extraction completed in {duration:.2f} seconds.")
 
 
 if __name__ == "__main__":
-    extract_video_feature = True
-    extract_text_feature = True
-    main(extract_video_feature=extract_video_feature, extract_text_feature=extract_text_feature)
+    extract_feature()
