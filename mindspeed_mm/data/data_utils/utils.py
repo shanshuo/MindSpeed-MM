@@ -786,8 +786,12 @@ class ImageProcesser:
             if train_pipeline["pad2square"]:
                 expand2square = Expand2Square(mean=train_pipeline["image_mean"])
                 image = expand2square(image)
+
+            processor_kwargs = copy.deepcopy(train_pipeline)
+            processor_kwargs.pop("pad2square", None)
+
             processer = CLIPImageProcessor(**train_pipeline)
-            pixel_values = processer.preprocess(image, return_tensors="pt", **train_pipeline)["pixel_values"][0]
+            pixel_values = processer.preprocess(image, return_tensors="pt", **processor_kwargs)["pixel_values"][0]
         return pixel_values
 
     def image_reader(self, image_path):
