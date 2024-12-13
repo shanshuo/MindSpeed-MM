@@ -403,7 +403,7 @@ class VideoDitSparse(MultiModalModule):
             self, latents, timestep, embedded_timestep, num_frames, height, width
     ):
         batch_size = latents.shape[1]
-        shift, scale = (self.scale_shift_table[None] + embedded_timestep[:, None]).chunk(2, dim=1)
+        shift, scale = (self.scale_shift_table[:, None] + embedded_timestep[None]).chunk(2, dim=0)
         latents = self.norm_out(latents)
         # Modulation
         latents = latents * (1 + scale) + shift
