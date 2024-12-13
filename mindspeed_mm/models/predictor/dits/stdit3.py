@@ -466,7 +466,6 @@ class STDiT3(MultiModalModule):
             x (torch.Tensor): of shape [B, C_out, T, H, W]
         """
 
-        # N_t, N_h, N_w = [self.input_size[i] // self.patch_size[i] for i in range(3)]
         T_p, H_p, W_p = self.patch_size
         x = rearrange(
             x,

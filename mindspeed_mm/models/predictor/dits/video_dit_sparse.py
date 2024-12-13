@@ -239,10 +239,15 @@ class VideoDitSparse(MultiModalModule):
         with rng_context:
             for i, block in enumerate(self.videodit_sparse_blocks):
                 if i > 1 and i < 30:
-                    video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
+                    try:
+                        video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
+                    except KeyError:
+                        video_mask, prompt_mask = None, None
                 else:
-                    video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
-
+                    try:
+                        video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
+                    except KeyError:
+                        video_mask, prompt_mask = None, None
                 if self.training and self.gradient_checkpointing:
                     def create_custom_forward(module, return_dict=None):
                         def custom_forward(*inputs):
@@ -356,7 +361,6 @@ class VideoDitSparse(MultiModalModule):
                         width
                     )
                 else:
-                    # block = self._get_block(layer_num)
                     latents = block(
                         latents,
                         video_mask,

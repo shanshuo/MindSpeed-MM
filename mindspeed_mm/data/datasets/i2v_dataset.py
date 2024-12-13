@@ -205,7 +205,7 @@ class I2VDataset(T2VDataset):
             masked_image = self.image_transforms_after_resize(masked_image)
 
             image = torch.cat([image, masked_image, mask], dim=1)  # [1 2C+1 H W]
-            # image = [torch.rand(1, 3, 480, 640) for i in image_data]
+
             image = image.transpose(0, 1)  # [1 C H W] -> [C 1 H W]
             examples[VIDEO] = image
 
