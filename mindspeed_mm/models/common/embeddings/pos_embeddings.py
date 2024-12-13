@@ -552,7 +552,7 @@ class Rotary3DPositionEmbedding(nn.Module):
         freqs_cos = self.freqs_cos[:seq_len].unsqueeze(0).unsqueeze(0)
         freqs_sin = self.freqs_sin[:seq_len].unsqueeze(0).unsqueeze(0)
 
-        return npu_rotary_position_embedding(t, freqs_cos, freqs_sin)
+        return npu_rotary_position_embedding(t, freqs_cos, freqs_sin, mode=1)
 
     def position_embedding_forward(self, position_ids, **kwargs):
         if self.pos_embedding is not None:
