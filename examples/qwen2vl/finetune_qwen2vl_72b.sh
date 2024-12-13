@@ -14,9 +14,9 @@ export HOST_CACHE_CAPACITY=20
 export ACLNN_CACHE_LIMIT=100000
 export MULTI_STREAM_MEMORY_REUSE=2
 export PYTORCH_NPU_ALLOC_CONF="expandable_segments:True"
-
+# 根据机器实际情况填写
 NPUS_PER_NODE=16
-# 注意，当前为多机运行，需要根据实际的机器ip修改examples/qwen2vl/hostfile.txt文件
+# 注意，当前为多机运行，需要根据实际的机器ip创建examples/qwen2vl/hostfile.txt文件，其中每行为一台机器的ip地址
 HOSTFILE="examples/qwen2vl/hostfile.txt"
 MASTER_ADDR=$(head -n1 $HOSTFILE | awk '{print $1;}')  # 获取hostfile第一行为masteraddr
 MASTER_PORT=6000
@@ -54,7 +54,7 @@ DISTRIBUTED_ARGS="
     --master_port $MASTER_PORT
 "
 
-# GPT_ARGS中模型相关参数具体配置在example/qwen2vl/model_xb.json中，训练相关参数配置在这里
+# GPT_ARGS中模型相关参数具体配置在example/qwen2vl/model_72b.json中，训练相关参数配置在这里
 GPT_ARGS="
     --use-mcore-models \
     --tensor-model-parallel-size ${TP} \

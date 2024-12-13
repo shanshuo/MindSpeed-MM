@@ -68,16 +68,16 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git 
-    git clone https://github.com/NVIDIA/Megatron-LM.git
-    cd Megatron-LM
-    git checkout core_r0.6.0
-    cp -r megatron ../MindSpeed-MM/
-    cd ..
-    cd MindSpeed-MM
-    mkdir logs
-    mkdir data
-    mkdir ckpt
+git clone https://gitee.com/ascend/MindSpeed-MM.git 
+git clone https://github.com/NVIDIA/Megatron-LM.git
+cd Megatron-LM
+git checkout core_r0.6.0
+cp -r megatron ../MindSpeed-MM/
+cd ..
+cd MindSpeed-MM
+mkdir logs
+mkdir data
+mkdir ckpt
 ```
 
 <a id="jump1.2"></a>
@@ -87,31 +87,31 @@
 torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
 ```bash
-    # python3.10
-    conda create -n test python=3.10
-    conda activate test
+# python3.10
+conda create -n test python=3.10
+conda activate test
 
-    # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
-    # 下载路径参考 https://www.hiascend.com/document/detail/zh/Pytorch/60RC3/configandinstg/instg/insg_0001.html
-    pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
-    pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
-    
-    # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+# 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
+# 下载路径参考 https://www.hiascend.com/document/detail/zh/Pytorch/60RC3/configandinstg/instg/insg_0001.html
+pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
+pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 
-    # 安装加速库
-    git clone https://gitee.com/ascend/MindSpeed.git
-    cd MindSpeed
-    # checkout commit from MindSpeed core_r0.6.0
-    git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
-    pip install -r requirements.txt 
-    pip3 install -e .
-    cd ..
-    # 替换MindSpeed中的文件
-    cp examples/qwen2vl/dot_product_attention.py MindSpeed/mindspeed/core/transformer/dot_product_attention.py
-    
-    # 安装其余依赖库
-    pip install -e .
+# apex for Ascend 参考 https://gitee.com/ascend/apex
+pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+
+# 安装加速库
+git clone https://gitee.com/ascend/MindSpeed.git
+cd MindSpeed
+# checkout commit from MindSpeed core_r0.6.0
+git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
+pip install -r requirements.txt 
+pip3 install -e .
+cd ..
+# 替换MindSpeed中的文件
+cp examples/qwen2vl/dot_product_attention.py MindSpeed/mindspeed/core/transformer/dot_product_attention.py
+
+# 安装其余依赖库
+pip install -e .
 ```
 
 ## 权重下载及转换
@@ -125,45 +125,71 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 - 模型地址: [Qwen2-VL-7B](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct/tree/main)；
 
+- 模型地址: [Qwen2-VL-72B](https://huggingface.co/Qwen/Qwen2-VL-72B-Instruct/tree/main)；
+
  将下载的模型权重保存到本地的`ckpt/hf_path/Qwen2-VL-*B-Instruct`目录下。(*表示对应的尺寸)
 <a id="jump2.2"></a>
 
 #### 2. 权重转换
 
-MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分 (目前只支持7B和2B特定的切分方式)。
+MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分 (目前支持72B、7B和2B特定的切分方式)。
+
+以Qwen2VL-72B为例
+修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
+
+```python
+hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-72B-Instruct'  # huggingface权重目录
+mm_save_dir = 'ckpt/mm_path/Qwen2-VL-72B-Instruct'  # 转换后保存目录
+pp_size = 16  # 切分的PPstage数量，注意要和finetune脚本中配置的PP一致
+
+llm_num_layers = 80  #LLM的总层数
+llm_pipeline_num_layers = [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 4]  # LLM在每个卡上切分的层数，和为 llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
+
+vit_num_layers = 32  # vit的总层数
+vit_pipeline_num_layers = [32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # vit在每个卡上切分的层数，和为 vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
+
+vit_hidden_size = 1280  # vit的隐藏层size
+vit_attention_heads_num = 16  # vit的注意力heads数
+```
 
 以Qwen2VL-7B为例
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
-```
+```python
 hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后保存目录
-vit_hidden_size = 1280  # vit的隐藏层size
-vit_attention_heads_num = 16  # vit的注意力heads数
 pp_size = 4  # 切分的PPstage数量
-vit_num_layers = 32  # vit的总层数
-vit_pipeline_num_layers = [32, 0, 0, 0]  # vit在每个卡上切分的层数，和为 vit_num_layers
+
 llm_num_layers = 28  #LLM的总层数
 llm_pipeline_num_layers = [1, 6, 11, 10]  # LLM在每个卡上切分的层数，和为 llm_num_layers
+
+vit_num_layers = 32  # vit的总层数
+vit_pipeline_num_layers = [32, 0, 0, 0]  # vit在每个卡上切分的层数，和为 vit_num_layers
+
+vit_hidden_size = 1280  # vit的隐藏层size
+vit_attention_heads_num = 16  # vit的注意力heads数
 ```
 以Qwen2VL-2B为例
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
-```
+```python
 hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-2B-Instruct'  # 转换后保存目录
-vit_hidden_size = 1280  # vit的隐藏层size
-vit_attention_heads_num = 16  # vit的注意力heads数
 pp_size = 1  # 2B不需要切分PP
-vit_num_layers = 32  # vit的总层数
-vit_pipeline_num_layers = [32]  # vit在每个卡上切分的层数，和为vit_num_layers
+
 llm_num_layers = 28  #LLM的总层数
 llm_pipeline_num_layers = [28]  # LLM在每个卡上切分的层数，和为llm_num_layers
+
+vit_num_layers = 32  # vit的总层数
+vit_pipeline_num_layers = [32]  # vit在每个卡上切分的层数，和为vit_num_layers
+
+vit_hidden_size = 1280  # vit的隐藏层size
+vit_attention_heads_num = 16  # vit的注意力heads数
 ```
-  
+
 启动脚本
 
-  ```
+  ```shell
   # 根据实际情况修改 ascend-toolkit 路径
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
   python examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py
@@ -171,7 +197,7 @@ llm_pipeline_num_layers = [28]  # LLM在每个卡上切分的层数，和为llm_
 
 如果需要用转换后模型训练的话，同步修改examples/qwen2vl/finetune_qwen2vl_7b.sh中的LOAD_PATH参数，该路径为转换后或者切分后的权重，注意与原始权重 hf_path/Qwen2-VL-7B-Instruct进行区分。
 
-```
+```shell
 LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
 ```
 
@@ -204,7 +230,7 @@ LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
 当前支持读取多个以`,`（注意不要加空格）分隔的数据集，配置方式为`data.json`中
 dataset_param->basic_parameters->dataset
 从"./data/mllm_format_llava_instruct_data.json"修改为"./data/mllm_format_llava_instruct_data.json,./data/mllm_format_llava_instruct_data2.json"
-  
+
 同时注意`data.json`中`dataset_param->basic_parameters->max_samples`的配置，会限制数据只读`max_samples`条，这样可以快速验证功能。如果正式训练时，可以把该参数去掉则读取全部的数据。
 <a id="jump4"></a>
 
@@ -225,6 +251,8 @@ dataset_param->basic_parameters->dataset
 根据实际情况修改`data.json`中的数据集路径，包括`model_name_or_path`、`dataset_dir`、`dataset`等字段。
 
 以Qwen2VL-7B为例，`data.json`进行以下修改，注意`model_name_or_path`的权重路径为转换前的权重路径。
+
+**注意`cache_dir`在多机上不要配置同一个挂载目录避免写入同一个文件导致冲突**。
 
 ```json
 {
@@ -289,14 +317,14 @@ $save_dir
 配置`examples/qwen2vl/finetune_qwen2vl_7b.sh`参数如下
 
 ```shell
-    # 根据实际情况修改 ascend-toolkit 路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
-    GPUS_PER_NODE=8
-    MASTER_ADDR=locahost
-    MASTER_PORT=29501
-    NNODES=1
-    NODE_RANK=0
-    WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+# 根据实际情况修改 ascend-toolkit 路径
+source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+GPUS_PER_NODE=8
+MASTER_ADDR=locahost
+MASTER_PORT=29501
+NNODES=1
+NODE_RANK=0
+WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 ```
 
 <a id="jump4.3"></a>
@@ -306,15 +334,20 @@ $save_dir
 以Qwen2VL-7B为例，启动微调训练任务。
 
 ```shell
-    bash examples/qwen2vl/finetune_qwen2vl_7b.sh
+bash examples/qawen2vl/finetune_qwen2vl_7b.sh
 ```
 
 <a id="jump5"></a>
 
+## LoRA
+
+LoRA为框架通用能力，如需在基线脚本上增加LoRA能力请参考LoRA特性文档[docs/features/lora_finetune.md](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/lora_finetune.md)
+
 ## 推理
+
 #### 1、准备工作（以微调环境为基础，包括环境安装、权重下载及转换-目前支持PP切分的推理）
 追加安装：
-```
+```shell
 pip install qwen_vl_utils
 ```
 注：如果使用huggingface下载的原始权重，需要权重转换，权重转换步骤中，根据具体需求设置PP切分的参数。
@@ -329,7 +362,7 @@ pip install qwen_vl_utils
 
 #### 3、启动推理
 ```shell
-    bash examples/qwen2vl/inference_qwen2vl_7b.sh
+bash examples/qwen2vl/inference_qwen2vl_7b.sh
 ```
 注：单卡推理需打开FA，否则可能会显存不足报错，开关--use-flash-attn 默认已开，确保FA步骤完成即可。如果使用多卡推理则需要调整相应的PP参数和NPU使用数量的NPUS_PER_NODE参数。以PP4为例，shell修改参数如下：
 
