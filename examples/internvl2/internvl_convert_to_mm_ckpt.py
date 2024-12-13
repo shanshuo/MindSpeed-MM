@@ -19,7 +19,7 @@ def load_from_hf(load_dir, trust_remote_code):
     return hf_model
 
 
-def get_model_config(model_size, enable_vpp):
+def get_model_config(model_size, enable_vpp, is_inference=False):
     if model_size == '2B':
         if not enable_vpp:
             pp_size = 1
@@ -33,7 +33,12 @@ def get_model_config(model_size, enable_vpp):
     elif model_size == '8B':
         vit_num_layers = 24
         llm_num_layers = 32
-        if not enable_vpp:
+        if is_inference:
+            pp_size = 1
+            vp_size = 1
+            vit_pipeline_num_layers = [24, ]
+            llm_pipeline_num_layers = [32, ]
+        elif not enable_vpp:
             pp_size = 4
             vp_size = 1
             vit_pipeline_num_layers = [24, 0, 0, 0]
@@ -348,6 +353,8 @@ if __name__ == '__main__':
                         help='MindSpeed-MM weight path for saving')
     parser.add_argument('--trust-remote-code', type=str, required=True, default=False,
                         help='Whether or not to allow HuggingFace API to execute code')
+    parser.add_argument('--is-inference', action='store_true',
+                        help='If true, 8B pp size will be set to 1.')
     args, unrecognized_args = parser.parse_known_args()
     if unrecognized_args:
         print(f"Unrecognized Args: {unrecognized_args}")
@@ -355,7 +362,7 @@ if __name__ == '__main__':
     hf_model = load_from_hf(args.load_dir, args.trust_remote_code)
     state_dict = hf_model.state_dict()
     pp_size, vp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers = get_model_config(
-        args.model_size, args.vpp)
+        args.model_size, args.vpp, args.is_inference)
     pp_split = merge_pp_index(pp_size, vp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers,
                               llm_pipeline_num_layers)
     print(50 * '*')
