@@ -105,11 +105,12 @@ class Encoder(MultiModalModule):
         self.conv_out = WfCausalConv3d(
             base_channels * 4, latent_dim * 2, kernel_size=3, stride=1, padding=1
         )
-
+        self.wavelet_tranform_in = HaarWaveletTransform3D()
         self.wavelet_tranform_l1 = HaarWaveletTransform2D()
         self.wavelet_tranform_l2 = HaarWaveletTransform3D()
 
     def forward(self, coeffs):
+        coeffs = self.wavelet_tranform_in(coeffs)
         l1_coeffs = coeffs[:, :3]
         l1_coeffs = self.wavelet_tranform_l1(l1_coeffs)
         l1 = self.connect_l1(l1_coeffs)
@@ -125,7 +126,7 @@ class Encoder(MultiModalModule):
         h = self.norm_out(h)
         h = self.activation(h)
         h = self.conv_out(h)
-        return h
+        return h, (l1_coeffs, l2_coeffs)
 
 
 class Decoder(MultiModalModule):
@@ -308,9 +309,9 @@ class WFVAE(MultiModalModule):
         self.register_buffer("shift", torch.zeros(1, 8, 1, 1, 1))
 
         # Hardcode for now
-        self.t_chunk_enc = 16
+        self.t_chunk_enc = 8
         self.t_upsample_times = 4 // 2
-        self.t_chunk_dec = 4
+        self.t_chunk_dec = 2
         self.use_quant_layer = False
         self.vae_scale_factor = vae_scale_factor
 
@@ -389,18 +390,18 @@ class WFVAE(MultiModalModule):
 
     def encode(self, x):
         self._empty_causal_cached(self.encoder)
+        self._set_first_chunk(True)
         dtype = x.dtype
-        wt = HaarWaveletTransform3D().to(x.device, dtype=x.dtype)
-        coeffs = wt(x)
 
         if self.use_tiling:
-            h = self.tile_encode(coeffs)
+            h = self.tile_encode(x)
+            l1, l2 = None, None
         else:
-            h = self.encoder(coeffs)
-            self._empty_causal_cached(self.encoder)
+            h, (l1, l2) = self.encoder(x)
             if self.use_quant_layer:
                 h = self.quant_conv(h)
 
+        self._empty_causal_cached(self.encoder)
         posterior = DiagonalGaussianDistribution(h)
         return (posterior.sample() - self.shift.to(x.device, dtype=dtype)) * self.scale.to(x.device, dtype)
 
@@ -409,11 +410,12 @@ class WFVAE(MultiModalModule):
 
         start_end = self.build_chunk_start_end(t)
         result = []
-        for start, end in start_end:
+        for idx, (start, end) in enumerate(start_end):
+            self._set_first_chunk(idx == 0)
             chunk = x[:, :, start:end, :, :]
-            chunk = self.encoder(chunk)
+            chunk = self.encoder(chunk)[0]
             if self.use_quant_layer:
-                chunk = self.encoder(chunk)
+                chunk = self.quant_conv(chunk)
             result.append(chunk)
 
         return torch.cat(result, dim=2)
