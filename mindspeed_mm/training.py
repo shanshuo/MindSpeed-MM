@@ -381,6 +381,7 @@ def train(
                 optimizer,
                 opt_param_scheduler,
                 num_floating_point_operations_so_far,
+                None,
             )
         num_microbatches = get_num_microbatches()
         update_num_microbatches(args.consumed_train_samples, consistency_check=True)
@@ -482,22 +483,22 @@ def train(
                     optimizer,
                     opt_param_scheduler,
                     num_floating_point_operations_so_far,
+                    None,
                 )
                 print_datetime("exiting program after receiving SIGTERM.")
                 exit_flag = True
                 break
 
         if args.save and args.save_interval and iteration % args.save_interval == 0:
-            timers("interval-time").stop()
             save_checkpoint_and_time(
                 iteration,
                 model,
                 optimizer,
                 opt_param_scheduler,
                 num_floating_point_operations_so_far,
+                None,
             )
             saved_checkpoint = True
-            timers("interval-time", log_level=0).start(barrier=True)
 
         # Exiting based on duration
         if args.exit_duration_in_mins:
@@ -517,6 +518,7 @@ def train(
                         optimizer,
                         opt_param_scheduler,
                         num_floating_point_operations_so_far,
+                        None,
                     )
                 print_datetime("exiting program after {} minutes".format(train_time))
                 exit_flag = True
@@ -531,6 +533,7 @@ def train(
                     optimizer,
                     opt_param_scheduler,
                     num_floating_point_operations_so_far,
+                    None,
                 )
             torch.distributed.barrier()
             print_datetime("exiting program at iteration {}".format(iteration))
