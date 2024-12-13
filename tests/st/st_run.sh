@@ -51,11 +51,15 @@ for test_case in "$SHELL_SCRIPTS_DIR"/*.sh; do
     else
         echo "$(printf '*%.0s' {1..20}) Execution Time for $file_name: *${SECONDS}s* $(printf '*%.0s' {1..20})"
     fi
-    # begin to execute the logic of compare
-    pytest -x $BASE_DIR/test_tools/test_ci_st.py \
-        --baseline-json $BASELINE_DIR/$file_name_prefix.json \
-        --generate-log $GENERATE_LOG_DIR/$file_name_prefix.log \
-        --generate-json $GENERATE_JSON_DIR/$file_name_prefix.json
+    if [[ $file_name == inference* ]]; then
+            echo "st is an inference task, skip compare result"
+        else
+            # begin to execute the logic of compare
+            pytest -x $BASE_DIR/test_tools/test_ci_st.py \
+                --baseline-json $BASELINE_DIR/$file_name_prefix.json \
+                --generate-log $GENERATE_LOG_DIR/$file_name_prefix.log \
+                --generate-json $GENERATE_JSON_DIR/$file_name_prefix.json
+    fi
 
     PYTEST_EXITCODE=$?
     echo $PYTEST_EXITCODE
