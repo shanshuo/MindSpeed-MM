@@ -512,6 +512,7 @@ class LengthGroupedSampler(DistributedSampler):
         group_resolution=False,
         group_data=False,
         generator=None,
+        consumed_samples: int = 0,
     ):
         super().__init__(dataset=lengths, num_replicas=num_replicas, rank=rank)
 
@@ -528,6 +529,7 @@ class LengthGroupedSampler(DistributedSampler):
         self.group_resolution = group_resolution
         self.group_data = group_data
         self.generator = generator
+        self.consumed_samples = consumed_samples
 
     def __len__(self):
         if self.group_data:
@@ -554,7 +556,14 @@ class LengthGroupedSampler(DistributedSampler):
                 group_data=self.group_data,
                 generator=self.generator,
             )
+
+        # start sampling from the consumed samples point to continue training from where it left off
+        start_index = self.consumed_samples % len(indices)
+        indices = indices[start_index:]
+        actual_indices_len = len(indices)
+
         indices = indices[self.rank:self.total_size:self.num_replicas]
+        self.consumed_samples += actual_indices_len
         return iter(indices)
 
 

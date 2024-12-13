@@ -159,6 +159,7 @@ def prepare_sampler_dataloader(
                 group_frame=group_frame,
                 group_resolution=group_resolution,
                 group_data=group_data,
+                consumed_samples=consumed_samples,
             )
             if (group_frame or group_resolution or group_data)
             else None
