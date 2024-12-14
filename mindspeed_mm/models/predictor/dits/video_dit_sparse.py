@@ -73,7 +73,6 @@ class VideoDitSparse(MultiModalModule):
         super().__init__(config=None)
         args = get_args()
         self.sequence_parallel = args.sequence_parallel
-        self.gradient_checkpointing = True
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
@@ -245,33 +244,25 @@ class VideoDitSparse(MultiModalModule):
         width = torch.tensor(width)
 
         with rng_context:
-            for i, block in enumerate(self.videodit_sparse_blocks):
-                if i > 1 and i < 30:
-                    video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
-                else:
-                    video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
+            if self.recompute_granularity == "full":
+                latents = self._checkpointed_forward(
+                    sparse_mask,
+                    latents,
+                    video_mask=video_mask,
+                    prompt=prompt,
+                    prompt_mask=prompt_mask,
+                    timestep=timestep,
+                    frames=frames,
+                    height=height,
+                    width=width,
+                )
+            else:
+                for i, block in enumerate(self.videodit_sparse_blocks):
+                    if i > 1 and i < 30:
+                        video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
+                    else:
+                        video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
 
-                if self.training and self.gradient_checkpointing:
-                    def create_custom_forward(module, return_dict=None):
-                        def custom_forward(*inputs):
-                            if return_dict is not None:
-                                return module(*inputs, return_dict=return_dict)
-                            else:
-                                return module(*inputs)
-                        return custom_forward
-
-                    latents = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(block),
-                        latents,
-                        video_mask,
-                        prompt,
-                        prompt_mask,
-                        timestep,
-                        frames,
-                        height,
-                        width
-                    )
-                else:
                     latents = block(
                                 latents,
                                 video_mask=video_mask,
@@ -320,6 +311,10 @@ class VideoDitSparse(MultiModalModule):
                 x_, *args = args
                 for index in range(start, end):
                     layer = self._get_block(index)
+                    if index > 1 and index < 30:
+                        args[0], args[2] = sparse_mask[layer.self_atten.sparse_n][layer.self_atten.sparse_group]
+                    else:
+                        args[0], args[2] = sparse_mask[1][layer.self_atten.sparse_group]
                     x_ = layer(x_, *args, **kwargs)
                 return x_
             return custom_forward
@@ -344,12 +339,7 @@ class VideoDitSparse(MultiModalModule):
                 )
                 layer_num += self.recompute_num_layers
         elif self.recompute_method == "block":
-            for layer_num in range(self.videodit_sparse_blocks):
-                block = self._get_block(layer_num)
-                if layer_num > 1 and layer_num < 30:
-                    video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
-                else:
-                    video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
+            for layer_num in range(self.num_layers):
                 if layer_num < self.recompute_num_layers:
                     latents = tensor_parallel.checkpoint(
                         custom(layer_num, layer_num + 1),
@@ -365,6 +355,11 @@ class VideoDitSparse(MultiModalModule):
                     )
                 else:
                     # block = self._get_block(layer_num)
+                    block = self._get_block(layer_num)
+                    if layer_num > 1 and layer_num < 30:
+                        video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
+                    else:
+                        video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
                     latents = block(
                         latents,
                         video_mask,
@@ -530,6 +525,9 @@ class VideoDiTSparseBlock(nn.Module):
             height: int = None,
             width: int = None,
     ) -> torch.FloatTensor:
+        frames = frames.item()
+        height = height.item()
+        width = width.item()
         # 1. Self-Attention
         batch_size = latents.shape[1]
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (

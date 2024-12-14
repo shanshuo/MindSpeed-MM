@@ -77,6 +77,9 @@ GPT_ARGS="
     --bf16 \
     --use-distributed-optimizer \
     --optimization-level 2 \
+    --recompute-granularity full \
+    --recompute-method block \
+    --recompute-num-layers 32 \
     --optimizer-selection fused_ema_adamw \
 "
 
