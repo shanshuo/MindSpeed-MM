@@ -21,6 +21,10 @@
   - [配置参数](#jump5.2)
   - [启动推理](#jump5.3)
 - [注意事项](#jump6)
+- [评测](#jump7)
+  - [数据集准备](#jump7.1)
+  - [配置参数](#jump7.2)
+  - [启动评测](#jump7.3)
 ---
 <a id="jump1"></a>
 
@@ -378,4 +382,63 @@ PP=4 #PP并行参数
 2. 模型相关参数在examples/qwen2vl/model_xb.json 修改，训练相关参数在 finetune_xx.sh修改。
 
 
+<a id="jump7"></a>
+
+## 评测
+<a id="jump7.1"></a>
+### 数据集准备
+
+当前模型支持AI2D(test)、ChartQA(test)、Docvqa(val)、MMMU(val)四种数据集的评测。
+数据集参考下载链接：
+
+- [MMMU_DEV_VAL](https://opencompass.openxlab.space/utils/VLMEval/MMMU_DEV_VAL.tsv)
+- [DocVQA_VAL](https://opencompass.openxlab.space/utils/VLMEval/DocVQA_VAL.tsv)
+- [AI2D_TEST](https://opencompass.openxlab.space/utils/VLMEval/AI2D_TEST.tsv)
+- [ChartQA_TEST](https://opencompass.openxlab.space/utils/VLMEval/ChartQA_TEST.tsv)
+<a id="jump7.2"></a>
+### 参数配置
+如果要进行评测需要将要评测的数据集名称和路径传到examples/qwen2vl/evaluate_qwen2vl_7b.json
+需要更改的字段有
+- `tokenizer`中的`from_pretrained`为huggingface的Qwen2-VL的权重，参考readme上面链接自行下载传入
+- `dataset_path`为上述评测数据集的本地路径
+- `evaluation_dataset`为评测数据集的名称可选的名称有(`ai2d_test`、`mmmu_dev_val`、`docvqa_val`、`chartqa_test`)， **注意**：需要与上面的数据集路径相对应。
+- `result_output_path`为评测结果的输出路径，**注意**：每次评测前需要将之前保存在该路径下评测文件删除。
+
+
+
+```json
+    "tokenizer": {
+        "from_pretrained": "./Qwen2-VL-7B-Instruct",
+
+    },
+    "dataset_path": "./AI2D_TEST.tsv",
+    "evaluation_dataset":"ai2d_test",
+    "evaluation_model":"qwen2_vl_7b",
+    "result_output_path":"./evaluation_outputs/"
+
+```
+
+examples/qwen2vl/evaluate_qwen2vl_7b.json改完后，需要将json文件的路径传入到examples/qwen2vl/evaluate_qwen2vl_7b.sh MM_MODEL字段中。
+
+以及需要将上面提到的权重转换后模型传入examples/qwen2vl/evaluate_qwen2vl_7b.sh中的LOAD_PATH字段中。
+
+```shell
+MM_MODEL=examples/qwen2vl/evaluate_qwen2vl_7b.json
+LOAD_PATH="./qwen_7b_pp1/Qwen2-VL-7B-Instruct"
+
+```
+评测支持多卡DP推理需要更改的配置,为NPU卡数量
+
+```shell
+NPUS_PER_NODE=1
+```
+<a id="jump7.3"></a>
+### 启动评测
+启动shell开始推理
+```shell
+bash examples/qwen2vl/evaluate_qwen2vl_7b.sh
+```
+评测结果会输出到`result_output_path`路径中，会输出结果文件：
+- *.xlsx文件，这个文件会输出每道题的预测结果和答案等详细信息。
+- *.csv文件，这个文件会输出统计准确率等数据。
 

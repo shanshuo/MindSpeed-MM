@@ -21,6 +21,10 @@
   - [准备工作](#jump5.1)
   - [配置参数](#jump5.2)
   - [启动推理](#jump5.3)
+- [评测](#jump6)
+  - [数据集准备](#jump6.1)
+  - [配置参数](#jump6.2)
+  - [启动评测](#jump6.3)
 
 ---
 <a id="jump1"></a>
@@ -406,3 +410,72 @@ bash examples/llava1.5/inference_llava1_5.sh
 ```
 
 ---
+
+<a id="jump6"></a>
+
+## 评测
+<a id="jump6.1"></a>
+### 数据集准备
+
+当前模型支持AI2D(test)、ChartQA(test)、Docvqa(val)、MMMU(val)四种数据集的评测。
+数据集参考下载链接：
+
+- [MMMU_DEV_VAL](https://opencompass.openxlab.space/utils/VLMEval/MMMU_DEV_VAL.tsv)
+- [DocVQA_VAL](https://opencompass.openxlab.space/utils/VLMEval/DocVQA_VAL.tsv)
+- [AI2D_TEST](https://opencompass.openxlab.space/utils/VLMEval/AI2D_TEST.tsv)
+- [ChartQA_TEST](https://opencompass.openxlab.space/utils/VLMEval/ChartQA_TEST.tsv)
+<a id="jump6.2"></a>
+### 参数配置
+如果要进行评测需要将要评测的数据集名称和路径传到examples/llava1.5/evaluate_llava1_5.json
+需要更改的字段有
+- `text_decoder`中的`ckpt_path`为前面的权重转换章节中lmsys/vicuna-7b-v1.5权重转换脚本后的权重
+- `vision_encoder`中的`ckpt_path`为前面权重转换章节中ViT-L-14-336px权重转换后的权重
+- `vision_projector`中的`ckpt_path`为推理章节中vision_projector权重转换后的权重
+- `tokenizer`中的`from_pretrained`为huggingface的[llava权重路径](https://huggingface.co/liuhaotian/llava-v1.5-7b)，自行下载传入
+- `dataset_path`为上述评测数据集的本地路径
+- `evaluation_dataset`为评测数据集的名称可选的名称有(`ai2d_test`、`mmmu_dev_val`、`docvqa_val`、`chartqa_test`)， **注意**：需要与上面的数据集路径相对应。
+- `result_output_path`为评测结果的输出路径，**注意**：每次评测前需要将之前保存在该路径下评测文件删除。
+- `image_processer_path`下载链接为[clip-vit-large-patch14-336](https://huggingface.co/openai/clip-vit-large-patch14-336)，自行下载传入
+
+
+```json
+  "text_decoder": {
+    "ckpt_path": "./llava_weights_mm/splitqkv.pt"
+  },
+  "vision_encoder": {
+    "ckpt_path": "./llava_weights_mm/clip_weights.pt"
+  }
+  "vision_projector": {
+    "ckpt_path": "./llava_weights_mm/projector.pth"
+  }
+   "tokenizer": {
+    "from_pretrained": "./llava_7b",
+  }, 
+           
+  "dataset_path": "./AI2D_TEST.tsv",
+  "evaluation_dataset": "ai2d_test",
+  "evaluation_model": "llava_v1.5_7b",
+  "result_output_path": "./evaluation_outputs/",
+  "image_processer_path": "./llava_weights_mm/clip-vit-large-patch14-336"
+
+```
+
+examples/llava1.5/evaluate_llava1_5.json改完后，需要将json文件的路径传入到examples/llava1.5/evaluate_llava1_5.sh MM_MODEL字段中
+
+```shell
+MM_MODEL=examples/llava1.5/evaluate_llava1_5.json
+```
+评测支持多卡DP推理需要更改的配置,为NPU卡数量
+
+```shell
+NPUS_PER_NODE=1
+```
+<a id="jump6.3"></a>
+### 启动评测
+启动shell开始推理
+```shell
+bash examples/llava1.5/evaluate_llava1_5.sh
+```
+评测结果会输出到`result_output_path`路径中，会输出结果文件：
+- *.xlsx文件，这个文件会输出每道题的预测结果和答案等详细信息。
+- *.csv文件，这个文件会输出统计准确率等数据。

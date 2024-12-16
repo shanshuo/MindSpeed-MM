@@ -124,7 +124,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 从Huggingface等网站下载开源模型权重
 
 - [PixArt-alpha/PixArt-alpha](https://huggingface.co/PixArt-alpha/PixArt-alpha/resolve/main/PixArt-XL-2-512x512.pth)   - PixArt-XL-2-512x512模型(训练用)
-- [stabilityai/sd-vae-ft-ema](https://huggingface.co/stabilityai/sd-vae-ft-mse-original)   - vae模型
+- [stabilityai/sd-vae-ft-ema](https://huggingface.co/stabilityai/sd-vae-ft-ema)   - vae模型
 - [DeepFloyd/t5-v1_1-xxl](https://huggingface.co/DeepFloyd/t5-v1_1-xxl)       -  t5模型
 - [hpcai-tech/Open-Sora](https://huggingface.co/hpcai-tech/Open-Sora/resolve/main/OpenSora-v1-HQ-16x512x512.pth)        -  预训练权重(推理用)
 
@@ -221,7 +221,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 从Huggingface等网站下载开源模型权重
 
-- [stabilityai/sd-vae-ft-ema](https://huggingface.co/stabilityai/sd-vae-ft-mse-original)   - vae模型
+- [stabilityai/sd-vae-ft-ema](https://huggingface.co/stabilityai/sd-vae-ft-ema)   - vae模型
 - [DeepFloyd/t5-v1_1-xxl](https://huggingface.co/DeepFloyd/t5-v1_1-xxl)       -  t5模型
 - [hpcai-tech/Open-Sora](https://huggingface.co/hpcai-tech/Open-Sora/resolve/main/OpenSora-v1-HQ-16x512x512.pth)        -  预训练权重
 
@@ -229,9 +229,10 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 #### 2. 配置参数
 
-将上述权重传到json文件中 from_pretrained字段中，prompt字段可以自定义成自己的prompt
+将上述权重传到json文件中 from_pretrained字段中，prompt字段可以自定义成自己的prompt,目前有两种视频格式选择。
 
 ```
+examples/opensora1.0/inference_model_16x512x512.json
 examples/opensora1.0/inference_model_120x256x256.json
 ```
 
@@ -239,7 +240,7 @@ examples/opensora1.0/inference_model_120x256x256.json
 
 #### 3. 启动推理
 
-执行下面的推理脚本即可进行推理
+将上面的json，传入下面shell中MM_MODEL字段中，执行下面的推理脚本即可进行推理
 
 ```shell
 examples/opensora1.0/inference_opensora1_0.sh
