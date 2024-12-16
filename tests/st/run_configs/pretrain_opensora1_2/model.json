@@ -36,7 +36,7 @@
         "time_scale": 1.0,
         "enable_flashattn": true,
         "enable_sequence_parallelism": false,
-        "from_pretrained": "/home/ci_resource/models/opensora1.0/PixArt-XL-2-512x512.pth"
+        "from_pretrained": null
     },
     "diffusion": {
         "model_id": "rflow",
