@@ -39,6 +39,7 @@ class BaseEvalImpl:
         self.report_file = self.result_path.replace('.xlsx', '_acc.csv')
 
         sheet_indices = list(range(self.rank, len(dataset), self.world_size))  # 对数据进行分块，后面涉及到多卡评估
+        print(f"Rank {self.rank} of the data parallel group has {len(sheet_indices)} evaluation data ")
         self.data = dataset.data.iloc[sheet_indices]
         self.data_indices = [i for i in self.data['index']]  # 每个卡处理自己的index
         self.result = load_pkl(self.prev_file) if os.path.exists(self.prev_file) else {}
@@ -85,8 +86,9 @@ class BaseEvalImpl:
                         raise Exception("unsupported instruct type")
                 response = self.inference_pipeline(prompt=text, images=images, return_ids=True)
             torch.cuda.empty_cache()
-            print(response, flush=True)
-            self.result[data_index] = response
+            if response is not None:
+                print(response, flush=True)
+                self.result[data_index] = response
 
             # 每20步存一下pkl文件
             if (i + 1) % 20 == 0:
@@ -101,6 +103,7 @@ class BaseEvalImpl:
 
         """
         if self.world_size > 1:
+            print("rank:", self.rank, " finish evaluate")
             dist.barrier()
         if self.rank == 0:
             data_all = {}
@@ -176,7 +179,7 @@ class BaseEvalImpl:
             data['log'] = [result[i]['log'] for i in data['index']]
             if 'GT' in data:
                 data.pop('GT')
-
+            data.to_excel(self.result_path, index=False, engine='xlsxwriter')
             acc = report_acc(data)
 
             save_csv(acc, self.report_file)

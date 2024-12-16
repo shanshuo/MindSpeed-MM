@@ -60,6 +60,8 @@ class Qwen2VlPipeline(GenerationMixin):
             )
             response = out[0]
             return response
+        else:
+            return None
 
     def prepare_inputs(self, prompt=None, images=None, messages=None):
         if not messages:
@@ -102,16 +104,18 @@ class Qwen2VlPipeline(GenerationMixin):
                                       do_sample=True if self.generation_config.temperature > 0 else False,
                                       temperature=self.generation_config.temperature,
                                       max_new_tokens=self.generation_config.max_new_tokens)
-
-        #  把input_ids 截取掉
-        generated_ids = [
-            output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
-        ]
-        out = self.image_processor.tokenizer.batch_decode(
-            generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
-        )
-        response = out[0]
-        return response
+        if generated_ids is not None:
+            #  把input_ids 截取掉
+            generated_ids = [
+                output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
+            ]
+            out = self.image_processor.tokenizer.batch_decode(
+                generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            )
+            response = out[0]
+            return response
+        else:
+            return None
 
     def _prepare_content(self, inputs: List[Dict[str, str]]) -> List[Dict[str, str]]:
         """

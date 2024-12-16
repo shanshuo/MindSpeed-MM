@@ -1,7 +1,7 @@
 from typing import Callable
 
 from mindspeed_mm.tasks.evaluation.eval_prompt.build_prompt_base import BasePromptTemplate
-from mindspeed_mm.tasks.evaluation.eval_datastes.datasets_base import datasets_type
+from mindspeed_mm.tasks.evaluation.eval_datasets.datasets_base import datasets_type
 
 
 class LlavaPromptTemplate(BasePromptTemplate):
@@ -9,7 +9,7 @@ class LlavaPromptTemplate(BasePromptTemplate):
     def __init__(self):
         super().__init__()
 
-    def build_prompt(self, line, dump_image: Callable):
+    def build_prompt(self, line, dump_image: Callable, dataset_name=None):
         target_path = dump_image(line)
         prompt = super()._build_prompt(line)
         message = [dict(type='image', value=s) for s in target_path]

@@ -1,7 +1,7 @@
 from typing import Callable
 
 from mindspeed_mm.tasks.evaluation.eval_prompt.build_prompt_base import BasePromptTemplate
-from mindspeed_mm.tasks.evaluation.eval_datastes.datasets_base import datasets_type
+from mindspeed_mm.tasks.evaluation.eval_datasets.datasets_base import datasets_type
 
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
@@ -26,8 +26,7 @@ class InternvlPromptTemplate(BasePromptTemplate):
         message.extend([dict(type='image', value=s) for s in tgt_path])
         return message
 
-    @staticmethod
-    def build_multi_choice_prompt(line):
+    def build_multi_choice_prompt(self, line):
         return super()._build_prompt(line)
 
     @staticmethod

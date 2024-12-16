@@ -107,9 +107,11 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
                                           stopping_criteria=stopping_criteria,
                                           )
 
-        if return_ids:
+        if return_ids and generation_output is not None:
             response = self.tokenizer.batch_decode(generation_output, skip_special_tokens=True)[0].strip()
             return response
+        else:
+            return None
 
     def evaluate(self, message, device="npu"):
         text, images = '', []
@@ -125,8 +127,10 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         stopping_criteria = KeywordsStoppingCriteria(['</s>'], self.tokenizer, input_ids)
         output = self(input_ids=input_ids, images=images, stopping_criteria=[stopping_criteria], return_ids=True,
                       device=device)
-
-        return output
+        if output is not None:
+            return output
+        else:
+            return None
 
     def tokenizer_image_token(self, prompt, image_token_index=MODEL_CONSTANTS["llava"]["IMAGE_TOKEN_INDEX"],
                               return_tensors="pt"):

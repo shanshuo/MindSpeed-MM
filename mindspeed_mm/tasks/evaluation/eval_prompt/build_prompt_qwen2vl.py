@@ -5,12 +5,12 @@ import pandas as pd
 
 from mindspeed_mm.tasks.evaluation.utils.string_utils import is_cn_string
 from mindspeed_mm.tasks.evaluation.eval_prompt.build_prompt_base import BasePromptTemplate
-from mindspeed_mm.tasks.evaluation.eval_datastes.datasets_base import datasets_type
+from mindspeed_mm.tasks.evaluation.eval_datasets.datasets_base import datasets_type
 
 
 class Qwen2vlPromptTemplate(BasePromptTemplate):
 
-    def __init__(self, ):
+    def __init__(self):
         super().__init__()
         self.tgt_path = None
 

@@ -178,12 +178,14 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
         )
 
-        if return_ids:
+        if return_ids and generation_output is not None:
             answer_len = generation_output.shape[-1] - input_ids.shape[-1]
             response = self.tokenizer.batch_decode(generation_output[:, -answer_len:], skip_special_tokens=True)[0]
             response = response.split(template.sep)[0].strip()
 
             return response
+        else:
+            return None
 
     def evaluate(self, message, dataset=None):
         IMG_CONTEXT_TOKEN = "<IMG_CONTEXT>"
@@ -260,9 +262,11 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
             attention_mask=attention_mask,
             generation_config=self.generation_config,
         )
+        if generation_output is not None:
+            answer_len = generation_output.shape[-1] - input_ids.shape[-1]
+            response = self.tokenizer.batch_decode(generation_output[:, -answer_len:], skip_special_tokens=True)[0]
+            response = response.split(template.sep)[0].strip()
 
-        answer_len = generation_output.shape[-1] - input_ids.shape[-1]
-        response = self.tokenizer.batch_decode(generation_output[:, -answer_len:], skip_special_tokens=True)[0]
-        response = response.split(template.sep)[0].strip()
-
-        return response
+            return response
+        else:
+            return None
