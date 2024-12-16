@@ -42,6 +42,8 @@ def load_checkpoint(model, ckpt_path):
 
     if "model" in ckpt_dict.keys():
         ckpt_dict = ckpt_dict["model"]
+    elif "state_dict" in ckpt_dict.keys():
+        ckpt_dict = ckpt_dict["state_dict"]
 
     missing_keys, unexpected_keys = model.load_state_dict(ckpt_dict, strict=False)
     print(f"Missing keys: {missing_keys}")

@@ -4,6 +4,9 @@ import math
 import torch
 import numpy as np
 from diffusers.utils import load_image
+from PIL import Image
+from torchvision.io import write_video
+from torchvision.io import write_png
 from einops import rearrange
 import imageio
 
@@ -30,6 +33,22 @@ def save_videos(videos, start_index, save_path, fps):
         imageio.mimwrite(save_path, video, fps=fps, quality=6)
     else:
         raise ValueError("The video must be in either [b, t, h, w, c] or [t, h, w, c] format.")
+
+
+def save_image_or_videos(videos, save_path, start_idx, fps, value_range=(-1, 1), normalize=True):
+    os.makedirs(save_path, exist_ok=True)
+    if isinstance(videos, (list, tuple)) or videos.ndim == 5:  # b,c,t,h,w
+        for i, video in enumerate(videos):
+            if video.shape[1] == 1:
+                save_path_i = os.path.join(save_path, str(i + start_idx) + ".png")
+                imageio.imwrite(save_path_i, video[:, 0])
+            else:
+                save_path_i = os.path.join(save_path, str(i + start_idx) + ".mp4")
+                imageio.mimwrite(save_path_i, video, fps=fps, quality=6)
+    elif videos.ndim == 4:
+        _save_video(videos, os.path.join(save_path, "0" + ".mp4"), fps, value_range, normalize)
+    else:
+        raise ValueError("The video must be in either [b,c,t,h,w] or [c,t,h,w] format.")
 
 
 def save_video_grid(videos, save_path, fps, nrow=None):

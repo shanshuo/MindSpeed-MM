@@ -4,5 +4,6 @@ from .latte import Latte
 from .stdit import STDiT
 from .stdit3 import STDiT3
 from .sat_dit import SatDiT
+from .pt_dit_diffusers import PTDiTDiffuser as PTDiT
 
-__all__ = ["VideoDiT", "VideoDitSparse", "Latte", "STDiT", "STDiT3", "SatDiT", "VideoDitSparseI2V"]
+__all__ = ["VideoDiT", "VideoDitSparse", "Latte", "STDiT", "STDiT3", "SatDiT", "VideoDitSparseI2V", "PTDiT"]
