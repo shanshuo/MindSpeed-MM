@@ -380,6 +380,22 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
    > train_text_to_image_lora_sdxl 在1235行附近添加; train_controlnet_sdxl 在1307行附近添加
    >
 
+  【Lora断点推理权重保存】
+
+   如需保存checkpointing steps中的Lora_weights，须在代码上方（同sdxl预训练中的patch修改）添加如下：
+
+   ```python
+  from patch_sdxl import save_Lora_Weights
+  ```
+  
+  并在train_text_to_image_lora_sdxl.py的1227行附近，`accelerator.save_state(save_path)`下方添加`save_Lora_Weights(unwrap_model, unet, text_encoder_one, text_encoder_two, args.train_text_encoder, save_path)`,如下：
+
+  ```python
+  accelerator.save_state(save_path)
+  save_Lora_Weights(unwrap_model, unet, text_encoder_one, text_encoder_two, args.train_text_encoder, save_path)
+  logger.info(f"Saved state to {save_path}")
+  ```
+
    【运行微调的脚本】
 
     ```shell
