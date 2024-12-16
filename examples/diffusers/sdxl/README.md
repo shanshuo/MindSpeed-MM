@@ -78,6 +78,8 @@
 
 1. 软件与驱动安装
 
+  torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
+
     ```bash
     # python3.8
     conda create -n test python=3.8
@@ -102,7 +104,7 @@
 
 3. 模型搭建
 
-    3.1 【下载 SDXL [GitHub参考实现](https://github.com/huggingface/diffusers)】或 [适配昇腾AI处理器的实现](https://gitee.com/ascend/ModelZoo-PyTorch.git) 或 在模型根目录下执行以下命令，安装模型对应PyTorch版本需要的依赖】
+    3.1 【下载 SDXL [GitHub参考实现](https://github.com/huggingface/diffusers)】或 在模型根目录下执行以下命令，安装模型对应PyTorch版本需要的依赖】
 
     ```shell
     git clone https://github.com/huggingface/diffusers.git -b v0.30.0
@@ -117,7 +119,7 @@
     code_path=examples/text_to_image/
     ```
 
-    3.2【安装 `{任务pretrain/train}_sdxl_deepspeed_{混精fp16/bf16}.sh` 需要[适配昇腾AI处理器的实现](https://gitee.com/ascend/ModelZoo-PyTorch.git)】
+    3.2【安装 `{任务pretrain/train}_sdxl_deepspeed_{混精fp16/bf16}.sh`】
 
     转移 `collect_dataset.py` 与 `pretrain_model.py` 与 `train_text_to_image_sdxl_pretrain.py` 与 `patch_sdxl.py` 到 `examples/text_to_image/` 路径
 
@@ -377,6 +379,22 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
    > **注意**
    > train_text_to_image_lora_sdxl 在1235行附近添加; train_controlnet_sdxl 在1307行附近添加
    >
+
+  【Lora断点推理权重保存】
+
+   如需保存checkpointing steps中的Lora_weights，须在代码上方（同sdxl预训练中的patch修改）添加如下：
+
+    ```python
+    from patch_sdxl import save_Lora_Weights
+    ```
+  
+  并在train_text_to_image_lora_sdxl.py的1227行附近，`accelerator.save_state(save_path)`下方添加`save_Lora_Weights(unwrap_model, unet, text_encoder_one, text_encoder_two, args.train_text_encoder, save_path)`,如下：
+
+    ```python
+    accelerator.save_state(save_path)
+    save_Lora_Weights(unwrap_model, unet, text_encoder_one, text_encoder_two, args.train_text_encoder, save_path)
+    logger.info(f"Saved state to {save_path}")
+    ```
 
    【运行微调的脚本】
 

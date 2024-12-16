@@ -18,7 +18,10 @@
 import gc
 
 import torch
-import torch.distributed as dis
+import torch.distributed as dist
+from diffusers import StableDiffusionXLPipeline
+from diffusers.utils import convert_state_dict_to_diffusers
+from peft.utils import get_peft_model_state_dict
 from torch.distributed._shard.sharded_tensor.api import ShardedTensor
 
 
@@ -62,3 +65,40 @@ class TorchPatcher:
 def config_gc():
     # set gc threshold
     gc.set_threshold(700, 50, 1000)
+
+
+# Save Lora weights for checkpointing steps
+def save_Lora_Weights(
+    unwrap_model,
+    unet,
+    text_encoder_one,
+    text_encoder_two,
+    train_text_encoder,
+    output_dir,
+):
+    unet = unwrap_model(unet)
+    unet_lora_state_dict = convert_state_dict_to_diffusers(
+        get_peft_model_state_dict(unet)
+    )
+
+    if train_text_encoder:
+        text_encoder_one = unwrap_model(text_encoder_one)
+        text_encoder_two = unwrap_model(text_encoder_two)
+
+        text_encoder_lora_layers = convert_state_dict_to_diffusers(
+            get_peft_model_state_dict(text_encoder_one)
+        )
+        text_encoder_2_lora_layers = convert_state_dict_to_diffusers(
+            get_peft_model_state_dict(text_encoder_two)
+        )
+
+    else:
+        text_encoder_lora_layers = None
+        text_encoder_2_lora_layers = None
+
+    StableDiffusionXLPipeline.save_lora_weights(
+        output_dir,
+        unet_lora_layers=unet_lora_state_dict,
+        text_encoder_lora_layers=text_encoder_lora_layers,
+        text_encoder_2_lora_layers=text_encoder_2_lora_layers,
+    )
