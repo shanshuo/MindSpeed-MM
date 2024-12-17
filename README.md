@@ -19,6 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
+* [Dec. 16, 2024]: 🚀 MindSpeed-MM支持Qihoo-T2X模型
 * [Dec. 05, 2024]: 🎉 MindSpeed-MM理解类模型支持Lora微调
 * [Dec. 03, 2024]: 🚀 MindSpeed-MM支持SD3.5模型
 * [Nov. 30, 2024]: 🎉 MindSpeed-MM支持多模态理解测评
@@ -126,7 +127,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="7"> 视频生成 </td>
+      <td rowspan="15"> 多模态生成 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensora1.0">OpenSora 1.0</a></td>
       <td><a href="https://huggingface.co/hpcai-tech/Open-Sora/tree/main">5.5B</a></td>
       <td> 预训练 </td>
@@ -197,7 +198,16 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="7"> 图像生成 </td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qihoo_t2x">Qihoo-T2X</a></td>
+      <td><a href="https://huggingface.co/qihoo360/Qihoo-T2X">1.1B</a></td>
+      <td> 推理 </td>
+      <td> 1x1 </td>
+      <td> BF16 </td>
+      <td> / </td>
+      <td> / </td>
+      <td>【奇虎360贡献】</td>
+    </tr>
+    <tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sdxl">SDXL</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/5956b68a6927126daffc2c5a6d1a9a189defe288">3.5B</a></td>
       <td>预训练</td>
@@ -536,6 +546,9 @@ MindSpeed-MM 由华为公司的下列部门联合贡献 ：
 * 公共开发部
 * 2012实验室
 * 华为云
+
+MindSpeed-MM 生态贡献方：
+* 奇虎360
 
 感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
 

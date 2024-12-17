@@ -56,7 +56,6 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     conda activate qihoot2x
 
     # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
-    # 下载路径参考 https://www.hiascend.com/document/detail/zh/Pytorch/60RC3/configandinstg/instg/insg_0001.html
     pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
     
@@ -113,9 +112,6 @@ i2v 启动推理脚本
 ```shell
 sh examples/qihoo_t2x/inference_qihoo.sh
 ```
-
-## 加入我们
-我们正在招募 AIGC 方向的学术实习生。如果感兴趣，请将您的简历发送至 [maao@360.cn](mailto:maao@360.cn).
 
 
 ## 文献引用

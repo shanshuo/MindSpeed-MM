@@ -1,5 +1,4 @@
-# source /usr/local/Ascend/ascend-toolkit/set_env.sh
-source /home/my_cann/ascend-toolkit/set_env.sh
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
 export ASCEND_RT_VISIBLE_DEVICES="0"
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export SCEND_LAUNCH_BLOCKING=1
