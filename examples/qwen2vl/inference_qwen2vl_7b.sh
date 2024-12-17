@@ -68,7 +68,9 @@ GPT_ARGS="
     --load $LOAD_PATH \
     --variable-seq-lengths \
     --enable-one-logger \
-    --use-flash-attn
+    --use-flash-attn \
+    --no-load-optim \
+    --no-load-rng
 "
 
 MM_ARGS="

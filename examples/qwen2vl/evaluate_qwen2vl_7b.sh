@@ -76,7 +76,9 @@ GPT_ARGS="
     --variable-seq-lengths \
     --enable-one-logger \
     --distributed-timeout-minutes 1000 \
-    --use-flash-attn
+    --use-flash-attn \
+    --no-load-optim \
+    --no-load-rng
 "
 
 MM_ARGS="
