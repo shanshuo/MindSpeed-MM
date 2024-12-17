@@ -535,7 +535,8 @@ class DDPM:
             ]:
                 B, C = x_t.shape[:2]
                 if model_output.shape != (B, C * 2, *x_t.shape[2:]):
-                    raise AssertionError("Shape does not match")
+                    raise AssertionError(f"Shape does not match, model output shape is {model_output.shape}\n"
+                                         f"The expected shape is {(B, C * 2, *x_t.shape[2:])}")
                 model_output, model_var_values = torch.split(model_output, C, dim=1)
                 # Learn the variance using the variational bound, but don't let it affect our mean prediction.
                 frozen_out = torch.cat([model_output.detach(), model_var_values], dim=1)

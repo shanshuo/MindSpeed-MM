@@ -17,7 +17,8 @@ from logging import getLogger
 from typing import Any, Mapping
 
 import torch
-from megatron.training import get_args
+from megatron.core import mpu
+from megatron.training import get_args, print_rank_0
 from megatron.training.arguments import core_transformer_config_from_args
 from torch import nn
 
@@ -25,7 +26,6 @@ from mindspeed_mm.models.ae import AEModel
 from mindspeed_mm.models.diffusion import DiffusionModel
 from mindspeed_mm.models.predictor import PredictModel
 from mindspeed_mm.models.text_encoder import TextEncoder
-
 
 logger = getLogger(__name__)
 
@@ -51,19 +51,59 @@ class SoRAModel(nn.Module):
         super().__init__()
         self.config = core_transformer_config_from_args(get_args())
         self.task = config.task if hasattr(config, "task") else "t2v"
-        self.load_video_features = config.load_video_features
-        self.load_text_features = config.load_text_features
-        if not self.load_video_features:
-            self.ae = AEModel(config.ae).eval()
-            self.ae.requires_grad_(False)
-        if not self.load_text_features:
-            self.text_encoder = TextEncoder(config.text_encoder).eval()
-            self.text_encoder.requires_grad_(False)
 
-        self.predictor = PredictModel(config.predictor).get_model()
+        self.pp_size = mpu.get_pipeline_model_parallel_world_size()
+        if mpu.get_virtual_pipeline_model_parallel_world_size() is not None:
+            raise NotImplementedError("Not support virtual_pipeline_model_parallel now. ")
+        else:
+            self.pp_rank = mpu.get_pipeline_model_parallel_rank()
+
+        self.pre_process = True
+        self.post_process = True
+        self.input_tensor = None
+        # to avoid grad all-reduce and reduce-scatter in megatron, since SoRAModel has no embedding layer.
+        self.share_embeddings_and_output_weights = False
+
+        if self.pp_rank == 0:
+            self.load_video_features = config.load_video_features
+            self.load_text_features = config.load_text_features
+            if not self.load_video_features:
+                print_rank_0(f"init AEModel....")
+                self.ae = AEModel(config.ae).eval()
+                self.ae.requires_grad_(False)
+            if not self.load_text_features:
+                print_rank_0(f"init TextEncoder....")
+                self.text_encoder = TextEncoder(config.text_encoder).eval()
+                self.text_encoder.requires_grad_(False)
+
         self.diffusion = DiffusionModel(config.diffusion).get_model()
+        self.predictor = self._build_predictor_layers(config.predictor)
+
+    def _build_predictor_layers(self, config):
+        self.predictor_cls = config.model_id
+        if self.pp_size <= 1:
+            return PredictModel(config).get_model()
+
+        local_num_layers = config.pipeline_num_layers[self.pp_rank]
+        if local_num_layers <= 0:
+            raise ValueError(f"for pp_rank {self.pp_rank}, the predictor layer is {local_num_layers}, "
+                             f"which is invalid. ")
+
+        pipeline_start_idx = sum(config.pipeline_num_layers[:self.pp_rank])
+        pipeline_end_idx = sum(config.pipeline_num_layers[:self.pp_rank + 1])
+        self.pre_process = pipeline_start_idx == 0
+        self.post_process = pipeline_end_idx == config.num_layers
+
+        config.num_layers = local_num_layers
+        config.pre_process, config.post_process = self.pre_process, self.post_process
+        config.global_layer_idx = tuple(range(pipeline_start_idx, pipeline_end_idx))
+        if len(config.global_layer_idx) != local_num_layers:
+            raise ValueError("The number of global_layer_idx is not equal to local_num_layers")
+
+        return PredictModel(config=config).get_model()
 
     def set_input_tensor(self, input_tensor):
+        self.input_tensor = input_tensor
         self.predictor.set_input_tensor(input_tensor)
 
     def forward(self, video, prompt_ids, video_mask=None, prompt_mask=None, **kwargs):
@@ -73,40 +113,69 @@ class SoRAModel(nn.Module):
         video_mask: mask for video/image
         prompt_mask: mask for prompt(text)
         """
-        with torch.no_grad():
-            # Visual Encode
-            if self.load_video_features:
-                latents = video
-            else:
-                if self.task == "t2v":
-                    latents, _ = self.ae.encode(video)
-                elif self.task == "i2v":
-                    latents, i2v_results = self.ae.encode(video, **kwargs)
-                    kwargs.update(i2v_results)
+
+        if self.pre_process:
+            with torch.no_grad():
+                # Visual Encode
+                if self.load_video_features:
+                    latents = video
                 else:
-                    raise NotImplementedError(f"Task {self.task} if not Implemented!")
+                    if self.task == "t2v":
+                        latents, _ = self.ae.encode(video)
+                    elif self.task == "i2v":
+                        latents, i2v_results = self.ae.encode(video, **kwargs)
+                        kwargs.update(i2v_results)
+                    else:
+                        raise NotImplementedError(f"Task {self.task} if not Implemented!")
 
-            # Text Encode
-            if self.load_text_features:
-                prompt = prompt_ids
-            else:
-                B, N, L = prompt_ids.shape
-                prompt_ids = prompt_ids.view(-1, L)
-                prompt_mask = prompt_mask.view(-1, L)
-                hidden_states = self.text_encoder.encode(prompt_ids, prompt_mask)
-                prompt = hidden_states["last_hidden_state"].view(B, N, L, -1)
+                # Text Encode
+                if self.load_text_features:
+                    prompt = prompt_ids
+                else:
+                    B, N, L = prompt_ids.shape
+                    prompt_ids = prompt_ids.view(-1, L)
+                    prompt_mask = prompt_mask.view(-1, L)
+                    hidden_states = self.text_encoder.encode(prompt_ids, prompt_mask)
+                    prompt = hidden_states["last_hidden_state"].view(B, N, L, -1)
 
-        noised_latents, noise, timesteps = self.diffusion.q_sample(latents, model_kwargs=kwargs, mask=video_mask)
+            noised_latents, noise, timesteps = self.diffusion.q_sample(latents, model_kwargs=kwargs, mask=video_mask)
+            predictor_input_latent, predictor_timesteps, predictor_prompt = noised_latents, timesteps, prompt
+            predictor_video_mask, predictor_prompt_mask = video_mask, prompt_mask
+        else:
+            if not hasattr(self.predictor, "pipeline_set_prev_stage_tensor"):
+                raise ValueError(f"PP has not been implemented for {self.predictor_cls} yet. ")
+            predictor_input_list, training_loss_input_list = self.predictor.pipeline_set_prev_stage_tensor(
+                self.input_tensor, extra_kwargs=kwargs)
+            predictor_input_latent, predictor_timesteps, predictor_prompt, predictor_video_mask, predictor_prompt_mask \
+                = predictor_input_list
+            latents, noised_latents, timesteps, noise, video_mask = training_loss_input_list
 
-        model_output = self.predictor(
-            noised_latents,
-            timestep=timesteps,
-            prompt=prompt,
-            video_mask=video_mask,
-            prompt_mask=prompt_mask,
+        output = self.predictor(
+            predictor_input_latent,
+            timestep=predictor_timesteps,
+            prompt=predictor_prompt,
+            video_mask=predictor_video_mask,
+            prompt_mask=predictor_prompt_mask,
             **kwargs,
         )
-        return model_output, latents, noised_latents, timesteps, noise, video_mask
+
+        if self.post_process:
+            timesteps = timesteps.to(torch.int64)
+            loss = self.compute_loss(
+                output if isinstance(output, torch.Tensor) else output[0],
+                latents,
+                noised_latents,
+                timesteps,
+                noise,
+                video_mask
+            )
+            return [loss]
+
+        timesteps = timesteps.to(torch.bfloat16)
+        return self.predictor.pipeline_set_next_stage_tensor(
+            input_list=[latents, noised_latents, timesteps, noise, video_mask],
+            output_list=output,
+            extra_kwargs=kwargs)
 
     def compute_loss(
         self, model_output, latents, noised_latents, timesteps, noise, video_mask
@@ -133,8 +202,8 @@ class SoRAModel(nn.Module):
         """Customized load."""
         if not isinstance(state_dict, Mapping):
             raise TypeError(f"Expected state_dict to be dict-like, got {type(state_dict)}.")
-        
-        missing_keys, unexpected_keys = self.predictor.load_state_dict(state_dict, strict)
+
+        missing_keys, unexpected_keys = self.predictor.load_state_dict(state_dict, False)
 
         if missing_keys is not None:
             logger.info(f"Missing keys in state_dict: {missing_keys}.")

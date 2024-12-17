@@ -153,6 +153,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 首先修改 examples/opensoraplan1.3/convert_ckpt_to_mm.py 参数
 
     TP_SIZE = 1  # TP（Tensor Parallel）size，需要和训练脚本的TP保持一致
+    PP_SIZE = [8, 8, 8, 8] # PP (Pipeline Parallel) size, 需要和训练脚本保持一致
     dit_hg_weight_path = "raw_ckpt/open-sora-plan/any93x640x640/" #huggingface下载的dit预训练权重路径
     dit_mm_save_dir = "mm_ckpt/open-sora-plan/pretrained-checkpoint-dit" #转换到MindSpeed-MM的dit权重存放路径
 
@@ -222,6 +223,12 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 #### 2. 配置参数
 
 需根据实际情况修改`pretrain_t2v_model.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
+
+并行化配置参数修改：
++ PP：流水线并行，目前支持将predictor模型切分流水线。在data.json文件中新增字段"pipeline_num_layers", 类型为list。该list的长度即为 
+pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。
+注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，
+因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
 
 【单机运行】
 

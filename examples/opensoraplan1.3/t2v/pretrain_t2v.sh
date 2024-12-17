@@ -19,7 +19,7 @@ TP=1
 PP=1
 CP=1
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP/$PP))
 
 MM_DATA="./examples/opensoraplan1.3/t2v/data.json"
 MM_MODEL="./examples/opensoraplan1.3/t2v/pretrain_t2v_model.json"
@@ -76,6 +76,10 @@ GPT_ARGS="
     --recompute-method block \
     --recompute-num-layers 32 \
     --use-distributed-optimizer \
+    --sequence-parallel \
+    --optimization-level 2 \
+    --use-multiparameter-pipeline-model-parallel \
+    --variable-seq-lengths \
 "
 
 MM_ARGS="

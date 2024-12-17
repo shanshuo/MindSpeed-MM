@@ -68,11 +68,17 @@ class VideoDitSparse(MultiModalModule):
         interpolation_scale: Tuple[float] = None,
         sparse1d: bool = False,
         sparse_n: int = 2,
+        pre_process: bool = True,
+        post_process: bool = True,
+        global_layer_idx: Optional[Tuple] = None,
         **kwargs
     ):
         super().__init__(config=None)
         args = get_args()
+        self.pre_process = pre_process
+        self.post_process = post_process
         self.sequence_parallel = args.sequence_parallel
+        self.gradient_checkpointing = True
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
@@ -88,13 +94,20 @@ class VideoDitSparse(MultiModalModule):
         self.num_layers = num_layers
         self.patch_size_t = patch_size_t
         self.patch_size = patch_size
-        self.caption_projection = PixArtAlphaTextProjection(in_features=caption_channels, hidden_size=inner_dim)
-        self.pos_embed = PatchEmbed2D(
-            patch_size=patch_size,
-            in_channels=in_channels,
-            embed_dim=inner_dim,
-        )
 
+        if self.pre_process:
+            self.caption_projection = PixArtAlphaTextProjection(in_features=caption_channels, hidden_size=inner_dim)
+            self.pos_embed = PatchEmbed2D(
+                patch_size=patch_size,
+                in_channels=in_channels,
+                embed_dim=inner_dim,
+            )
+            self.adaln_single = AdaLayerNormSingle(inner_dim)
+            # set label "sequence_parallel", for all_reduce the grad
+            for param in self.adaln_single.parameters():
+                setattr(param, "sequence_parallel", self.sequence_parallel)
+
+        self.global_layer_idx = global_layer_idx if global_layer_idx is not None else tuple(range(num_layers))
         self.videodit_sparse_blocks = nn.ModuleList(
             [
                 VideoDiTSparseBlock(
@@ -115,17 +128,15 @@ class VideoDitSparse(MultiModalModule):
                     sparse_n=sparse_n,
                     sparse_group=_ % 2 == 1,
                 )
-                for _ in range(num_layers)
+                for _ in self.global_layer_idx
             ]
         )
-        self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=False, eps=1e-6)
-        self.scale_shift_table = nn.Parameter(torch.randn(2, inner_dim) / inner_dim ** 0.5)
-        self.proj_out = nn.Linear(inner_dim, patch_size_t * patch_size * patch_size * out_channels)
-        self.adaln_single = AdaLayerNormSingle(inner_dim)
-        # set label "sequence_parallel", for all_reduce the grad
-        for param in self.adaln_single.parameters():
-            setattr(param, "sequence_parallel", self.sequence_parallel)
-        setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
+
+        if self.post_process:
+            self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=False, eps=1e-6)
+            self.scale_shift_table = nn.Parameter(torch.randn(2, inner_dim) / inner_dim ** 0.5)
+            self.proj_out = nn.Linear(inner_dim, patch_size_t * patch_size * patch_size * out_channels)
+            setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
 
     def prepare_sparse_mask(self, video_mask, prompt_mask, sparse_n):
         video_mask = video_mask.unsqueeze(1)
@@ -182,22 +193,51 @@ class VideoDitSparse(MultiModalModule):
         video_mask: Optional[torch.Tensor] = None,
         prompt_mask: Optional[torch.Tensor] = None,
         **kwargs
-    ) -> torch.Tensor:
+    ):
         # RNG context.
         if self.sequence_parallel:
             rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
         else:
             rng_context = nullcontext()
-        
-        batch_size, c, frames, h, w = latents.shape
-        prompt_mask = prompt_mask.view(batch_size, -1, prompt_mask.shape[-1])
-        if self.training and mpu.get_context_parallel_world_size() > 1:
-            frames //= mpu.get_context_parallel_world_size()
-            latents = split_forward_gather_backward(latents, mpu.get_context_parallel_group(), dim=2,
-                                                    grad_scale='down')
-            prompt = split_forward_gather_backward(prompt, mpu.get_context_parallel_group(),
-                                                   dim=2, grad_scale='down')
 
+        if self.pre_process:
+            # pre_process latents
+            batch_size, c, frames, h, w = latents.shape
+            if self.training and mpu.get_context_parallel_world_size() > 1:
+                frames //= mpu.get_context_parallel_world_size()
+                latents = split_forward_gather_backward(latents, mpu.get_context_parallel_group(), dim=2,
+                                                        grad_scale='down')
+                prompt = split_forward_gather_backward(prompt, mpu.get_context_parallel_group(),
+                                                       dim=2, grad_scale='down')
+
+            latents, prompt, timestep, embedded_timestep = self._operate_on_patched_inputs(
+                latents, prompt, timestep, batch_size, **kwargs
+            )
+
+            latents = rearrange(latents, 'b s h -> s b h', b=batch_size).contiguous()
+            prompt = rearrange(prompt, 'b s h -> s b h', b=batch_size).contiguous()
+            timestep = timestep.view(batch_size, 6, -1).transpose(0, 1).contiguous()
+
+            if self.sequence_parallel:
+                latents = tensor_parallel.scatter_to_sequence_parallel_region(latents)
+                prompt = tensor_parallel.scatter_to_sequence_parallel_region(prompt)
+
+            prompt_mask = prompt_mask.view(batch_size, -1, prompt_mask.shape[-1])
+            # convert encoder_attention_mask to a bias the same way we do for attention_mask
+            if prompt_mask is not None and prompt_mask.ndim == 3:
+                # b, 1, l
+                prompt_mask = (1 - prompt_mask.to(self.dtype)) * -10000.0
+        else:
+            embedded_timestep = kwargs['embedded_timestep']
+            batch_size, c, frames, h, w = kwargs['batch_size'], kwargs['c'], kwargs['frames'], kwargs['h'], kwargs['w']
+
+        # 1. mask converting
+        frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
+        height, width = h // self.patch_size, w // self.patch_size
+        frames, height, width = torch.tensor(frames), torch.tensor(height), torch.tensor(width)
+
+        origin_video_mask = video_mask.clone().detach().to(self.dtype)
+        origin_prompt_mask = prompt_mask.clone().detach().to(self.dtype)
         if video_mask is not None and video_mask.ndim == 4:
             video_mask = video_mask.to(self.dtype)
 
@@ -210,38 +250,12 @@ class VideoDitSparse(MultiModalModule):
             video_mask = rearrange(video_mask, 'b 1 t h w -> (b 1) 1 (t h w)')
             video_mask = (1 - video_mask.bool().to(self.dtype)) * -10000.0
 
-        # convert encoder_attention_mask to a bias the same way we do for attention_mask
-        if prompt_mask is not None and prompt_mask.ndim == 3:
-            # b, 1, l
-            prompt_mask = (1 - prompt_mask.to(self.dtype)) * -10000.0
-
-        # 1. Input
-        frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
-        height, width = latents.shape[-2] // self.patch_size, latents.shape[-1] // self.patch_size
-
-        latents, prompt, timestep, embedded_timestep = self._operate_on_patched_inputs(
-            latents, prompt, timestep, batch_size, **kwargs
-        )
-
-        latents = rearrange(latents, 'b s h -> s b h', b=batch_size).contiguous()
-        prompt = rearrange(prompt, 'b s h -> s b h', b=batch_size).contiguous()
-        timestep = timestep.view(batch_size, 6, -1).transpose(0, 1).contiguous()
-
         sparse_mask = {}
         for sparse_n in [1, 4]:
             sparse_mask[sparse_n] = self.prepare_sparse_mask(video_mask, prompt_mask, sparse_n)
 
         if (video_mask == 0).all():
             video_mask = None
-        
-        if self.sequence_parallel:
-            latents = tensor_parallel.scatter_to_sequence_parallel_region(latents)
-            prompt = tensor_parallel.scatter_to_sequence_parallel_region(prompt)
-        
-        # 2. Blocks
-        frames = torch.tensor(frames)
-        height = torch.tensor(height)
-        width = torch.tensor(width)
 
         with rng_context:
             if self.recompute_granularity == "full":
@@ -257,7 +271,7 @@ class VideoDitSparse(MultiModalModule):
                     width=width,
                 )
             else:
-                for i, block in enumerate(self.videodit_sparse_blocks):
+                for i, block in zip(self.global_layer_idx, self.videodit_sparse_blocks):
                     if i > 1 and i < 30:
                         video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
                     else:
@@ -273,22 +287,84 @@ class VideoDitSparse(MultiModalModule):
                                 height=height,
                                 width=width,
                             )
-        
-        # 3. Output
-        output = self._get_output_for_patched_inputs(
-            latents=latents,
-            timestep=timestep,
-            embedded_timestep=embedded_timestep,
-            num_frames=frames,
-            height=height,
-            width=width,
-        )  # b c t h w
 
-        if self.training and mpu.get_context_parallel_world_size() > 1:
-            output = gather_forward_split_backward(output, mpu.get_context_parallel_group(), dim=2,
-                                                        grad_scale='up')
+        output = latents
 
-        return output
+        if self.post_process:
+            # 3. Output
+            output = self._get_output_for_patched_inputs(
+                latents=latents,
+                timestep=timestep,
+                embedded_timestep=embedded_timestep,
+                num_frames=frames,
+                height=height,
+                width=width,
+            )  # b c t h w
+
+            if self.training and mpu.get_context_parallel_world_size() > 1:
+                output = gather_forward_split_backward(output, mpu.get_context_parallel_group(), dim=2,
+                                                            grad_scale='up')
+        rtn = (output, prompt, timestep, embedded_timestep, origin_video_mask, origin_prompt_mask)
+        return rtn
+
+    def pipeline_set_prev_stage_tensor(self, input_tensor_list, extra_kwargs):
+        """
+        Implemnented for pipeline parallelism. The input tensor is got from last PP stage.
+        Args:
+            input_tensor_list: same as the return value of pipeline_set_next_stage_tensor
+            extra_kwargs: kwargs for forward func.
+
+        Returns:
+            predictor_input_list: values for predictor forward.
+            training_loss_input_list: values to calculate loss.
+        """
+        (prev_output, prompt, predictor_timesteps, embedded_timestep, video_mask, prompt_mask,
+         latents, noised_latents, timesteps, noise) = input_tensor_list
+        predictor_input_list = [prev_output, predictor_timesteps, prompt, video_mask, prompt_mask]
+        training_loss_input_list = [latents, noised_latents, timesteps, noise, video_mask]
+
+        extra_kwargs['embedded_timestep'] = embedded_timestep
+        (extra_kwargs['batch_size'], extra_kwargs['c'], extra_kwargs['frames'], extra_kwargs['h'],
+         extra_kwargs['w']) = latents.shape
+
+        return predictor_input_list, training_loss_input_list
+
+    def pipeline_set_next_stage_tensor(self, input_list, output_list, extra_kwargs=None):
+        """return as
+        [prev_output, prompt, predictor_timesteps, embedded_timestep, video_mask, prompt_mask,
+         latents, noised_latents, timesteps, noise]
+         which should be corresponded with initialize_pipeline_tensor_shapes
+        """
+        return list(output_list) + list(input_list[:-1])
+
+    @staticmethod
+    def initialize_pipeline_tensor_shapes():
+        args = get_args()
+        micro_batch_size = args.micro_batch_size
+        dtype = args.params_dtype
+
+        model_cfg = args.mm.model
+        hidden_size = model_cfg.predictor.num_heads * model_cfg.predictor.head_dim
+        frames, height, width = model_cfg.frames, model_cfg.resolution[0], model_cfg.resolution[1]
+        latent_size = ((frames + 3) // 4, height // 8, width // 8)
+        divisor = model_cfg.predictor.patch_size_t * (model_cfg.predictor.patch_size ** 2)
+        seq_len = latent_size[0] * latent_size[1] * latent_size[2] // divisor
+        max_prompt_len = model_cfg.model_max_length if hasattr(model_cfg, "model_max_length") else 512
+        channels = model_cfg.predictor.in_channels
+
+        pipeline_tensor_shapes = [
+            {'shape': (seq_len, micro_batch_size, hidden_size), 'dtype': dtype},  # prev_output
+            {'shape': (max_prompt_len, micro_batch_size, hidden_size), 'dtype': dtype},  # prompt
+            {'shape': (6, micro_batch_size, hidden_size), 'dtype': dtype},  # predictor_timesteps
+            {'shape': (micro_batch_size, hidden_size), 'dtype': dtype},  # embedded_timestep
+            {'shape': (micro_batch_size, *latent_size), 'dtype': dtype},            # origin_video_mask
+            {'shape': (micro_batch_size, 1, max_prompt_len), 'dtype': dtype},       # origin_prompt_mask
+            {'shape': (micro_batch_size, channels, *latent_size), 'dtype': dtype},  # latents(x0)
+            {'shape': (micro_batch_size, channels, *latent_size), 'dtype': dtype},  # noised_latents
+            {'shape': (micro_batch_size,), 'dtype': dtype},  # timesteps
+            {'shape': (micro_batch_size, channels, *latent_size), 'dtype': dtype},  # noise
+        ]
+        return pipeline_tensor_shapes
 
     def _get_block(self, layer_number):
         return self.videodit_sparse_blocks[layer_number]
@@ -311,7 +387,8 @@ class VideoDitSparse(MultiModalModule):
                 x_, *args = args
                 for index in range(start, end):
                     layer = self._get_block(index)
-                    if index > 1 and index < 30:
+                    layer_idx = self.global_layer_idx[index]
+                    if layer_idx > 1 and layer_idx < 30:
                         args[0], args[2] = sparse_mask[layer.self_atten.sparse_n][layer.self_atten.sparse_group]
                     else:
                         args[0], args[2] = sparse_mask[1][layer.self_atten.sparse_group]
@@ -355,7 +432,8 @@ class VideoDitSparse(MultiModalModule):
                     )
                 else:
                     block = self._get_block(layer_num)
-                    if layer_num > 1 and layer_num < 30:
+                    layer_idx = self.global_layer_idx[layer_num]
+                    if layer_idx > 1 and layer_idx < 30:
                         video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
                     else:
                         video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
@@ -403,7 +481,7 @@ class VideoDitSparse(MultiModalModule):
             self, latents, timestep, embedded_timestep, num_frames, height, width
     ):
         batch_size = latents.shape[1]
-        shift, scale = (self.scale_shift_table[:, None] + embedded_timestep[None]).chunk(2, dim=0)
+        shift, scale = (self.scale_shift_table[None] + embedded_timestep[:, None]).chunk(2, dim=1)
         latents = self.norm_out(latents)
         # Modulation
         latents = latents * (1 + scale) + shift
@@ -411,7 +489,7 @@ class VideoDitSparse(MultiModalModule):
         if self.sequence_parallel:
             latents = tensor_parallel.gather_from_sequence_parallel_region(latents,
                                                                            tensor_parallel_output_grad=False)
-        
+
         # To (b, t*h*w, h)
         latents = rearrange(latents, 's b h -> b s h', b=batch_size).contiguous()
         latents = self.proj_out(latents)
@@ -591,6 +669,9 @@ class VideoDitSparseI2V(VideoDitSparse):
             sparse1d: bool = False,
             sparse_n: int = 2,
             vae_scale_factor_t: int = 4,
+            pre_process: bool = True,
+            post_process: bool = True,
+            global_layer_idx: Optional[Tuple] = None,
             **kwargs
     ):
         super().__init__(
@@ -614,30 +695,35 @@ class VideoDitSparseI2V(VideoDitSparse):
             interpolation_scale=interpolation_scale,
             sparse1d=sparse1d,
             sparse_n=sparse_n,
+            pre_process=pre_process,
+            post_process=post_process,
+            global_layer_idx=global_layer_idx,
         )
         self.vae_scale_factor_t = vae_scale_factor_t
         inner_dim = num_heads * head_dim
-        self.pos_embed_masked_hidden_states = nn.ModuleList(
-            [
-                PatchEmbed2D(
-                    patch_size=patch_size,
-                    in_channels=in_channels,
-                    embed_dim=inner_dim,
-                ),
-                zero_module(nn.Linear(inner_dim, inner_dim, bias=False)),
-            ]
-        )
 
-        self.pos_embed_mask = nn.ModuleList(
-            [
-                PatchEmbed2D(
-                    patch_size=patch_size,
-                    in_channels=self.vae_scale_factor_t,
-                    embed_dim=inner_dim,
-                ),
-                zero_module(nn.Linear(inner_dim, inner_dim, bias=False)),
-            ]
-        )
+        if self.pre_process:
+            self.pos_embed_masked_hidden_states = nn.ModuleList(
+                [
+                    PatchEmbed2D(
+                        patch_size=patch_size,
+                        in_channels=in_channels,
+                        embed_dim=inner_dim,
+                    ),
+                    zero_module(nn.Linear(inner_dim, inner_dim, bias=False)),
+                ]
+            )
+
+            self.pos_embed_mask = nn.ModuleList(
+                [
+                    PatchEmbed2D(
+                        patch_size=patch_size,
+                        in_channels=self.vae_scale_factor_t,
+                        embed_dim=inner_dim,
+                    ),
+                    zero_module(nn.Linear(inner_dim, inner_dim, bias=False)),
+                ]
+            )
 
     def _operate_on_patched_inputs(self, hidden_states, encoder_hidden_states, timestep, batch_size, **kwargs):
         # inpaint

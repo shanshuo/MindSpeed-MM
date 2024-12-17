@@ -25,6 +25,7 @@
         "norm_eps":1e-06,
         "caption_channels":4096,
         "interpolation_scale":[1.0, 1.0, 1.0],
+        "pipeline_num_layers": [8, 8, 8, 8],
         "sparse1d":true,
         "sparse_n":4
     },

@@ -90,11 +90,71 @@ def split_by_tp(state_dicts, tp_size):
     return return_dicts
 
 
-def save_by_tp(state_dicts, save_dir, mode="train", latest_checkpointed_iteration="release", exists_ok=False):
-    if os.path.exists(save_dir):
-        if not exists_ok:
-            print(f"save dir: {save_dir} exists, please check.")
-            return
+def split_by_pp(state_dicts, pp_sizes):
+    return_dict = {}
+    if len(pp_sizes) == 0:
+        return_dict = {}
+        for tp_rank, state_dict in enumerate(state_dicts):
+            return_dict[(0, tp_rank)] = state_dict
+        return return_dict
+
+    postprocess_weight_names = ['scale_shift_table', 'proj_out.weight', 'proj_out.bias']
+    for pp_rank, layers in enumerate(pp_sizes):
+        is_first = pp_rank == 0
+        is_last = pp_rank == len(pp_sizes) - 1
+        start_layer, end_layer = sum(pp_sizes[:pp_rank]), sum(pp_sizes[:pp_rank + 1])
+        for tp_rank, state_dict in enumerate(state_dicts):
+            pp_tp_param = dict()
+            for k in state_dict.keys():
+                if k.startswith("videodit_sparse_blocks"):
+                    idx = int(k.split('.')[1])
+                    if start_layer <= idx < end_layer:
+                        cur_idx, tmps = str(idx - start_layer), k.split('.')
+                        new_k = '.'.join(tmps[:1] + [cur_idx] + tmps[2:])
+                        pp_tp_param[new_k] = state_dict[k]
+                elif k in postprocess_weight_names:
+                    # for pp rank -1
+                    if is_last:
+                        pp_tp_param[k] = state_dict[k]
+                else:
+                    # for pp rank 0
+                    if is_first:
+                        pp_tp_param[k] = state_dict[k]
+            return_dict[(pp_rank, tp_rank)] = pp_tp_param
+
+    return return_dict
+
+
+def save_by_pp_tp(state_dicts, save_dir, latest_checkpointed_iteration="release", exists_ok=False,
+                  has_pp=True):
+    if os.path.exists(save_dir) and not exists_ok:
+        print(f"save dir: {save_dir} exists, please check.")
+        return
+    else:
+        os.makedirs(save_dir)
+
+    flags = os.O_WRONLY | os.O_CREAT
+    stat_mode = stat.S_IWUSR | stat.S_IRUSR
+    with os.fdopen(os.open(os.path.join(save_dir, 'latest_checkpointed_iteration.txt'), flags, stat_mode), 'w') as fout:
+        fout.write(latest_checkpointed_iteration)
+    if latest_checkpointed_iteration == 'release':
+        directory = 'release'
+    else:
+        directory = 'iter_{:07d}'.format(latest_checkpointed_iteration)
+
+    for (pp_rank, tp_rank), state_dict in state_dicts.items():
+        filename = f"mp_rank_{tp_rank:02d}_{pp_rank:03d}" if has_pp else f"mp_rank_{tp_rank:02d}"
+        os.makedirs(os.path.join(save_dir, directory, filename))
+        save_path = os.path.join(save_dir, directory, filename, "model_optim_rng.pt")
+        save_dict = {}
+        save_dict["model"] = state_dict
+        torch.save(save_dict, save_path)
+
+
+def save_by_tp(state_dicts, save_dir, latest_checkpointed_iteration="release", exists_ok=False):
+    if os.path.exists(save_dir) and not exists_ok:
+        print(f"save dir: {save_dir} exists, please check.")
+        return
     else:
         os.makedirs(save_dir)
 
@@ -111,12 +171,7 @@ def save_by_tp(state_dicts, save_dir, mode="train", latest_checkpointed_iteratio
         os.makedirs(os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}"))
         save_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
         save_dict = {}
-        if mode == "train":
-            save_dict["model"] = state_dict
-        elif mode == "inference":
-            save_dict = state_dict
-        else:
-            raise ValueError(f"unsupported mode: {mode}")
+        save_dict["model"] = state_dict
         torch.save(save_dict, save_path)
 
 
@@ -134,8 +189,8 @@ def save_vae(_state_dict, save_dir, exists_ok=False):
 if __name__ == "__main__":
     # 参数配置
     TP_SIZE = 1
-
-    MODE = "train"   # 转换权重的用途，默认为用于训练: "train"; 若用于推理, 需改为"inference"
+    # The layers of each pp_rank. For example, [8, 8, 8, 8] means pp_size is 4 and allocate 8 layers for each.
+    PP_SIZE = [8, 8, 8, 8]
 
     dit_hg_weight_path = "local downloaded open sora plan weight path"
     dit_mm_save_dir = "dir to save dit weights after transfer to MindSpeed-MM"
@@ -147,7 +202,14 @@ if __name__ == "__main__":
     dit_state_dict = load_from_hf(dit_hg_weight_path)
     dit_state_dict = convert_hg_to_mm(dit_state_dict)
     dit_state_dicts = split_by_tp(dit_state_dict, TP_SIZE)
-    save_by_tp(dit_state_dicts, dit_mm_save_dir, mode=MODE, exists_ok=False)
+    dit_state_dicts = split_by_pp(dit_state_dicts, PP_SIZE)
+
+    for k in dit_state_dicts.keys():
+        print(f"\n\npp_{k[0]} tp_{k[1]}")
+        for param_k in dit_state_dicts[k]:
+            print(f"{param_k}: {dit_state_dicts[k][param_k].shape}")
+
+    save_by_pp_tp(dit_state_dicts, dit_mm_save_dir, exists_ok=False)
 
     # 转换VAE权重
     vae_state_dict = load_from_hf(vae_hg_weight_path)
