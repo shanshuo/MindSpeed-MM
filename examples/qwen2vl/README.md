@@ -3,30 +3,7 @@
 <p align="left">
 </p>
 
-## 目录
-
-- [环境安装](#jump1)
-  - [仓库拉取](#jump1.1)
-  - [环境搭建](#jump1.2)
-- [权重下载及转换](#jump2)
-  - [权重下载](#jump2.1)
-- [数据集准备及处理](#jump3)
-  - [数据集下载](#jump3.1)
-- [预训练](#jump4)
-  - [准备工作](#jump4.1)
-  - [配置参数](#jump4.2)
-  - [启动预训练](#jump4.3)
-- [推理](#jump5)
-  - [准备工作](#jump5.1)
-  - [配置参数](#jump5.2)
-  - [启动推理](#jump5.3)
-- [注意事项](#jump6)
-- [评测](#jump7)
-  - [数据集准备](#jump7.1)
-  - [配置参数](#jump7.2)
-  - [启动评测](#jump7.3)
----
-<a id="jump1"></a>
+[toc]
 
 ## 环境安装
 
@@ -67,7 +44,7 @@
   </tr>
 </table>
 
-<a id="jump1.1"></a>
+
 
 #### 1. 仓库拉取
 
@@ -84,7 +61,7 @@ mkdir data
 mkdir ckpt
 ```
 
-<a id="jump1.2"></a>
+
 
 #### 2. 环境搭建
 
@@ -120,7 +97,7 @@ pip install -e .
 
 ## 权重下载及转换
 
-<a id="jump2.1"></a>
+
 
 #### 1. 权重下载
 
@@ -205,11 +182,9 @@ vit_attention_heads_num = 16  # vit的注意力heads数
 LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
 ```
 
-<a id="jump3"></a>
+
 
 ## 数据集准备及处理
-
-<a id="jump3.1"></a>
 
 #### 1. 数据集下载(以coco2017数据集为例)
 
@@ -236,17 +211,17 @@ dataset_param->basic_parameters->dataset
 从"./data/mllm_format_llava_instruct_data.json"修改为"./data/mllm_format_llava_instruct_data.json,./data/mllm_format_llava_instruct_data2.json"
 
 同时注意`data.json`中`dataset_param->basic_parameters->max_samples`的配置，会限制数据只读`max_samples`条，这样可以快速验证功能。如果正式训练时，可以把该参数去掉则读取全部的数据。
-<a id="jump4"></a>
+
 
 ## 微调
 
-<a id="jump4.1"></a>
+
 
 #### 1. 准备工作
 
 配置脚本前需要完成前置准备工作，包括：**环境安装**、**权重下载及转换**、**数据集准备及处理**，详情可查看对应章节。
 
-<a id="jump4.2"></a>
+
 
 #### 2. 配置参数
 
@@ -331,7 +306,7 @@ NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 ```
 
-<a id="jump4.3"></a>
+
 
 #### 3. 启动微调
 
@@ -341,11 +316,16 @@ WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 bash examples/qawen2vl/finetune_qwen2vl_7b.sh
 ```
 
-<a id="jump5"></a>
+
 
 ## LoRA
 
 LoRA为框架通用能力，如需在基线脚本上增加LoRA能力请参考LoRA特性文档[docs/features/lora_finetune.md](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/lora_finetune.md)
+
+
+
+
+
 
 ## 推理
 
@@ -375,17 +355,38 @@ NPUS_PER_NODE=4 # 可用几张卡 要大于 PP*TP*CP
 PP=4 #PP并行参数
 ```
 
-<a id="jump6"></a>
+## 训练后权重转回huggingface格式
+MindSpeed-MM修改了部分原始网络的结构名称，在微调后，如果需要将权重转回huggingface格式，可使用examples/qwen2vl/qwen2vl_convert_to_hg.py脚本对微调后的权重进行转换，将权重名称修改为与原始网络一致。
+#### 1.修改路径
+修改qwen2vl_convert_to_hf.py中的如下内容,与实际保持一致：
+```python
+mm_save_dir = "save_dir"                # 微调后保存的权重目录
+hg_save_dir = "Qwen2-VL-7B-Save"        # 希望保存的hf目录
+model_path = "Qwen2-VL-7B-Instruct"     # hf原仓目录
+```
 
-## 注意事项：
-1. 在使用流水线并行策略进行多机训练可能会出现卡住现象，可参考[此处](https://gitee.com/ascend/MindSpeed/pulls/1627/files)修改。
-2. 模型相关参数在examples/qwen2vl/model_xb.json 修改，训练相关参数在 finetune_xx.sh修改。
+#### 2.修改配置
+修改qwen2vl_convert_to_hf.py中的如下内容,与qwen2vl_convert_to_mm_ckpt.py保持一致：
+```python
+pp_size = 4
+vit_num_layers = 32
+vit_pipeline_num_layers = [32, 0, 0, 0]
+llm_num_layers = 28
+llm_pipeline_num_layers = [1, 6, 11, 10]
+
+vit_hidden_size = 1280
+vit_attention_heads_num = 16
+```
 
 
-<a id="jump7"></a>
+#### 3.执行转换脚本
+```bash
+python examples/qwen2vl/qwen2vl_convert_to_hf.py
+```
+
+
 
 ## 评测
-<a id="jump7.1"></a>
 ### 数据集准备
 
 当前模型支持AI2D(test)、ChartQA(test)、Docvqa(val)、MMMU(val)四种数据集的评测。
@@ -395,7 +396,6 @@ PP=4 #PP并行参数
 - [DocVQA_VAL](https://opencompass.openxlab.space/utils/VLMEval/DocVQA_VAL.tsv)
 - [AI2D_TEST](https://opencompass.openxlab.space/utils/VLMEval/AI2D_TEST.tsv)
 - [ChartQA_TEST](https://opencompass.openxlab.space/utils/VLMEval/ChartQA_TEST.tsv)
-<a id="jump7.2"></a>
 ### 参数配置
 如果要进行评测需要将要评测的数据集名称和路径传到examples/qwen2vl/evaluate_qwen2vl_7b.json
 需要更改的字段有
@@ -432,7 +432,6 @@ LOAD_PATH="./qwen_7b_pp1/Qwen2-VL-7B-Instruct"
 ```shell
 NPUS_PER_NODE=1
 ```
-<a id="jump7.3"></a>
 ### 启动评测
 启动shell开始推理
 ```shell
@@ -441,4 +440,10 @@ bash examples/qwen2vl/evaluate_qwen2vl_7b.sh
 评测结果会输出到`result_output_path`路径中，会输出结果文件：
 - *.xlsx文件，这个文件会输出每道题的预测结果和答案等详细信息。
 - *.csv文件，这个文件会输出统计准确率等数据。
+
+
+
+## 注意事项
+1. 在使用流水线并行策略进行多机训练可能会出现卡住现象，可参考[此处](https://gitee.com/ascend/MindSpeed/pulls/1627/files)修改。
+2. 在 `finetune_xx.sh`里，与模型结构相关的参数并不生效，以`examples/qwen2vl/model_xb.json`里同名参数配置为准，非模型结构的训练相关参数在 `finetune_xx.sh`修改。
 

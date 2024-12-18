@@ -1,4 +1,6 @@
 import json
+import os
+import shutil
 from pathlib import Path
 
 import mindspeed.megatron_adaptor  # noqa
@@ -6,18 +8,28 @@ import torch
 from safetensors.torch import save_file
 
 
-def rename_pp_parameter(param_name: str, model_dir: Path, pp_list:list[int]) -> str:
-    if param_name.startswith('decoder.layers'):
-        index = int(model_dir.parent.stem.split('_')[-1])
+def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int]) -> str:
+    index = int(model_dir.parent.stem.split('_')[-1])
+    llm_pp_list = [sum(llm_pp_list[:i + 1]) for i in range(len(llm_pp_list))]
+    vit_pp_list = [sum(vit_pp_list[:i + 1]) for i in range(len(vit_pp_list))]
+    llm_pp_list = [0] + llm_pp_list[0:-1]
+    vit_pp_list = [0] + vit_pp_list[0:-1]
+    if param_name.startswith('image_encoder.encoder.blocks.layers'):
         # 比如pp_list = [0,0,10,20],当读取到最后一个.pt文件，此时index=3，该文件中存放的是第20到第27层
-        index = pp_list[index]
+        index = vit_pp_list[index]
         name_li = param_name.split('.')
-        name_li[2] = str(index + int(name_li[2]))
+        name_li[4] = str(index + int(name_li[4]))
+        param_name = '.'.join(name_li)
+    elif param_name.startswith('text_decoder.decoder.layers'):
+        # 比如pp_list = [0,0,10,20],当读取到最后一个.pt文件，此时index=3，该文件中存放的是第20到第27层
+        index = llm_pp_list[index]
+        name_li = param_name.split('.')
+        name_li[3] = str(index + int(name_li[3]))
         param_name = '.'.join(name_li)
     return param_name
 
 
-def load_from_mm(_load_dir, pp_index):
+def load_from_mm(_load_dir, vit_pp_list, llm_pp_list):
     LATEST_TXT = "latest_checkpointed_iteration.txt"
     mm_save_dir = Path(_load_dir)
     save_iteration = mm_save_dir.joinpath(LATEST_TXT).read_text()
@@ -27,14 +39,15 @@ def load_from_mm(_load_dir, pp_index):
     for pt_path in save_iter_dir.glob("*/*.pt"):
         print(str(pt_path).center(100, '_'))
         state_dict.update(
-            {rename_pp_parameter(param, pt_path, pp_index): tensor for param, tensor in torch.load(pt_path)['model'].items()})
+            {rename_pp_parameter(param, pt_path, vit_pp_list, llm_pp_list): tensor
+             for param, tensor in torch.load(pt_path, map_location='cpu')['model'].items()})
     for key, value in state_dict.items():
         print(key)
 
     return state_dict
 
 
-def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
+def convert_mm_to_hf(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
     hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
     new_params = {}
     for key, value in _state_dict.items():
@@ -66,7 +79,7 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
 
                     v_part = value[(i + 2) * hiddensize_per_head: (i + 3) * hiddensize_per_head, :]
                     res[_vit_hidden_size * 2 + hiddensize_per_head * j: _vit_hidden_size * 2 + hiddensize_per_head * (
-                                j + 1), :] = v_part
+                            j + 1), :] = v_part
 
                     i = i + 3
                 new_params[new_key] = res
@@ -79,12 +92,12 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
 
                     k_part = value[(i + 1) * hiddensize_per_head: (i + 2) * hiddensize_per_head]
                     res[_vit_hidden_size + hiddensize_per_head * j: _vit_hidden_size + hiddensize_per_head * (
-                                j + 1)] = k_part
+                            j + 1)] = k_part
 
                     v_part = value[(i + 2) * hiddensize_per_head: (i + 3) * hiddensize_per_head]
                     res[
                     _vit_hidden_size * 2 + hiddensize_per_head * j: _vit_hidden_size * 2 + hiddensize_per_head * (
-                                j + 1)] = v_part
+                            j + 1)] = v_part
 
                     i = i + 3
                 new_params[new_key] = res
@@ -95,7 +108,7 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
         else:
             if 'self_attention.linear_qkv.weight' in key:
                 qkv_chunks = torch.chunk(value, 4, dim=0)
-                # [896(q)+128(k)+128(v)]*4
+                # qkv的结构是[896(q)+128(k)+128(v)]*4
                 indices = [896, 1024]
                 indices = [0] + indices + [qkv_chunks[0].size(0)]
                 q_chunks = []
@@ -111,7 +124,7 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
                 attention_k_weight = torch.cat(k_chunks, dim=0)
                 attention_v_weight = torch.cat(v_chunks, dim=0)
 
-                layer = key.split('.')[2]
+                layer = key.split('.')[3]
                 attention_q = f'model.layers.{layer}.self_attn.q_proj.weight'
                 attention_k = f'model.layers.{layer}.self_attn.k_proj.weight'
                 attention_v = f'model.layers.{layer}.self_attn.v_proj.weight'
@@ -122,7 +135,7 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
 
             elif 'self_attention.linear_qkv.bias' in key:
                 qkv_chunks = torch.chunk(value, 4, dim=0)
-                # [896(q)+128(k)+128(v)]*4
+                # qkv的结构是[896(q)+128(k)+128(v)]*4
                 indices = [896, 1024]
                 indices = [0] + indices + [qkv_chunks[0].size(0)]
                 q_chunks = []
@@ -138,7 +151,7 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
                 attention_k_weight = torch.cat(k_chunks, dim=0)
                 attention_v_weight = torch.cat(v_chunks, dim=0)
 
-                layer = key.split('.')[2]
+                layer = key.split('.')[3]
                 attention_q = f'model.layers.{layer}.self_attn.q_proj.bias'
                 attention_k = f'model.layers.{layer}.self_attn.k_proj.bias'
                 attention_v = f'model.layers.{layer}.self_attn.v_proj.bias'
@@ -149,27 +162,27 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
 
             elif 'mlp.linear_fc1.weight' in key:
                 gate_up_chunks = torch.chunk(value, 2, dim=0)
-                layer = key.split('.')[2]
+                layer = key.split('.')[3]
                 attention_gate = f'model.layers.{layer}.mlp.gate_proj.weight'
                 attention_up = f'model.layers.{layer}.mlp.up_proj.weight'
 
                 new_params[attention_gate] = gate_up_chunks[0]
                 new_params[attention_up] = gate_up_chunks[1]
 
-            elif key.startswith('output_layer'):
-                new_key = key.replace('output_layer', 'lm_head')
+            elif key.startswith('text_decoder.output_layer'):
+                new_key = key.replace('text_decoder.output_layer', 'lm_head')
                 if value is not None:
                     new_params[new_key] = value
-            elif key == 'embedding.word_embeddings.weight':
-                new_key = key.replace('embedding.word_embeddings.weight', 'model.embed_tokens.weight')
+            elif key == 'text_decoder.embedding.word_embeddings.weight':
+                new_key = key.replace('text_decoder.embedding.word_embeddings.weight', 'model.embed_tokens.weight')
                 if value is not None:
                     new_params[new_key] = value
-            elif key == 'decoder.final_layernorm.weight':
-                new_key = key.replace('decoder.final_layernorm.weight', 'model.norm.weight')
+            elif key == 'text_decoder.decoder.final_layernorm.weight':
+                new_key = key.replace('text_decoder.decoder.final_layernorm.weight', 'model.norm.weight')
                 if value is not None:
                     new_params[new_key] = value
-            elif key.startswith('decoder.layers'):
-                new_key = key.replace('decoder.layers', 'model.layers')
+            elif key.startswith('text_decoder.decoder.layers'):
+                new_key = key.replace('text_decoder.decoder.layers', 'model.layers')
                 new_key = new_key.replace('self_attention.linear_proj.weight', 'self_attn.o_proj.weight')
                 new_key = new_key.replace('pre_mlp_layernorm.weight', 'post_attention_layernorm.weight')
                 new_key = new_key.replace('mlp.linear_fc2.weight', 'mlp.down_proj.weight')
@@ -179,9 +192,45 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
     return new_params
 
 
-def split_by_index_json(_state_dict, _index_json_path):
+def copy_except_safetensors(src_dir: str, dst_dir: str) -> None:
+    # 如果目标目录不存在，则创建它
+    if not os.path.exists(dst_dir):
+        os.makedirs(dst_dir)
+
+    # 遍历源目录及其子目录
+    for root, dirs, files in os.walk(src_dir):
+        # 构造目标路径
+        dst_root = os.path.join(dst_dir, os.path.relpath(root, src_dir))
+
+        # 复制文件，但排除 .safetensors 文件
+        for file in files:
+            if not file.endswith('.safetensors'):
+                src_file = os.path.join(root, file)
+                dst_file = os.path.join(dst_root, file)
+                # 确保目标文件的父目录存在
+                os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+
+
+def check_pp_config(_pp_size, _vit_num_layers, _vit_pipeline_num_layers, _llm_num_layers, _llm_pipeline_num_layers):
+    if len(_vit_pipeline_num_layers) != _pp_size:
+        raise AssertionError(f'length of vit_pipeline_num_layers must be equal to pp_size, '
+                             f'but got {len(_vit_pipeline_num_layers)} and {_pp_size}.')
+    if sum(_vit_pipeline_num_layers) != _vit_num_layers:
+        raise AssertionError(f'sum of vit_pipeline_num_layers must be equal to vit_num_layers, '
+                             f'but got {sum(_vit_pipeline_num_layers)} and {_vit_num_layers}.')
+    if len(_llm_pipeline_num_layers) != _pp_size:
+        raise AssertionError(f'length of llm_pipeline_num_layers must be equal to pp_size, '
+                             f'but got {len(_llm_pipeline_num_layers)} and {_pp_size}.')
+    if sum(_llm_pipeline_num_layers) != _llm_num_layers:
+        raise AssertionError(f'sum of llm_pipeline_num_layers must be equal to llm_num_layers, '
+                             f'but got {sum(_llm_pipeline_num_layers)} and {_llm_num_layers}.')
+
+
+def split_by_index_json(_state_dict, _model_path):
+    index_json_path = os.path.join(_model_path, 'model.safetensors.index.json')
     return_dicts = []
-    with open(_index_json_path, 'r', encoding='utf-8') as file:
+    with open(index_json_path, 'r', encoding='utf-8') as file:
         weight_map = json.load(file)['weight_map']
     for key, value in weight_map.items():
         index = int(value.split('-')[1])
@@ -192,22 +241,31 @@ def split_by_index_json(_state_dict, _index_json_path):
 
 
 def save_by_index_json(_state_dicts, _save_dir):
+    metadata = {
+        'format': 'pt'
+    }
     for index, state_dict in enumerate(_state_dicts, start=1):
         name = f'model-{index:05}-of-{len(_state_dicts):05}.safetensors'
-        save_file(state_dict, Path(_save_dir).joinpath(name))
+        save_file(state_dict, Path(_save_dir).joinpath(name), metadata=metadata)
 
 
 if __name__ == "__main__":
-    mm_save_dir = "/data/MindSpeed-MM/save_dir"
-    hg_save_dir = "Qwen2-VL-7B-Save"
-    index_json_path = "Qwen2-VL-7B-Instruct/model.safetensors.index.json"
+    mm_save_dir = "save_dir"                # 微调后保存的权重目录
+    hg_save_dir = "Qwen2-VL-7B-Save"        # 希望保存的hf目录
+    model_path = "Qwen2-VL-7B-Instruct"     # hf原仓目录
 
-    pp_index_ = [0, 0, 10, 20]
-    num_layers = 28
+    pp_size = 4
+    vit_num_layers = 32
+    vit_pipeline_num_layers = [32, 0, 0, 0]
+    llm_num_layers = 28
+    llm_pipeline_num_layers = [1, 6, 11, 10]
 
     vit_hidden_size = 1280
     vit_attention_heads_num = 16
-    state_dict = load_from_mm(mm_save_dir, pp_index_)
-    state_dict = convert_mm_to_hg(state_dict, vit_hidden_size, vit_attention_heads_num)
-    state_dicts = split_by_index_json(state_dict, index_json_path)
+
+    check_pp_config(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers)
+    state_dict = load_from_mm(mm_save_dir, vit_pipeline_num_layers, llm_pipeline_num_layers)
+    state_dict = convert_mm_to_hf(state_dict, vit_hidden_size, vit_attention_heads_num)
+    state_dicts = split_by_index_json(state_dict, model_path)
+    copy_except_safetensors(model_path, hg_save_dir)
     save_by_index_json(state_dicts, hg_save_dir)
