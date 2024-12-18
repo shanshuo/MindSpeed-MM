@@ -223,9 +223,9 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     如下：
 
     ```python
-    if global_step >= args.max_train_steps:
+    if global_step >= args.max_train_steps: # 原代码
       break
-    accelerator.print("")
+    accelerator.print("") # 添加
     ```
 
 4. 【如需保存checkpointing请修改代码】
@@ -236,13 +236,38 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     vim examples/dreambooth/train_dreambooth_lora_sd3.py
     ```
 
+    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近），并增加patch引用`from patch_sd3 import create_save_model_hook`
     - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`（dreambooth在1681行附近,lora在1833行附近）
-    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
 
     ```python
     from accelerate import Accelerator, DistributedType
+    # from accelerate import Accelerator # 原代码
+    from patch_sd3 import create_save_model_hook # 添加此行patch引用代码
+    from accelerate.logging import get_logger # 原代码
+     
     if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
+    # if accelerator.is_main_process: # 原代码 1681/1833行附近
     ```
+
+    Lora任务需调用patch任务进行权重保存：
+
+    在`train_dreambooth_lora_sd3.py`文件中找到代码`accelerator.register_save_state_pre_hook(save_model_hook)`进行修改(1368行附近)，修改如下：
+
+   ```python
+   # 添加
+   save_Model_Hook = create_save_model_hook(
+          accelerator=accelerator,
+          unwrap_model=unwrap_model,
+          transformer=transformer,
+          text_encoder_one=text_encoder_one,
+          text_encoder_two=text_encoder_two,
+          args=args,
+          weight_dtype=weight_dtype
+   )
+   accelerator.register_save_state_pre_hook(save_Model_Hook) # 修改
+   # accelerator.register_save_state_pre_hook(save_model_hook) # 原代码
+   accelerator.register_load_state_pre_hook(load_model_hook) # 原代码 不修改
+   ```
 
 5. 【修改文件】
 
@@ -257,6 +282,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     ```python
     # 修改pipeline为：
     pipeline = pipeline.to(accelerator.device, dtype=torch_dtype)
+    # pipeline = pipeline.to(accelerator.device) # 原代码
     ```
 
 6. 【启动 SD3 微调脚本】
