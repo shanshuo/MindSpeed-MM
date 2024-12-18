@@ -105,4 +105,5 @@ torchrun $DISTRIBUTED_ARGS \
     --distributed-backend nccl \
     | tee logs/train_${logfile}.log 2>&1
 chmod 440 logs/train_${logfile}.log
+chmod -R 440 $SAVE_PATH
 set +x
