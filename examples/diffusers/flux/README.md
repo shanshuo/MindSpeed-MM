@@ -129,7 +129,7 @@
 
 1. 【准备微调数据集】
 
-    - 用户需自行获取并解压[pokemon-blip-captions](https://huggingface.co/datasets/lambdalabs/pokemon-blip-captions/tree/main)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径>
+    - 用户需自行获取并解压[pokemon-blip-captions](https://huggingface.co/datasets/lambdalabs/pokemon-blip-captions/tree/main)数据集，并在以下启动shell脚本中将`dataset_name`参数设置为本地数据集的绝对路径
 
     ```shell
     dataset_name="pokemon-blip-captions" # 数据集 路径
@@ -179,35 +179,6 @@
       --validation_prompt="a validation prompt based on your own dataset" \
     ```
 
-    【因模型较大 如不需要`checkpointing_steps`，请设置其大于`max_train_steps`, 避免开启】
-
-    ```shell
-    --checkpointing_steps=50000 \ # 修改50000步为所需要步数
-    ```
-
-    【如需保存checkpointing请修改代码】
-
-    ```shell
-    vim examples/dreambooth/train_dreambooth_flux.py #（1669行附近）
-    vim examples/dreambooth/train_dreambooth_lora_flux.py #（1788行附近）
-    ```
-
-    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
-    - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`
-
-    ```python
-    from accelerate import Accelerator, DistributedType
-    if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
-    ```
-
-    更改shell脚本：
-
-    ```shell
-    export HCCL_CONNECT_TIMEOUT=1200 # 大幅调高HCCL_CONNECT_TIMEOUT (如5000)
-    export HCCL_EXEC_TIMEOUT=17000
-    --checkpointing_steps=50000 \ # 修改50000步为所需要步数
-    ```
-
 2. 【配置 FLUX 微调脚本】
 
     联网情况下，微调模型可通过以下步骤下载。无网络时，用户可访问huggingface官网自行下载[FLUX.1-dev模型](https://huggingface.co/black-forest-labs/FLUX.1-dev) `model_name`模型
@@ -236,9 +207,12 @@
         vim src/diffusers/models/embeddings.py
         ```
 
-    2. 打开`train_dreambooth_flux.py`或`train_dreambooth_lora_flux.py`文件
+        ```python
+        freqs_dtype = torch.float32 # 760行附近
+        # freqs_dtype = torch.float32 if is_mps else torch.float64 # 原代码
+        ```
 
-        - 在62行附近添加代码
+    2. 打开`train_dreambooth_flux.py`或`train_dreambooth_lora_flux.py`文件
 
         ```shell
         cd examples/dreambooth/ # 从diffusers目录进入dreambooth目录
@@ -246,11 +220,16 @@
         vim train_dreambooth_lora_flux.py # 进入Python文件
         ```
 
+        - 在import栏/`if is_wandb_available():`上方（62行附近添加代码）
+
         ```python
         # 添加代码到train_dreambooth_flux.py 62行附近
-        from patch_flux import TorchPatcher, config_gc
+        from patch_flux import TorchPatcher, config_gc, create_save_model_hook
         TorchPatcher.apply_patch()
         config_gc()
+
+        if is_wandb_available(): # 原代码
+          import wandb
         ```
 
         - 在log_validation里修改`pipeline = pipeline.to(accelerator.device)`，`train_dreambooth_flux.py`在171行附近`train_dreambooth_lora_flux.py`在180行附近
@@ -258,17 +237,70 @@
         ```python
         # 修改pipeline为：
         pipeline = pipeline.to(accelerator.device, dtype=torch_dtype)
+        # pipeline = pipeline.to(accelerator.device) # 原代码
         ```
 
     3. 【Optional】Ubuntu系统需在1701行附近 添加 `accelerator.print("")`
 
         ```python
-        if global_step >= args.max_train_steps:
+        if global_step >= args.max_train_steps: # 原代码
           break
-        accelerator.print("")
+        accelerator.print("") # 添加
         ```
 
-3. 【启动 FLUX 微调脚本】
+    4. 【Optional】模型checkpoint saving保存
+
+        【因模型较大 如不需要`checkpointing_steps`，请设置其大于`max_train_steps`, 避免开启】
+
+        ```shell
+        --checkpointing_steps=50000 \ # 修改50000步为所需要步数
+        ```
+
+        【如需保存checkpointing请修改代码】
+
+        ```shell
+        vim examples/dreambooth/train_dreambooth_flux.py #（1669行附近）
+        vim examples/dreambooth/train_dreambooth_lora_flux.py #（1788行附近）
+        ```
+
+        - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
+        - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED` (1669/1788行附近)
+
+        ```python
+        from accelerate import Accelerator, DistributedType
+        # from accelerate import Accelerator # 原代码
+
+        if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
+        # if accelerator.is_main_process: # 原代码
+        ```
+
+        Lora任务需调用patch任务进行权重保存：
+        在`train_dreambooth_lora_flux.py`文件中找到代码`accelerator.register_save_state_pre_hook(save_model_hook)`进行修改(1308行附近)，复制粘贴以下代码：
+
+        ```python
+        # 添加
+        save_Model_Hook = create_save_model_hook(
+              accelerator=accelerator,
+              unwrap_model=unwrap_model,
+              transformer=transformer,
+              text_encoder_one=text_encoder_one,
+              args=args,
+              weight_dtype=weight_dtype
+        )
+        accelerator.register_save_state_pre_hook(save_Model_Hook) # 修改
+        # accelerator.register_save_state_pre_hook(save_model_hook) # 原代码
+        accelerator.register_load_state_pre_hook(load_model_hook) # 原代码 不修改
+        ```
+
+        更改shell脚本：
+
+        ```shell
+        export HCCL_CONNECT_TIMEOUT=1200 # 大幅调高HCCL_CONNECT_TIMEOUT (如5000)
+        export HCCL_EXEC_TIMEOUT=17000
+        --checkpointing_steps=50000 \ # 修改50000步为所需要步数
+        ```
+
+4. 【启动 FLUX 微调脚本】
 
     本任务主要提供flux_dreambooth与flux_dreambooth_lora微调脚本，支持多卡训练。
 
