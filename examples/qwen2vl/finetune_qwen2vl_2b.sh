@@ -97,7 +97,8 @@ GPT_ARGS="
     --load $LOAD_PATH \
     --use-distributed-optimizer \
     --variable-seq-lengths \
-    --enable-one-logger
+    --enable-one-logger \
+    --use-flash-attn \
 "
 
 MM_ARGS="
