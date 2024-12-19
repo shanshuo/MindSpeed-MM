@@ -73,7 +73,6 @@ def convert_sharegpt(
         logger.warning("Invalid message count in %s.", messages)
         broken_data = True
 
-
     prompt = aligned_messages[:-1]
     response = aligned_messages[-1:]
 
@@ -165,7 +164,11 @@ class DataArguments:
     r"""
     Arguments pertaining to what data we are going to input our model for training and evaluation.
     """
-    cache_dir: str
+    cache_dir: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Directory to read/write data. Defaults to `~/.cache/huggingface/datasets`(env:HF_DATASETS_CACHE)"},
+    )
     template: Optional[str] = field(
         default=None,
         metadata={
@@ -220,6 +223,9 @@ class DataArguments:
         metadata={
             "help": "Tool format to use for constructing function calling examples."},
     )
+
+    def __post_init__(self):
+        self.dataset = self.dataset.split(",")
 
 
 def preprocess_supervised_dataset(
