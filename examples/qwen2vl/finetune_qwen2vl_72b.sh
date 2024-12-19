@@ -94,7 +94,8 @@ GPT_ARGS="
     --variable-seq-lengths \
     --enable-one-logger \
     --use-distributed-optimizer \
-    --reuse-fp32-param
+    --reuse-fp32-param \
+    --use-flash-attn \
 "
 
 MM_ARGS="
