@@ -13,7 +13,7 @@ def load_from_hf(_load_dir):
     return hf_model.state_dict()
 
 
-def convert_hg_to_mm(_state_dict, _num_layers):
+def convert_hf_to_mm(_state_dict, _num_layers):
     new_dict = {}
     for key, value in _state_dict.items():
         new_key = None
@@ -166,12 +166,12 @@ def save_by_pp(_state_dicts, _save_dir, _latest_checkpointed_iteration='release'
 
 
 if __name__ == "__main__":
-    hg_ckpt_dir = "InternVL2-8B" # huggingface权重目录
+    hf_ckpt_dir = "InternVL2-8B" # huggingface权重目录
     mm_save_dir = 'InternVL2-8B_pp4'  # 转换后权重保持目录
     pipeline_layer_index = [0, 6, 15, 24]
     num_layers = 32
 
-    state_dict = load_from_hf(_load_dir=hg_ckpt_dir)
-    state_dict = convert_hg_to_mm(state_dict, num_layers)
+    state_dict = load_from_hf(_load_dir=hf_ckpt_dir)
+    state_dict = convert_hf_to_mm(state_dict, num_layers)
     state_dicts, _ = split_by_pp(state_dict, num_layers, pipeline_layer_index)
     save_by_pp(state_dicts, mm_save_dir, _exists_ok=True)

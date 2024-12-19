@@ -34,7 +34,7 @@ def load_from_mm(_load_dir, pp_index):
     return state_dict
 
 
-def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
+def convert_mm_to_hf(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
     hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
     new_params = {}
     for key, value in _state_dict.items():
@@ -95,7 +95,6 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
         else:
             if 'self_attention.linear_qkv.weight' in key:
                 qkv_chunks = torch.chunk(value, 4, dim=0)
-                # [896(q)+128(k)+128(v)]*4
                 indices = [896, 1024]
                 indices = [0] + indices + [qkv_chunks[0].size(0)]
                 q_chunks = []
@@ -122,7 +121,6 @@ def convert_mm_to_hg(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
 
             elif 'self_attention.linear_qkv.bias' in key:
                 qkv_chunks = torch.chunk(value, 4, dim=0)
-                # [896(q)+128(k)+128(v)]*4
                 indices = [896, 1024]
                 indices = [0] + indices + [qkv_chunks[0].size(0)]
                 q_chunks = []
@@ -199,7 +197,7 @@ def save_by_index_json(_state_dicts, _save_dir):
 
 if __name__ == "__main__":
     mm_save_dir = "/data/MindSpeed-MM/save_dir"
-    hg_save_dir = "Qwen2-VL-7B-Save"
+    hf_save_dir = "Qwen2-VL-7B-Save"
     index_json_path = "Qwen2-VL-7B-Instruct/model.safetensors.index.json"
 
     pp_index_ = [0, 0, 10, 20]
@@ -208,6 +206,6 @@ if __name__ == "__main__":
     vit_hidden_size = 1280
     vit_attention_heads_num = 16
     state_dict = load_from_mm(mm_save_dir, pp_index_)
-    state_dict = convert_mm_to_hg(state_dict, vit_hidden_size, vit_attention_heads_num)
+    state_dict = convert_mm_to_hf(state_dict, vit_hidden_size, vit_attention_heads_num)
     state_dicts = split_by_index_json(state_dict, index_json_path)
-    save_by_index_json(state_dicts, hg_save_dir)
+    save_by_index_json(state_dicts, hf_save_dir)

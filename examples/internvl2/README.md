@@ -68,7 +68,7 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git 
+    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git
     git clone https://github.com/NVIDIA/Megatron-LM.git
     cd Megatron-LM
     git checkout core_r0.6.0
@@ -90,9 +90,9 @@
     conda activate test
 
     # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
-    pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
+    pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
-    
+
     # apex for Ascend 参考 https://gitee.com/ascend/apex
     pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
 
@@ -100,13 +100,13 @@
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
     # checkout commit from MindSpeed core_r0.6.0
-    git checkout 4c6847e6fda0a458914fd2ea664f6d09a8be300e
-    pip install -r requirements.txt 
+    git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
+    pip install -r requirements.txt
     pip3 install -e .
     cd ..
     # 替换MindSpeed中的文件
     cp examples/internvl2/dot_product_attention.py MindSpeed/mindspeed/core/transformer/dot_product_attention.py
-    
+
     # 安装其余依赖库
     pip install -e .
 ```
@@ -130,10 +130,10 @@
 
 MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
 
-以InternVL2-2B为例，修改`inernvl_convert_to_mm_ckpt.py`中的`load_dir`、`save_dir`、`pipeline_layer_index`、`num_layers`如下：
+以InternVL2-2B为例，修改`internvl_convert_to_mm_ckpt.py`中的`load_dir`、`save_dir`、`pipeline_layer_index`、`num_layers`如下：
 
 ```python
-  hg_ckpt_dir = 'raw_ckpt/InternVL2-2B' # huggingface权重目录
+  hf_ckpt_dir = 'raw_ckpt/InternVL2-2B' # huggingface权重目录
   mm_save_dir = 'ckpt/InternVL2-2B'  # 转换后保存目录
   pipeline_layer_index = None     # None表示不进行pp切分；若要进行pp切分，则需要传入一个列表，例如[0, 3, 13, 23]
   num_layers=24                   # 模型结构层数
@@ -258,7 +258,7 @@ $save_dir
 
 ```shell
     # 根据实际情况修改 ascend-toolkit 路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
     GPUS_PER_NODE=8
     MASTER_ADDR=locahost
     MASTER_PORT=6000
@@ -293,7 +293,7 @@ $save_dir
 以InternVL2-2B为例，按实际情况修改inference_2B.json，注意tokenizer_config的权重路径为转换前的权重路径。
 
 ```json
-{   
+{
     "image_path": "./examples/internvl2/view.jpg",
     "prompts": "Please describe the image shortly.",
     "model_id": "InternVLPipeline",
@@ -314,7 +314,7 @@ $save_dir
 
 ```shell
     # 根据实际情况修改 ascend-toolkit 路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
     ...
     MM_MODEL="./examples/internvl2/inference_2B.json"
 ```

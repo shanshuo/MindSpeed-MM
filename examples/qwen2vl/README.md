@@ -68,7 +68,7 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git 
+    git clone --branch 1.0.0 https://gitee.com/ascend/MindSpeed-MM.git
     git clone https://github.com/NVIDIA/Megatron-LM.git
     cd Megatron-LM
     git checkout core_r0.6.0
@@ -93,9 +93,9 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
     # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
     # 下载路径参考 https://www.hiascend.com/document/detail/zh/Pytorch/60RC3/configandinstg/instg/insg_0001.html
-    pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
+    pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
-    
+
     # apex for Ascend 参考 https://gitee.com/ascend/apex
     pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
 
@@ -104,12 +104,12 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     cd MindSpeed
     # checkout commit from MindSpeed core_r0.6.0
     git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
-    pip install -r requirements.txt 
+    pip install -r requirements.txt
     pip3 install -e .
     cd ..
     # 替换MindSpeed中的文件
     cp examples/qwen2vl/dot_product_attention.py MindSpeed/mindspeed/core/transformer/dot_product_attention.py
-    
+
     # 安装其余依赖库
     pip install -e .
 ```
@@ -137,7 +137,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```
-hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct' # huggingface权重目录
+hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct' # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后保存目录
 pipeline_layer_index = [0, 0, 10, 20]     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
 
@@ -148,13 +148,13 @@ num_layers=28                   # 语言模型结构层数
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```
-hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct' # huggingface权重目录
+hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct' # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-2B-Instruct'  # 转换后保存目录
 pipeline_layer_index = None     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
 
 num_layers=28                   # 语言模型结构层数
 ```
-  
+
 启动脚本
 
   ```
@@ -188,7 +188,7 @@ LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
    ├── data
        ├── COCO2017
            ├── train2017
-           
+
        ├── llava_instruct_150k.json
        ├── mllm_format_llava_instruct_data.json
        ...
@@ -283,7 +283,7 @@ $save_dir
 
 ```shell
     # 根据实际情况修改 ascend-toolkit 路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
     GPUS_PER_NODE=8
     MASTER_ADDR=locahost
     MASTER_PORT=29501
@@ -334,15 +334,15 @@ pip install qwen_vl_utils
 
 ## 权重转换
 
-MindSpeed-MM修改了部分原始网络的结构名称，在微调后，可使用examples/qwen2vl/qwen2vl_convert_to_hg.py脚本对微调后的权重进行转换，将权重名称修改为与原始网络一致。
+MindSpeed-MM修改了部分原始网络的结构名称，在微调后，可使用examples/qwen2vl/qwen2vl_convert_to_hf.py脚本对微调后的权重进行转换，将权重名称修改为与原始网络一致。
 
 #### 1.修改路径
 
-修改qwen2vl_convert_to_hg.py中的如下内容,与实际保持一致：
+修改qwen2vl_convert_to_hf.py中的如下内容,与实际保持一致：
 
 ```
 mm_save_dir = "/data/MindSpeed-MM/save_dir" # 微调后保存的权重目录
-hg_save_dir = "Qwen2-VL-7B-Save"            # 转换后保存目录
+hf_save_dir = "Qwen2-VL-7B-Save"            # 转换后保存目录
 index_json_path = "Qwen2-VL-7B-Instruct/model.safetensors.index.json" # 原始模型文件夹中的model.safetensors.index.json文件
 num_layers = 28                             # 模型结构层数
 ```
@@ -350,5 +350,5 @@ num_layers = 28                             # 模型结构层数
 #### 2.执行转换脚本
 
 ```
-python examples/qwen2vl/qwen2vl_convert_to_hg.py
+python examples/qwen2vl/qwen2vl_convert_to_hf.py
 ```

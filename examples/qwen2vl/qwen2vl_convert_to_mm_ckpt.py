@@ -15,7 +15,7 @@ def load_from_hf(_load_dir):
     return state_dict
 
 
-def convert_hg_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num):
+def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num):
     hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
     new_params = {}
     for key, value in _state_dict.items():
@@ -271,7 +271,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
 
 
 if __name__ == "__main__":
-    hg_ckpt_dir = "Qwen2-VL-7B-Instruct"
+    hf_ckpt_dir = "Qwen2-VL-7B-Instruct"
     mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'
     pipeline_layer_index = [0, 0, 10, 20]
     num_layers = 28
@@ -279,7 +279,7 @@ if __name__ == "__main__":
     vit_hidden_size = 1280
     vit_attention_heads_num = 16
 
-    state_dict = load_from_hf(_load_dir=hg_ckpt_dir)
-    state_dict = convert_hg_to_mm(state_dict, num_layers, vit_hidden_size, vit_attention_heads_num)
+    state_dict = load_from_hf(_load_dir=hf_ckpt_dir)
+    state_dict = convert_hf_to_mm(state_dict, num_layers, vit_hidden_size, vit_attention_heads_num)
     state_dicts = split_by_pp(state_dict, num_layers, pipeline_layer_index)
     save_by_pp(state_dicts, mm_save_dir, _exists_ok=True)
