@@ -64,6 +64,10 @@ MindSpeed-MM已发布版本维护策略：
 
 `认证`【Pass】表示已经过测试的模型，【Test】表示测试中的模型
 
+Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为 (TPS)
+
+`亲和场景`为调整少量结构或参数，使得模型更加亲和昇腾，性能更优
+
 <table>
   <a id="jump1"></a>
   <caption>MindSpeed-MM模型列表</caption>
@@ -77,77 +81,108 @@ MindSpeed-MM已发布版本维护策略：
       <th>精度格式</th>
       <th>NPU性能</th>
       <th>参考性能</th>
-      <th>贡献方</th>
       <th>认证</th>
     </tr>
   </thead>
   <tbody>
     <tr>
-      <td rowspan="5"> 视频生成 </td>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensora1.0">OpenSora 1.0</a></td>
+      <td rowspan="9"> 视频生成 </td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/opensora1.0">OpenSora 1.0</a></td>
       <td><a href="https://huggingface.co/hpcai-tech/Open-Sora/tree/main">5.5B</a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 3.18 (Samples per Second)</td>
-      <td> 2.04 (Samples per Second)</td>
-      <td> 【昇腾】 </td>
+      <td> 3.18 (SPS)</td>
+      <td> 2.04 (SPS)</td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensora1.2">OpenSora 1.2</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/opensora1.2">OpenSora 1.2</a></td>
       <td><a href="https://huggingface.co/hpcai-tech/OpenSora-STDiT-v3">5.2B</a></td>
       <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
-      <td> 7.31 (Samples per Second) </td>
-      <td> 8.15 (Samples per Second) </td>
-      <td> 【昇腾】 </td>
-      <td>【Test】</td>
+      <td> 7.31 (SPS) </td>
+      <td> 8.15 (SPS) </td>
+      <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensoraplan1.2">OpenSoraPlan 1.2</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/opensoraplan1.2">OpenSoraPlan 1.2</a></td>
       <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.2.0">8.7B</a></td>
       <td>预训练</td>
       <td> 1x8</td>
       <td> BF16 </td>
-      <td> 0.42 (Samples per Second) </td>
-      <td> 0.37 (Samples per Second) </td>
-      <td> 【昇腾】 </td>
+      <td> 0.42 (SPS) </td>
+      <td> 0.37 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensoraplan1.3">OpenSoraPlan 1.3</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/opensoraplan1.3">OpenSoraPlan 1.3-T2V</a></td>
       <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.3.0"> 8.6B </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 0.71 (Samples per Second) </td>
-      <td> 0.73 (Samples per Second) </td>
-      <td> 【昇腾】 </td>
+      <td> 1.29 (SPS) </td>
+      <td> 1.27 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX</a></td>
-      <td><a href="https://huggingface.co/THUDM/CogVideo">5B</a></td>
-      <td>/</td>
-      <td> /</td>
-      <td> / </td>
-      <td> / </td>
-      <td> / </td>
-      <td> / </td>
-      <td>【Test】</td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/opensoraplan1.3">OpenSoraPlan 1.3-I2V</a></td>
+      <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.3.0"> 8.6B </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 1.17 (SPS) </td>
+      <td> 1.15 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/cogvideox">CogVideoX-T2V</a></td>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 5B </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 0.37 (SPS) </td>
+      <td> 0.46 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+    <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 亲和场景 </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 0.92 (SPS) </td>
+      <td> 0.96 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/cogvideox">CogVideoX-I2V</a></td>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 5B </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 0.37 (SPS) </td>
+      <td> 0.46 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+    <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 亲和场景 </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 0.92 (SPS) </td>
+      <td> 0.96 (SPS) </td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td rowspan="7"> 图像生成 </td>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sdxl">SDXL</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/diffusers/sdxl">SDXL</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/5956b68a6927126daffc2c5a6d1a9a189defe288">3.5B</a></td>
       <td>预训练</td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 29.92  (FPS)</td>
       <td> 30.65 (FPS)</td>
-      <td> 【昇腾】【NAIE】 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -157,29 +192,26 @@ MindSpeed-MM已发布版本维护策略：
       <td> FP16 </td>
       <td> 28.51 (FPS)</td>
       <td> 30.23 (FPS)</td>
-      <td> 【昇腾】【NAIE】 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/diffusers/sd3">SD3</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/94643fac8a27345f695500085d78cc8fa01f5fa9">2B</a></td>
       <td>全参微调</td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 17.08 (FPS)</td>
       <td> 17.51 (FPS)</td>
-      <td> 【昇腾】【NAIE】 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3.5</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/diffusers/sd3">SD3.5</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/94643fac8a27345f695500085d78cc8fa01f5fa9">2B</a></td>
       <td>全参微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 26.20 (FPS)</td>
       <td> 28.33 (FPS)</td>
-      <td> 【昇腾】【NAIE】 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -189,52 +221,47 @@ MindSpeed-MM已发布版本维护策略：
       <td> FP16 </td>
       <td> 47.93 (FPS)</td>
       <td> 47.95 (FPS)</td>
-      <td> 【昇腾】【NAIE】 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/flux">Flux</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/diffusers/flux">Flux</a></td>
       <td><a href="https://github.com/huggingface/diffusers/blob/main/examples/dreambooth">12B</a></td>
       <td>全参微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 55.23 (FPS) </td>
       <td> 53.65 (FPS) </td>
-      <td> 【昇腾】 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/diffusers/kolors">Kolors</a></td>
       <td><a href="https://github.com/Kwai-Kolors/Kolors">2.6B</a></td>
       <td>推理</td>
       <td> 1x1 </td>
       <td> FP16 </td>
       <td> / </td>
       <td> / </td>
-      <td> 【NAIE】 </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td rowspan="7"> 多模态理解 </td>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/llava1.5">LLaVA 1.5</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/llava1.5">LLaVA 1.5</a></td>
       <td><a href="https://github.com/haotian-liu/LLaVA">7B</a></td>
       <td>预训练</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 48.27 (Samples per Second) </td>
-      <td> 49.94 (Samples per Second) </td>
-      <td> 【昇腾】【NAIE】 </td>
-      <td>【Test】</td>
+      <td> 48.27 (SPS) </td>
+      <td> 49.94 (SPS) </td>
+      <td>【Pass】</td>
     </tr>
    <tr>
-      <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/internvl2">Intern-VL-2.0</a></td>
+      <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/internvl2">Intern-VL-2.0</a></td>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-2B">2B</a></td>
       <td>微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 33.77 (Samples per Second) </td>
-      <td> 22.46 (Samples per Second) </td>
-      <td> 【昇腾】 </td>
+      <td> 33.77 (SPS) </td>
+      <td> 22.46 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -242,62 +269,56 @@ MindSpeed-MM已发布版本维护策略：
       <td>微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 12.86 (Samples per Second) </td>
-      <td> 11.00 (Samples per Second) </td>
-      <td> 【昇腾】 </td>
+      <td> 12.86 (SPS) </td>
+      <td> 11.00 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://huggingface.co/OpenGVLab/InternVL2-26B">26B</a></td>
-      <td>/</td>
-      <td> /</td>
-      <td> / </td>
-      <td> / </td>
-      <td> / </td>
-      <td> / </td>
-      <td>【Coming Soon】</td>
+      <td><a href="https://huggingface.co/OpenGVLab/InternVL2-Llama3-76B">76B</a></td>
+      <td> 全参微调 </td>
+      <td> 8x16 </td>
+      <td> BF16 </td>
+      <td> 214 (TPS) </td>
+      <td> 191 (TPS) </td>
+      <td>【Test】</td>
     </tr>
     <tr>
-      <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2vl">Qwen2-VL</a></td>
+      <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/qwen2vl">Qwen2-VL</a></td>
       <td><a href="https://qwen2.org/vl/">2B</a></td>
       <td>微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 34.15 (Samples per Second) </td>
-      <td> 34.88 (Samples per Second) </td>
-      <td> 【昇腾】【NAIE】 </td>
-      <td>【Test】</td>
+      <td> 34.15 (SPS) </td>
+      <td> 34.88 (SPS) </td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://qwen2.org/vl/">7B</a></td>
       <td>微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 13.28 (Samples per Second)  </td>
-      <td> 11.66 (Samples per Second)  </td>
-      <td> 【昇腾】【NAIE】 </td>
-      <td>【Test】</td>
+      <td> 13.28 (SPS)  </td>
+      <td> 11.66 (SPS)  </td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://qwen2.org/vl/">72B</a></td>
-      <td>/</td>
-      <td> /</td>
+      <td>微调</td>
+      <td> 8x16 </td>
+      <td> BF16 </td>
       <td> / </td>
       <td> / </td>
-      <td> / </td>
-      <td> 【昇腾】【NAIE】 </td>
-      <td>【Coming Soon】</td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td> 语音识别 </td>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/whisper">Whisper</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/1.0.0/examples/whisper">Whisper</a></td>
       <td><a href="https://github.com/openai/whisper">1.5B</a></td>
       <td>预训练</td>
       <td> 1x8</td>
       <td> BF16 </td>
-      <td> 93.38 (Samples per Second) </td>
-      <td> 109.23 (Samples per Second) </td>
-      <td> 【昇腾】 </td>
+      <td> 93.38 (SPS) </td>
+      <td> 109.23 (SPS) </td>
       <td>【Test】</td>
     </tr>
     </tbody>
@@ -306,7 +327,7 @@ MindSpeed-MM已发布版本维护策略：
 ---
 
 <table>
-  <caption><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm">其他已适配昇腾的多模态大模型</a></caption>
+  <caption><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/1.0.0/PyTorch/built-in/mm">其他已适配昇腾的多模态大模型</a></caption>
   <thead>
     <tr>
       <th>模型</th>
@@ -419,10 +440,10 @@ MindSpeed-MM集成了昇腾profiling采集工具，以提供对模型运行情�
 
 MindSpeed-MM 由华为公司的下列部门联合贡献 ：
 
-* 昇腾计算产品部
-* 公共开发部：NAIE
-* 全球技术服务部：GTS
-* 计算技术开发部
+* 计算产品线
+* 公共开发部
+* 2012实验室
+* 华为云
 
 感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
 

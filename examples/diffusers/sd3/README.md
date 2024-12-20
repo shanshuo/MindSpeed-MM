@@ -237,7 +237,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     ```
 
     - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近），并增加patch引用`from patch_sd3 import create_save_model_hook`
-    - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`（dreambooth在1681行附近,lora在1833行附近）
+    - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`（dreambooth在1681行附近,lora在1833行附近），并在`if args.checkpoints_total_limit is not None`后增加`and accelerator.is_main_process`
 
     ```python
     from accelerate import Accelerator, DistributedType
@@ -247,6 +247,8 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     
     if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
     # if accelerator.is_main_process: # 原代码 1681/1833行附近
+      if global_step % args.checkpointing_steps == 0:  # 原代码 不进行修改
+        if args.checkpoints_total_limit is not None and accelerator.is_main_process: # 添加
     ```
 
     Lora任务需调用patch任务进行权重保存：

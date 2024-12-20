@@ -264,7 +264,7 @@
         ```
 
         - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
-        - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED` (1669/1788行附近)
+        - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED` (1669/1788行附近)，并在`if args.checkpoints_total_limit is not None`后增加`and accelerator.is_main_process`
 
         ```python
         from accelerate import Accelerator, DistributedType
@@ -272,6 +272,8 @@
 
         if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
         # if accelerator.is_main_process: # 原代码
+          if global_step % args.checkpointing_steps == 0:  # 原代码 不进行修改
+            if args.checkpoints_total_limit is not None and accelerator.is_main_process: # 添加
         ```
 
         Lora任务需调用patch任务进行权重保存：
