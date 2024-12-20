@@ -19,6 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
+* [Dec. 19, 2024]: 🎉 MindSpeed-MM生成类模型支持分布式推理
 * [Dec. 16, 2024]: 🚀 MindSpeed-MM支持Qihoo-T2X模型
 * [Dec. 05, 2024]: 🎉 MindSpeed-MM理解类模型支持Lora微调
 * [Dec. 03, 2024]: 🚀 MindSpeed-MM支持SD3.5模型
@@ -39,8 +40,8 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 | CogVideoX-T2V | ✔ |  |  |  | CP (Ulysses) | ✔ | ✔ |  |
 | CogVideoX-I2V | ✔ |  |  |  | CP (Ulysses) | ✔ | ✔ |  |
 | Opensora1.2 |  |  |  |  | DSP | ✔ | ✔ |  |
-| OpensoraPlan1.3-T2V | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ |  |
-| OpensoraPlan1.3-I2V | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ |  |
+| OpensoraPlan1.3-T2V | ✔ | ✔ |  | ✔ | CP (Ulysses) | ✔ | ✔ |  |
+| OpensoraPlan1.3-I2V | ✔ | ✔ |  | ✔ | CP (Ulysses) | ✔ | ✔ |  |
 | InternVL2-2B |  |  | ✔ | ✔ |  | ✔ | ✔ | ✔ |
 | InternVL2-8B |  |  | ✔ | ✔ |  | ✔ | ✔ | ✔ |
 | InternVL2-76B |  |  | ✔ | ✔ |  | ✔ | ✔ | ✔ |
@@ -60,6 +61,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 * Distributed Optimizer: [Zero Redundancy Optimizer](https://arxiv.org/abs/1910.02054) (ZeRO)
 * Recomputation: Reducing Activation [Recomputation](https://arxiv.org/abs/2205.05198)
 * LoRA: [Low-Rank Adaptation](https://arxiv.org/abs/2106.09685)
+
 ---
 
 ## 研发中的特性与模型
@@ -109,6 +111,8 @@ MindSpeed-MM已发布版本维护策略：
 
 Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为 (TPS)
 
+`亲和场景`为调整少量结构或参数，使得模型更加亲和昇腾，性能更优
+
 <table>
   <a id="jump1"></a>
   <caption>MindSpeed-MM模型列表</caption>
@@ -127,7 +131,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="15"> 多模态生成 </td>
+      <td rowspan="17"> 多模态生成 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensora1.0">OpenSora 1.0</a></td>
       <td><a href="https://huggingface.co/hpcai-tech/Open-Sora/tree/main">5.5B</a></td>
       <td> 预训练 </td>
@@ -178,23 +182,41 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX-T2V</a></td>
-      <td><a href="https://huggingface.co/THUDM/CogVideoX-5b">5B</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX-T2V</a></td>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 5B </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> / </td>
-      <td> / </td>
+      <td> 0.37 (SPS) </td>
+      <td> 0.46 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX-I2V</a></td>
-      <td><a href="https://huggingface.co/THUDM/CogVideoX-5b">5B</a></td>
+    <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 亲和场景 </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> / </td>
-      <td> / </td>
+      <td> 0.92 (SPS) </td>
+      <td> 0.96 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX-I2V</a></td>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 5B </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 0.37 (SPS) </td>
+      <td> 0.46 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+    <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 亲和场景 </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 0.92 (SPS) </td>
+      <td> 0.96 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -306,7 +328,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://huggingface.co/OpenGVLab/InternVL2-26B">76B</a></td>
+      <td><a href="https://huggingface.co/OpenGVLab/InternVL2-Llama3-76B">76B</a></td>
       <td> 全参微调 </td>
       <td> 8x16 </td>
       <td> BF16 </td>
@@ -548,7 +570,8 @@ MindSpeed-MM 由华为公司的下列部门联合贡献 ：
 * 华为云
 
 MindSpeed-MM 生态贡献方：
-* 奇虎360
+
+* 360 AI Research
 
 感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
 
