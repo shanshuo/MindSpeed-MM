@@ -20,7 +20,10 @@
   - [准备工作](#jump5.1)
   - [配置参数](#jump5.2)
   - [启动推理](#jump5.3)
-
+- [评测](#jump6)
+  - [数据集准备](#jump6.1)
+  - [配置参数](#jump6.2)
+  - [启动评测](#jump6.3)
 ---
 <a id="jump1"></a>
 
@@ -331,3 +334,66 @@ $save_dir
 ```shell
   bash examples/internvl2/inference_internvl.sh
 ```
+<a id="jump6"></a>
+
+## 评测
+<a id="jump6.1"></a>
+### 数据集准备
+
+当前模型支持AI2D(test)、ChartQA(test)、Docvqa(val)、MMMU(val)四种数据集的评测。
+数据集参考下载链接：
+
+- [MMMU_DEV_VAL](https://opencompass.openxlab.space/utils/VLMEval/MMMU_DEV_VAL.tsv)
+- [DocVQA_VAL](https://opencompass.openxlab.space/utils/VLMEval/DocVQA_VAL.tsv)
+- [AI2D_TEST](https://opencompass.openxlab.space/utils/VLMEval/AI2D_TEST.tsv)
+- [ChartQA_TEST](https://opencompass.openxlab.space/utils/VLMEval/ChartQA_TEST.tsv)
+<a id="jump6.2"></a>
+### 参数配置
+如果要进行评测需要将要评测的数据集名称和路径传到examples/internvl2/evaluate_internvl2_8B.json
+需要更改的字段有
+
+- `from_pretrained` 需要改为模型的权重文件的路径，如果使用的是huggingface的权重则需要进行权重转换(参考前面的权重转换的章节)，如果使用MindSpeed-MM训练出的则不需要进行权重转换。
+- `dataset_path` 需要填入上面下载的数据集文件路径。
+- `evaluation_dataset` 为评测数据集的名称可选的名称有(`ai2d_test`、`mmmu_dev_val`、`docvqa_val`、`chartqa_test`)， **注意**：需要与上面的数据集路径相对应。
+- `result_output_path` 为评测结果的输出路径，**注意**：每次评测前需要将之前保存在该路径下评测文件删除。
+- `tokenizer`下面的`from_pretrained`为huggingface下载的InternVL2-8B权重路径。
+
+```json
+    "model_id": "InternVLPipeline",
+    "from_pretrained": "./internvl8b_mm/release/mp_rank_00/model_optim_rng.pt",
+    "dataset_path": "./AI2D_TEST.tsv",
+    "evaluation_dataset":"ai2d_test",
+    "evaluation_model":"internvl2_8b",
+    "result_output_path":"./evaluation_outputs/",
+
+    "tokenizer":{
+        "hub_backend": "hf",
+        "autotokenizer_name": "AutoTokenizer",
+        "from_pretrained": "./InternVL2-8B",
+        "model_max_length": 4096,
+        "add_eos_token": false,
+        "trust_remote_code": true,
+        "use_fast": false
+    }
+
+```
+
+examples/internvl2/evaluate_internvl2_8B.json改完后，需要将json文件的路径传入到examples/internvl2/evaluate_internvl2_8B.sh MM_MODEL字段中
+
+```shell
+MM_MODEL=examples/internvl2/evaluate_internvl2_8B.json
+```
+评测支持多卡DP推理需要更改的配置,为NPU卡数量
+
+```shell
+NPUS_PER_NODE=1
+```
+<a id="jump6.3"></a>
+### 启动评测
+启动shell开始推理
+```shell
+bash examples/internvl2/evaluate_internvl2_8B.sh
+```
+评测结果会输出到`result_output_path`路径中，会输出结果文件：
+- *.xlsx文件，这个文件会输出每道题的预测结果和答案等详细信息。
+- *.csv文件，这个文件会输出统计准确率等数据。

@@ -1,3 +1,4 @@
+from typing import Callable
 import string
 
 import torch
@@ -11,6 +12,9 @@ class BasePromptTemplate:
 
     def __init__(self):
         self.device = torch.cuda.current_device()
+
+    def build_prompt(self, line, dump_image: Callable, dateset_name=None):
+        raise NotImplementedError('you must implement build_prompt')
 
     @staticmethod
     def check_content_type(message):
