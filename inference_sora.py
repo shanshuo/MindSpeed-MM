@@ -2,6 +2,9 @@ import os
 
 import torch
 import mindspeed.megatron_adaptor
+import torch.distributed as dist
+from megatron.core import mpu
+from megatron.training.checkpointing import load_checkpoint
 from megatron.training.initialize import initialize_megatron
 from megatron.training import get_args
 
@@ -28,9 +31,13 @@ if is_npu_available():
 
 
 def prepare_pipeline(args, device):
+    ori_args = get_args()
     vae = AEModel(args.ae).get_model().to(device, args.ae.dtype).eval()
     text_encoder = TextEncoder(args.text_encoder).get_model().to(device).eval()
-    predict_model = PredictModel(args.predictor).get_model().to(device, args.predictor.dtype).eval()
+    predict_model = PredictModel(args.predictor).get_model()
+    if ori_args.load is not None:
+        load_checkpoint([predict_model], None, None)
+    predict_model = predict_model.to(device, args.predictor.dtype).eval()
     scheduler = DiffusionModel(args.diffusion).get_model()
     tokenizer = Tokenizer(args.tokenizer).get_tokenizer()
     if not hasattr(vae, 'dtype'):
@@ -62,6 +69,9 @@ def main():
     if images is not None and len(prompts) != len(images):
         raise AssertionError(f'The number of images {len(images)} and the numbers of prompts {len(prompts)} do not match')
 
+    if len(prompts) % args.micro_batch_size != 0:
+        raise AssertionError(f'The number of  prompts {len(prompts)} is not divisible by the batch size {args.micro_batch_size}')
+
     save_fps = args.fps // args.frame_interval
 
     # prepare pipeline
@@ -70,7 +80,9 @@ def main():
     # == Iter over all samples ==
     video_grids = []
     start_idx = 0
-    for i in range(0, len(prompts), args.micro_batch_size):
+    rank = mpu.get_data_parallel_rank()
+    world_size = mpu.get_data_parallel_world_size()
+    for i in range(rank * args.micro_batch_size, len(prompts), args.micro_batch_size * world_size):
         # == prepare batch prompts ==
         batch_prompts = prompts[i: i + args.micro_batch_size]
         kwargs = {}
@@ -95,14 +107,49 @@ def main():
                                dtype=dtype,
                                **kwargs
                                )
-        save_videos(videos, start_idx, args.save_path, save_fps)
-        start_idx += len(batch_prompts)
-        video_grids.append(videos)
-        print("Saved %s samples to %s" % (start_idx, args.save_path))
+        if mpu.get_context_parallel_rank() == 0 and mpu.get_tensor_model_parallel_rank() == 0:
+            save_videos(videos, i, args.save_path, save_fps)
+            start_idx += len(batch_prompts) * world_size
+            video_grids.append(videos)
+    if len(video_grids) > 0:
+        video_grids = torch.cat(video_grids, dim=0).to(device)
 
-    video_grids = torch.cat(video_grids, dim=0)
-    save_video_grid(video_grids, args.save_path, save_fps)
-    print("Inference finished.")
+    if len(prompts) < args.micro_batch_size * world_size:
+        active_ranks = range(len(prompts) // args.micro_batch_size)
+    else:
+        active_ranks = range(world_size)
+    active_ranks = [x * mpu.get_tensor_model_parallel_world_size() * mpu.get_context_parallel_world_size() for x in active_ranks]
+
+    dist.barrier()
+    gathered_videos = []
+    rank = dist.get_rank()
+    if rank == 0:
+        for r in active_ranks:
+            if r != 0:  # main process does not need to receive from itself
+                # receive tensor shape
+                shape_tensor = torch.empty(5, dtype=torch.int, device=device)
+                dist.recv(shape_tensor, src=r)
+                shape_videos = shape_tensor.tolist()
+
+                # create receiving buffer based on received shape
+                received_videos = torch.empty(shape_videos, dtype=video_grids.dtype, device=device)
+                dist.recv(received_videos, src=r)
+                gathered_videos.append(received_videos.cpu())
+            else:
+                gathered_videos.append(video_grids.cpu())
+    elif rank in active_ranks:
+        # send tensor shape first
+        shape_tensor = torch.tensor(video_grids.shape, dtype=torch.int, device=device)
+        dist.send(shape_tensor, dst=0)
+
+        # send the tensor
+        dist.send(video_grids, dst=0)
+    dist.barrier()
+    if rank == 0:
+        video_grids = torch.cat(gathered_videos, dim=0)
+        save_video_grid(video_grids, args.save_path, save_fps)
+        print("Inference finished.")
+        print("Saved %s samples to %s" % (video_grids.shape[0], args.save_path))
 
 
 if __name__ == "__main__":
