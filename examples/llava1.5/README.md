@@ -99,16 +99,13 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
-
-    # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl 
 
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
     # checkout commit from MindSpeed core_r0.6.0
-    git checkout 3da17d56
+    git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
     pip install -r requirements.txt 
     pip3 install -e .
     cd ..
@@ -117,24 +114,6 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install -e .
 ```
 
-**注意事项:**
-
-  需要修改 mindspeed/core/transformer/dot_product_attention.py的65行，修改如下：
-
-```python
-def dot_product_attention_forward_wrapper(fn):
-    @wraps(fn)
-    def wrapper(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params):
-        # 注释下一行
-        # attention_mask = get_attention_mask()
-        if get_args().use_flash_attn:
-            return dot_product_attention_forward(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
-        return fn(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
-
-    return wrapper
-```
-
----
 
 <a id="jump2"></a>
 
@@ -152,90 +131,36 @@ def dot_product_attention_forward_wrapper(fn):
 
 <a id="jump2.2"></a>
 
-#### 2. 权重转换
+#### 2. 权重转换（当前依赖openai-clip库，正在规划重构）
 
 MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。 当前训练只使用了ViT-L-14-336px和lmsys/vicuna-7b-v1.5两个模型，以下介绍这两个模型从开源仓转换成MindSpeeed-MM所需权重的方法：
 
 - ViT-L-14-336px权重转换
 
-  参考 NVIDIA/Megatron-LM中[Vision model](https://github.com/NVIDIA/Megatron-LM/blob/main/examples/multimodal/README.md#vision-model) ,
-  执行如下命令：
+  脚本参考 NVIDIA/Megatron-LM中[Vision model](https://github.com/NVIDIA/Megatron-LM/blob/core_r0.8.0/examples/multimodal/README.md#vision-model) ,将[ViT-L-14-336px](https://openaipublic.azureedge.net/clip/models/3035c92b350959924f9f00213499208652fc7ea050643e8b385c2dac08641f02/ViT-L-14-336px.pt)权重下载到本地后，
+  执行如下命令：
+  ```bash
+    # 安装依赖（加载原始权重需要依赖openai-clip库）
+    pip install git+https://github.com/openai/CLIP.git
 
-  ```
-  python examples/multimodal/clip_converter.py --download-root /some/download/folder --output /some/output/folder --tensor-parallel-size 1 --use-te
-  ```
-
-  如果执行环境连接不到外网下载ViT-L-14-336px模型，建议手动下载，再在clip_converter.py中将ViT-L-14-336px路径修改成本地路径
-
-  ```
-  model, _ = clip.load("{dir_to_model}/ViT-L-14-336px.pt", device=device, download_root="")
+    python examples/llava1.5/clip_converter.py \
+      --download-root {dir_to_model}/ViT-L-14-336px.pt \
+      --output {target_dir}
   ```
 
-  其中{dir_to_model}为模型所在的路径。
-  转换的结果在： /some/output/folder/iter_0000001/mp_rank_00/model_optim_rng.pt
-  
-  对于转换后的结果，需要再执行如下转换，其中{target_dir}为最终的权重文件保存路径：
-
-  ```python
-  before = torch.load("/some/output/folder/iter_0000001/mp_rank_00/model_optim_rng.pt")["model"]
-  torch.save(before, "{target_dir}/converted_clip.pt")
-  ```
+  其中{dir_to_model}为下载模型权重所在的路径，转换后权重将保存在{target_dir}/converted_clip.pt。
 
 - lmsys/vicuna-7b-v1.5权重转换
 
-  参考[ModelLink](https://gitee.com/ascend/ModelLink/blob/master/examples/README.md#21-huggingface%E6%9D%83%E9%87%8D%E8%BD%AC%E6%8D%A2%E5%88%B0megatron-lm%E6%A0%BC%E5%BC%8F)中语言模型权重转换的脚本：
-
+  下载权重后执行如下命令：
   ```shell
-  source {cann_dir}/ascend-toolkit/set_env.sh
-  HF_FORMAT_DIR="{dir_to_model}/vicuna-7b-v1.5"
-  MEGATRON_FORMAT_DIR="{target_dir}"
-  TOKENIZER_MODEL="{dir_to_model}/vicuna-7b-v1.5/tokenizer.model" 
-  python tools/checkpoint/convert_ckpt.py \
-       --model-type GPT \
-       --loader llama2_hf \
-       --saver megatron \
-       --target-tensor-parallel-size 1 \
-       --target-pipeline-parallel-size 1 \
-       --load-dir ${HF_FORMAT_DIR} \
-       --save-dir ${MEGATRON_FORMAT_DIR} \
-       --tokenizer-model ${TOKENIZER_MODEL} \
-       --params-dtype bf16
+  python examples/llava1.5/vicuna_converter.py \
+    --load-dir {dir_to_model}/vicuna-7b-v1.5 \
+    --save-dir {target_dir} \
+    --trust-remote-code True # 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
   ```
-
-  其中： {dir_to_model}为vicuna-7b-v1.5所在路径，{target_dir}为转换结果文件路径, {cann_dir}为cann包安装路径。转换的结果在：{target_dir}/iter_0000001/mp_rank_00/model_optim_rng.pt。
-
-由于MindSpeed-MM中模型变量名称跟转换结果有差异，需要再做一次适配：
-
-- 在megatron同级目录，创建convert.py脚本，将如下代码复制到convert.py中，
-- 修改{target_dir}为上一步model_optim_rng.pt所在路径，
-- 修改{dir_to_save_file}为结果文件所在路径，
-- 执行命令：python convert.py
-
-  ```python
-  import torch
-  def convert_param():
-      ckp = torch.load("{target_dir}/model_optim_rng.pt")["model"]["language_model"]
-      target_ckp = {}
-      target_ckp["embedding.word_embeddings.weight"] = ckp["embedding"]["word_embeddings"]["weight"]
-      target_ckp["output_layer.weight"] = ckp["output_layer"]["weight"]
-      for encode_key in ckp["encoder"].keys():
-          if ckp["encoder"][encode_key] is not None:
-              targetkey = encode_key.replace("input_norm", "input_layernorm")
-              targetkey = targetkey.replace(".dense.", ".linear_proj.")
-              targetkey = targetkey.replace("query_key_value", "linear_qkv")
-              targetkey = targetkey.replace("post_attention_norm", "pre_mlp_layernorm")
-              targetkey = targetkey.replace("dense_h_to_4h", "linear_fc1")
-              targetkey = targetkey.replace("dense_4h_to_h", "linear_fc2")
-              targetkey = targetkey.replace("final_norm", "final_layernorm")
-              targetkey = "decoder." + targetkey
-              target_ckp[targetkey] = ckp["encoder"][encode_key]
-      torch.save(target_ckp, "{dir_to_save_file}/converted_vicuna.pt")
-
-  if __name__ == "__main__":
-      convert_param()
-  ```
-
----
+  其中{dir_to_model}为下载模型权重所在的路径，转换后权重将保存在{target_dir}/converted_vicuna.pt。
+  
 
 <a id="jump3"></a>
 
@@ -297,6 +222,26 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
       ...
   },
   ...
+}
+```
+根据实际情况修改`model.json`中的权重路径为转换后权重，无需预训练权重则传入null。
+```json
+{
+    ...
+    "text_decoder": {
+      ...
+      "ckpt_path": "/<your_vicuna_weights_path>/converted_vicuna.pt"
+    },
+    "image_encoder": {
+      "vision_encoder":{
+        ...
+        "ckpt_path": "/<your_clip_weights_path>/converted_clip.pt"
+      },
+      "vision_projector":{
+        ...
+        "ckpt_path": null
+      }
+    }
 }
 ```
 

@@ -18,7 +18,7 @@ WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 TP=1
 PP=1
 CP=1
-MBS=1
+MBS=8
 GBS=$(($WORLD_SIZE*$MBS/$CP))
 
 MM_DATA="./examples/llava1.5/data.json"
@@ -91,5 +91,5 @@ torchrun $DISTRIBUTED_ARGS \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl >> logs/train_${logfile}.log 2>&1
+    --distributed-backend nccl | tee logs/train_${logfile}.log 2>&1
 chmod 440 logs/train_${logfile}.log
