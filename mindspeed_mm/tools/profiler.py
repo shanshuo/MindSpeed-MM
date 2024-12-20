@@ -1,4 +1,5 @@
-# Copyright (c) 2024 Huawei Technologies Co., Ltd.
+# coding=utf-8
+# Copyright (c) 2024, HUAWEI CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,7 +65,9 @@ class Profiler:
         self.sp_data_simplification = config.static_param.data_simplification
 
         self.dp_config_path = config.dynamic_param.config_path
-
+        
+        self.aic_metrics_type = config.static_param.aic_metrics_type
+        
         if self.profile_type == "static":
             if self.sp_level == 'level0':
                 profiler_level = torch_npu.profiler.ProfilerLevel.Level0
@@ -75,9 +78,14 @@ class Profiler:
             else:
                 raise ValueError(f"profiler_level only supports level0,"
                                 f" 1, and 2, but gets {self.sp_level}")
-
+            if self.aic_metrics_type == 'PipeUtilization':
+                aic_metrics_type = torch_npu.profiler.AiCMetrics.PipeUtilization
+            elif self.aic_metrics_type == 'ArithmeticUtilization':
+                aic_metrics_type = torch_npu.profiler.AiCMetrics.ArithmeticUtilization
+            else:
+                raise ValueError(f"aic_metrics_type only supports PipeUtilization and ArithmeticUtilization")
             experimental_config = torch_npu.profiler._ExperimentalConfig(
-                aic_metrics=torch_npu.profiler.AiCMetrics.ArithmeticUtilization,
+                aic_metrics=aic_metrics_type,
                 profiler_level=profiler_level,
                 data_simplification=self.sp_data_simplification,
             )
