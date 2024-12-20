@@ -4,9 +4,10 @@
         <b>简体中文</b> |
 </p>
 
-- [Profiling采集](#jump1)
-  - [静态采集](#静态采集)
-  - [动态采集](#动态采集)
+- [MindSpeed-MM 工具库使用指南](#mindspeed-mm-工具库使用指南)
+  - [Profiling采集工具](#profiling采集工具)
+    - [静态采集](#静态采集)
+    - [动态采集](#动态采集)
 
 ## <a id="jump1"></a>Profiling采集工具
 
@@ -53,6 +54,7 @@ prof.stop()
     --start_step                # 设置启动采集的步数
     --end_step                  # 设置结束采集的步数
     --data_simplification       # 采集时是否采用简化数据
+    --aic_metrics_type          # 采集模式，目前支持PipeUtilization和ArithmeticUtilization两种，默认采用PipeUtilization
     ```
 
 3. 运行模型并采集profiling文件
