@@ -78,7 +78,7 @@ class OpenSoraPlanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
                 pixel_values_i = get_pixel_values(pixel_values_path_i, self.num_frames)
                 pixel_values += pixel_values_i
-                pixel_values_indices += pixel_values_indices_i
+                pixel_values_indices.append(pixel_values_indices_i)
             min_height = min([pixels.shape[2] for pixels in pixel_values])
             min_width = min([pixels.shape[3] for pixels in pixel_values])
 
@@ -241,27 +241,36 @@ class OpenSoraPlanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         conditional_pixel_values = conditional_pixel_values.to(device=device, dtype=weight_dtype)
 
-        if conditional_pixel_values.shape[0] == num_frames:
-            inpaint_cond_data = self.mask_processor(conditional_pixel_values, mask_type=mask_type)
-            masked_pixel_values, mask = inpaint_cond_data['masked_pixel_values'], inpaint_cond_data['mask']
-        else:
-            input_pixel_values = torch.zeros([num_frames, 3, height, width], device=device, dtype=weight_dtype)
-            input_mask = torch.ones([num_frames, 1, height, width], device=device, dtype=weight_dtype)
-            input_pixel_values[conditional_pixel_values_indices] = conditional_pixel_values
-            input_mask[conditional_pixel_values_indices] = 0
-            masked_pixel_values = input_pixel_values * (input_mask < 0.5)
-            mask = input_mask
+        masked_pixel_values = []
+        mask = []
+        for i in range(batch_size):
+            conditional_pixel_values_i = conditional_pixel_values[i].unsqueeze(0)
+            conditional_pixel_values_indices_i = conditional_pixel_values_indices[i]
+            if conditional_pixel_values_i.shape[0] == num_frames:
+                inpaint_cond_data = self.mask_processor(conditional_pixel_values_i, mask_type=mask_type)
+                masked_pixel_values_i, mask_i = inpaint_cond_data['masked_pixel_values'], inpaint_cond_data['mask']
+            else:
+                input_pixel_values = torch.zeros([num_frames, 3, height, width], device=device, dtype=weight_dtype)
+                input_mask = torch.ones([num_frames, 1, height, width], device=device, dtype=weight_dtype)
+                input_pixel_values[conditional_pixel_values_indices_i] = conditional_pixel_values_i
+                input_mask[conditional_pixel_values_indices_i] = 0
+                masked_pixel_values_i = input_pixel_values * (input_mask < 0.5)
+                mask_i = input_mask
 
-        print('conditional_pixel_values_indices', conditional_pixel_values_indices)
-        print('mask_type', TYPE_TO_STR[mask_type])
+            print('conditional_pixel_values_indices_i', conditional_pixel_values_indices_i)
+            print('mask_type', TYPE_TO_STR[mask_type])
 
-        masked_pixel_values = video_transform(masked_pixel_values)
+            masked_pixel_values_i = video_transform(masked_pixel_values_i)
 
-        masked_pixel_values = masked_pixel_values.unsqueeze(0).repeat(batch_size * num_samples_per_prompt, 1, 1, 1,
-                                                                      1).transpose(1, 2).contiguous()  # b c t h w
-        mask = mask.unsqueeze(0).repeat(batch_size * num_samples_per_prompt, 1, 1, 1, 1).transpose(1,
-                                                                                                   2).contiguous()  # b c t h w
+            masked_pixel_values_i = masked_pixel_values_i.unsqueeze(0).repeat(num_samples_per_prompt, 1, 1, 1,
+                                                                          1).transpose(1, 2).contiguous()  # 1 c t h w
+            mask_i = mask_i.unsqueeze(0).repeat(num_samples_per_prompt, 1, 1, 1, 1).transpose(1, 2).contiguous()  # 1 c t h w
 
+            masked_pixel_values.append(masked_pixel_values_i)
+            mask.append(mask_i)
+
+        masked_pixel_values = torch.cat(masked_pixel_values, dim=0)
+        mask = torch.cat(mask, dim=0)
         masked_pixel_values = masked_pixel_values.to(self.vae.dtype)
         masked_pixel_values = self.vae.encode(masked_pixel_values)
 

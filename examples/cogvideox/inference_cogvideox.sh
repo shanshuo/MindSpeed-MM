@@ -1,5 +1,4 @@
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
-export ASCEND_RT_VISIBLE_DEVICES="0"
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export SCEND_LAUNCH_BLOCKING=1
 MASTER_ADDR=localhost
@@ -13,9 +12,10 @@ TP=1
 PP=1
 CP=1
 MBS=1
-GBS=1
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
 MM_MODEL="examples/cogvideox/inference_model.json"
+LOAD_PATH="your_converted_dit_ckpt_dir"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -60,6 +60,7 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --fp16 \
+    --load $LOAD_PATH \
 "
 
 torchrun $DISTRIBUTED_ARGS  inference_sora.py  $MM_ARGS $GPT_ARGS

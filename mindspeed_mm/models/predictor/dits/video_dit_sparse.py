@@ -203,7 +203,7 @@ class VideoDitSparse(MultiModalModule):
         if self.pre_process:
             # pre_process latents
             batch_size, c, frames, h, w = latents.shape
-            if self.training and mpu.get_context_parallel_world_size() > 1:
+            if mpu.get_context_parallel_world_size() > 1:
                 frames //= mpu.get_context_parallel_world_size()
                 latents = split_forward_gather_backward(latents, mpu.get_context_parallel_group(), dim=2,
                                                         grad_scale='down')
@@ -301,7 +301,7 @@ class VideoDitSparse(MultiModalModule):
                 width=width,
             )  # b c t h w
 
-            if self.training and mpu.get_context_parallel_world_size() > 1:
+            if mpu.get_context_parallel_world_size() > 1:
                 output = gather_forward_split_backward(output, mpu.get_context_parallel_group(), dim=2,
                                                             grad_scale='up')
         rtn = (output, prompt, timestep, embedded_timestep, origin_video_mask, origin_prompt_mask)
@@ -731,7 +731,7 @@ class VideoDitSparseI2V(VideoDitSparse):
         input_hidden_states = hidden_states
         input_masked_hidden_states = kwargs.get(MASKED_VIDEO, None)
         input_mask = kwargs.get(INPUT_MASK, None)
-        if self.training and mpu.get_context_parallel_world_size() > 1:
+        if mpu.get_context_parallel_world_size() > 1:
             input_masked_hidden_states = split_forward_gather_backward(input_masked_hidden_states,
                                                                        mpu.get_context_parallel_group(),
                                                                        dim=2, grad_scale='down')
