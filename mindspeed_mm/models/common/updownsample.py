@@ -9,6 +9,7 @@ import torch.nn.functional as F
 
 from mindspeed_mm.utils.utils import cast_tuple, video_to_image
 from mindspeed_mm.models.common.conv import CausalConv3d, WfCausalConv3d
+from mindspeed_mm.utils.utils import get_context_parallel_rank
 
 
 class Upsample(nn.Module):
@@ -79,21 +80,29 @@ class DownSample3D(nn.Module):
             self.conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=0)
         self.compress_time = compress_time
 
-    def forward(self, x):
+    def forward(self, x, enable_cp=True):
         if self.compress_time and x.shape[2] > 1:
             h, w = x.shape[-2:]
             x = rearrange(x, "b c t h w -> (b h w) c t")
 
-            if x.shape[-1] % 2 == 1:
+            if get_context_parallel_rank() == 0 and enable_cp:
                 # split first frame
                 x_first, x_rest = x[..., 0], x[..., 1:]
 
                 if x_rest.shape[-1] > 0:
-                    x_rest = torch.nn.functional.avg_pool1d(x_rest, kernel_size=2, stride=2)
+                    splits = torch.split(x_rest, 32, dim=1)
+                    interpolated_splits = [
+                        torch.nn.functional.avg_pool1d(split, kernel_size=2, stride=2) for split in splits
+                    ]
+                    x_rest = torch.cat(interpolated_splits, dim=1)
                 x = torch.cat([x_first[..., None], x_rest], dim=-1)
                 x = rearrange(x, "(b h w) c t -> b c t h w", h=h, w=w)
             else:
-                x = torch.nn.functional.avg_pool1d(x, kernel_size=2, stride=2)
+                splits = torch.split(x, 32, dim=1)
+                interpolated_splits = [
+                    torch.nn.functional.avg_pool1d(split, kernel_size=2, stride=2) for split in splits
+                ]
+                x = torch.cat(interpolated_splits, dim=1)
                 x = rearrange(x, "(b h w) c t -> b c t h w", h=h, w=w)
 
         if self.with_conv:
@@ -119,24 +128,39 @@ class Upsample3D(nn.Module):
             self.conv = torch.nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1)
         self.compress_time = compress_time
 
-    def forward(self, x):
-        if self.compress_time:
-            if x.shape[2] > 1:
+    def forward(self, x, enable_cp=True):
+        if self.compress_time and x.shape[2] > 1:
+            if get_context_parallel_rank() == 0 and enable_cp:
                 # split first frame
                 x_first, x_rest = x[:, :, 0], x[:, :, 1:]
 
                 x_first = torch.nn.functional.interpolate(x_first, scale_factor=2.0, mode="nearest")
                 x_rest = torch.nn.functional.interpolate(x_rest, scale_factor=2.0, mode="nearest")
+
+                splits = torch.split(x_rest, 32, dim=1)
+                interpolated_splits = [
+                    torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest") for split in splits
+                ]
+                x_rest = torch.cat(interpolated_splits, dim=1)
+
                 x = torch.cat([x_first[:, :, None, :, :], x_rest], dim=2)
             else:
-                x = x.squeeze(2)
-                x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
-                x = x[:, :, None, :, :]
+                splits = torch.split(x, 32, dim=1)
+                interpolated_splits = [
+                    torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest") for split in splits
+                ]
+                x = torch.cat(interpolated_splits, dim=1)
         else:
             # only interpolate 2D
             t = x.shape[2]
             x = rearrange(x, "b c t h w -> (b t) c h w")
-            x = torch.nn.functional.interpolate(x, scale_factor=2.0, mode="nearest")
+
+            splits = torch.split(x, 32, dim=1)
+            interpolated_splits = [
+                torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest") for split in splits
+            ]
+            x = torch.cat(interpolated_splits, dim=1)
+
             x = rearrange(x, "(b t) c h w -> b c t h w", t=t)
 
         if self.with_conv:

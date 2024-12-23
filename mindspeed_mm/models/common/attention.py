@@ -442,6 +442,7 @@ class SelfAttentionBNSD(nn.Module):
         frames: Optional[int] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
+        **kwargs
     ) -> torch.Tensor:
         """
         Args:
@@ -471,8 +472,8 @@ class SelfAttentionBNSD(nn.Module):
             k = self.k_norm(k)
 
         if self.use_rope and self.rope is not None:
-            q = self.rope(q)
-            k = self.rope(k)
+            q = self.rope(q, **kwargs)
+            k = self.rope(k, **kwargs)
 
         out = torch_npu.npu_fusion_attention(
             q,
@@ -682,7 +683,8 @@ class ParallelMultiHeadAttentionSBH(nn.Module):
         mask: Optional[torch.Tensor] = None,
         frames: Optional[int] = None,
         height: Optional[int] = None,
-        width: Optional[int] = None
+        width: Optional[int] = None,
+        **kwargs
     ) -> torch.Tensor:
         """
         Args:

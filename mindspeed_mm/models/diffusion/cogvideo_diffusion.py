@@ -30,25 +30,30 @@ def append_zero(x):
 
 
 class DiscreteSampling:
-    def __init__(self, discretization_config, num_idx, do_append_zero=False, flip=True, uniform_sampling=False):
+    def __init__(self, discretization_config, num_idx, do_append_zero=False, flip=True, uniform_sampling=False,
+                 group_num=None):
         self.num_idx = num_idx
         self.sigmas = ZeroSNRDDPMDiscretization(**discretization_config)(num_idx, do_append_zero=do_append_zero, flip=flip)
         world_size = mpu.get_data_parallel_world_size()
         self.uniform_sampling = uniform_sampling
-        if self.uniform_sampling:
-            i = 1
-            while True:
-                if world_size % i != 0 or num_idx % (world_size // i) != 0:
-                    i += 1
-                else:
-                    self.group_num = world_size // i
-                    break
+        if group_num:
+            self.group_num = group_num
+        else:
+            if self.uniform_sampling:
+                i = 1
+                while True:
+                    if world_size % i != 0 or num_idx % (world_size // i) != 0:
+                        i += 1
+                    else:
+                        self.group_num = world_size // i
+                        break
 
+        if self.uniform_sampling:
             if self.group_num <= 0:
-                raise ValueError
+                raise ValueError("group_num should not be less than or equal to 0")
 
             if world_size % self.group_num != 0:
-                raise ValueError
+                raise ValueError("The remainder of world_size to group_num should be equal to 0")
 
             self.group_width = world_size // self.group_num  # the number of rank in one group
             self.sigma_interval = self.num_idx // self.group_num

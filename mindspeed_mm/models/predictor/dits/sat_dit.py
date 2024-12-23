@@ -1,22 +1,22 @@
-from curses import KEY_A1
+from functools import reduce
+from operator import mul
 from typing import Optional, Tuple, Dict
 from contextlib import nullcontext
 
-from einops import rearrange, repeat
 import torch
-from torch import nn
-import torch.nn.functional as F
 from diffusers.models.embeddings import SinusoidalPositionalEmbedding
+from einops import rearrange
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
+from torch import nn
 
 from mindspeed_mm.models.common.ffn import FeedForward as TensorParallelFeedForward
 from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
 from mindspeed_mm.models.common.embeddings.pos_embeddings import Rotary3DPositionEmbedding
 from mindspeed_mm.models.common.embeddings.time_embeddings import TimeStepEmbedding
 from mindspeed_mm.models.common.module import MultiModalModule
-from mindspeed_mm.models.common.embeddings.patch_embeddings import VideoPatchEmbed2D, VideoPatch2D
+from mindspeed_mm.models.common.embeddings.patch_embeddings import VideoPatchEmbed2D, VideoPatch2D, VideoPatch3D
 from mindspeed_mm.models.common.attention import SelfAttentionBNSD, ParallelSelfAttentionSBH
 
 
@@ -62,6 +62,7 @@ class SatDiT(MultiModalModule):
         attention_bias: bool = False,
         input_size: Tuple[int] = None,
         patch_size: Tuple[int] = None,
+        patch_type: str = "2D",
         activation_fn: str = "geglu",
         norm_type: str = "layer_norm",
         num_embeds_ada_norm: Optional[int] = None,
@@ -89,6 +90,8 @@ class SatDiT(MultiModalModule):
                 raise ValueError(
                     f"When using a `patch_size` and this `norm_type` ({norm_type}), `num_embeds_ada_norm` cannot be None."
                 )
+        self.patch_size = patch_size
+        self.patch_type = patch_type
         self.patch_size_t, self.patch_size_h, self.patch_size_w = patch_size
         self.norm_type = norm_type
         self.in_channels = in_channels
@@ -120,7 +123,11 @@ class SatDiT(MultiModalModule):
         # Initialize blocks
         # Init PatchEmbed
         self.time_embed = TimeStepEmbedding(inner_dim, self.time_embed_dim)
-        self.patch_embed = VideoPatch2D(in_channels, inner_dim, self.patch_size_h)
+        if self.patch_type == "3D":
+            self.patch_embed = VideoPatch3D(in_channels, inner_dim, self.patch_size)
+        else:
+            self.patch_embed = VideoPatch2D(in_channels, inner_dim, self.patch_size_h)
+
         self.pos_embed = Rotary3DPositionEmbedding(
             hidden_size_head=head_dim,
             text_length=text_length,
@@ -151,6 +158,7 @@ class SatDiT(MultiModalModule):
                     enable_sequence_parallelism=self.enable_sequence_parallelism,
                     time_embed_dim=self.time_embed_dim,
                     text_length=self.text_length,
+                    patch_size=self.patch_size
                 )
                 for i in range(num_layers)
             ]
@@ -170,8 +178,8 @@ class SatDiT(MultiModalModule):
             )
         )
         self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=elementwise_affine, eps=1e-6)
-        self.proj_out = nn.Linear(inner_dim,
-                                  self.patch_size_t * self.patch_size_h * self.patch_size_w * self.out_channels)
+        self.proj_out = nn.Linear(inner_dim, reduce(mul, self.patch_size) * self.out_channels)
+
         for param in self.norm_final.parameters():
             setattr(param, "sequence_parallel", self.sequence_parallel)
         for param in self.norm_out.parameters():
@@ -220,7 +228,7 @@ class SatDiT(MultiModalModule):
             class_labels: Used to indicate class labels conditioning.
             use_image_num: The number of images use for trainning.
         """
-        b, _, t, _, _ = latents.shape
+        b, _, t, h, w = latents.shape
         frames = t - use_image_num
         vid_mask, img_mask = None, None
         prompt_vid_mask, prompt_img_mask = None, None
@@ -241,8 +249,7 @@ class SatDiT(MultiModalModule):
         added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
         latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
             embedded_timestep_vid, embedded_timestep_img = self._operate_on_patched_inputs(
-            latents, prompt, timestep, added_cond_kwargs, b, frames, use_image_num
-        )
+            latents, prompt, timestep, frames)
         if self.concat_text_embed:
             latents_vid = torch.cat((prompt_vid, latents_vid), dim=1)
 
@@ -269,7 +276,10 @@ class SatDiT(MultiModalModule):
                         class_labels=class_labels,
                         frames=frames,
                         height=height,
-                        width=width
+                        width=width,
+                        rope_T=t,
+                        rope_H=h,
+                        rope_W=w
                     )
             else:
                 for block in self.videodit_blocks:
@@ -283,7 +293,10 @@ class SatDiT(MultiModalModule):
                             class_labels=class_labels,
                             frames=frames,
                             height=height,
-                            width=width
+                            width=width,
+                            rope_T=torch.tensor(t / self.patch_size[0], dtype=torch.int),
+                            rope_H=torch.tensor(h / self.patch_size[1], dtype=torch.int),
+                            rope_W=torch.tensor(w / self.patch_size[2], dtype=torch.int)
                         )
 
 
@@ -293,9 +306,6 @@ class SatDiT(MultiModalModule):
             output_vid = self._get_output_for_patched_inputs(
                 latents=latents_vid,
                 timestep=timestep_vid,
-                class_labels=class_labels,
-                embedded_timestep=embedded_timestep_vid,
-                num_frames=frames,
                 height=height,
                 width=width,
             )  # [b, c, t, h, w]
@@ -321,7 +331,9 @@ class SatDiT(MultiModalModule):
         class_labels,
         frames,
         height,
-        width):
+        width,
+        **kwargs
+    ):
         """Forward method with activation checkpointing."""
 
         def custom(start, end):
@@ -350,7 +362,10 @@ class SatDiT(MultiModalModule):
                     class_labels,
                     frames,
                     height,
-                    width
+                    width,
+                    torch.tensor(kwargs["rope_T"] / self.patch_size[0], dtype=torch.int),
+                    torch.tensor(kwargs["rope_H"] / self.patch_size[1], dtype=torch.int),
+                    torch.tensor(kwargs["rope_W"] / self.patch_size[2], dtype=torch.int)
                 )
                 layer_num += self.recompute_num_layers
         elif self.recompute_method == "block":
@@ -367,7 +382,10 @@ class SatDiT(MultiModalModule):
                         class_labels,
                         frames,
                         height,
-                        width
+                        width,
+                        torch.tensor(kwargs["rope_T"] / self.patch_size[0], dtype=torch.int),
+                        torch.tensor(kwargs["rope_H"] / self.patch_size[1], dtype=torch.int),
+                        torch.tensor(kwargs["rope_W"] / self.patch_size[2], dtype=torch.int)
                     )
                 else:
                     block = self._get_block(layer_num)
@@ -380,7 +398,10 @@ class SatDiT(MultiModalModule):
                         class_labels=class_labels,
                         frames=frames,
                         height=height,
-                        width=width
+                        width=width,
+                        rope_T=kwargs["rope_T"],
+                        rope_H=kwargs["rope_H"],
+                        rope_W=kwargs["rope_W"]
                     )
         else:
             raise ValueError("Invalid activation recompute method.")
@@ -397,15 +418,22 @@ class SatDiT(MultiModalModule):
             return buffers[0].dtype
 
     def _operate_on_patched_inputs(self, latents, prompt, timestep, frames):
+        b, _, t, h, w = latents.shape
         if self.pos_embed is not None:
-            latents_vid, latents_img = self.patch_embed(latents.to(self.dtype), prompt)
+            latents_vid, latents_img = self.patch_embed(latents.to(self.dtype), prompt,
+                                                        rope_T=t // self.patch_size[0],
+                                                        rope_H=h // self.patch_size[1],
+                                                        rope_W=w // self.patch_size[2])
             _, seq_len, _ = latents_vid.shape
             pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
                                                                 seq_length=seq_len - self.text_length)
             if pos_emb is not None:
                 latents_vid = latents_vid + pos_emb
         else:
-            latents_vid, latents_img = self.patch_embed(latents.to(self.dtype), frames)
+            latents_vid, latents_img = self.patch_embed(latents.to(self.dtype), frames,
+                                                        rope_T=t // self.patch_size[0],
+                                                        rope_H=h // self.patch_size[1],
+                                                        rope_W=w // self.patch_size[2])
         timestep_vid, timestep_img = None, None
         embedded_timestep_vid, embedded_timestep_img = None, None
         prompt_vid, prompt_img = None, None
@@ -507,8 +535,10 @@ class VideoDiTBlock(nn.Module):
         time_embed_dim=None,
         text_length=None,
         pos_embed=None,
+        patch_size=None
     ):
         super().__init__()
+        self.patch_size = patch_size
         args = get_args()
         self.sequence_parallel = args.sequence_parallel
         self.time_embed_dim = time_embed_dim if time_embed_dim is not None else dim
@@ -599,6 +629,9 @@ class VideoDiTBlock(nn.Module):
         frames: torch.int64 = None,
         height: torch.int64 = None,
         width: torch.int64 = None,
+        rope_T: torch.int64 = None,
+        rope_H: torch.int64 = None,
+        rope_W: torch.int64 = None,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
     ) -> torch.FloatTensor:
         # 1. Self-Attention
@@ -662,7 +695,7 @@ class VideoDiTBlock(nn.Module):
             norm_latents = torch.cat((latents_text, latents_vid), dim=1)  # (b, s_t + t * h/2 * w/2, n * d)
 
         if self.pos_embed is not None and self.positional_embeddings is not None:
-            norm_latents = self.pos_embed(norm_latents)
+            norm_latents = self.pos_embed(norm_latents, rope_T=rope_T, rope_H=rope_H, rope_W=rope_W)
 
         attn_output = self.self_atten(
             query=norm_latents,
@@ -671,6 +704,9 @@ class VideoDiTBlock(nn.Module):
             frames=frames,
             height=height,
             width=width,
+            rope_T=rope_T,
+            rope_H=rope_H,
+            rope_W=rope_W
         )
         if self.enable_sequence_parallelism or self.sequence_parallel:
             attn_vid_output = gate_msa * attn_output[self.text_length:]

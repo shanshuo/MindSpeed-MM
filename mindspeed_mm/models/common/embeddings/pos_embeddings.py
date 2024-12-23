@@ -531,13 +531,10 @@ class Rotary3DPositionEmbedding(nn.Module):
         freqs_w = repeat(freqs_w, "... n -> ... (n r)", r=2)
 
         freqs = broad_cat((freqs_t[:, None, None, :], freqs_h[None, :, None, :], freqs_w[None, None, :, :]), dim=-1)
-        freqs = rearrange(freqs, "t h w d -> (t h w) d")
 
         freqs = freqs.contiguous()
-        freqs_sin = freqs.sin()
-        freqs_cos = freqs.cos()
-        self.register_buffer("freqs_sin", freqs_sin)
-        self.register_buffer("freqs_cos", freqs_cos)
+        self.freqs_sin = freqs.sin().npu()
+        self.freqs_cos = freqs.cos().npu()
 
         self.text_length = text_length
         if learnable_pos_embed:
@@ -546,11 +543,16 @@ class Rotary3DPositionEmbedding(nn.Module):
         else:
             self.pos_embedding = None
 
-    def rotary(self, t):
+    def rotary(self, t, **kwargs):
         # input shape: bnsd
-        seq_len = t.shape[2]
-        freqs_cos = self.freqs_cos[:seq_len].unsqueeze(0).unsqueeze(0)
-        freqs_sin = self.freqs_sin[:seq_len].unsqueeze(0).unsqueeze(0)
+        def reshape_freq(freqs):
+            freqs = freqs[: kwargs["rope_T"], : kwargs["rope_H"], : kwargs["rope_W"]].contiguous()
+            freqs = rearrange(freqs, "t h w d -> (t h w) d")
+            freqs = freqs.unsqueeze(0).unsqueeze(0)
+            return freqs
+
+        freqs_cos = reshape_freq(self.freqs_cos).to(t.dtype)
+        freqs_sin = reshape_freq(self.freqs_sin).to(t.dtype)
 
         return npu_rotary_position_embedding(t, freqs_cos, freqs_sin, mode=1)
 
@@ -560,7 +562,7 @@ class Rotary3DPositionEmbedding(nn.Module):
         else:
             return None
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         # input shape: bnsd
-        x[:, :, self.text_length:] = self.rotary(x[:, :, self.text_length:])
+        x[:, :, self.text_length:] = self.rotary(x[:, :, self.text_length:], **kwargs)
         return x

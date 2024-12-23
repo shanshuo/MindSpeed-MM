@@ -5,6 +5,9 @@
 # LICENSE file in the root directory of this source tree.
 
 
+from functools import reduce
+from operator import mul
+
 import torch
 import torch.nn.functional as F
 from einops import rearrange
@@ -14,7 +17,6 @@ from torch import nn
 from .pos_embeddings import (
     get_1d_sincos_pos_embed,
     get_2d_sincos_pos_embed,
-    get_3d_sincos_pos_embed,
 )
 
 
@@ -598,7 +600,7 @@ class VideoPatch2D(nn.Module):
         super().__init__()
         self.proj = nn.Conv2d(in_channels, hidden_size, kernel_size=patch_size, stride=patch_size, bias=bias)
 
-    def forward(self, latent, encoder_outputs):
+    def forward(self, latent, encoder_outputs, **kwargs):
         latent = latent.transpose(1, 2)
         b, t = latent.shape[:2]
         emb = latent.view(-1, *latent.shape[2:])
@@ -609,3 +611,36 @@ class VideoPatch2D(nn.Module):
 
         emb = emb.contiguous()
         return emb, None  # (b,n_t+t*n_i,d)
+
+
+class VideoPatch3D(nn.Module):
+    """
+    3D Image to Patch Embedding concat witch text embedding
+    """
+    def __init__(
+        self,
+        in_channels,
+        hidden_size,
+        patch_size,
+    ):
+        super().__init__()
+        self.patch_size = patch_size
+        self.proj = nn.Linear(in_channels * reduce(mul, patch_size), hidden_size)
+
+    def forward(self, latent, encoder_outputs, **kwargs):
+        latent = latent.transpose(1, 2)
+        emb = rearrange(latent, "b t c h w -> b (t h w) c")
+        emb = rearrange(
+            emb,
+            "b (t o h p w q) c -> b (t h w) (c o p q)",
+            t=kwargs["rope_T"],
+            h=kwargs["rope_H"],
+            w=kwargs["rope_W"],
+            o=self.patch_size[0],
+            p=self.patch_size[1],
+            q=self.patch_size[2],
+        )
+        emb = self.proj(emb)
+        emb = emb.contiguous()
+
+        return emb, None

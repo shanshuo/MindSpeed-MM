@@ -4,6 +4,7 @@ from einops import rearrange
 
 from mindspeed_mm.models.common.communications import _conv_split, _conv_gather
 from mindspeed_mm.models.common.conv import ContextParallelCausalConv3d
+from mindspeed_mm.utils.utils import get_context_parallel_rank
 
 
 class LayerNorm(nn.Module):
@@ -142,15 +143,28 @@ class SpatialNorm3D(nn.Module):
         )
 
     def forward(self, f, zq, clear_fake_cp_cache=True, enable_cp=True):
-        if f.shape[2] > 1 and f.shape[2] % 2 == 1:
+        if f.shape[2] > 1 and get_context_parallel_rank() == 0 and enable_cp:
             f_first, f_rest = f[:, :, :1], f[:, :, 1:]
             f_first_size, f_rest_size = f_first.shape[-3:], f_rest.shape[-3:]
             zq_first, zq_rest = zq[:, :, :1], zq[:, :, 1:]
             zq_first = torch.nn.functional.interpolate(zq_first, size=f_first_size, mode="nearest")
-            zq_rest = torch.nn.functional.interpolate(zq_rest, size=f_rest_size, mode="nearest")
+
+            zq_rest_splits = torch.split(zq_rest, 32, dim=1)
+            interpolated_splits = [
+                torch.nn.functional.interpolate(split, size=f_rest_size, mode="nearest") for split in zq_rest_splits
+            ]
+
+            zq_rest = torch.cat(interpolated_splits, dim=1)
+
             zq = torch.cat([zq_first, zq_rest], dim=2)
         else:
-            zq = torch.nn.functional.interpolate(zq, size=f.shape[-3:], mode="nearest")
+            f_size = f.shape[-3:]
+
+            zq_splits = torch.split(zq, 32, dim=1)
+            interpolated_splits = [
+                torch.nn.functional.interpolate(split, size=f_size, mode="nearest") for split in zq_splits
+            ]
+            zq = torch.cat(interpolated_splits, dim=1)
 
         if self.add_conv:
             zq = self.conv(zq, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
