@@ -373,9 +373,10 @@ vit_num_layers = 32
 vit_pipeline_num_layers = [32, 0, 0, 0]
 llm_num_layers = 28
 llm_pipeline_num_layers = [1, 6, 11, 10]
-
-vit_hidden_size = 1280
-vit_attention_heads_num = 16
+```
+在qwen2vl_convert_to_hf.py中根据模型选择模型配置
+```python
+model_config = model_config_dict["7B"]  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
 ```
 
 

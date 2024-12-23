@@ -7,6 +7,34 @@ import mindspeed.megatron_adaptor  # noqa
 import torch
 from safetensors.torch import save_file
 
+model_config_dict = {
+    '2B': {
+        'model_size': '2B',
+        'vit_hidden_size': 1280,
+        'vit_num_attention_heads': 16,
+        'llm_hidden_size': 1536,
+        'llm_num_key_value_heads': 2,
+        'llm_num_attention_heads': 12
+    },
+    '7B': {
+        'model_size': '7B',
+        'vit_hidden_size': 1280,
+        'vit_num_attention_heads': 16,
+        'llm_hidden_size': 3584,
+        'llm_num_key_value_heads': 4,
+        'llm_num_attention_heads': 28
+    },
+    '72B': {
+        'model_size': '72B',
+        'vit_hidden_size': 1280,
+        'vit_num_attention_heads': 16,
+        'llm_hidden_size': 8192,
+        'llm_num_key_value_heads': 8,
+        'llm_num_attention_heads': 64
+    }
+}
+CHUNK_SIZE = 4  # 2B 7B 72B 的qkv固定拆分为4份
+
 
 def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int]) -> str:
     index = int(model_dir.parent.stem.split('_')[-1])
@@ -29,14 +57,14 @@ def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int]
     return param_name
 
 
-def load_from_mm(_load_dir, vit_pp_list, llm_pp_list):
+def load_from_mm(_load_dir: str, vit_pp_list: list[int], llm_pp_list: list[int]) -> dict:
     LATEST_TXT = "latest_checkpointed_iteration.txt"
     mm_save_dir = Path(_load_dir)
     save_iteration = mm_save_dir.joinpath(LATEST_TXT).read_text()
-    save_iter_dir = mm_save_dir.joinpath(f"iter_{int(save_iteration):07}")
+    save_dir = mm_save_dir.joinpath(f"iter_{int(save_iteration):07}" if save_iteration != "release" else save_iteration)
     state_dict = {}
-    print(str(save_iter_dir).center(100, "="))
-    for pt_path in save_iter_dir.glob("*/*.pt"):
+    print(str(save_dir).center(100, "="))
+    for pt_path in save_dir.glob("*/*.pt"):
         print(str(pt_path).center(100, '_'))
         state_dict.update(
             {rename_pp_parameter(param, pt_path, vit_pp_list, llm_pp_list): tensor
@@ -47,10 +75,23 @@ def load_from_mm(_load_dir, vit_pp_list, llm_pp_list):
     return state_dict
 
 
-def convert_mm_to_hf(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
-    hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
+def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
+    vit_hidden_size = _model_config['vit_hidden_size']
+    vit_num_attention_heads = _model_config['vit_num_attention_heads']
+    llm_hidden_size = _model_config['llm_hidden_size']
+    llm_num_attention_heads = _model_config['llm_num_attention_heads']
+    llm_num_key_value_heads = _model_config['llm_num_key_value_heads']
+
+    vit_head_hidden_size = vit_hidden_size // vit_num_attention_heads
+    llm_head_hidden_size = llm_hidden_size // llm_num_attention_heads
+    q_size = llm_head_hidden_size * llm_num_attention_heads // CHUNK_SIZE
+    k_size = llm_head_hidden_size * llm_num_key_value_heads // CHUNK_SIZE
+    v_size = llm_head_hidden_size * llm_num_key_value_heads // CHUNK_SIZE
+
     new_params = {}
     for key, value in _state_dict.items():
+        if value is None:
+            continue
         new_key = None
         # image_encoder 权重转换部分
         if key.startswith('image_encoder'):
@@ -69,16 +110,16 @@ def convert_mm_to_hf(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
             if 'qkv.weight' in new_key:
                 res = value * 0
                 i = 0
-                for j in range(_vit_attention_heads_num):
-                    q_part = value[i * hiddensize_per_head: (i + 1) * hiddensize_per_head, :]
-                    res[hiddensize_per_head * j: hiddensize_per_head * (j + 1), :] = q_part
+                for j in range(vit_num_attention_heads):
+                    q_part = value[i * vit_head_hidden_size: (i + 1) * vit_head_hidden_size, :]
+                    res[vit_head_hidden_size * j: vit_head_hidden_size * (j + 1), :] = q_part
 
-                    k_part = value[(i + 1) * hiddensize_per_head: (i + 2) * hiddensize_per_head, :]
-                    res[_vit_hidden_size + hiddensize_per_head * j: _vit_hidden_size + hiddensize_per_head * (j + 1),
+                    k_part = value[(i + 1) * vit_head_hidden_size: (i + 2) * vit_head_hidden_size, :]
+                    res[vit_hidden_size + vit_head_hidden_size * j: vit_hidden_size + vit_head_hidden_size * (j + 1),
                     :] = k_part
 
-                    v_part = value[(i + 2) * hiddensize_per_head: (i + 3) * hiddensize_per_head, :]
-                    res[_vit_hidden_size * 2 + hiddensize_per_head * j: _vit_hidden_size * 2 + hiddensize_per_head * (
+                    v_part = value[(i + 2) * vit_head_hidden_size: (i + 3) * vit_head_hidden_size, :]
+                    res[vit_hidden_size * 2 + vit_head_hidden_size * j: vit_hidden_size * 2 + vit_head_hidden_size * (
                             j + 1), :] = v_part
 
                     i = i + 3
@@ -86,17 +127,17 @@ def convert_mm_to_hf(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
             elif 'qkv.bias' in new_key:
                 res = value * 0
                 i = 0
-                for j in range(_vit_attention_heads_num):
-                    q_part = value[i * hiddensize_per_head: (i + 1) * hiddensize_per_head]
-                    res[hiddensize_per_head * j: hiddensize_per_head * (j + 1)] = q_part
+                for j in range(vit_num_attention_heads):
+                    q_part = value[i * vit_head_hidden_size: (i + 1) * vit_head_hidden_size]
+                    res[vit_head_hidden_size * j: vit_head_hidden_size * (j + 1)] = q_part
 
-                    k_part = value[(i + 1) * hiddensize_per_head: (i + 2) * hiddensize_per_head]
-                    res[_vit_hidden_size + hiddensize_per_head * j: _vit_hidden_size + hiddensize_per_head * (
+                    k_part = value[(i + 1) * vit_head_hidden_size: (i + 2) * vit_head_hidden_size]
+                    res[vit_hidden_size + vit_head_hidden_size * j: vit_hidden_size + vit_head_hidden_size * (
                             j + 1)] = k_part
 
-                    v_part = value[(i + 2) * hiddensize_per_head: (i + 3) * hiddensize_per_head]
+                    v_part = value[(i + 2) * vit_head_hidden_size: (i + 3) * vit_head_hidden_size]
                     res[
-                    _vit_hidden_size * 2 + hiddensize_per_head * j: _vit_hidden_size * 2 + hiddensize_per_head * (
+                    vit_hidden_size * 2 + vit_head_hidden_size * j: vit_hidden_size * 2 + vit_head_hidden_size * (
                             j + 1)] = v_part
 
                     i = i + 3
@@ -106,55 +147,27 @@ def convert_mm_to_hf(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
                     new_params[new_key] = value
 
         else:
-            if 'self_attention.linear_qkv.weight' in key:
-                qkv_chunks = torch.chunk(value, 4, dim=0)
-                # qkv的结构是[896(q)+128(k)+128(v)]*4
-                indices = [896, 1024]
-                indices = [0] + indices + [qkv_chunks[0].size(0)]
+            # self_attention.linear_qkv.weight 和 self_attention.linear_qkv.bias
+            if 'self_attention.linear_qkv' in key:
+                qkv_chunks = torch.chunk(value, CHUNK_SIZE, dim=0)
                 q_chunks = []
                 k_chunks = []
                 v_chunks = []
-                for j in range(4):
-                    splits = [qkv_chunks[j][indices[i]:indices[i + 1]] for i in range(len(indices) - 1)]
-                    q_chunks.append(splits[0])
-                    k_chunks.append(splits[1])
-                    v_chunks.append(splits[2])
+                for chunk in qkv_chunks:
+                    q_chunk, k_chunk, v_chunk = torch.split(chunk, [q_size, k_size, v_size], dim=0)
+                    q_chunks.append(q_chunk)
+                    k_chunks.append(k_chunk)
+                    v_chunks.append(v_chunk)
 
                 attention_q_weight = torch.cat(q_chunks, dim=0)
                 attention_k_weight = torch.cat(k_chunks, dim=0)
                 attention_v_weight = torch.cat(v_chunks, dim=0)
 
                 layer = key.split('.')[3]
-                attention_q = f'model.layers.{layer}.self_attn.q_proj.weight'
-                attention_k = f'model.layers.{layer}.self_attn.k_proj.weight'
-                attention_v = f'model.layers.{layer}.self_attn.v_proj.weight'
-
-                new_params[attention_q] = attention_q_weight
-                new_params[attention_k] = attention_k_weight
-                new_params[attention_v] = attention_v_weight
-
-            elif 'self_attention.linear_qkv.bias' in key:
-                qkv_chunks = torch.chunk(value, 4, dim=0)
-                # qkv的结构是[896(q)+128(k)+128(v)]*4
-                indices = [896, 1024]
-                indices = [0] + indices + [qkv_chunks[0].size(0)]
-                q_chunks = []
-                k_chunks = []
-                v_chunks = []
-                for j in range(4):
-                    splits = [qkv_chunks[j][indices[i]:indices[i + 1]] for i in range(len(indices) - 1)]
-                    q_chunks.append(splits[0])
-                    k_chunks.append(splits[1])
-                    v_chunks.append(splits[2])
-
-                attention_q_weight = torch.cat(q_chunks, dim=0)
-                attention_k_weight = torch.cat(k_chunks, dim=0)
-                attention_v_weight = torch.cat(v_chunks, dim=0)
-
-                layer = key.split('.')[3]
-                attention_q = f'model.layers.{layer}.self_attn.q_proj.bias'
-                attention_k = f'model.layers.{layer}.self_attn.k_proj.bias'
-                attention_v = f'model.layers.{layer}.self_attn.v_proj.bias'
+                name = key.split('.')[-1]  # weight或bias
+                attention_q = f'model.layers.{layer}.self_attn.q_proj.{name}'
+                attention_k = f'model.layers.{layer}.self_attn.k_proj.{name}'
+                attention_v = f'model.layers.{layer}.self_attn.v_proj.{name}'
 
                 new_params[attention_q] = attention_q_weight
                 new_params[attention_k] = attention_k_weight
@@ -212,7 +225,7 @@ def copy_except_safetensors(src_dir: str, dst_dir: str) -> None:
                 shutil.copy2(src_file, dst_file)
 
 
-def check_pp_config(_pp_size, _vit_num_layers, _vit_pipeline_num_layers, _llm_num_layers, _llm_pipeline_num_layers):
+def check_pp_config(_pp_size: int, _vit_num_layers: int, _vit_pipeline_num_layers: list[int], _llm_num_layers: int, _llm_pipeline_num_layers: list[int]) -> None:
     if len(_vit_pipeline_num_layers) != _pp_size:
         raise AssertionError(f'length of vit_pipeline_num_layers must be equal to pp_size, '
                              f'but got {len(_vit_pipeline_num_layers)} and {_pp_size}.')
@@ -227,7 +240,7 @@ def check_pp_config(_pp_size, _vit_num_layers, _vit_pipeline_num_layers, _llm_nu
                              f'but got {sum(_llm_pipeline_num_layers)} and {_llm_num_layers}.')
 
 
-def split_by_index_json(_state_dict, _model_path):
+def split_by_index_json(_state_dict: dict, _model_path: str) -> list[dict]:
     index_json_path = os.path.join(_model_path, 'model.safetensors.index.json')
     return_dicts = []
     with open(index_json_path, 'r', encoding='utf-8') as file:
@@ -240,7 +253,7 @@ def split_by_index_json(_state_dict, _model_path):
     return return_dicts
 
 
-def save_by_index_json(_state_dicts, _save_dir):
+def save_by_index_json(_state_dicts: list[dict], _save_dir: str) -> None:
     metadata = {
         'format': 'pt'
     }
@@ -250,22 +263,20 @@ def save_by_index_json(_state_dicts, _save_dir):
 
 
 if __name__ == "__main__":
-    mm_save_dir = "save_dir"                # 微调后保存的权重目录
-    hg_save_dir = "Qwen2-VL-7B-Save"        # 希望保存的hf目录
-    model_path = "Qwen2-VL-7B-Instruct"     # hf原仓目录
+    mm_save_dir = "save_dir"  # 微调后保存的权重目录
+    hg_save_dir = "Qwen2-VL-7B-Save"  # 希望保存的hf目录
+    model_path = "Qwen2-VL-7B-Instruct"  # hf原仓目录
 
     pp_size = 4
     vit_num_layers = 32
     vit_pipeline_num_layers = [32, 0, 0, 0]
     llm_num_layers = 28
     llm_pipeline_num_layers = [1, 6, 11, 10]
-
-    vit_hidden_size = 1280
-    vit_attention_heads_num = 16
+    model_config = model_config_dict["7B"]  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
 
     check_pp_config(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers)
     state_dict = load_from_mm(mm_save_dir, vit_pipeline_num_layers, llm_pipeline_num_layers)
-    state_dict = convert_mm_to_hf(state_dict, vit_hidden_size, vit_attention_heads_num)
+    state_dict = convert_mm_to_hf(state_dict, model_config)
     state_dicts = split_by_index_json(state_dict, model_path)
     copy_except_safetensors(model_path, hg_save_dir)
     save_by_index_json(state_dicts, hg_save_dir)
