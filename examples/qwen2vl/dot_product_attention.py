@@ -129,8 +129,8 @@ def dot_product_attention_forward(
         query, key, value, indices_q, cu_seq_lens, max_seq_lens = _unpad_input(
             query, key, value, attention_mask, seq_length
         )
-        attention_mask_npu = torch.from_numpy(
-            np.triu(np.ones([max_seq_lens, max_seq_lens]), k=1)).bool().to(torch.cuda.current_device())
+        attention_mask_npu = torch.triu(
+            torch.ones([max_seq_lens, max_seq_lens], dtype=torch.bool, device=query.device), diagonal=1)
         attn_output_unpad = torch_npu.npu_fusion_attention(
             query, key, value, n_head,
             pse=None,
@@ -149,8 +149,8 @@ def dot_product_attention_forward(
         query = query.transpose(0, 1).contiguous()
         key = key.transpose(0, 1).contiguous()
         value = value.transpose(0, 1).contiguous()
-        attention_mask_npu = torch.from_numpy(
-            np.triu(np.ones([query.shape[1], key.shape[1]]), k=1)).bool().to(torch.cuda.current_device())
+        attention_mask_npu = torch.triu(
+            torch.ones([query.shape[1], key.shape[1]], dtype=torch.bool, device=query.device), diagonal=1)
         attn_output = torch_npu.npu_fusion_attention(
             query, key, value, n_head, 'BSND',
             keep_prob=1.0,
@@ -158,7 +158,7 @@ def dot_product_attention_forward(
             atten_mask=attention_mask_npu)[0]
         attn_output = rearrange(attn_output, 'b s h d -> s b (h d)', s=seq_length, b=bsz)
     return attn_output
-        
+
 
 def _unpad_input(
         query_state: torch.Tensor,
