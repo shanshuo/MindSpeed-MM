@@ -69,6 +69,7 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --bf16 \
+    --qk-layernorm \
     --recompute-granularity full \
     --recompute-method block \
     --recompute-num-layers 42 \

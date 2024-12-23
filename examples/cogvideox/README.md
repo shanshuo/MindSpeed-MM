@@ -222,6 +222,8 @@ data.jsonl文件内容如下示例：
 #### 配置参数
 需根据实际任务情况修改`model_cogvideox.json`、`model_cogvideox_i2v.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
 
+`model_cogvideox.json`/`model_cogvideox_i2v.json`文件中的`head_dim`字段原模型默认配置为64。此字段调整为128会更加亲和昇腾。
+
 在sh启动脚本中可以修改运行卡数：
 ```shell
     GPUS_PER_NODE=8

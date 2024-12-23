@@ -398,6 +398,10 @@ class SelfAttentionBNSD(nn.Module):
         if self.qk_ln:
             self.q_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
             self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+            for param in self.q_norm.parameters():
+                setattr(param, "sequence_parallel", True)
+            for param in self.k_norm.parameters():
+                setattr(param, "sequence_parallel", True)
 
         key_dim = key_dim if key_dim is not None else query_dim
 
@@ -529,6 +533,10 @@ class ParallelSelfAttentionSBH(nn.Module):
         if self.qk_ln:
             self.q_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
             self.k_norm = nn.LayerNorm(self.head_dim, eps=1e-6)
+            for param in self.q_norm.parameters():
+                setattr(param, "sequence_parallel", True)
+            for param in self.k_norm.parameters():
+                setattr(param, "sequence_parallel", True)
 
         key_dim = key_dim if key_dim is not None else query_dim
 
@@ -577,9 +585,10 @@ class ParallelSelfAttentionSBH(nn.Module):
             mask: The attention mask to use.
             **kwargs: Additional keyword arguments to pass along
         """
-        sequence_length, batch_size, _ = query.shape
 
         q, k, v = self.proj_qkv(query)[0].chunk(3, dim=2)
+        sequence_length, batch_size, _ = q.shape
+
         q = q.view(-1, self.num_attention_heads_per_partition, self.head_dim)
         k = k.view(-1, self.num_attention_heads_per_partition, self.head_dim)
         v = v.view(-1, self.num_attention_heads_per_partition, self.head_dim)

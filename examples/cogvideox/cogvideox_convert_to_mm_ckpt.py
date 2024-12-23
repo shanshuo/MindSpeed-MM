@@ -108,6 +108,13 @@ def split_by_tp(state_dict: Dict[str, Any], tp_size: int = 2, num_layers: int = 
                 wv = torch.chunk(wv, tp_size, dim=0)[tp_rank]
                 weight = torch.cat([wq, wk, wv], dim=0)
                 new_state_dict[split_name] = weight
+        # adaLN modulation
+        col_split_names = [
+            "adaLN_modulation.1.weight",
+            "adaLN_modulation.1.bias",
+        ]
+        for split_name in col_split_names:
+            new_state_dict[split_name] = torch.chunk(state_dict[split_name], tp_size, dim=0)[tp_rank]
         new_state_dicts.append(new_state_dict)
     
     return new_state_dicts
@@ -155,7 +162,7 @@ def merge_by_tp(train_save_dir: str, save_path: str, num_layers: int, tp_size: i
         return 
 
     merged_state_dict = copy.deepcopy(_state_dicts[0])
-    for index in num_layers:
+    for index in range(num_layers):
         # ColumnParallelLinear
         suffixed_0 = [
             f"videodit_blocks.{index}.ff.net.0.proj.weight",
@@ -190,6 +197,13 @@ def merge_by_tp(train_save_dir: str, save_path: str, num_layers: int, tp_size: i
             wv = torch.cat(wv, dim=0)
             wqkv = torch.cat([wq, wk, wv], dim=0)
             merged_state_dict[name] = wqkv
+        # adaLN modulation
+        col_split_names = [
+            "adaLN_modulation.1.weight",
+            "adaLN_modulation.1.bias",
+        ]
+        for split_name in col_split_names:
+            merged_state_dict[split_name] = torch.cat([_state_dicts[tp_rank][split_name] for tp_rank in range(tp_size)])
     torch.save(merged_state_dict, save_path)
     return 
 
@@ -228,7 +242,7 @@ if __name__ == "__main__":
         remove_layers(source_state_dict, remove_keys)
 
         if args.remove_pos_emb:
-            remove_layers(source_state_dict, ["pos_embed.freq_cos", "pos_embed.freq_sin"])
+            remove_layers(source_state_dict, ["pos_embed.freqs_cos", "pos_embed.freqs_sin"])
             if args.task == "i2v":
                 remove_layers(source_state_dict, ["pos_embed.pos_embedding"])
 
