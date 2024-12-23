@@ -91,6 +91,8 @@ def make_beta_schedule(
 ):
     if schedule == "linear":
         betas = torch.linspace(linear_start**0.5, linear_end**0.5, n_timestep, dtype=torch.float64) ** 2
+    else:
+        raise NotImplementedError("Only support linear schedule")
     return betas.numpy()
 
 
