@@ -138,6 +138,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
   pipeline_layer_index = None     # None表示不进行pp切分；若要进行pp切分，则需要传入一个列表，例如[0, 3, 13, 23]
   num_layers=24                   # 模型结构层数
 ```
+*注意*： 为保证代码安全，用户需手动设置`internvl_convert_to_mm_ckpt.py`文件中`load_from_hf`函数中的`trust_remote_code=True`，同时用户需要确保所下载权重的安全性。
 
 启动脚本
 
@@ -193,7 +194,7 @@ LOAD_PATH="ckpt/InternVL2-2B"
 
 【数据目录配置】
 
-根据实际情况修改`data.json`中的数据集路径，包括`from_pretrained`、`data_path`、`data_folder`等字段。
+根据实际情况修改`data_xx.json`中的数据集路径，包括`from_pretrained`、`data_path`、`data_folder`、`trust_remote_code`等字段。
 
 以InternVL2-2B为例，`data_2B.json`进行以下修改，注意`tokenizer_config`的权重路径为转换前的权重路径。
 
@@ -209,6 +210,7 @@ LOAD_PATH="ckpt/InternVL2-2B"
       "tokenizer_config": {
           ...
           "from_pretrained": "raw_ckpt/InternVL2-2B",
+          "trust_remote_code": true, # 为保证代码安全，默认trust_remote_code设为false，用户需要设置为true，并且确保下载模型和数据的安全性
           ...
       },
       ...
@@ -303,6 +305,7 @@ $save_dir
         ...
         "autotokenizer_name": "AutoTokenizer",
         "from_pretrained": "raw_ckpt/InternVL2-2B",
+        "trust_remote_code": true, # 为保证代码安全，默认trust_remote_code设为false，用户需要设置为true，并且确保下载模型和数据的安全性
         ...
     },
     ...
