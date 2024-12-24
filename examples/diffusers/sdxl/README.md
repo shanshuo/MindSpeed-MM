@@ -454,20 +454,44 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
   python sdxl/sdxl_img2img_infer.py              # 混精fp16 图生图微调任务推理
   ```
 
+【分布式推理】
+
+- 对`sdxl/sdxl_text2img_distrib_infer.py`文件进行修改
+
+  ```shell
+  vim sdxl/sdxl_text2img_distrib_infer.py
+  ```
+
+- 修改模型权重路径 model_path为模型权重路径或微调后的权重路径
+- 如lora微调 可将lora_weights修改为Lora权重路径
+
+  ```python
+  model_path = "/stabilityai/stable-diffusion-xl-base-1.0"  # 模型权重/微调权重路径
+  lora_weights = "/pytorch_lora_weights.safetensors"  # Lora权重路径
+  ```
+
+- 启动分布式推理脚本
+
+  - 因使用accelerate进行分布式推理，config可设置：`--num_processes=卡数`，`num_machines=机器数`等
+
+  ```shell
+  accelerate launch --num_processes=4 sdxl/sdxl_text2img_distrib_infer.py # 单机四卡进行分布式推理
+  ```
+  
 <a id="jump4"></a>
 
 ### 性能
 
 | 芯片 | 卡数 |     任务     |  E2E（it/s）  |  AMP_Type | Torch_Version | deepspeed |
 |:---:|:---:|:----------:|:-----:|:---:|:---:|:---:|
-| 竞品A | 8p |    文生图lora    | 1.45 |  fp16 | 2.1 | ✔ |
+| 竞品A | 1p |    文生图lora    | 1.45 |  fp16 | 2.1 | ✔ |
 | Atlas 900 A2 PODc |8p |    文生图lora    | 2.61 |  fp16 | 2.1 | ✔ |
-| 竞品A | 8p | 文生图controlnet | 1.41  |  fp16 | 2.1 | ✔ |
-| Atlas 900 A2 PODc |8p | 文生图controlnet | 2.97 |  fp16 | 2.1 | ✔ |
-| 竞品A | 8p |  文生图全参  | 1.55 | fp16 | 2.1 | ✔ |
-| Atlas 900 A2 PODc |8p |  文生图全参  | 3.02 | fp16 | 2.1 | ✔ |
-| 竞品A | 8p |  图生图  | 3.56 | fp16 | 2.1 | ✔ |
-| Atlas 900 A2 PODc |8p |  图生图  | 3.94 | fp16 | 2.1 | ✔ |
+| 竞品A | 1p | 文生图controlnet | 1.41  |  fp16 | 2.1 | ✔ |
+| Atlas 900 A2 PODc |1p | 文生图controlnet | 2.97 |  fp16 | 2.1 | ✔ |
+| 竞品A | 1p |  文生图全参  | 1.55 | fp16 | 2.1 | ✔ |
+| Atlas 900 A2 PODc |1p |  文生图全参  | 3.02 | fp16 | 2.1 | ✔ |
+| 竞品A | 1p |  图生图  | 3.56 | fp16 | 2.1 | ✔ |
+| Atlas 900 A2 PODc |1p |  图生图  | 3.94 | fp16 | 2.1 | ✔ |
 
 ## 引用
 
