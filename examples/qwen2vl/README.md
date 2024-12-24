@@ -49,7 +49,7 @@
 #### 1. 仓库拉取
 
 ```shell
-git clone https://gitee.com/ascend/MindSpeed-MM.git 
+git clone https://gitee.com/ascend/MindSpeed-MM.git
 git clone https://github.com/NVIDIA/Megatron-LM.git
 cd Megatron-LM
 git checkout core_r0.6.0
@@ -74,7 +74,7 @@ conda activate test
 
 # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
 # 下载路径参考 https://www.hiascend.com/document/detail/zh/Pytorch/60RC3/configandinstg/instg/insg_0001.html
-pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
+pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl
 pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 
 # apex for Ascend 参考 https://gitee.com/ascend/apex
@@ -85,7 +85,7 @@ git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 # checkout commit from MindSpeed core_r0.6.0
 git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
-pip install -r requirements.txt 
+pip install -r requirements.txt
 pip3 install -e .
 cd ..
 # 替换MindSpeed中的文件
@@ -199,7 +199,7 @@ LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
    ├── data
        ├── COCO2017
            ├── train2017
-           
+
        ├── llava_instruct_150k.json
        ├── mllm_format_llava_instruct_data.json
        ...
@@ -297,7 +297,7 @@ $save_dir
 
 ```shell
 # 根据实际情况修改 ascend-toolkit 路径
-source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
 GPUS_PER_NODE=8
 MASTER_ADDR=locahost
 MASTER_PORT=29501
@@ -315,16 +315,6 @@ WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 ```shell
 bash examples/qawen2vl/finetune_qwen2vl_7b.sh
 ```
-
-
-
-## LoRA
-
-LoRA为框架通用能力，如需在基线脚本上增加LoRA能力请参考LoRA特性文档[docs/features/lora_finetune.md](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/lora_finetune.md)
-
-
-
-
 
 
 ## 推理
@@ -447,4 +437,4 @@ bash examples/qwen2vl/evaluate_qwen2vl_7b.sh
 ## 注意事项
 1. 在使用流水线并行策略进行多机训练可能会出现卡住现象，可参考[此处](https://gitee.com/ascend/MindSpeed/pulls/1627/files)修改。
 2. 在 `finetune_xx.sh`里，与模型结构相关的参数并不生效，以`examples/qwen2vl/model_xb.json`里同名参数配置为准，非模型结构的训练相关参数在 `finetune_xx.sh`修改。
-
+3. LoRA为框架通用能力，当前功能已支持，可参考[LoRA特性文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/lora_finetune.md)。
