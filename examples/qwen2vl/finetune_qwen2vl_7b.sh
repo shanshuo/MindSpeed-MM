@@ -96,7 +96,7 @@ GPT_ARGS="
     --bf16 \
     --load $LOAD_PATH \
     --variable-seq-lengths \
-    --enable-one-loggerv \
+    --enable-one-logger \
     --use-flash-attn \
 "
 
