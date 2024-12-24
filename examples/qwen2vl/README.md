@@ -313,7 +313,7 @@ WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 以Qwen2VL-7B为例，启动微调训练任务。
 
 ```shell
-bash examples/qawen2vl/finetune_qwen2vl_7b.sh
+bash examples/qwen2vl/finetune_qwen2vl_7b.sh
 ```
 
 
@@ -369,10 +369,44 @@ llm_pipeline_num_layers = [1, 6, 11, 10]
 model_config = model_config_dict["7B"]  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
 ```
 
-
 #### 3.执行转换脚本
 ```bash
 python examples/qwen2vl/qwen2vl_convert_to_hf.py
+```
+
+## 训练后重新切分权重（pp切分）
+
+权重下载及转换部分会把权重进行pp切分，在微调后，如果需要对权重重新进行pp切分，可使用examples/qwen2vl/qwen2vl_convert_pp_to_pp.py脚本对微调后的权重进行切分
+
+#### 1.修改路径
+修改qwen2vl_convert_pp_to_pp.py中的如下内容,与实际保持一致：
+```python
+mm_save_dir = "save_dir"            # 微调后保存的权重目录
+new_save_dir = "new_pp_save_dir"    # 希望重新pp切分后保存的目录
+```
+
+#### 2.修改配置
+修改qwen2vl_convert_to_hf.py中的如下内容,与qwen2vl_convert_to_mm_ckpt.py保持一致：
+```python
+vit_num_layers = 32
+llm_num_layers = 28
+```
+
+```python
+old_pp_size = 4
+old_vit_pipeline_num_layers = [32, 0, 0, 0]
+old_llm_pipeline_num_layers = [1, 6, 11, 10]
+```
+修改qwen2vl_convert_to_hf.py中的如下内容，使之与期望的切分配置一致
+```python
+new_pp_size = 2
+new_vit_pipeline_num_layers = [32, 0]
+new_llm_pipeline_num_layers = [14, 14]
+```
+
+#### 3.执行转换脚本
+```bash
+python examples/qwen2vl/qwen2vl_convert_pp_to_pp.py
 ```
 
 
