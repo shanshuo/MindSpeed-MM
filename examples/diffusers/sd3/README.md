@@ -362,7 +362,7 @@ vim infer_sd3_img2img.py # 进入运行I2I推理的Python文件
       python infer_sd3_img2img.py   # 单卡推理，图生图
       ```
 
-  【lora微调FLUX模型推理】
+  【lora微调SD3模型推理】
 
   ```shell
   vim infer_sd3_text2img_lora.py
@@ -380,6 +380,28 @@ vim infer_sd3_img2img.py # 进入运行I2I推理的Python文件
       ```shell
       python infer_sd3_text2img_lora.py
       ```
+
+  【分布式推理】
+
+  ```shell
+  vim infer_sd3_text2img_distrib.py
+  ```
+
+- 修改模型权重路径 model_path为模型权重路径或微调后的权重路径
+- 如lora微调 可将lora_weights修改为Lora权重路径
+
+  ```python
+  model_path = "stabilityai/stable-diffusion-3.5-large"  # 模型权重/微调权重路径
+  lora_weights = "/pytorch_lora_weights.safetensors"  # Lora权重路径
+  ```
+
+- 启动分布式推理脚本
+  
+  - 因使用accelerate进行分布式推理，config可设置：`--num_processes=卡数`，`num_machines=机器数`等
+
+  ```shell
+  accelerate launch --num_processes=4 infer_sd3_text2img_distrib.py # 单机四卡进行分布式推理
+  ```
 
 ## 使用基线数据集进行评估
 

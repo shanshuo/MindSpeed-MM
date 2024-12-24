@@ -1,21 +1,28 @@
 import os
 
 import torch
-from diffusers import AutoPipelineForText2Image
+from accelerate import PartialState
+from diffusers import FluxPipeline
 
 output_path = "./flux_lora_NPU"
 os.makedirs(output_path, exist_ok=True)
-DEVICE = "npu"
 
-MODEL_PATH = "/flux/model"  # FLUX模型路径
+MODEL_PATH = "/black-forest-labs/FLUX.1-dev"  # FLUX模型路径
 LORA_WEIGHTS = "./output/pytorch_lora_weights.safetensors"  # LoRA权重路径
-pipe = AutoPipelineForText2Image.from_pretrained(
+pipe = FluxPipeline.from_pretrained(
     MODEL_PATH, torch_dtype=torch.bfloat16, local_files_only=True
 )
-pipe = pipe.to(DEVICE)
 
-pipe.load_lora_weights(LORA_WEIGHTS)
-prompts = [
+if os.path.exists(LORA_WEIGHTS):
+    print(f"Loading LoRA weights from {LORA_WEIGHTS}")
+    pipe.load_lora_weights(LORA_WEIGHTS)
+else:
+    print("LoRA weights not found. Using the base model")
+
+distributed_state = PartialState()
+pipe.to(distributed_state.device)
+
+PROMPTS = [
     "masterpiece, best quality, Cute dragon creature, pokemon style, night, moonlight, dim lighting",
     "masterpiece, best quality, Pikachu walking in beijing city, pokemon style, night, moonlight, dim lighting",
     "masterpiece, best quality, red panda , pokemon style, evening light, sunset, rim lighting",
@@ -27,10 +34,30 @@ prompts = [
 ]
 # 设置随机数种子
 seed_list = [8, 23, 42, 1334]
-for prompt_key in prompts:
-    for i in seed_list:
-        generator = torch.Generator(device="cpu").manual_seed(i)
-        image = pipe(
-            prompt=prompt_key, generator=generator, num_inference_steps=25
-        ).images
-        image[0].save(f"{output_path}/{prompt_key[26:40]}-{i}.png")
+
+for i in seed_list:
+    generator = torch.Generator(device="npu").manual_seed(i)
+
+    with distributed_state.split_between_processes(PROMPTS) as prompts:
+        for prompt in prompts:
+            image = pipe(
+                prompt=prompt,
+                generator=generator,
+                num_inference_steps=28,
+                height=1024,
+                width=1024,
+                guidance_scale=1.0,
+            ).images
+
+            # Create name for the image
+            prompt_words = prompt.replace("masterpiece, best quality, ", "").split()[:3]
+            prompt_abbr = "_".join(prompt_words)
+
+            filename = (
+                f"{prompt_abbr}_seed{i}_rank{distributed_state.process_index}.png"
+            )
+            filename = "".join(
+                c for c in filename if c.isalnum() or c in "._-"
+            )  # remove special chars
+
+            image[0].save(f"{output_path}/{filename}")

@@ -393,6 +393,28 @@ vim infer_flux_text2img_bf16.py # 进入运行推理的Python文件
       ```shell
       python infer_flux_text2img_lora_bf16.py
       ```
+  
+  【分布式推理】
+
+  ```shell
+  vim infer_flux_text2img_distrib.py
+  ```
+
+- 修改模型权重路径 model_path为模型权重路径或微调后的权重路径
+- 如lora微调 可将lora_weights修改为Lora权重路径
+
+    ```python
+    model_path = "/black-forest-labs/FLUX.1-dev"  # 模型权重/微调权重路径
+    lora_weights = "/pytorch_lora_weights.safetensors"  # Lora权重路径
+    ```
+
+- 启动分布式推理脚本
+
+  - 因使用accelerate进行分布式推理，config可设置：`--num_processes=卡数`，`num_machines=机器数`等
+
+  ```shell
+  accelerate launch --num_processes=4 infer_flux_text2img_distrib.py # 单机四卡进行分布式推理
+  ```
 
 <a id="jump3"></a>
 
