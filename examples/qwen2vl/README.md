@@ -119,7 +119,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```python
-hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-72B-Instruct'  # huggingface权重目录
+hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-72B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-72B-Instruct'  # 转换后保存目录
 pp_size = 16  # 切分的PPstage数量，注意要和finetune脚本中配置的PP一致
 
@@ -137,7 +137,7 @@ vit_attention_heads_num = 16  # vit的注意力heads数
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```python
-hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct'  # huggingface权重目录
+hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后保存目录
 pp_size = 4  # 切分的PPstage数量
 
@@ -154,7 +154,7 @@ vit_attention_heads_num = 16  # vit的注意力heads数
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```python
-hg_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct'  # huggingface权重目录
+hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-2B-Instruct'  # 转换后保存目录
 pp_size = 1  # 2B不需要切分PP
 

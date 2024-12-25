@@ -1,10 +1,11 @@
 import argparse
-import os
 import json
+import os
 from pathlib import Path
+from dataclasses import dataclass
+
 import torch
 from safetensors.torch import save_file
-from dataclasses import dataclass
 
 
 @dataclass
@@ -68,11 +69,9 @@ def check_pp_config(_model_config_dict=None):
 
 
 def merge_by_pp(pp_ckpt_file, pp_rank: int, _model_config_dict=None):
-    # vit: [24, 0, 0, 0]
-    # llm: [6, 9, 9, 8]
     _vit_pipeline_num_layers = _model_config_dict.vit_pipeline_num_layers
     _llm_pipeline_num_layers = _model_config_dict.llm_pipeline_num_layers
-    
+
     vit_pp_start_index = 0
     llm_pp_start_index = 0
     if pp_rank > 0:
@@ -132,8 +131,8 @@ def split_qkv(wqkv, hn=64, ng=8):
     return wq, wk, wv
 
 
-def convert_mm_to_hg(_mm_state_dict, _model_config_dict=None):
-    _hg_state_dict = {}
+def convert_mm_to_hf(_mm_state_dict, _model_config_dict=None):
+    _hf_state_dict = {}
     # check LlamaForCausalLM or InternLM2ForCausalLM
     architectures_key = "text_decoder.decoder.layers.0.self_attention.linear_qkv.weight"
     is_llama_for_causa_llm = True
@@ -189,7 +188,7 @@ def convert_mm_to_hg(_mm_state_dict, _model_config_dict=None):
             new_key = new_key.replace('linear_fc2', '3')
 
         print(f'mapping {key} to {new_key}')
-        _hg_state_dict[new_key] = value
+        _hf_state_dict[new_key] = value
 
     if is_llama_for_causa_llm:
         for i in range(_model_config_dict.llm_num_layers):
@@ -198,17 +197,17 @@ def convert_mm_to_hg(_mm_state_dict, _model_config_dict=None):
             v_name = f'language_model.model.layers.{i}.self_attention.wv.weight'
             qkv_name = f'language_model.model.layers.{i}.attention.wqkv.weight'
 
-            if qkv_name in _hg_state_dict.keys():
-                wqkv = _hg_state_dict[qkv_name]
+            if qkv_name in _hf_state_dict.keys():
+                wqkv = _hf_state_dict[qkv_name]
             else:
                 raise AssertionError(f'Missing key {qkv_name}')
             wq, wk, wv = split_qkv(wqkv)
             if not (wq and wk and wv):
                 raise ValueError("llama_for_causa_llm split qkv weight error, maybe not support right now.")
-            _hg_state_dict[q_name] = wq
-            _hg_state_dict[k_name] = wk
-            _hg_state_dict[v_name] = wv
-            _hg_state_dict.pop(qkv_name)
+            _hf_state_dict[q_name] = wq
+            _hf_state_dict[k_name] = wk
+            _hf_state_dict[v_name] = wv
+            _hf_state_dict.pop(qkv_name)
             print(f'merge {q_name}, {k_name}, {v_name} to {qkv_name}')
 
     # split w1 and w3 weight
@@ -217,16 +216,16 @@ def convert_mm_to_hg(_mm_state_dict, _model_config_dict=None):
         gate_name = f'language_model.model.layers.{i}.feed_forward.w1.weight'
         up_name = f'language_model.model.layers.{i}.feed_forward.w3.weight'
         # split w1 和 w3
-        if gate_and_up_name in _hg_state_dict.keys():
-            gate_and_up_weight = _hg_state_dict[gate_and_up_name]
+        if gate_and_up_name in _hf_state_dict.keys():
+            gate_and_up_weight = _hf_state_dict[gate_and_up_name]
             # refer to: torch.cat([gate_proj_weight, up_proj_weight], dim=0)
             gate_weight, up_weight = torch.split(gate_and_up_weight, gate_and_up_weight.size(0) // 2, dim=0)
-            _hg_state_dict[gate_name] = gate_weight
-            _hg_state_dict[up_name] = up_weight
+            _hf_state_dict[gate_name] = gate_weight
+            _hf_state_dict[up_name] = up_weight
         # remove useless weight
-        _hg_state_dict.pop(gate_and_up_name)
+        _hf_state_dict.pop(gate_and_up_name)
         print(f'split {gate_and_up_name} to {gate_name} and {up_name}')
-    return _hg_state_dict
+    return _hf_state_dict
 
 
 def split_by_index_json(_state_dict, _index_json_path):
@@ -251,7 +250,7 @@ def save_by_index_json(_state_dicts, _save_dir):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='mm2hg tools checkpoint utility arguments',
+    parser = argparse.ArgumentParser(description='mm2hf tools checkpoint utility arguments',
                                      allow_abbrev=False,
                                      conflict_handler='resolve')
     parser.add_argument('--model-size', type=str, required=True,
@@ -260,7 +259,7 @@ if __name__ == "__main__":
                         help='MindSpeed-MM checkpoint path for loading')
     parser.add_argument('--save-dir', type=str, required=True,
                         help='HuggingFace checkpoint path for saving')
-    parser.add_argument('--raw-hg-dir', type=str, required=True,
+    parser.add_argument('--raw-hf-dir', type=str, required=True,
                         help='original raw huggingface checkpoint path for loading')
     parser.add_argument('--trust-remote-code', type=str, required=True, default=False,
                         help='Whether not to allow HuggingFace API to execute code')
@@ -268,14 +267,14 @@ if __name__ == "__main__":
     if unrecognized_args:
         ValueError(f"please check unrecognized args: {unrecognized_args}")
 
-    index_json_path = os.path.join(args.raw_hg_dir, "model.safetensors.index.json")
+    index_json_path = os.path.join(args.raw_hf_dir, "model.safetensors.index.json")
     if not os.path.exists(index_json_path):
         raise ValueError(f"safetensors.index.json not in {index_json_path}")
     model_config_ = get_model_config(args.model_size)
     check_pp_config(model_config_)
     merge_state_dict = load_from_mm(args.load_dir, model_config_)
 
-    hg_state_dict = convert_mm_to_hg(merge_state_dict, model_config_)
-    state_dicts = split_by_index_json(hg_state_dict, index_json_path)
+    hf_state_dict = convert_mm_to_hf(merge_state_dict, model_config_)
+    state_dicts = split_by_index_json(hf_state_dict, index_json_path)
     save_by_index_json(state_dicts, args.save_dir)
 

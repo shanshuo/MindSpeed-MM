@@ -8,6 +8,9 @@ import torch
 from transformers import AutoModelForCausalLM, AutoConfig
 
 
+llm_arch = ''
+
+
 def load_from_hf(load_dir, trust_remote_code):
     # Load Huggingface model.
     hf_model = AutoModelForCausalLM.from_pretrained(load_dir, device_map='cpu', trust_remote_code=trust_remote_code,
@@ -128,7 +131,7 @@ def merge_qkv(wq, wk, wv, hn=64, ng=8):
     return qkv
 
 
-def convert_hg_to_mm(_state_dict, _num_layers):
+def convert_hf_to_mm(_state_dict, _num_layers):
     new_dict = {}
     for key, value in _state_dict.items():
         new_key = None
@@ -369,7 +372,7 @@ if __name__ == '__main__':
     for key, value in state_dict.items():
         print(key, value.shape)
     print(50 * '*')
-    state_dict = convert_hg_to_mm(state_dict, llm_num_layers)
+    state_dict = convert_hf_to_mm(state_dict, llm_num_layers)
     pipeline_state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
     if len(remains) > 0:
         print(remains)

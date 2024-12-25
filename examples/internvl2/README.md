@@ -105,7 +105,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
     # checkout commit from MindSpeed core_r0.6.0
-    git checkout 4c6847e6fda0a458914fd2ea664f6d09a8be300e
+    git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
     pip install -r requirements.txt
     pip3 install -e .
     cd ..
@@ -134,15 +134,15 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 #### 2. 权重转换
 
-MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
+MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl2_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
 
-以InternVL2-8B为例，`inernvl_convert_to_mm_ckpt.py`的入参`model-size`、`load-dir`、`save-dir`、`trust-remote-code`等如下：
+以InternVL2-8B为例，`internvl2_convert_to_mm_ckpt.py`的入参`model-size`、`load-dir`、`save-dir`、`trust-remote-code`等如下：
 
 启动脚本
 ```shell
   # 根据实际情况修改 ascend-toolkit 路径
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
-  python examples/internvl2/internvl_convert_to_mm_ckpt.py \
+  python examples/internvl2/internvl2_convert_to_mm_ckpt.py \
     --model-size 8B \
     --load-dir raw_ckpt/InternVL2-8B \    # huggingface权重目录
     --save-dir pretrained/InternVL2-8B \  # 转换后的权重保存目录
@@ -292,7 +292,7 @@ $save_dir
 ```shell
   # 根据实际情况修改 ascend-toolkit 路径
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
-  python examples/internvl2/internvl_convert_to_mm_ckpt.py \
+  python examples/internvl2/internvl2_convert_to_mm_ckpt.py \
     --model-size 8B \
     --load-dir raw_ckpt/InternVL2-8B \    # huggingface权重目录
     --save-dir pretrained/InternVL2-8B \  # 转换后的权重保存目录

@@ -16,7 +16,7 @@ def load_from_hf(_load_dir):
     return state_dict
 
 
-def convert_hg_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num):
+def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num):
     hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
     new_params = {}
     for key, value in _state_dict.items():
@@ -208,7 +208,7 @@ def merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_lay
 def split_model_by_pipeline(state_dict, pp_split):
     if pp_split is None or len(pp_split) <= 1:
         return [state_dict], {}
-    
+
     pp_size = len(pp_split)
     vit_range = [0, 0]
     llm_range = [pp_size - 1, pp_size - 1]
@@ -219,7 +219,7 @@ def split_model_by_pipeline(state_dict, pp_split):
             llm_range[0] = pp_rank
     print(f'vit range: {vit_range[0]}~{vit_range[1]}')
     print(f'llm range: {llm_range[0]}~{llm_range[1]}')
-    
+
     vit_start_idx = 0
     llm_start_idx = 0
     return_dicts = []
@@ -267,7 +267,7 @@ def split_model_by_pipeline(state_dict, pp_split):
         llm_start_idx = llm_end_idx
         return_dicts.append(new_dict)
     return return_dicts, copy_dict
-    
+
 def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release', _exists_ok=False):
     if os.path.exists(_save_dir):
         if not _exists_ok:
@@ -305,9 +305,9 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
 
 
 if __name__ == "__main__":
-    hg_ckpt_dir = "Qwen2-VL-7B-Instruct"
+    hf_ckpt_dir = "Qwen2-VL-7B-Instruct"
     mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'
-    
+
     vit_hidden_size = 1280
     vit_attention_heads_num = 16
 
@@ -318,8 +318,8 @@ if __name__ == "__main__":
     llm_num_layers = 28
     llm_pipeline_num_layers = [1, 6, 11, 10]
 
-    state_dict = load_from_hf(hg_ckpt_dir)
-    state_dict = convert_hg_to_mm(state_dict, llm_num_layers, vit_hidden_size, vit_attention_heads_num)
+    state_dict = load_from_hf(hf_ckpt_dir)
+    state_dict = convert_hf_to_mm(state_dict, llm_num_layers, vit_hidden_size, vit_attention_heads_num)
     pp_split = merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers)
     state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
     if len(remains) > 0:

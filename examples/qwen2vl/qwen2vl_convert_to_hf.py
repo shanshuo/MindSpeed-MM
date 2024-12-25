@@ -263,9 +263,9 @@ def save_by_index_json(_state_dicts: list[dict], _save_dir: str) -> None:
 
 
 if __name__ == "__main__":
-    mm_save_dir = "save_dir"  # 微调后保存的权重目录
-    hg_save_dir = "Qwen2-VL-7B-Save"  # 希望保存的hf目录
-    model_path = "Qwen2-VL-7B-Instruct"  # hf原仓目录
+    mm_save_dir = "save_dir"                # 微调后保存的权重目录
+    hf_save_dir = "Qwen2-VL-7B-Save"        # 希望保存的hf目录
+    model_path = "Qwen2-VL-7B-Instruct"     # hf原仓目录
 
     pp_size = 4
     vit_num_layers = 32
@@ -278,5 +278,5 @@ if __name__ == "__main__":
     state_dict = load_from_mm(mm_save_dir, vit_pipeline_num_layers, llm_pipeline_num_layers)
     state_dict = convert_mm_to_hf(state_dict, model_config)
     state_dicts = split_by_index_json(state_dict, model_path)
-    copy_except_safetensors(model_path, hg_save_dir)
-    save_by_index_json(state_dicts, hg_save_dir)
+    copy_except_safetensors(model_path, hf_save_dir)
+    save_by_index_json(state_dicts, hf_save_dir)
