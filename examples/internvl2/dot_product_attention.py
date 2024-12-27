@@ -103,132 +103,59 @@ def dot_product_attention_forward(
 ):
     args = get_args()
 
-    if not torch.any(attention_mask):
-        if self.num_attention_heads_per_partition // self.num_query_groups_per_partition > 1:
-            key = key.repeat_interleave(
-                self.num_attention_heads_per_partition // self.num_query_groups_per_partition, dim=2
-            )
-            value = value.repeat_interleave(
-                self.num_attention_heads_per_partition // self.num_query_groups_per_partition, dim=2
-            )
+    seq_length, batch_size, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
 
-        seq_length, batch_size, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
+    query, key, value = [x.transpose(0, 1) for x in [query, key, value]]
 
-        query, key, value = [rearrange(x, 's b h d -> (s b) h d') for x in [query, key, value]]
+    scale = 1.0 / math.sqrt(self.hidden_size_per_attention_head) if self.scale_mask_softmax.scale is None else self.softmax_scale
 
-        scale = 1.0 / math.sqrt(
-            self.hidden_size_per_attention_head) if self.scale_mask_softmax.scale is None else self.softmax_scale
+    if args.context_parallel_size > 1 and args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
+        in_hybrid_mode = False
+        if get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None:
+            in_hybrid_mode = True
 
-        if args.context_parallel_size > 1 and args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
-            in_hybrid_mode = False
-            if get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None:
-                in_hybrid_mode = True
-
-            if not in_hybrid_mode:
-                cp_group = mpu.get_context_parallel_group()
-                cp_size = mpu.get_context_parallel_world_size()
-                rank = mpu.get_context_parallel_rank()
-                cp_global_ranks = mpu.get_context_parallel_global_ranks()
-            else:
-                cp_group = get_context_parallel_group_for_hybrid_ring()
-                cp_size = get_context_parallel_for_hybrid_ring_world_size()
-                rank = get_context_parallel_for_hybrid_ring_rank()
-                cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
-
-            cp_para = dict()
-            cp_para['causal'] = args.cp_attention_mask_type == 'causal'
-            cp_para['cp_group'] = cp_group
-            cp_para['cp_size'] = cp_size
-            cp_para['rank'] = rank
-            cp_para['cp_global_ranks'] = cp_global_ranks
-            cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
-                if args.use_cp_send_recv_overlap else None
-            cp_para['pse'] = self.pse
-            cp_para['pse_type'] = self.pse_type
-            output = ringattn_context_parallel(query, key, value, n_head, cp_para, scale, attention_mask,
-                                               self.attention_dropout.p)
+        if not in_hybrid_mode:
+            cp_group = mpu.get_context_parallel_group()
+            cp_size = mpu.get_context_parallel_world_size()
+            rank = mpu.get_context_parallel_rank()
+            cp_global_ranks = mpu.get_context_parallel_global_ranks()
         else:
-            if args.use_fusion_attn_v2:
-                output = npu_fusion_attention(
-                    query, key, value, n_head, 'SBH',
-                    pse=self.pse,
-                    padding_mask=None,
-                    atten_mask=attention_mask,
-                    scale=scale,
-                    pse_type=self.pse_type,
-                    pre_tokens=args.pre_tockens,
-                    next_tokens=args.next_tockens,
-                    keep_prob=1 - self.dropout_p,
-                    inner_precise=0,
-                    sparse_mode=args.sparse_mode
-                )[0]
-            else:
-                cu_seqlens = tuple(
-                    torch.arange(seq_length, (batch_size + 1) * seq_length, step=seq_length, dtype=torch.int32).numpy().tolist())
-                output = torch_npu.npu_fusion_attention(
-                    query, key, value, head_num=n_head, input_layout="TND",
-                    keep_prob=1. - self.attention_dropout.p,
-                    actual_seq_qlen=cu_seqlens, actual_seq_kvlen=cu_seqlens,
-                    scale=scale,
-                )[0]
-                output = output.reshape(batch_size, seq_length, n_head, head_dim).contiguous()
-                output = output.reshape(batch_size, seq_length, -1).transpose(0, 1)
+            cp_group = get_context_parallel_group_for_hybrid_ring()
+            cp_size = get_context_parallel_for_hybrid_ring_world_size()
+            rank = get_context_parallel_for_hybrid_ring_rank()
+            cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
 
-        return output
+        cp_para = dict()
+        cp_para['causal'] = args.cp_attention_mask_type == 'causal'
+        cp_para['cp_group'] = cp_group
+        cp_para['cp_size'] = cp_size
+        cp_para['rank'] = rank
+        cp_para['cp_global_ranks'] = cp_global_ranks
+        cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
+            if args.use_cp_send_recv_overlap else None
+        cp_para['pse'] = self.pse
+        cp_para['pse_type'] = self.pse_type
+        output = ringattn_context_parallel(query, key, value, n_head, cp_para, scale, attention_mask, self.attention_dropout.p)
     else:
-        seq_length, batch_size, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
-
-        query, key, value = [x.transpose(0, 1) for x in [query, key, value]]
-
-        scale = 1.0 / math.sqrt(self.hidden_size_per_attention_head) if self.scale_mask_softmax.scale is None else self.softmax_scale
-
-        if args.context_parallel_size > 1 and args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
-            in_hybrid_mode = False
-            if get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None:
-                in_hybrid_mode = True
-
-            if not in_hybrid_mode:
-                cp_group = mpu.get_context_parallel_group()
-                cp_size = mpu.get_context_parallel_world_size()
-                rank = mpu.get_context_parallel_rank()
-                cp_global_ranks = mpu.get_context_parallel_global_ranks()
-            else:
-                cp_group = get_context_parallel_group_for_hybrid_ring()
-                cp_size = get_context_parallel_for_hybrid_ring_world_size()
-                rank = get_context_parallel_for_hybrid_ring_rank()
-                cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
-
-            cp_para = dict()
-            cp_para['causal'] = args.cp_attention_mask_type == 'causal'
-            cp_para['cp_group'] = cp_group
-            cp_para['cp_size'] = cp_size
-            cp_para['rank'] = rank
-            cp_para['cp_global_ranks'] = cp_global_ranks
-            cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
-                if args.use_cp_send_recv_overlap else None
-            cp_para['pse'] = self.pse
-            cp_para['pse_type'] = self.pse_type
-            output = ringattn_context_parallel(query, key, value, n_head, cp_para, scale, attention_mask, self.attention_dropout.p)
+        if args.use_fusion_attn_v2:
+            output = npu_fusion_attention(
+                query, key, value, n_head, 'SBH',
+                pse=self.pse,
+                padding_mask=None,
+                atten_mask=attention_mask,
+                scale=scale,
+                pse_type=self.pse_type,
+                pre_tokens=args.pre_tockens,
+                next_tokens=args.next_tockens,
+                keep_prob=1 - self.dropout_p,
+                inner_precise=0,
+                sparse_mode=args.sparse_mode
+            )[0]
         else:
-            if args.use_fusion_attn_v2:
-                output = npu_fusion_attention(
-                    query, key, value, n_head, 'SBH',
-                    pse=self.pse,
-                    padding_mask=None,
-                    atten_mask=attention_mask,
-                    scale=scale,
-                    pse_type=self.pse_type,
-                    pre_tokens=args.pre_tockens,
-                    next_tokens=args.next_tockens,
-                    keep_prob=1 - self.dropout_p,
-                    inner_precise=0,
-                    sparse_mode=args.sparse_mode
-                )[0]
-            else:
-                output = torch_npu.npu_fusion_attention(query, key, value, n_head, "BSND",
-                                                             keep_prob=1. - self.attention_dropout.p,
-                                                             scale=scale,
-                                                             atten_mask=attention_mask, )[0]
-                output = output.transpose(0, 1).reshape(seq_length, batch_size, -1)
+            output = torch_npu.npu_fusion_attention(query, key, value, n_head, "BSND",
+                                                            keep_prob=1. - self.attention_dropout.p,
+                                                            scale=scale,
+                                                            atten_mask=attention_mask, )[0]
+        output = output.transpose(0, 1).reshape(seq_length, batch_size, -1)
 
-        return output
+    return output
