@@ -6,17 +6,53 @@ from copy import deepcopy
 import torch
 from safetensors.torch import load_file
 
+MODEL_CONFIG_DICT = {
+    '2B': {
+        'model_size': '2B',
+        'vit_hidden_size': 1280,
+        'vit_num_attention_heads': 16,
+        'vit_num_layers': 32,
+        'llm_hidden_size': 1536,
+        'llm_num_query_groups': 2,
+        'llm_num_attention_heads': 12,
+        'llm_num_layers': 28,
+    },
+    '7B': {
+        'model_size': '7B',
+        'vit_hidden_size': 1280,
+        'vit_num_attention_heads': 16,
+        'vit_num_layers': 32,
+        'llm_hidden_size': 3584,
+        'llm_num_query_groups': 4,
+        'llm_num_attention_heads': 28,
+        'llm_num_layers': 28,
+    },
+    '72B': {
+        'model_size': '72B',
+        'vit_hidden_size': 1280,
+        'vit_num_attention_heads': 16,
+        'vit_num_layers': 32,
+        'llm_hidden_size': 8192,
+        'llm_num_query_groups': 8,
+        'llm_num_attention_heads': 64,
+        'llm_num_layers': 80,
+    }
+}
+
 
 def load_from_hf(_load_dir):
     # Load Huggingface model 。
     load_dir = Path(_load_dir)
+    safetensors_files = list(load_dir.glob("*.safetensors"))
+    if not safetensors_files:
+        raise FileNotFoundError(f"No *.safetensors files found in {load_dir}")
     state_dict = {}
-    for safe_path in load_dir.glob("*.safetensors"):
+    for safe_path in safetensors_files:
         state_dict.update(load_file(str(safe_path), device='cpu'))
     return state_dict
 
 
-def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num):
+def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num, _llm_num_query_groups):
     hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
     new_params = {}
     for key, value in _state_dict.items():
@@ -132,11 +168,11 @@ def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
         if attention_v in new_params.keys():
             attention_v_weight = new_params[attention_v]
 
-        q_chunks = torch.chunk(attention_q_weight, 4, dim=0)
-        k_chunks = torch.chunk(attention_k_weight, 4, dim=0)
-        v_chunks = torch.chunk(attention_v_weight, 4, dim=0)
+        q_chunks = torch.chunk(attention_q_weight, _llm_num_query_groups, dim=0)
+        k_chunks = torch.chunk(attention_k_weight, _llm_num_query_groups, dim=0)
+        v_chunks = torch.chunk(attention_v_weight, _llm_num_query_groups, dim=0)
         all_chunks = []
-        for j in range(4):
+        for j in range(_llm_num_query_groups):
             all_chunks.append(q_chunks[j])
             all_chunks.append(k_chunks[j])
             all_chunks.append(v_chunks[j])
@@ -168,11 +204,11 @@ def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
         else:
             continue
 
-        q_chunks1 = torch.chunk(attention_q_bias, 4, dim=0)
-        k_chunks1 = torch.chunk(attention_k_bias, 4, dim=0)
-        v_chunks1 = torch.chunk(attention_v_bias, 4, dim=0)
+        q_chunks1 = torch.chunk(attention_q_bias, _llm_num_query_groups, dim=0)
+        k_chunks1 = torch.chunk(attention_k_bias, _llm_num_query_groups, dim=0)
+        v_chunks1 = torch.chunk(attention_v_bias, _llm_num_query_groups, dim=0)
         all_chunks1 = []
-        for j in range(4):
+        for j in range(_llm_num_query_groups):
             all_chunks1.append(q_chunks1[j])
             all_chunks1.append(k_chunks1[j])
             all_chunks1.append(v_chunks1[j])
@@ -186,6 +222,7 @@ def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
             new_params.pop(attention_v1)
 
     return new_params
+
 
 def merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers):
     if len(vit_pipeline_num_layers) != pp_size:
@@ -204,6 +241,7 @@ def merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_lay
     for vit_num, llm_num in zip(vit_pipeline_num_layers, llm_pipeline_num_layers):
         split_method.append((vit_num, llm_num))
     return split_method
+
 
 def split_model_by_pipeline(state_dict, pp_split):
     if pp_split is None or len(pp_split) <= 1:
@@ -268,6 +306,7 @@ def split_model_by_pipeline(state_dict, pp_split):
         return_dicts.append(new_dict)
     return return_dicts, copy_dict
 
+
 def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release', _exists_ok=False):
     if os.path.exists(_save_dir):
         if not _exists_ok:
@@ -305,22 +344,20 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
 
 
 if __name__ == "__main__":
-    hf_ckpt_dir = "Qwen2-VL-7B-Instruct"
-    mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'
+    hf_ckpt_dir = "ckpt/hf_path/Qwen2-VL-7B-Instruct"  # hugging face原始的权重保存路径
+    mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后的权重保存路径
+    model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+    #model parameters
+    model_config = MODEL_CONFIG_DICT[model_size]
 
-    vit_hidden_size = 1280
-    vit_attention_heads_num = 16
-
-    #for 7B
+    #PP parameters: 7B
     pp_size = 4
-    vit_num_layers = 32
     vit_pipeline_num_layers = [32, 0, 0, 0]
-    llm_num_layers = 28
     llm_pipeline_num_layers = [1, 6, 11, 10]
 
     state_dict = load_from_hf(hf_ckpt_dir)
-    state_dict = convert_hf_to_mm(state_dict, llm_num_layers, vit_hidden_size, vit_attention_heads_num)
-    pp_split = merge_pp_index(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers)
+    state_dict = convert_hf_to_mm(state_dict, model_config["llm_num_layers"], model_config["vit_hidden_size"], model_config["vit_num_attention_heads"], model_config["llm_num_query_groups"])
+    pp_split = merge_pp_index(pp_size, model_config["vit_num_layers"], vit_pipeline_num_layers, model_config["llm_num_layers"], llm_pipeline_num_layers)
     state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
     if len(remains) > 0:
         print(remains)

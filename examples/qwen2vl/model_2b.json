@@ -24,7 +24,7 @@
             "freeze": true,
             "use_fused_rotary_pos_emb": true,
             "post_layer_norm": false,
-            "pipeline_num_layers": [32, 0, 0, 0]
+            "pipeline_num_layers": [32]
         },
         "vision_projector": {
             "model_id": "lnmlp",
@@ -45,7 +45,7 @@
     "text_decoder": {
         "model_id": "qwen2lm",
         "num_layers": 28,
-        "pipeline_num_layers": [1, 6, 11, 10],
+        "pipeline_num_layers": [28],
         "hidden_size": 1536,
         "ffn_hidden_size": 8960,
         "num_attention_heads": 12,

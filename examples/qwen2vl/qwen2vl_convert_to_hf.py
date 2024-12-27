@@ -7,33 +7,38 @@ import mindspeed.megatron_adaptor  # noqa
 import torch
 from safetensors.torch import save_file
 
-model_config_dict = {
+MODEL_CONFIG_DICT = {
     '2B': {
         'model_size': '2B',
         'vit_hidden_size': 1280,
         'vit_num_attention_heads': 16,
+        'vit_num_layers': 32,
         'llm_hidden_size': 1536,
-        'llm_num_key_value_heads': 2,
-        'llm_num_attention_heads': 12
+        'llm_num_query_groups': 2,
+        'llm_num_attention_heads': 12,
+        'llm_num_layers': 28,
     },
     '7B': {
         'model_size': '7B',
         'vit_hidden_size': 1280,
         'vit_num_attention_heads': 16,
+        'vit_num_layers': 32,
         'llm_hidden_size': 3584,
-        'llm_num_key_value_heads': 4,
-        'llm_num_attention_heads': 28
+        'llm_num_query_groups': 4,
+        'llm_num_attention_heads': 28,
+        'llm_num_layers': 28,
     },
     '72B': {
         'model_size': '72B',
         'vit_hidden_size': 1280,
         'vit_num_attention_heads': 16,
+        'vit_num_layers': 32,
         'llm_hidden_size': 8192,
-        'llm_num_key_value_heads': 8,
-        'llm_num_attention_heads': 64
+        'llm_num_query_groups': 8,
+        'llm_num_attention_heads': 64,
+        'llm_num_layers': 80,
     }
 }
-CHUNK_SIZE = 4  # 2B 7B 72B 的qkv固定拆分为4份
 
 
 def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int]) -> str:
@@ -80,13 +85,13 @@ def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
     vit_num_attention_heads = _model_config['vit_num_attention_heads']
     llm_hidden_size = _model_config['llm_hidden_size']
     llm_num_attention_heads = _model_config['llm_num_attention_heads']
-    llm_num_key_value_heads = _model_config['llm_num_key_value_heads']
+    llm_num_query_groups = _model_config['llm_num_query_groups']
 
     vit_head_hidden_size = vit_hidden_size // vit_num_attention_heads
     llm_head_hidden_size = llm_hidden_size // llm_num_attention_heads
-    q_size = llm_head_hidden_size * llm_num_attention_heads // CHUNK_SIZE
-    k_size = llm_head_hidden_size * llm_num_key_value_heads // CHUNK_SIZE
-    v_size = llm_head_hidden_size * llm_num_key_value_heads // CHUNK_SIZE
+    q_size = llm_head_hidden_size * llm_num_attention_heads // llm_num_query_groups
+    k_size = llm_head_hidden_size * llm_num_query_groups // llm_num_query_groups
+    v_size = llm_head_hidden_size * llm_num_query_groups // llm_num_query_groups
 
     new_params = {}
     for key, value in _state_dict.items():
@@ -149,7 +154,7 @@ def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
         else:
             # self_attention.linear_qkv.weight 和 self_attention.linear_qkv.bias
             if 'self_attention.linear_qkv' in key:
-                qkv_chunks = torch.chunk(value, CHUNK_SIZE, dim=0)
+                qkv_chunks = torch.chunk(value, llm_num_query_groups, dim=0)
                 q_chunks = []
                 k_chunks = []
                 v_chunks = []
@@ -263,18 +268,19 @@ def save_by_index_json(_state_dicts: list[dict], _save_dir: str) -> None:
 
 
 if __name__ == "__main__":
-    mm_save_dir = "save_dir"                # 微调后保存的权重目录
-    hf_save_dir = "Qwen2-VL-7B-Save"        # 希望保存的hf目录
-    model_path = "Qwen2-VL-7B-Instruct"     # hf原仓目录
+    mm_save_dir = "save_dir"  # 微调后保存的权重目录
+    hf_save_dir = "Qwen2-VL-7B-Save"  # 希望保存的hf目录
+    model_path = "ckpt/hf_path/Qwen2-VL-7B-Instruct"  # hf原仓目录
+    model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+    #model parameters
+    model_config = MODEL_CONFIG_DICT[model_size]
 
+    #PP parameters: 7B
     pp_size = 4
-    vit_num_layers = 32
     vit_pipeline_num_layers = [32, 0, 0, 0]
-    llm_num_layers = 28
     llm_pipeline_num_layers = [1, 6, 11, 10]
-    model_config = model_config_dict["7B"]  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
 
-    check_pp_config(pp_size, vit_num_layers, vit_pipeline_num_layers, llm_num_layers, llm_pipeline_num_layers)
+    check_pp_config(pp_size, model_config["vit_num_layers"], vit_pipeline_num_layers, model_config["llm_num_layers"], llm_pipeline_num_layers)
     state_dict = load_from_mm(mm_save_dir, vit_pipeline_num_layers, llm_pipeline_num_layers)
     state_dict = convert_mm_to_hf(state_dict, model_config)
     state_dicts = split_by_index_json(state_dict, model_path)

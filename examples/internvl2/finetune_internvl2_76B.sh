@@ -9,7 +9,7 @@ export HCCL_CONNECT_TIMEOUT=1200
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ACLNN_CACHE_LIMIT=100000
 
-GPUS_PER_NODE=16
+NPUS_PER_NODE=16
 MASTER_PORT=6000
 HOSTFILE='./hostfile'
 NODEADDR=$(hostname -I | awk -F " " '{print$1}')
@@ -17,7 +17,7 @@ NODE_RANK=$(awk '{ranks[$1]=(FNR-1);}END{print ranks["'$NODEADDR'"];}' $HOSTFILE
 NNODES=$(wc -l $HOSTFILE)
 MASTER_ADDR=$(head -n 1 $HOSTFILE | awk '{print $1;}')
 
-WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
+WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 MBS=1
 GRAD_ACC_STEP=128
@@ -40,7 +40,7 @@ MM_ARGS="
 "
 
 DISTRIBUTED_ARGS="
-    --nproc_per_node $GPUS_PER_NODE \
+    --nproc_per_node $NPUS_PER_NODE \
     --nnodes $NNODES \
     --node_rank $NODE_RANK \
     --master_addr $MASTER_ADDR \

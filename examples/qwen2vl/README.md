@@ -61,8 +61,6 @@ mkdir data
 mkdir ckpt
 ```
 
-
-
 #### 2. 环境搭建
 
 torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
@@ -121,34 +119,31 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/
 ```python
 hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-72B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-72B-Instruct'  # 转换后保存目录
+model_size = "72B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+#model parameters
+model_config = MODEL_CONFIG_DICT[model_size]
+
+#PP parameters: 72B
 pp_size = 16  # 切分的PPstage数量，注意要和finetune脚本中配置的PP一致
-
-llm_num_layers = 80  #LLM的总层数
 llm_pipeline_num_layers = [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 4]  # LLM在每个卡上切分的层数，和为 llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-
-vit_num_layers = 32  # vit的总层数
 vit_pipeline_num_layers = [32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # vit在每个卡上切分的层数，和为 vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
 
-vit_hidden_size = 1280  # vit的隐藏层size
-vit_attention_heads_num = 16  # vit的注意力heads数
 ```
 
 以Qwen2VL-7B为例
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
 
 ```python
-hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-7B-Instruct'  # huggingface权重目录
-mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后保存目录
-pp_size = 4  # 切分的PPstage数量
+hf_ckpt_dir = "ckpt/hf_path/Qwen2-VL-7B-Instruct"  #hf原始的权重保存路径
+mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  #转换后的权重保存路径
+model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+#model parameters
+model_config = MODEL_CONFIG_DICT[model_size]
 
-llm_num_layers = 28  #LLM的总层数
-llm_pipeline_num_layers = [1, 6, 11, 10]  # LLM在每个卡上切分的层数，和为 llm_num_layers
-
-vit_num_layers = 32  # vit的总层数
-vit_pipeline_num_layers = [32, 0, 0, 0]  # vit在每个卡上切分的层数，和为 vit_num_layers
-
-vit_hidden_size = 1280  # vit的隐藏层size
-vit_attention_heads_num = 16  # vit的注意力heads数
+#PP parameters: 7B
+pp_size = 4
+vit_pipeline_num_layers = [32, 0, 0, 0]  # LLM在每个卡上切分的层数，和为llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
+llm_pipeline_num_layers = [1, 6, 11, 10]  # vit在每个卡上切分的层数，和为vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
 ```
 以Qwen2VL-2B为例
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
@@ -156,16 +151,15 @@ vit_attention_heads_num = 16  # vit的注意力heads数
 ```python
 hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct'  # huggingface权重目录
 mm_save_dir = 'ckpt/mm_path/Qwen2-VL-2B-Instruct'  # 转换后保存目录
+model_size = "2B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+#model parameters
+model_config = MODEL_CONFIG_DICT[model_size]
+
+#PP parameters: 2B
 pp_size = 1  # 2B不需要切分PP
+llm_pipeline_num_layers = [28]  # LLM在每个卡上切分的层数，和为llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
+vit_pipeline_num_layers = [32]  # vit在每个卡上切分的层数，和为vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
 
-llm_num_layers = 28  #LLM的总层数
-llm_pipeline_num_layers = [28]  # LLM在每个卡上切分的层数，和为llm_num_layers
-
-vit_num_layers = 32  # vit的总层数
-vit_pipeline_num_layers = [32]  # vit在每个卡上切分的层数，和为vit_num_layers
-
-vit_hidden_size = 1280  # vit的隐藏层size
-vit_attention_heads_num = 16  # vit的注意力heads数
 ```
 
 启动脚本
@@ -262,7 +256,7 @@ dataset_param->basic_parameters->dataset
 ```shell
 ...
 # 加载路径
-LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
+LOAD_PATH="ckpt/mm_path/Qwen2-VL-7B-Instruct"
 # 保存路径
 SAVE_PATH="save_dir"
 ...
@@ -298,12 +292,12 @@ $save_dir
 ```shell
 # 根据实际情况修改 ascend-toolkit 路径
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
-GPUS_PER_NODE=8
+NPUS_PER_NODE=8
 MASTER_ADDR=locahost
 MASTER_PORT=29501
 NNODES=1
 NODE_RANK=0
-WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 ```
 
 
@@ -359,14 +353,14 @@ model_path = "Qwen2-VL-7B-Instruct"     # hf原仓目录
 修改qwen2vl_convert_to_hf.py中的如下内容,与qwen2vl_convert_to_mm_ckpt.py保持一致：
 ```python
 pp_size = 4
-vit_num_layers = 32
 vit_pipeline_num_layers = [32, 0, 0, 0]
-llm_num_layers = 28
 llm_pipeline_num_layers = [1, 6, 11, 10]
 ```
 在qwen2vl_convert_to_hf.py中根据模型选择模型配置
 ```python
-model_config = model_config_dict["7B"]  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+#model parameters
+model_config = MODEL_CONFIG_DICT[model_size]
 ```
 
 #### 3.执行转换脚本

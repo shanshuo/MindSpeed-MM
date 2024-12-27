@@ -23,7 +23,7 @@ WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 MM_DATA="./examples/qwen2vl/data_2b.json"
 MM_MODEL="./examples/qwen2vl/model_2b.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
+LOAD_PATH="ckpt/mm_path/Qwen2-VL-2B-Instruct"
 SAVE_PATH="save_dir"
 
 TP=1

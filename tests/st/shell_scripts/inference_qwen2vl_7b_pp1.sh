@@ -1,8 +1,6 @@
 #!/bin/bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 
-# 通过此配置选择使用的NPU卡
-# export ASCEND_RT_VISIBLE_DEVICES=1
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3

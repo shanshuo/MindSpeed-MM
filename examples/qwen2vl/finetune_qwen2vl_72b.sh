@@ -33,7 +33,7 @@ MM_DATA="./examples/qwen2vl/data_72b.json"
 MM_MODEL="./examples/qwen2vl/model_72b.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 # 需要先根据readme把huggingface格式模型转换为mm格式
-LOAD_PATH="ckpt/Qwen2-VL-72B-Instruct"
+LOAD_PATH="ckpt/mm_path/Qwen2-VL-72B-Instruct"
 SAVE_PATH="save_dir"
 
 TP=1

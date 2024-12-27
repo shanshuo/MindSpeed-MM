@@ -7,12 +7,12 @@ export COMBINED_ENABLE=1
 export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
 
-GPUS_PER_NODE=4
+NPUS_PER_NODE=4
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
 NODE_RANK=0
-WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
+WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 TP=1
 PP=1
@@ -27,7 +27,7 @@ MM_MODEL="$BASEPATH/tests/st/run_configs/pretrain_llava1_5/model.json"
 MM_TOOL="$BASEPATH/mindspeed_mm/tools/tools.json"
 
 DISTRIBUTED_ARGS="
-    --nproc_per_node $GPUS_PER_NODE \
+    --nproc_per_node $NPUS_PER_NODE \
     --nnodes $NNODES \
     --node_rank $NODE_RANK \
     --master_addr $MASTER_ADDR \
