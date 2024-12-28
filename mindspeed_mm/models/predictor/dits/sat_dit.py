@@ -72,14 +72,20 @@ class SatDiT(MultiModalModule):
         use_rope: bool = False,
         interpolation_scale: Tuple[float] = None,
         elementwise_affine: bool = True,
-        text_length=None,
-        text_hidden_size=None,
-        time_embed_dim=None,
-        concat_text_embed=None,
-        learnable_pos_embed=False,
+        text_length: int = None,
+        text_hidden_size: int = None,
+        time_embed_dim: int = None,
+        concat_text_embed: bool = None,
+        learnable_pos_embed: bool = False,
+        pre_process: bool = True,
+        post_process: bool = True,
+        global_layer_idx: Optional[Tuple] = None,
         **kwargs
     ):
         super().__init__(config=None)
+        self.pre_process = pre_process
+        self.post_process = post_process
+        self.input_size = input_size
         # Validate inputs and init args.
         if patch_size is not None:
             if norm_type not in ["ada_norm", "ada_norm_zero", "ada_norm_single", "qk_ln"]:
@@ -101,9 +107,12 @@ class SatDiT(MultiModalModule):
         args = get_args()
         self.sequence_parallel = args.sequence_parallel
         self.text_length = self._get_text_length(input_size, text_length)
+        self.ori_text_length = text_length
+        self.seq_len = text_length + reduce(mul, input_size) // reduce(mul, patch_size)
         self.text_hidden_size = text_hidden_size
         self.elementwise_affine = elementwise_affine
         inner_dim = num_heads * head_dim
+        self.inner_dim = inner_dim
         self.time_embed_dim = time_embed_dim if time_embed_dim is not None else inner_dim
 
         self.recompute_granularity = args.recompute_granularity
@@ -121,12 +130,21 @@ class SatDiT(MultiModalModule):
             self.enable_sequence_parallelism = False
 
         # Initialize blocks
+
+        if self.pre_process:
         # Init PatchEmbed
-        self.time_embed = TimeStepEmbedding(inner_dim, self.time_embed_dim)
-        if self.patch_type == "3D":
-            self.patch_embed = VideoPatch3D(in_channels, inner_dim, self.patch_size)
-        else:
-            self.patch_embed = VideoPatch2D(in_channels, inner_dim, self.patch_size_h)
+            self.time_embed = TimeStepEmbedding(inner_dim, self.time_embed_dim)
+            if self.patch_type == "3D":
+                self.patch_embed = VideoPatch3D(in_channels, inner_dim, self.patch_size)
+            else:
+                self.patch_embed = VideoPatch2D(in_channels, inner_dim, self.patch_size_h)
+            
+            # Init Projection
+            self.caption_projection = None
+            if text_hidden_size is not None:
+                self.caption_projection = nn.Linear(self.text_hidden_size, inner_dim)
+        
+        self.global_layer_idx = global_layer_idx if global_layer_idx is not None else tuple(range(num_layers))
 
         self.pos_embed = Rotary3DPositionEmbedding(
             hidden_size_head=head_dim,
@@ -163,31 +181,30 @@ class SatDiT(MultiModalModule):
                 for i in range(num_layers)
             ]
         )
-        # Init Norm
-        self.norm_final = nn.LayerNorm(inner_dim, elementwise_affine=elementwise_affine, eps=1e-5)
-        config = core_transformer_config_from_args(args)
-        config.sequence_parallel = False
-        self.adaLN_modulation = nn.Sequential(
-            nn.SiLU(),
-            tensor_parallel.ColumnParallelLinear(
-                self.time_embed_dim,
-                2 * inner_dim,
-                config=config,
-                init_method=config.init_method,
-                gather_output=False
-            )
-        )
-        self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=elementwise_affine, eps=1e-6)
-        self.proj_out = nn.Linear(inner_dim, reduce(mul, self.patch_size) * self.out_channels)
 
-        for param in self.norm_final.parameters():
-            setattr(param, "sequence_parallel", self.sequence_parallel)
-        for param in self.norm_out.parameters():
-            setattr(param, "sequence_parallel", self.sequence_parallel)
-        # Init Projection
-        self.caption_projection = None
-        if text_hidden_size is not None:
-            self.caption_projection = nn.Linear(self.text_hidden_size, inner_dim)
+        if self.post_process:
+            # Init Norm
+            self.norm_final = nn.LayerNorm(inner_dim, elementwise_affine=elementwise_affine, eps=1e-5)
+            config = core_transformer_config_from_args(args)
+            config.sequence_parallel = False
+            self.adaLN_modulation = nn.Sequential(
+                nn.SiLU(),
+                tensor_parallel.ColumnParallelLinear(
+                    self.time_embed_dim,
+                    2 * inner_dim,
+                    config=config,
+                    init_method=config.init_method,
+                    gather_output=False
+                )
+            )
+            self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=elementwise_affine, eps=1e-6)
+            self.proj_out = nn.Linear(inner_dim, reduce(mul, self.patch_size) * self.out_channels)
+
+            for param in self.norm_final.parameters():
+                setattr(param, "sequence_parallel", self.sequence_parallel)
+            for param in self.norm_out.parameters():
+                setattr(param, "sequence_parallel", self.sequence_parallel)
+        
         print(self)
 
     def _get_text_length(self, input_size, text_length):
@@ -228,7 +245,8 @@ class SatDiT(MultiModalModule):
             class_labels: Used to indicate class labels conditioning.
             use_image_num: The number of images use for trainning.
         """
-        b, _, t, h, w = latents.shape
+        b = latents.shape[0]
+        t, h, w = self.input_size[0], self.input_size[1], self.input_size[2]
         frames = t - use_image_num
         vid_mask, img_mask = None, None
         prompt_vid_mask, prompt_img_mask = None, None
@@ -241,29 +259,35 @@ class SatDiT(MultiModalModule):
 
         # 1. Input
         frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
-        height, width = latents.shape[-2] // self.patch_size_h, latents.shape[-1] // self.patch_size_w
+        height, width = h // self.patch_size_h, w // self.patch_size_w
 
-        if "masked_video" in kwargs.keys() and kwargs["masked_video"] is not None:
-            latents = torch.cat([latents, kwargs["masked_video"]], dim=1)
+        if self.pre_process:
+            if "masked_video" in kwargs.keys() and kwargs["masked_video"] is not None:
+                latents = torch.cat([latents, kwargs["masked_video"]], dim=1)
 
-        added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
-        latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
-            embedded_timestep_vid, embedded_timestep_img = self._operate_on_patched_inputs(
-            latents, prompt, timestep, frames)
-        if self.concat_text_embed:
-            latents_vid = torch.cat((prompt_vid, latents_vid), dim=1)
+            added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
+            latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
+                embedded_timestep_vid, embedded_timestep_img = self._operate_on_patched_inputs(
+                latents, prompt, timestep, frames)
+            if self.concat_text_embed:
+                latents_vid = torch.cat((prompt_vid, latents_vid), dim=1)
 
-        if self.enable_sequence_parallelism or self.sequence_parallel:
-            latents_vid = latents_vid.transpose(0, 1).contiguous()
-        if self.enable_sequence_parallelism:
-            latents_vid = split_forward_gather_backward(latents_vid, mpu.get_context_parallel_group(), dim=0,
-                                                        grad_scale='down')
-        if self.sequence_parallel:
-            latents_vid = tensor_parallel.scatter_to_sequence_parallel_region(latents_vid)
+            if self.enable_sequence_parallelism or self.sequence_parallel:
+                latents_vid = latents_vid.transpose(0, 1).contiguous()
+            if self.enable_sequence_parallelism:
+                latents_vid = split_forward_gather_backward(latents_vid, mpu.get_context_parallel_group(), dim=0,
+                                                            grad_scale='down')
+            if self.sequence_parallel:
+                latents_vid = tensor_parallel.scatter_to_sequence_parallel_region(latents_vid)
+        else:
+            latents_vid = latents
+            prompt_vid = prompt
+            timestep_vid = timestep
 
         frames = torch.tensor(frames)
         height = torch.tensor(height)
         width = torch.tensor(width)
+
         with rng_context:
             if self.recompute_granularity == "full":
                 if latents_vid is not None:
@@ -301,22 +325,25 @@ class SatDiT(MultiModalModule):
 
 
         # 3. Output
-        output_vid, output_img = None, None
-        if latents_vid is not None:
-            output_vid = self._get_output_for_patched_inputs(
-                latents=latents_vid,
-                timestep=timestep_vid,
-                height=height,
-                width=width,
-            )  # [b, c, t, h, w]
+        if self.post_process:
+            output_vid, output_img = None, None
+            if latents_vid is not None:
+                output_vid = self._get_output_for_patched_inputs(
+                    latents=latents_vid,
+                    timestep=timestep_vid,
+                    height=height,
+                    width=width,
+                )  # [b, c, t, h, w]
 
-        if output_vid is not None and output_img is not None:
-            output = torch.cat([output_vid, output_img], dim=2)
-        elif output_vid is not None:
-            output = output_vid
-        elif output_img is not None:
-            output = output_img
-        return output
+            if output_vid is not None and output_img is not None:
+                output = torch.cat([output_vid, output_img], dim=2)
+            elif output_vid is not None:
+                output = output_vid
+            elif output_img is not None:
+                output = output_img
+            return output, prompt_vid, timestep_vid
+        else:
+            return latents_vid, prompt_vid, timestep_vid
 
     def _get_block(self, layer_number):
         return self.videodit_blocks[layer_number]
@@ -483,6 +510,63 @@ class SatDiT(MultiModalModule):
                            o=self.patch_size_t, p=self.patch_size_h, q=self.patch_size_w,
                            c=self.out_channels).transpose(1, 2)
         return output
+
+    def initialize_pipeline_tensor_shapes(self):
+        args = get_args()
+        micro_batch_size = args.mm.data.dataloader_param.batch_size
+        dtype = args.params_dtype
+        latent_size = (self.out_channels, *self.input_size)
+        seq_len = self.seq_len 
+
+        if self.enable_sequence_parallelism or self.sequence_parallel:
+            prev_output_shape = (seq_len // mpu.get_context_parallel_world_size(), micro_batch_size, self.inner_dim) # SBH
+        else:
+            prev_output_shape = (micro_batch_size, seq_len, self.inner_dim) # BSH
+
+        pipeline_tensor_shapes = [
+            {'shape': prev_output_shape, 'dtype': dtype},                                           # prev_stage_output
+            {'shape': (micro_batch_size, *latent_size), 'dtype': dtype},                            # latents 
+            {'shape': (micro_batch_size, self.ori_text_length, self.inner_dim), 'dtype': dtype},    # prompt
+            {'shape': (micro_batch_size, self.time_embed_dim), 'dtype': dtype},                     # embedded_timestep
+            {'shape': (micro_batch_size, *latent_size), 'dtype': torch.float32},                    # video_diffusion: self.noised_start
+            {'shape': (micro_batch_size, 1, 1, 1, 1), 'dtype': torch.float32},                      # video_diffusion: self.c_out
+            {'shape': (micro_batch_size), 'dtype': torch.float32},                                  # video_diffusion: self.alpha_cumprod
+        ]
+        return pipeline_tensor_shapes
+
+    def pipeline_set_prev_stage_tensor(self, input_tensor_list, extra_kwargs=None):
+        """
+        Process tensor from prev_pipeline_stage, and adjust to predictor input and training loss input.
+        Input: 
+            input_tensor_list: 
+                model_output, latents, predictor_prompt, predictor_timesteps,
+            extra_kwargs (extra parameter for video_diffusion): 
+                extra_kwargs["noised_start"], extra_kwargs["c_out"], extra_kwargs["alphas_cumprod"]
+        Return:
+            predictor_input_list (input for self.predictor in SoraModel.forward):
+                predictor_input_latent, predictor_timesteps, predictor_prompt, predictor_video_mask, prompt_prompt_mask
+            training_loss_input_list (input for self.compute_loss in SoraModel.forward):
+                latents, noised_latents, timesteps, noise, video_mask
+        """
+        predictor_input_latent, latents, predictor_prompt, predictor_timesteps, \
+            extra_kwargs["noised_start"], extra_kwargs["c_out"], extra_kwargs["alphas_cumprod"] = input_tensor_list
+        predictor_video_mask, predictor_prompt_mask = None, None
+        predictor_input_list = [predictor_input_latent, predictor_timesteps, predictor_prompt, predictor_video_mask, predictor_prompt_mask]
+        training_loss_input_list = [latents, None, predictor_timesteps, None, predictor_video_mask]
+    
+        return predictor_input_list, training_loss_input_list
+
+    def pipeline_set_next_stage_tensor(self, input_list, output_list, extra_kwargs=None):
+        """
+        Process predictor output tensors from curr pipeline stage, and adjust to next pipeline stage 
+        Input:
+            input_list: [latents, noised_latents, timesteps, noise, video_mask]
+            output_list: [predictor_output, predictor_prompt, predictor_timesteps]
+        Return:
+            predictor_output, latents, predictor_prompt, predictor_timesteps, extra_kwargs["noised_start"], extra_kwargs["c_out"], extra_kwargs["alphas_cumprod"]
+        """
+        return [output_list[0], input_list[0], output_list[1], output_list[2], \
+                extra_kwargs["noised_start"], extra_kwargs["c_out"], extra_kwargs["alphas_cumprod"]]
 
 
 class VideoDiTBlock(nn.Module):

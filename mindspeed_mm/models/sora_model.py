@@ -52,14 +52,13 @@ class SoRAModel(nn.Module):
         self.config = core_transformer_config_from_args(get_args())
         self.task = config.task if hasattr(config, "task") else "t2v"
 
-        self.pp_size = mpu.get_pipeline_model_parallel_world_size()
         if mpu.get_virtual_pipeline_model_parallel_world_size() is not None:
             raise NotImplementedError("Not support virtual_pipeline_model_parallel now. ")
         else:
             self.pp_rank = mpu.get_pipeline_model_parallel_rank()
 
-        self.pre_process = True
-        self.post_process = True
+        self.pre_process = mpu.is_pipeline_first_stage()
+        self.post_process = mpu.is_pipeline_last_stage()
         self.input_tensor = None
         # to avoid grad all-reduce and reduce-scatter in megatron, since SoRAModel has no embedding layer.
         self.share_embeddings_and_output_weights = False
@@ -77,30 +76,7 @@ class SoRAModel(nn.Module):
                 self.text_encoder.requires_grad_(False)
 
         self.diffusion = DiffusionModel(config.diffusion).get_model()
-        self.predictor = self._build_predictor_layers(config.predictor)
-
-    def _build_predictor_layers(self, config):
-        self.predictor_cls = config.model_id
-        if self.pp_size <= 1:
-            return PredictModel(config).get_model()
-
-        local_num_layers = config.pipeline_num_layers[self.pp_rank]
-        if local_num_layers <= 0:
-            raise ValueError(f"for pp_rank {self.pp_rank}, the predictor layer is {local_num_layers}, "
-                             f"which is invalid. ")
-
-        pipeline_start_idx = sum(config.pipeline_num_layers[:self.pp_rank])
-        pipeline_end_idx = sum(config.pipeline_num_layers[:self.pp_rank + 1])
-        self.pre_process = pipeline_start_idx == 0
-        self.post_process = pipeline_end_idx == config.num_layers
-
-        config.num_layers = local_num_layers
-        config.pre_process, config.post_process = self.pre_process, self.post_process
-        config.global_layer_idx = tuple(range(pipeline_start_idx, pipeline_end_idx))
-        if len(config.global_layer_idx) != local_num_layers:
-            raise ValueError("The number of global_layer_idx is not equal to local_num_layers")
-
-        return PredictModel(config=config).get_model()
+        self.predictor = PredictModel(config.predictor).get_model()
 
     def set_input_tensor(self, input_tensor):
         self.input_tensor = input_tensor
@@ -160,25 +136,24 @@ class SoRAModel(nn.Module):
         )
 
         if self.post_process:
-            timesteps = timesteps.to(torch.int64)
             loss = self.compute_loss(
                 output if isinstance(output, torch.Tensor) else output[0],
                 latents,
                 noised_latents,
                 timesteps,
                 noise,
-                video_mask
+                video_mask,
+                **kwargs
             )
             return [loss]
 
-        timesteps = timesteps.to(torch.bfloat16)
         return self.predictor.pipeline_set_next_stage_tensor(
             input_list=[latents, noised_latents, timesteps, noise, video_mask],
             output_list=output,
             extra_kwargs=kwargs)
 
     def compute_loss(
-        self, model_output, latents, noised_latents, timesteps, noise, video_mask
+        self, model_output, latents, noised_latents, timesteps, noise, video_mask, **kwargs
     ):
         """compute diffusion loss"""
         loss_dict = self.diffusion.training_losses(
@@ -188,6 +163,7 @@ class SoRAModel(nn.Module):
             noise=noise,
             t=timesteps,
             mask=video_mask,
+            **kwargs
         )
         return loss_dict
     

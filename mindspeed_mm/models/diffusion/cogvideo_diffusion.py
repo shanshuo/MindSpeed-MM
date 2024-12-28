@@ -308,17 +308,21 @@ class CogVideoDiffusion(nn.Module):
         self.latents = latents
         self.x_start = noised_input
 
-        return noised_input * self.c_in, self.c_noise, idx
+        kwargs["model_kwargs"]["c_out"] = self.c_out
+        kwargs["model_kwargs"]["noised_start"] = self.x_start * self.c_skip
+        kwargs["model_kwargs"]["alphas_cumprod"] = self.alphas_cumprod_sqrt
 
-    def training_losses(self, model_output, **kwargs):
-        model_output = model_output * self.c_out + self.x_start * self.c_skip
+        return noised_input * self.c_in, noise, idx
 
-        w = append_dims(1 / (1 - self.alphas_cumprod_sqrt ** 2), self.x_start.ndim)  # v-pred
+    def training_losses(self, model_output, x_start, **kwargs):
+        model_output = model_output * kwargs['c_out'] + kwargs["noised_start"]
+
+        w = append_dims(1 / (1 - kwargs['alphas_cumprod'] ** 2), x_start.ndim)  # v-pred
 
         if self.min_snr_value is not None:
             w = min(w, self.min_snr_value)
 
-        return self.get_loss(model_output, self.latents, w)
+        return self.get_loss(model_output, x_start, w)
 
     def get_loss(self, model_output, target, w):
         model_output = model_output.transpose(1, 2)
