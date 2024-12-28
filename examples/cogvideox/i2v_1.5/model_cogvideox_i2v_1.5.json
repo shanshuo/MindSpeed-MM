@@ -39,7 +39,6 @@
         "model_id": "cogvideo_diffusion",
         "sigma_sampler_config": {
             "uniform_sampling": true,
-            "group_num": 8,
             "num_idx": 1000,
             "discretization_config":{
                 "shift_scale": 1.0

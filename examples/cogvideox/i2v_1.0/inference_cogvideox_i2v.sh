@@ -14,7 +14,7 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_MODEL="examples/cogvideox/inference_model_i2v.json"
+MM_MODEL="examples/cogvideox/i2v_1.0/inference_model_i2v.json"
 LOAD_PATH="your_converted_dit_ckpt_dir"
 
 DISTRIBUTED_ARGS="

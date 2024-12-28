@@ -48,7 +48,6 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.num_frames, self.height, self.width = config.get("input_size", [49, 480, 720])
         self.generator = torch.Generator().manual_seed(config.get("seed", 42))
         self.num_videos_per_prompt = 1
-        self.max_sequence_length = 226
         self.guidance_scale = config.get("guidance_scale", 6.0)
 
         self.scheduler.use_dynamic_cfg = config.get("use_dynamic_cfg", True)
@@ -105,10 +104,7 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
         **kwargs
     ):
-        if self.num_frames > 49:
-            raise ValueError(
-                "The number of frames must be less than 49 for now due to static positional embeddings. This will be updated in the future to remove this limitation."
-            )
+        self.max_sequence_length = kwargs.pop("max_sequence_length", 226)
 
         height = self.height or self.predict_model.config.sample_size * self.vae_scale_factor_spatial
         width = self.width or self.predict_model.config.sample_size * self.vae_scale_factor_spatial

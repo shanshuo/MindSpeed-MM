@@ -82,13 +82,13 @@
 #### 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git 
-    git clone https://github.com/NVIDIA/Megatron-LM.git
-    cd Megatron-LM
-    git checkout core_r0.6.0
-    cp -r megatron ../MindSpeed-MM/
-    cd ..
-    cd MindSpeed-MM
+git clone https://gitee.com/ascend/MindSpeed-MM.git 
+git clone https://github.com/NVIDIA/Megatron-LM.git
+cd Megatron-LM
+git checkout core_r0.6.0
+cp -r megatron ../MindSpeed-MM/
+cd ..
+cd MindSpeed-MM
 ```
 <a id="jump2.2"></a>
 #### 环境搭建
@@ -97,31 +97,31 @@
 torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
 ```bash
-    # python3.10
-    conda create -n test python=3.10
-    conda activate test
+# python3.10
+conda create -n test python=3.10
+conda activate test
 
-    # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
-    pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
-    pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
-    
-    # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+# 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
+pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl 
+pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 
-    # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+# apex for Ascend 参考 https://gitee.com/ascend/apex
+pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
 
-    # 安装加速库
-    git clone https://gitee.com/ascend/MindSpeed.git
-    cd MindSpeed
-    # checkout commit from MindSpeed core_r0.6.0
-    git checkout 5dc1e83b
-    pip install -r requirements.txt 
-    pip3 install -e .
-    cd ..
+# 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
+source /usr/local/Ascend/ascend-toolkit/set_env.sh 
 
-    # 安装其余依赖库
-    pip install -e .
+# 安装加速库
+git clone https://gitee.com/ascend/MindSpeed.git
+cd MindSpeed
+# checkout commit from MindSpeed core_r0.6.0
+git checkout 5dc1e83b
+pip install -r requirements.txt 
+pip install -e .
+cd ..
+
+# 安装其余依赖库
+pip install -e .
 ```
 <a id="jump2.3"></a>
 #### Decord搭建
@@ -224,25 +224,25 @@ data.jsonl文件内容如下示例：
 
 `model_cogvideox_t2v.json`/`model_cogvideox_i2v.json`文件中的`head_dim`字段原模型默认配置为64。此字段调整为128会更加亲和昇腾。
 
-在sh启动脚本中可以修改运行卡数：
+在sh启动脚本中可以修改运行卡数(NNODES为节点数，GPUS_PER_NODE为每个节点的卡数，相乘即为总运行卡数)：
 ```shell
-    GPUS_PER_NODE=8
-    MASTER_ADDR=locahost
-    MASTER_PORT=29501
-    NNODES=1  
-    NODE_RANK=0  
-    WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+GPUS_PER_NODE=8
+MASTER_ADDR=locahost
+MASTER_PORT=29501
+NNODES=1  
+NODE_RANK=0  
+WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 ```
 <a id="jump5.3"></a>
 #### 启动预训练
 
 t2v任务启动预训练
 ```shell
-    bash examples/cogvideox/t2v_1.0/pretrain_cogvideox_t2v.sh
+bash examples/cogvideox/t2v_1.0/pretrain_cogvideox_t2v.sh
 ```
 i2v任务启动预训练
 ```shell
-    bash examples/cogvideox/i2v_1.0/pretrain_cogvideox_i2v.sh
+bash examples/cogvideox/i2v_1.0/pretrain_cogvideox_i2v.sh
 ```
 ---
 
@@ -257,12 +257,20 @@ i2v任务启动预训练
 <a id="jump6.2"></a>
 #### 配置参数
 
-检查如下配置是否完成
+检查对应配置是否完成
 
-| 配置文件 |               修改字段               |                修改说明                 |
-|------|:--------------------------------:|:-----------------------------------:|
-|  examples/cogvideox/inference_model.json    |         from_pretrained          |            修改为下载的权重所对应路径            |
-|   examples/cogvideox/samples_prompts.txt   |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
+| t2v配置文件                                           |               修改字段               |                修改说明                 |
+|---------------------------------------------------|:--------------------------------:|:-----------------------------------:|
+| examples/cogvideox/t2v_*/inference_model_t2v.json |         from_pretrained          |            修改为下载的权重所对应路径            |
+| examples/cogvideox/samples_prompts.txt            |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
+
+
+| i2v配置文件                                           |               修改字段               |       修改说明       |
+|---------------------------------------------------|:--------------------------------:|:----------------:|
+| examples/cogvideox/i2v_*/inference_model_i2v.json |         from_pretrained          |  修改为下载的权重所对应路径   |
+| examples/cogvideox/samples_i2v_images.txt         |               文件内容               |       图片路径       |
+| examples/cogvideox/samples_i2v_prompts.txt        |               文件内容               |    自定义prompt     |
+
 
 如果使用训练后保存的权重进行推理，需要使用脚本进行转换，权重转换source_path参数请配置训练时的保存路径
 ```bash
@@ -271,9 +279,15 @@ python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your so
 
 <a id="jump6.3"></a>
 #### 启动推理
+t2v 启动推理脚本
 
 ```bash
-bash examples/cogvideox/inference_cogvideox.sh
+bash examples/cogvideox/t2v_1.0/inference_cogvideox_t2v.sh
+```
+i2v 启动推理脚本
+
+```bash
+bash examples/cogvideox/i2v_1.0/inference_cogvideox_i2v.sh
 ```
 
 ---

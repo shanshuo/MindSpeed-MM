@@ -296,7 +296,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             if (z.shape[-1] > self.tile_latent_min_size
                     or z.shape[-2] > self.tile_latent_min_size
                     or z.shape[-3] > self.tile_latent_min_size_t):
-                dec = self.tiled_decode(z)
+                dec = self.tiled_decode(z, enable_cp=enable_cp)
         else:
             if self.use_quant_layer:
                 z = self.post_quant_conv(z)
@@ -354,7 +354,7 @@ class ContextParallelCasualVAE(MultiModalModule):
         posterior = DiagonalGaussianDistribution(moments)
         return posterior
 
-    def tiled_decode(self, x):
+    def tiled_decode(self, x, enable_cp=True):
         t = x.shape[2]
         t_chunk_idx = [i for i in range(0, t, self.tile_latent_min_size_t - 1)]
         if len(t_chunk_idx) == 1 and t_chunk_idx[0] == 0:
@@ -370,9 +370,9 @@ class ContextParallelCasualVAE(MultiModalModule):
         for idx, (start, end) in enumerate(t_chunk_start_end):
             chunk_x = x[:, :, start: end]
             if idx != 0:
-                dec = self.tiled_decode2d(chunk_x)[:, :, 1:]
+                dec = self.tiled_decode2d(chunk_x, enable_cp=enable_cp)[:, :, 1:]
             else:
-                dec = self.tiled_decode2d(chunk_x)
+                dec = self.tiled_decode2d(chunk_x, enable_cp=enable_cp)
             dec_.append(dec)
         dec_ = torch.cat(dec_, dim=2)
         return dec_
@@ -415,7 +415,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             return moments
         return posterior
 
-    def tiled_decode2d(self, z):
+    def tiled_decode2d(self, z, enable_cp=True):
         overlap_size = int(self.tile_latent_min_size * (1 - self.tile_overlap_factor))
         blend_extent = int(self.tile_sample_min_size * self.tile_overlap_factor)
         row_limit = self.tile_sample_min_size - blend_extent
@@ -432,7 +432,7 @@ class ContextParallelCasualVAE(MultiModalModule):
                        ]
                 if self.use_quant_layer:
                     tile = self.post_quant_conv(tile)
-                decoded = self.decoder(tile)
+                decoded = self.decoder(tile, enable_cp=enable_cp)
                 row.append(decoded)
             rows.append(row)
         result_rows = []
@@ -773,9 +773,9 @@ class Decoder(nn.Module):
             for i_block in range(self.num_res_blocks + 1):
                 h = self.up[i_level].block[i_block](h, zq=zq, enable_cp=enable_cp)
                 if len(self.up[i_level].attn) > 0:
-                    h = self.up[i_level].attn[i_block](h, zq=zq, enable_cp=enable_cp)
+                    h = self.up[i_level].attn[i_block](h, zq=zq)
             if hasattr(self.up[i_level], "upsample"):
-                h = self.up[i_level].upsample(h)
+                h = self.up[i_level].upsample(h, enable_cp=enable_cp)
             if hasattr(self.up[i_level], "time_upsample"):
                 h = self.up[i_level].time_upsample(h)
 
