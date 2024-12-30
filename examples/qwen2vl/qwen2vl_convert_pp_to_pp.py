@@ -8,26 +8,28 @@ if __name__ == "__main__":
     vit_num_layers = 32
     llm_num_layers = 28
 
-    old_pp_size = 4
-    old_vit_pipeline_num_layers = [32, 0, 0, 0]
-    old_llm_pipeline_num_layers = [1, 6, 11, 10]
+    original_tp_size = 1
 
-    new_pp_size = 2
-    new_vit_pipeline_num_layers = [32, 0]
-    new_llm_pipeline_num_layers = [14, 14]
+    original_pp_size = 4
+    original_vit_pipeline_num_layers = [32, 0, 0, 0]
+    original_llm_pipeline_num_layers = [1, 6, 11, 10]
 
-    check_pp_config(old_pp_size, vit_num_layers, old_vit_pipeline_num_layers, llm_num_layers,
-                    old_llm_pipeline_num_layers)
-    check_pp_config(new_pp_size, vit_num_layers, new_vit_pipeline_num_layers, llm_num_layers,
-                    new_llm_pipeline_num_layers)
-    state_dict = load_from_mm(mm_save_dir, old_vit_pipeline_num_layers, old_llm_pipeline_num_layers)
-    pp_split = merge_pp_index(new_pp_size, vit_num_layers, new_vit_pipeline_num_layers, llm_num_layers,
-                              new_llm_pipeline_num_layers)
-    state_dicts, _ = split_model_by_pipeline(state_dict, pp_split)
+    revised_pp_size = 2
+    revised_vit_pipeline_num_layers = [32, 0]
+    revised_llm_pipeline_num_layers = [14, 14]
 
-    for rank, pipeline_state_dict in enumerate(state_dicts):
-        print(20 * '#', f'stage {rank}', 20 * '#')
-        for key, value in pipeline_state_dict.items():
-            if value is not None:
-                print(key, value.shape)
-    save_by_pp(state_dicts, new_save_dir, _exists_ok=True)
+    check_pp_config(original_pp_size, vit_num_layers, original_vit_pipeline_num_layers, llm_num_layers,
+                    original_llm_pipeline_num_layers)
+    check_pp_config(revised_pp_size, vit_num_layers, revised_vit_pipeline_num_layers, llm_num_layers,
+                    revised_llm_pipeline_num_layers)
+    state_dicts = load_from_mm(mm_save_dir, original_vit_pipeline_num_layers, original_llm_pipeline_num_layers)
+    pp_split = merge_pp_index(revised_pp_size, vit_num_layers, revised_vit_pipeline_num_layers, llm_num_layers,
+                              revised_llm_pipeline_num_layers)
+    for i in range(original_tp_size):
+        pp_state_dicts, _ = split_model_by_pipeline(state_dicts[i], pp_split)
+        for rank, pipeline_state_dict in enumerate(state_dicts):
+            print(20 * '#', f'stage {rank}', 20 * '#')
+            for key, value in pipeline_state_dict.items():
+                if value is not None:
+                    print(key, value.shape)
+        save_by_pp(pp_state_dicts, new_save_dir, _exists_ok=True, _tp_rank=i)

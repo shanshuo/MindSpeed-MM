@@ -307,7 +307,7 @@ def split_model_by_pipeline(state_dict, pp_split):
     return return_dicts, copy_dict
 
 
-def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release', _exists_ok=False):
+def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release', _exists_ok=False, _tp_rank=0):
     if os.path.exists(_save_dir):
         if not _exists_ok:
             print(f'save dir: {_save_dir} exists, please check.')
@@ -327,7 +327,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
 
     if len(_state_dicts) > 1:
         for pp_rank, _state_dict in enumerate(_state_dicts):
-            tp_rank = 0
+            tp_rank = _tp_rank
             os.makedirs(os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}'))
             save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}', 'model_optim_rng.pt')
             save_dict = {}
@@ -335,7 +335,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
             torch.save(save_dict, save_path)
     else:
         _state_dict = _state_dicts[0]
-        tp_rank = 0
+        tp_rank = _tp_rank
         os.makedirs(os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}'))
         save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}', 'model_optim_rng.pt')
         save_dict = {}
@@ -343,28 +343,70 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
         torch.save(save_dict, save_path)
 
 
+def split_by_tp(_state_dict: dict, _tp_num: int = 1):
+    if _tp_num == 1:
+        return [_state_dict, ]
+    return_dicts = []
+    copy_dict = deepcopy(_state_dict)
+    for tp_rank in range(_tp_num):
+        new_state_dict = {}
+        for key, value in _state_dict.items():
+            if key.startswith('text_decoder.decoder.layer') and 'linear_fc1.weight' in key:
+                value_shape = value.shape
+                size_per_tp = value_shape[0] // _tp_num // 2
+                values = torch.chunk(value, 2, dim=0)
+                gate_tp = values[0][tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
+                up_tp = values[1][tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
+                new_state_dict[key] = torch.cat((gate_tp, up_tp), dim=0)
+            elif 'linear_qkv.weight' in key or 'linear_fc1.weight' in key:
+                value_shape = value.shape
+                size_per_tp = value_shape[0] // _tp_num
+                new_state_dict[key] = value[tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
+            elif 'linear_qkv.bias' in key or 'linear_fc1.bias' in key:
+                value_shape = value.shape
+                size_per_tp = value_shape[0] // _tp_num
+                new_state_dict[key] = value[tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp]
+            elif 'linear_proj.weight' in key or 'linear_fc2.weight' in key:
+                value_shape = value.shape
+                size_per_tp = value_shape[1] // _tp_num
+                new_state_dict[key] = value[:, tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp]
+            elif 'output_layer' in key or 'word_embeddings' in key:
+                value_shape = value.shape
+                size_per_tp = value_shape[0] // _tp_num
+                new_state_dict[key] = value[tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
+            else:
+                new_state_dict[key] = value
+        return_dicts.append(new_state_dict)
+    return return_dicts
+
+
 if __name__ == "__main__":
     hf_ckpt_dir = "ckpt/hf_path/Qwen2-VL-7B-Instruct"  # hugging face原始的权重保存路径
     mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后的权重保存路径
     model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
-    #model parameters
+    # model parameters
     model_config = MODEL_CONFIG_DICT[model_size]
 
-    #PP parameters: 7B
+    # PP parameters: 7B
     pp_size = 4
     vit_pipeline_num_layers = [32, 0, 0, 0]
     llm_pipeline_num_layers = [1, 6, 11, 10]
+    tp_size = 1
 
     state_dict = load_from_hf(hf_ckpt_dir)
-    state_dict = convert_hf_to_mm(state_dict, model_config["llm_num_layers"], model_config["vit_hidden_size"], model_config["vit_num_attention_heads"], model_config["llm_num_query_groups"])
-    pp_split = merge_pp_index(pp_size, model_config["vit_num_layers"], vit_pipeline_num_layers, model_config["llm_num_layers"], llm_pipeline_num_layers)
-    state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
-    if len(remains) > 0:
-        print(remains)
-        raise RuntimeWarning("There are some weights ungrouped.")
+    state_dict = convert_hf_to_mm(state_dict, model_config["llm_num_layers"], model_config["vit_hidden_size"],
+                                  model_config["vit_num_attention_heads"], model_config["llm_num_query_groups"])
+    state_dicts = split_by_tp(state_dict, tp_size)
+    pp_split = merge_pp_index(pp_size, model_config["vit_num_layers"], vit_pipeline_num_layers,
+                              model_config["llm_num_layers"], llm_pipeline_num_layers)
+    for i in range(tp_size):
+        pp_state_dicts, remains = split_model_by_pipeline(state_dicts[i], pp_split)
+        if len(remains) > 0:
+            print(remains)
+            raise RuntimeWarning("There are some weights ungrouped.")
 
-    for rank, pipeline_state_dict in enumerate(state_dicts):
-        print(20 * '#', f'stage {rank}', 20 * '#')
-        for key, value in pipeline_state_dict.items():
-            print(key, value.shape)
-    save_by_pp(state_dicts, mm_save_dir, _exists_ok=True)
+        for rank, pipeline_state_dict in enumerate(pp_state_dicts):
+            print(20 * '#', f'stage {rank}', 20 * '#')
+            for key, value in pipeline_state_dict.items():
+                print(key, value.shape)
+        save_by_pp(pp_state_dicts, mm_save_dir, _exists_ok=True, _tp_rank=i)

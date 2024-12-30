@@ -41,8 +41,8 @@ MODEL_CONFIG_DICT = {
 }
 
 
-def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int]) -> str:
-    index = int(model_dir.parent.stem.split('_')[-1])
+def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int], _pp_index: int = 0) -> str:
+    index = _pp_index
     llm_pp_list = [sum(llm_pp_list[:i + 1]) for i in range(len(llm_pp_list))]
     vit_pp_list = [sum(vit_pp_list[:i + 1]) for i in range(len(vit_pp_list))]
     llm_pp_list = [0] + llm_pp_list[0:-1]
@@ -62,22 +62,52 @@ def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int]
     return param_name
 
 
-def load_from_mm(_load_dir: str, vit_pp_list: list[int], llm_pp_list: list[int]) -> dict:
+def load_from_mm(_load_dir: str, vit_pp_list: list[int], llm_pp_list: list[int], _tp_size: int = 1) -> list[dict]:
     LATEST_TXT = "latest_checkpointed_iteration.txt"
     mm_save_dir = Path(_load_dir)
     save_iteration = mm_save_dir.joinpath(LATEST_TXT).read_text()
     save_dir = mm_save_dir.joinpath(f"iter_{int(save_iteration):07}" if save_iteration != "release" else save_iteration)
-    state_dict = {}
-    print(str(save_dir).center(100, "="))
-    for pt_path in save_dir.glob("*/*.pt"):
-        print(str(pt_path).center(100, '_'))
-        state_dict.update(
-            {rename_pp_parameter(param, pt_path, vit_pp_list, llm_pp_list): tensor
-             for param, tensor in torch.load(pt_path, map_location='cpu')['model'].items()})
-    for key, value in state_dict.items():
-        print(key)
+    state_dicts = []
 
-    return state_dict
+    for tp_rank in range(_tp_size):
+        pp_state_dict = {}
+        for pp_rank in range(len(vit_pp_list)):
+            if len(vit_pp_list) > 1:
+                current_path = save_dir.joinpath(f"mp_rank_{int(tp_rank):02}_{int(pp_rank):03}")
+            else:
+                current_path = save_dir.joinpath(f"mp_rank_{int(tp_rank):02}")
+            pt_path = current_path.joinpath("model_optim_rng.pt")
+            print(str(pt_path).center(100, '_'))
+            pp_state_dict.update(
+                {rename_pp_parameter(param, pt_path, vit_pp_list, llm_pp_list, pp_rank): tensor
+                 for param, tensor in torch.load(pt_path, map_location='cpu')['model'].items()})
+        state_dicts.append(pp_state_dict)
+
+    return state_dicts
+
+
+def merge_by_tp(_state_dicts: list[dict], _tp_size: int) -> dict:
+    if len(_state_dicts) == 0:
+        raise AssertionError(f'_state_dicts is empty.')
+    if len(_state_dicts) == 1:
+        return _state_dicts[0]
+    return_state_dict = {}
+    for key, value in _state_dicts[0].items():
+        if key.startswith('text_decoder.decoder.layer') and 'linear_fc1.weight' in key:
+            chunks_0 = [torch.chunk(_state_dicts[i][key], 2, dim=0) for i in range(_tp_size)]
+            flattened_tensors = [pair[i] for i in range(2) for pair in chunks_0]
+            return_state_dict[key] = torch.cat(flattened_tensors, dim=0)
+        elif 'linear_qkv.weight' in key or 'linear_fc1.weight' in key:
+            return_state_dict[key] = torch.cat([_state_dicts[i][key] for i in range(_tp_size)], dim=0)
+        elif 'linear_qkv.bias' in key or 'linear_fc1.bias' in key:
+            return_state_dict[key] = torch.cat([_state_dicts[i][key] for i in range(_tp_size)], dim=0)
+        elif 'linear_proj.weight' in key or 'linear_fc2.weight' in key:
+            return_state_dict[key] = torch.cat([_state_dicts[i][key] for i in range(_tp_size)], dim=1)
+        elif 'output_layer' in key or 'word_embeddings' in key:
+            return_state_dict[key] = torch.cat([_state_dicts[i][key] for i in range(_tp_size)], dim=0)
+        else:
+            return_state_dict[key] = value
+    return return_state_dict
 
 
 def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
@@ -230,7 +260,8 @@ def copy_except_safetensors(src_dir: str, dst_dir: str) -> None:
                 shutil.copy2(src_file, dst_file)
 
 
-def check_pp_config(_pp_size: int, _vit_num_layers: int, _vit_pipeline_num_layers: list[int], _llm_num_layers: int, _llm_pipeline_num_layers: list[int]) -> None:
+def check_pp_config(_pp_size: int, _vit_num_layers: int, _vit_pipeline_num_layers: list[int], _llm_num_layers: int,
+                    _llm_pipeline_num_layers: list[int]) -> None:
     if len(_vit_pipeline_num_layers) != _pp_size:
         raise AssertionError(f'length of vit_pipeline_num_layers must be equal to pp_size, '
                              f'but got {len(_vit_pipeline_num_layers)} and {_pp_size}.')
@@ -272,16 +303,19 @@ if __name__ == "__main__":
     hf_save_dir = "Qwen2-VL-7B-Save"  # 希望保存的hf目录
     model_path = "ckpt/hf_path/Qwen2-VL-7B-Instruct"  # hf原仓目录
     model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
-    #model parameters
+    # model parameters
     model_config = MODEL_CONFIG_DICT[model_size]
 
-    #PP parameters: 7B
+    # PP parameters: 7B
     pp_size = 4
     vit_pipeline_num_layers = [32, 0, 0, 0]
     llm_pipeline_num_layers = [1, 6, 11, 10]
+    tp_size = 1
 
-    check_pp_config(pp_size, model_config["vit_num_layers"], vit_pipeline_num_layers, model_config["llm_num_layers"], llm_pipeline_num_layers)
-    state_dict = load_from_mm(mm_save_dir, vit_pipeline_num_layers, llm_pipeline_num_layers)
+    check_pp_config(pp_size, model_config["vit_num_layers"], vit_pipeline_num_layers, model_config["llm_num_layers"],
+                    llm_pipeline_num_layers)
+    state_dicts = load_from_mm(mm_save_dir, vit_pipeline_num_layers, llm_pipeline_num_layers, tp_size)
+    state_dict = merge_by_tp(state_dicts, tp_size)
     state_dict = convert_mm_to_hf(state_dict, model_config)
     state_dicts = split_by_index_json(state_dict, model_path)
     copy_except_safetensors(model_path, hf_save_dir)

@@ -127,7 +127,7 @@ model_config = MODEL_CONFIG_DICT[model_size]
 pp_size = 16  # 切分的PPstage数量，注意要和finetune脚本中配置的PP一致
 llm_pipeline_num_layers = [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 4]  # LLM在每个卡上切分的层数，和为 llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
 vit_pipeline_num_layers = [32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # vit在每个卡上切分的层数，和为 vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-
+tp_size = 1
 ```
 
 以Qwen2VL-7B为例
@@ -144,6 +144,7 @@ model_config = MODEL_CONFIG_DICT[model_size]
 pp_size = 4
 vit_pipeline_num_layers = [32, 0, 0, 0]  # LLM在每个卡上切分的层数，和为llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
 llm_pipeline_num_layers = [1, 6, 11, 10]  # vit在每个卡上切分的层数，和为vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
+tp_size = 1
 ```
 以Qwen2VL-2B为例
 修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
@@ -159,7 +160,7 @@ model_config = MODEL_CONFIG_DICT[model_size]
 pp_size = 1  # 2B不需要切分PP
 llm_pipeline_num_layers = [28]  # LLM在每个卡上切分的层数，和为llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
 vit_pipeline_num_layers = [32]  # vit在每个卡上切分的层数，和为vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-
+tp_size = 1
 ```
 
 启动脚本
@@ -355,6 +356,7 @@ model_path = "Qwen2-VL-7B-Instruct"     # hf原仓目录
 pp_size = 4
 vit_pipeline_num_layers = [32, 0, 0, 0]
 llm_pipeline_num_layers = [1, 6, 11, 10]
+tp_size = 1
 ```
 在qwen2vl_convert_to_hf.py中根据模型选择模型配置
 ```python
@@ -380,22 +382,23 @@ new_save_dir = "new_pp_save_dir"    # 希望重新pp切分后保存的目录
 ```
 
 #### 2.修改配置
-修改qwen2vl_convert_to_hf.py中的如下内容,与qwen2vl_convert_to_mm_ckpt.py保持一致：
+修改qwen2vl_convert_pp_to_pp.py中的如下内容,与qwen2vl_convert_to_mm_ckpt.py保持一致：
 ```python
-vit_num_layers = 32
-llm_num_layers = 28
+vit_num_layers = 32     # vit模型层数
+llm_num_layers = 28     # llm模型层数
 ```
 
 ```python
-old_pp_size = 4
-old_vit_pipeline_num_layers = [32, 0, 0, 0]
-old_llm_pipeline_num_layers = [1, 6, 11, 10]
+original_tp_size = 1                                # 使用qwen2vl_convert_to_mm_ckpt.py切分时配置的tp_size
+original_pp_size = 4                                # 使用qwen2vl_convert_to_mm_ckpt.py切分时配置的pp_size
+original_vit_pipeline_num_layers = [32, 0, 0, 0]    # 使用qwen2vl_convert_to_mm_ckpt.py切分时配置的vit模块切分层数
+original_llm_pipeline_num_layers = [1, 6, 11, 10]   # 使用qwen2vl_convert_to_mm_ckpt.py切分时配置的llm模块切分层数
 ```
-修改qwen2vl_convert_to_hf.py中的如下内容，使之与期望的切分配置一致
+修改qwen2vl_convert_pp_to_pp.py中的如下内容，使之与期望的切分配置一致
 ```python
-new_pp_size = 2
-new_vit_pipeline_num_layers = [32, 0]
-new_llm_pipeline_num_layers = [14, 14]
+revised_pp_size = 2                         # 期望的重切分pp_size 
+revised_vit_pipeline_num_layers = [32, 0]   # 期望的重切分vit模块切分层数
+revised_llm_pipeline_num_layers = [14, 14]  # 期望的重切分llm模块切分层数
 ```
 
 #### 3.执行转换脚本
