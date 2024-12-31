@@ -7,6 +7,9 @@ import torch_npu
 from torch_npu.contrib import transfer_to_npu
 from safetensors.torch import load_file as safe_load
 
+import mindspeed.megatron_adaptor
+from mindspeed_mm.utils.utils import safe_save
+
 
 def load_weight(weight_path):
     if weight_path.endswith(".safetensors"):
@@ -117,7 +120,7 @@ def save_by_tp(state_dicts, save_dir, mode="train", latest_checkpointed_iteratio
             save_dict = state_dict
         else:
             raise ValueError(f"unsupported mode: {mode}")
-        torch.save(save_dict, save_path)
+        safe_save(save_dict, save_path)
 
 
 def save_vae(_state_dict, save_dir, exists_ok=False):
@@ -128,7 +131,7 @@ def save_vae(_state_dict, save_dir, exists_ok=False):
     else:
         os.makedirs(save_dir)
     save_path = os.path.join(save_dir, "wfvae_mm.pt")
-    torch.save(_state_dict, save_path)
+    safe_save(_state_dict, save_path)
 
 
 if __name__ == "__main__":

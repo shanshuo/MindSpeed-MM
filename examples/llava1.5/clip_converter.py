@@ -5,6 +5,9 @@ import os
 import clip
 import torch
 
+import mindspeed.megatron_adaptor
+from mindspeed_mm.utils.utils import safe_save
+
 
 def convert(download_root, output_path, tensor_parallel_size, use_te_layernorm_linear):
     device = "cpu"
@@ -116,7 +119,7 @@ def convert(download_root, output_path, tensor_parallel_size, use_te_layernorm_l
             new_state_dicts[i]["model"][new_name] = new_tensors[i].clone()
 
     output_path_pt = os.path.join(output_path, "converted_clip.pt")
-    torch.save(new_state_dicts[0]["model"], output_path_pt)
+    safe_save(new_state_dicts[0]["model"], output_path_pt)
 
 
 if __name__ == "__main__":

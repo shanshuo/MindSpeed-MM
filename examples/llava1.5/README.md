@@ -137,6 +137,8 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
   # 安装依赖（加载原始权重需要依赖openai-clip库）
   pip install git+https://github.com/openai/CLIP.git
 
+  # 根据实际情况修改 ascend-toolkit 路径
+  source /usr/local/Ascend/ascend-toolkit/set_env.sh
   python examples/llava1.5/clip_converter.py \
     --download-root {dir_to_model}/ViT-L-14-336px.pt \
     --output {target_dir}
@@ -149,6 +151,8 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
   下载权重后执行如下命令：
 
   ```shell
+  # 根据实际情况修改 ascend-toolkit 路径
+  source /usr/local/Ascend/ascend-toolkit/set_env.sh
   python examples/llava1.5/vicuna_converter.py \
     --load-dir {dir_to_model}/vicuna-7b-v1.5 \
     --save-dir {target_dir} \

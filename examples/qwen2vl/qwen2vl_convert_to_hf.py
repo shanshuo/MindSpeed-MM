@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import mindspeed.megatron_adaptor  # noqa
@@ -180,7 +181,10 @@ def convert_mm_to_hf(_state_dict, _vit_hidden_size, _vit_attention_heads_num):
 def split_by_index_json(_state_dict, _index_json_path):
     return_dicts = []
     with open(_index_json_path, 'r', encoding='utf-8') as file:
-        weight_map = json.load(file)['weight_map']
+        json_file = json.load(file)
+        if 'weight_map' not in json_file:
+            raise KeyError(f'key "weight_map" not found in this json')
+        weight_map = json_file['weight_map']
     for key, value in weight_map.items():
         index = int(value.split('-')[1])
         while index > len(return_dicts):
@@ -193,6 +197,7 @@ def save_by_index_json(_state_dicts, _save_dir):
     for index, state_dict in enumerate(_state_dicts, start=1):
         name = f'model-{index:05}-of-{len(_state_dicts):05}.safetensors'
         save_file(state_dict, Path(_save_dir).joinpath(name))
+    os.chmod(_save_dir, 0o640)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,9 @@ from pathlib import Path
 import torch
 from safetensors.torch import load_file
 
+import mindspeed.megatron_adaptor
+from mindspeed_mm.utils.utils import safe_save
+
 
 def load_from_hf(_load_dir):
     # Load Huggingface model 。
@@ -259,7 +262,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
             save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}_{pp_rank:03d}', 'model_optim_rng.pt')
             save_dict = {}
             save_dict['model'] = _state_dict
-            torch.save(save_dict, save_path)
+            safe_save(save_dict, save_path)
     else:
         _state_dict = _state_dicts[0]
         tp_rank = 0
@@ -267,7 +270,7 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
         save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}', 'model_optim_rng.pt')
         save_dict = {}
         save_dict['model'] = _state_dict
-        torch.save(save_dict, save_path)
+        safe_save(save_dict, save_path)
 
 
 if __name__ == "__main__":

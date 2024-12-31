@@ -10,6 +10,8 @@ with open(llava_json_path, "r") as f:
 
 mllm_format_llava_instruct_data = []
 for item in info_json:
+    if "image" not in item or "conversations" not in item:
+        raise KeyError(f"key 'image' or 'conversations' not found in this dict")
     img_path = os.path.join("./data/COCO2017/train2017", item["image"])
     print(f"img_path: {img_path}")
     if not os.path.exists(img_path):
@@ -20,6 +22,8 @@ for item in info_json:
     }
 
     for i, trun in enumerate(item["conversations"]):
+        if "from" not in trun or "value" not in trun:
+            raise KeyError(f"key 'from' or 'value' not found in this dict")
         if trun["from"] == "human":
             new_item["messages"].append({"role": "user", "content": trun["value"]})
         elif trun["from"] == "gpt":

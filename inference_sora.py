@@ -62,6 +62,8 @@ def main():
     if images is not None and len(prompts) != len(images):
         raise AssertionError(f'The number of images {len(images)} and the numbers of prompts {len(prompts)} do not match')
 
+    if args.frame_interval == 0:
+        raise AssertionError("frame_interval cannot be set to zero")
     save_fps = args.fps // args.frame_interval
 
     # prepare pipeline

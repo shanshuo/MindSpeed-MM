@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import importlib
 from functools import lru_cache
 from einops import rearrange
@@ -171,3 +172,8 @@ def get_context_parallel_group_rank():
     cp_group_rank = rank // _CONTEXT_PARALLEL_SIZE
 
     return cp_group_rank
+
+
+def safe_save(save_state_dict, path, privilege=0o640):
+    torch.save(save_state_dict, path)
+    os.chmod(path, privilege)

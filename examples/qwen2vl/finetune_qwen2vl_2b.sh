@@ -121,4 +121,4 @@ torchrun $DISTRIBUTED_ARGS pretrain_qwen2vl.py \
     $OUTPUT_ARGS \
     --distributed-backend nccl > logs/train_${logfile}.log 2>&1
 chmod 440 logs/train_${logfile}.log
-chmod -R 440 $SAVE_PATH
+chmod -R 640 $SAVE_PATH

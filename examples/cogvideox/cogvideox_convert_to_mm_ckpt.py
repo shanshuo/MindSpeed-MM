@@ -3,7 +3,11 @@ import stat
 import copy
 import argparse
 from typing import Any, Dict, List
+
 import torch
+
+import mindspeed.megatron_adaptor
+from mindspeed_mm.utils.utils import safe_save
 
 
 CONVERT_MAPPING = {
@@ -131,7 +135,7 @@ def save_by_tp(state_dicts: List[Dict], save_dir: str, latest_checkpointed_itera
         save_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
         save_dict = {}
         save_dict['model'] = state_dict
-        torch.save(save_dict, save_path)
+        safe_save(save_dict, save_path)
 
 
 def merge_by_tp(train_save_dir: str, save_path: str, num_layers: int, tp_size: int):
@@ -151,7 +155,7 @@ def merge_by_tp(train_save_dir: str, save_path: str, num_layers: int, tp_size: i
         _state_dicts.append(torch.load(state_dict_path)['model'])
     
     if tp_size == 1:
-        torch.save(_state_dicts[0], save_path)
+        safe_save(_state_dicts[0], save_path)
         return 
 
     merged_state_dict = copy.deepcopy(_state_dicts[0])
@@ -190,7 +194,7 @@ def merge_by_tp(train_save_dir: str, save_path: str, num_layers: int, tp_size: i
             wv = torch.cat(wv, dim=0)
             wqkv = torch.cat([wq, wk, wv], dim=0)
             merged_state_dict[name] = wqkv
-    torch.save(merged_state_dict, save_path)
+    safe_save(merged_state_dict, save_path)
     return 
 
 

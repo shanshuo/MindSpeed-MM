@@ -4,6 +4,9 @@ import os
 import torch
 from transformers import AutoModelForCausalLM, AutoConfig
 
+import mindspeed.megatron_adaptor
+from mindspeed_mm.utils.utils import safe_save
+
 
 def load_from_hf(load_dir, trust_remote_code):
     # Load Huggingface model.
@@ -18,6 +21,8 @@ def load_from_hf(load_dir, trust_remote_code):
 def merge_qkv(wq, wk, wv, ng=32):
     hq, h = wq.shape
     hkv = wk.shape[0]
+    if ng == 0:
+        raise AssertionError('number of query groups cannot be zero')
     dq = hq // ng
     dkv = hkv // ng
     d = dq + 2 * dkv
@@ -131,5 +136,5 @@ if __name__ == '__main__':
         print(key, value.shape)
     print(50 * '*')
     output_path = os.path.join(args.save_dir, 'converted_vicuna.pt')
-    torch.save(new_state_dict, output_path)
+    safe_save(new_state_dict, output_path)
     print('all weights have been converted.')
