@@ -207,6 +207,32 @@ dataset_param->basic_parameters->dataset
 
 同时注意`data.json`中`dataset_param->basic_parameters->max_samples`的配置，会限制数据只读`max_samples`条，这样可以快速验证功能。如果正式训练时，可以把该参数去掉则读取全部的数据。
 
+#### 2.纯文本或有图无图混合训练数据(以LLaVA-Instruct-150K为例)：
+现在本框架已经支持纯文本/混合数据（有图像和无图像数据混合训练）。
+
+在数据构造时，对于包含图片的数据，需要保留`image`这个键值。
+```python
+{
+  "id": your_id,
+  "image": your_image_path,
+  "conversations": [
+      {"from": "human", "value": your_query},
+      {"from": "gpt", "value": your_response},
+  ],
+}
+```
+
+在数据构造时，对于纯文本数据，可以去除`image`这个键值。
+```python
+{
+  "id": your_id,
+  "conversations": [
+      {"from": "human", "value": your_query},
+      {"from": "gpt", "value": your_response},
+  ],
+}
+```
+
 
 ## 微调
 

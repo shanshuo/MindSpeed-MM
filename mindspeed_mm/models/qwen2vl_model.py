@@ -269,12 +269,13 @@ class Qwen2VLModel(MultiModalModule):
                 causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(padding_mask, min_dtype)
             return causal_mask < 0
 
+
     def forward(
             self,
             input_ids: torch.Tensor,
-            pixel_values: torch.Tensor,
-            image_grid_thw: torch.Tensor,
-            attention_mask: torch.Tensor,
+            pixel_values: Optional[torch.Tensor] = None,
+            image_grid_thw: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
             labels: Optional[torch.Tensor] = None,
             inference_params: Optional[InferenceParams] = None,
             decoder_input: Optional[torch.FloatTensor] = None,
@@ -282,11 +283,12 @@ class Qwen2VLModel(MultiModalModule):
             packed_seq_params: Optional[PackedSeqParams] = None,
             extra_block_kwargs: Optional[dict] = None,
     ) -> Union[Dict[str, torch.Tensor], torch.Tensor]:
-  
-        if self.add_image_encoder:
+
+        vit_embeds = None
+
+        if self.add_image_encoder and pixel_values is not None:
             vit_embeds = self.image_encoder(pixel_values, image_grid_thw)
             vit_embeds = vit_embeds.reshape(-1, 1, vit_embeds.shape[-1]).clone()
-            output = vit_embeds
         else:
             vit_embeds = self.input_tensor
 
@@ -295,9 +297,12 @@ class Qwen2VLModel(MultiModalModule):
             if self.text_decoder.pre_process:
                 input_embeds = self.text_decoder.embedding(input_ids=input_ids, position_ids=position_ids).clone()
                 input_embeds = input_embeds.transpose(0, 1)
-                image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
-                vit_embeds = vit_embeds[:, 0, :]
-                input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
+            
+                if vit_embeds is not None:
+                    image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
+                    vit_embeds = vit_embeds[:, 0, :]
+                    input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
+            
                 input_embeds = input_embeds.transpose(0, 1).clone()
 
             past_seen_tokens = 0

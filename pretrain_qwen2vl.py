@@ -27,14 +27,18 @@ def model_provider(pre_process=True, post_process=True):
     vlm_config.pre_process = pre_process
     vlm_config.post_process = post_process
 
-    vlm_config.image_encoder.vision_encoder = get_model_config(vlm_config.image_encoder.vision_encoder)
-    vlm_config.image_encoder.vision_projector = get_model_config(vlm_config.image_encoder.vision_projector)
-    vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
+    if vlm_config.image_encoder:
+        vlm_config.image_encoder.vision_encoder = get_model_config(vlm_config.image_encoder.vision_encoder)
+        vlm_config.image_encoder.vision_projector = get_model_config(vlm_config.image_encoder.vision_projector)
+        vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
 
-    model = Qwen2VLModel(vlm_config)
+        model = Qwen2VLModel(vlm_config)
 
-    model.freeze(freeze_image_encoder=getattr(vlm_config.image_encoder.vision_encoder, 'freeze', True), \
-        freeze_image_projection=getattr(vlm_config.image_encoder.vision_projector, 'freeze', True))
+        model.freeze(freeze_image_encoder=getattr(vlm_config.image_encoder.vision_encoder, 'freeze', True), \
+            freeze_image_projection=getattr(vlm_config.image_encoder.vision_projector, 'freeze', True))
+    else:
+        vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
+        model = Qwen2VLModel(vlm_config)
 
     return model
 
@@ -48,8 +52,12 @@ def get_batch(data_iterator):
     input_ids = batch['input_ids'].to(torch.cuda.current_device())
     labels = batch['labels'].to(torch.cuda.current_device())
     attention_mask = batch['attention_mask'].to(torch.cuda.current_device())
-    pixel_values = batch['pixel_values'].to(torch.cuda.current_device())
-    image_grid_thw = batch['image_grid_thw'].to(torch.cuda.current_device())
+    if 'pixel_values' in batch and 'image_grid_thw' in batch:
+        pixel_values = batch['pixel_values'].to(torch.cuda.current_device())
+        image_grid_thw = batch['image_grid_thw'].to(torch.cuda.current_device())
+    else:
+        pixel_values = None
+        image_grid_thw = None
     batch = {
         'input_ids': input_ids,
         'labels': labels,

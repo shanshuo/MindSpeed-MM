@@ -40,11 +40,11 @@ class Qwen2VlPipeline(GenerationMixin):
 
         inputs = self.prepare_inputs(prompt=prompt, images=image)
 
-        if return_ids:
-            streamer = None
-        else:
+        # Use the model as a language model if no valid inputs are generated  
+        if inputs is None:
+            inputs = {'input_ids': self.tokenizer(prompt, return_tensors="pt").input_ids.to(self.infer_config.device)}
 
-            streamer = TextStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
+        streamer = None if return_ids else TextStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
 
         generated_ids = self.generate(**inputs,
                                       do_sample=True if self.generation_config.temperature > 0 else False,
@@ -53,7 +53,7 @@ class Qwen2VlPipeline(GenerationMixin):
                                       streamer=streamer)
         if return_ids and generated_ids is not None:
             generated_ids = [
-                output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
+                output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs['input_ids'], generated_ids)
             ]
             out = self.image_processor.tokenizer.batch_decode(
                 generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -64,6 +64,9 @@ class Qwen2VlPipeline(GenerationMixin):
             return None
 
     def prepare_inputs(self, prompt=None, images=None, messages=None):
+        if not images and not messages:
+            return None
+
         if not messages:
             messages = [[
                 {
