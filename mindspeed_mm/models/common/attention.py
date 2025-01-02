@@ -578,6 +578,7 @@ class ParallelSelfAttentionSBH(nn.Module):
         frames: Optional[int] = None,
         height: Optional[int] = None,
         width: Optional[int] = None,
+        **kwargs
     ) -> torch.Tensor:
         """
         Args:
@@ -605,8 +606,8 @@ class ParallelSelfAttentionSBH(nn.Module):
             k = self.k_norm(k)
 
         if self.use_rope and self.rope is not None:
-            q = rearrange(self.rope(rearrange(q, 's b n d -> b n s d')), 'b n s d -> s b n d')
-            k = rearrange(self.rope(rearrange(k, 's b n d -> b n s d')), 'b n s d -> s b n d')
+            q = rearrange(self.rope(rearrange(q, 's b n d -> b n s d'), **kwargs), 'b n s d -> s b n d')
+            k = rearrange(self.rope(rearrange(k, 's b n d -> b n s d'), **kwargs), 'b n s d -> s b n d')
             
         q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
         k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)

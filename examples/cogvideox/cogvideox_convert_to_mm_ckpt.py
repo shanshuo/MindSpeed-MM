@@ -46,7 +46,8 @@ def update_state_dict_inplace(
 ):
     for old_key in convert_mapping:
         new_key = convert_mapping[old_key]
-        state_dict[new_key] = state_dict.pop(prefix + old_key)
+        if prefix + old_key in state_dict:
+            state_dict[new_key] = state_dict.pop(prefix + old_key)
 
 
 def get_layer_mapping(i: int) -> Dict:

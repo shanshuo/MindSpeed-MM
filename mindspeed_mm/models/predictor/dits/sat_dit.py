@@ -453,7 +453,7 @@ class SatDiT(MultiModalModule):
                                                         rope_W=w // self.patch_size[2])
             _, seq_len, _ = latents_vid.shape
             pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
-                                                                seq_length=seq_len - self.text_length)
+                                                                seq_length=seq_len - self.pos_embed.text_length)
             if pos_emb is not None:
                 latents_vid = latents_vid + pos_emb
         else:
