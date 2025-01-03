@@ -334,19 +334,43 @@ pip install qwen_vl_utils
 
 <a id="jump5"></a>
 
-## 权重转换
+## 训练后权重转回huggingface格式
 
 MindSpeed-MM修改了部分原始网络的结构名称，在微调后，可使用examples/qwen2vl/qwen2vl_convert_to_hf.py脚本对微调后的权重进行转换，将权重名称修改为与原始网络一致。
 
-#### 1.修改路径
+#### 1.修改配置
 
-修改qwen2vl_convert_to_hf.py中的如下内容,与实际保持一致：
+
+以Qwen2VL-7B为例
+修改qwen2vl_convert_to_hf.py中的如下内容,与实际保持一致。
+
+若qwen2vl_convert_to_mm_ckpt.py中的pipeline_layer_index为None，则llm_pipeline_layer_index = [0]；
+否则，llm_pipeline_num_layers要与qwen2vl_convert_to_mm_ckpt.py中的pipeline_layer_index一致：
 
 ```
-mm_save_dir = "/data/MindSpeed-MM/save_dir" # 微调后保存的权重目录
-hf_save_dir = "Qwen2-VL-7B-Save"            # 转换后保存目录
-index_json_path = "Qwen2-VL-7B-Instruct/model.safetensors.index.json" # 原始模型文件夹中的model.safetensors.index.json文件
-num_layers = 28                             # 模型结构层数
+mm_save_dir = "save_dir"              # 微调后保存的权重目录
+hf_save_dir = "Qwen2-VL-7B-Save"      # 希望保存的hf目录
+model_path = "Qwen2-VL-7B-Instruct"   # hf原仓目录
+model_size = "7B"                     # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+
+# PP parameters: 7B
+llm_pipeline_layer_index = [0, 0, 10, 20] # pp=4，第一部分放[0,0)层，第二部分放[0,10)层，第三部分放[10,20)层，第四部分放[20,28)层（28是语言模型总层数）
+```
+
+以Qwen2VL-2B为例
+修改qwen2vl_convert_to_hf.py中的如下内容,与实际保持一致。
+
+若qwen2vl_convert_to_mm_ckpt.py中的pipeline_layer_index为None，则llm_pipeline_layer_index = [0]；
+否则，llm_pipeline_num_layers要与qwen2vl_convert_to_mm_ckpt.py中的pipeline_layer_index一致：
+
+```
+mm_save_dir = "save_dir"              # 微调后保存的权重目录
+hf_save_dir = "Qwen2-VL-7B-Save"      # 希望保存的hf目录
+model_path = "Qwen2-VL-7B-Instruct"   # hf原仓目录
+model_size = "2B"                     # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
+
+# PP parameters: 2B
+llm_pipeline_layer_index = [0]         
 ```
 
 #### 2.执行转换脚本
@@ -354,3 +378,4 @@ num_layers = 28                             # 模型结构层数
 ```
 python examples/qwen2vl/qwen2vl_convert_to_hf.py
 ```
+
