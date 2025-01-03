@@ -91,6 +91,7 @@
     "generation_config": {
         "bos_token_id": 151643,
         "do_sample": true,
+        "kv_cache":true,
         "output_attentions": false,
         "output_hidden_states": false,
         "max_length": 20,
@@ -153,7 +154,6 @@
         "max_matching_ngram_size": null,
         "stop_strings": null
     },
-    "image_processer_path": "ckpt/hf_path/Qwen2-VL-7B-Instruct/preprocessor_config.json",
     "image_path": "examples/qwen2vl/demo.jpeg",
     "prompts": "Describe this image and keep it within 100 words."
 }

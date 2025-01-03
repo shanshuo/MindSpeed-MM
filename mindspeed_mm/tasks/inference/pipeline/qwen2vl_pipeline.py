@@ -51,6 +51,8 @@ class Qwen2VlPipeline(GenerationMixin):
                                       temperature=self.generation_config.temperature,
                                       max_new_tokens=self.generation_config.max_new_tokens,
                                       streamer=streamer)
+        # clear cache memory
+        self.model.inference_params = None
         if return_ids and generated_ids is not None:
             generated_ids = [
                 output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs['input_ids'], generated_ids)
@@ -97,7 +99,19 @@ class Qwen2VlPipeline(GenerationMixin):
         return inputs
 
     def prepare_inputs_for_generation(self, **kwargs):
-        return kwargs
+        input_ids = kwargs.get("input_ids", None)
+
+        if self.model.inference_params is not None:
+            batch_size, seq_length = input_ids.shape
+            input_ids = input_ids[:, [-1]]
+            pixel_values = None
+            image_grid_thw = kwargs.get("image_grid_thw", None)
+            attention_mask = torch.ones((batch_size, seq_length)).to("npu")
+            kwargs = {"input_ids": input_ids, "pixel_values": pixel_values, "attention_mask": attention_mask,
+                      "image_grid_thw": image_grid_thw}
+            return kwargs
+        else:
+            return kwargs
 
     def evaluate(self, message):
         messages = [{'role': 'user', 'content': self._prepare_content(message)}]
@@ -107,6 +121,8 @@ class Qwen2VlPipeline(GenerationMixin):
                                       do_sample=True if self.generation_config.temperature > 0 else False,
                                       temperature=self.generation_config.temperature,
                                       max_new_tokens=self.generation_config.max_new_tokens)
+        # clear cache memory
+        self.model.inference_params = None
         if generated_ids is not None:
             #  把input_ids 截取掉
             generated_ids = [

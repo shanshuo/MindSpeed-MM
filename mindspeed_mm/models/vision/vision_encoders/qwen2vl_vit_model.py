@@ -116,15 +116,9 @@ class Qwen2vlSelfAttention(SelfAttention):
             rotary_pos_emb=None,
             packed_seq_params=None,
     ):
-        query, key, value = self.get_query_key_value_tensors(hidden_states, key_value_states)
-        query = query.permute(1, 2, 0, 3).contiguous()
-        key = key.permute(1, 2, 0, 3).contiguous()
-        # ===================================================
-        # Adjust key, value, and rotary_pos_emb for inference
-        # ===================================================
-        key, value, rotary_pos_emb, attn_mask_type = self._adjust_key_value_for_inference(
-            inference_params, key, value, rotary_pos_emb
-        )
+        query, key, value = self.get_query_key_value_tensors(hidden_states, key_value_states)  # s b h d
+        query = query.permute(1, 2, 0, 3).contiguous()  # b h s d
+        key = key.permute(1, 2, 0, 3).contiguous()  # b h s d
 
         if packed_seq_params is not None:
             query = query.squeeze(1)
@@ -142,10 +136,15 @@ class Qwen2vlSelfAttention(SelfAttention):
             half_dim = rotary_pos_emb.shape[-1] // 2
             cos, sin = rotary_pos_emb[..., :half_dim], rotary_pos_emb[..., half_dim:]
             query, key = apply_multimodal_rotary_pos_emb(query, key, cos, sin, self.mrope_section,
-                                                         use_fused_rope=self.config.use_fused_rotary_pos_emb)
-        query = query.permute(2, 0, 1, 3).contiguous()
-        key = key.permute(2, 0, 1, 3).contiguous()
-
+                                                         use_fused_rope=self.config.use_fused_rotary_pos_emb)  # b h s d
+        query = query.permute(2, 0, 1, 3).contiguous()  # s b h d
+        key = key.permute(2, 0, 1, 3).contiguous()  # s b h d
+        # ===================================================
+        # Adjust key, value for inference
+        # ===================================================
+        key, value, _, attn_mask_type = self._adjust_key_value_for_inference(
+            inference_params, key, value, None
+        )
         # ==================================
         # core attention computation
         # ==================================
@@ -423,12 +422,11 @@ class Qwen2VLViT(MultiModalModule):
             hidden_states = None
 
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
-        
+
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0, dtype=torch.int32
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        
 
         seq_len = images.shape[0]
         attention_mask = torch.full(

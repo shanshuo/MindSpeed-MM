@@ -93,6 +93,7 @@
     "generation_config": {
         "bos_token_id": 151643,
         "do_sample": true,
+        "kv_cache":true,
         "output_attentions": false,
         "output_hidden_states": false,
         "max_length": 20,
@@ -131,7 +132,6 @@
         "sequence_bias": null,
         "suppress_tokens": null,
         "typical_p": 1.0,
-        "transformers_version": "4.31.0",
         "force_words_ids": null,
         "num_beams": 1,
         "renormalize_logits": false,

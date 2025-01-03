@@ -18,7 +18,7 @@ from copy import deepcopy
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
 from megatron.training import get_args
-from megatron.core import mpu
+from megatron.core import mpu, InferenceParams
 from megatron.inference.text_generation.communication import recv_from_prev_pipeline_rank_, send_to_next_pipeline_rank
 from megatron.training.training import get_model
 from megatron.training.checkpointing import load_checkpoint
@@ -38,15 +38,27 @@ class ParallelWrapper:
         self.model = unwrap_model(model, (torchDDP, LocalDDP, MegatronFloat16Module))[0].eval()
         # Pipelining arguments.
         args = get_args()
-        vlm_config = deepcopy(args.mm.model)
-        self.text_decoder_config = get_model_config(vlm_config.text_decoder)
+        self.vlm_config = deepcopy(args.mm.model)
+        self.text_decoder_config = get_model_config(self.vlm_config.text_decoder)
         self.pipeline_size_larger_than_one = args.pipeline_model_parallel_size > 1
         # Threshold of pipelining.
         self.pipelining_batch_x_seqlen = getattr(self.text_decoder_config, 'inference_batch_times_seqlen_threshold', 512)
+        if self.vlm_config.generation_config.max_length and self.vlm_config.generation_config.max_new_tokens:
+            print(
+                "warning: Both `max_new_tokens` (= %s) and `max_length` (= %s) seem to have been set. `max_new_tokens` will take precedence. "
+                % (self.vlm_config.generation_config.max_new_tokens, self.vlm_config.generation_config.max_length))
+        self.inference_params = None
 
     def __call__(self, **kwargs):
         """Invocation of the forward methods. """
         input_ids = kwargs.get("input_ids", None)
+        batch_size = input_ids.size(0)
+        sequence_length = input_ids.size(1)
+
+        if self.inference_params is None and hasattr(self.vlm_config.generation_config,
+                                                     "kv_cache") and self.vlm_config.generation_config.kv_cache:
+            max_length = _get_max_length(self.vlm_config.generation_config, sequence_length)
+            self.inference_params = InferenceParams(batch_size, max_length)
 
         model_forward_kwargs = kwargs
 
@@ -66,7 +78,8 @@ class ParallelWrapper:
         return getattr(self.model, item)
 
     def _forward(self, **kwargs):
-
+        if self.inference_params is not None:
+            kwargs["inference_params"] = self.inference_params
         return self.model(**kwargs)
 
     def _forward_step_helper(self, model_forward_kwargs, recv_buffer=None):
@@ -95,6 +108,11 @@ class ParallelWrapper:
         # Run a simple forward pass.
         output_tensor = self._forward_step_helper(model_forward_kwargs, recv_buffer=recv_buffer)
 
+        tokens = model_forward_kwargs.get("input_ids", None)
+        # Update the sequence length offset.
+        if self.inference_params is not None:
+            self.inference_params.sequence_len_offset += tokens.size(1)
+
         logits = None
         if mpu.is_pipeline_last_stage():
             logits = output_tensor
@@ -106,7 +124,7 @@ class ParallelWrapper:
            Ensure the first dimension of `model_forward_kwargs` is the batch size.
         """
 
-        first_dims = [v.shape[0] for v in model_forward_kwargs.values()]
+        first_dims = [v.shape[0] for v in model_forward_kwargs.values() if v is not None]
         if not len(set(first_dims)) == 1:
             raise Exception(
                 "All values in model_forward_kwargs must have the same first dimension, which represents the batch size.")
@@ -140,18 +158,30 @@ class ParallelWrapper:
             end = min(start + micro_batch_size, batch_size)
             this_micro_batch_size = end - start
 
-            model_forward_kwargs = {key: value[start:end, ...] for key, value in model_forward_kwargs.items()}
+            model_forward_kwargs = {
+                key: (value[start:end, ...] if value is not None else None)
+                for key, value in model_forward_kwargs.items()
+            }
 
             # Run a simple forward pass.
             if this_micro_batch_size != micro_batch_size:
                 recv_buffer = None
             output = self._forward_step_helper(model_forward_kwargs, recv_buffer=recv_buffer)
 
+            # Adjust the batch size offset to account for the micro-batch.
+            if self.inference_params is not None:
+                self.inference_params.batch_size_offset += this_micro_batch_size
+
             # Copy logits.
             if mpu.is_pipeline_last_stage():
                 if isinstance(output, dict):
                     logits = output["logits"][start:end, ...]
-
+        if self.inference_params is not None:
+            # Once we are done with all the micro-batches, we can
+            # adjust the sequence length offset.
+            self.inference_params.sequence_len_offset += sequence_length
+            # and reset the batch size offset
+            self.inference_params.batch_size_offset = 0
         return logits
 
 
@@ -173,3 +203,18 @@ def _allocate_recv_buffer(batch_size, sequence_length):
     return torch.empty(recv_size,
                        dtype=_get_recv_buffer_dtype(args),
                        device=torch.cuda.current_device())
+
+
+def _get_max_length(config, inputs_seq_length):
+    if config.max_new_tokens and not config.max_length:
+        max_length = inputs_seq_length + config.max_new_tokens
+    elif config.max_length and not config.max_new_tokens:
+        if config.max_length < inputs_seq_length:
+            raise ValueError(
+                f"generation config max length:{config.max_length} must larger than inputs seq length:{inputs_seq_length}")
+        max_length = config.max_length
+    elif config.max_length and config.max_new_tokens:
+        max_length = inputs_seq_length + config.max_new_tokens
+    else:
+        raise ValueError("You must set either `max_new_tokens` or `max_length`.")
+    return max_length

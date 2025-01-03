@@ -284,8 +284,6 @@ class Qwen2VLModel(MultiModalModule):
             extra_block_kwargs: Optional[dict] = None,
     ) -> Union[Dict[str, torch.Tensor], torch.Tensor]:
 
-        vit_embeds = None
-
         if self.add_image_encoder and pixel_values is not None:
             vit_embeds = self.image_encoder(pixel_values, image_grid_thw)
             vit_embeds = vit_embeds.reshape(-1, 1, vit_embeds.shape[-1]).clone()
@@ -296,24 +294,25 @@ class Qwen2VLModel(MultiModalModule):
             input_embeds = None
             if self.text_decoder.pre_process:
                 input_embeds = self.text_decoder.embedding(input_ids=input_ids, position_ids=position_ids).clone()
-                input_embeds = input_embeds.transpose(0, 1)
-            
                 if vit_embeds is not None:
+                    input_embeds = input_embeds.transpose(0, 1)  # bsh
                     image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
                     vit_embeds = vit_embeds[:, 0, :]
                     input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
-            
-                input_embeds = input_embeds.transpose(0, 1).clone()
+                    input_embeds = input_embeds.transpose(0, 1).clone()
 
-            past_seen_tokens = 0
             seq_len = input_ids.shape[1]
             if self.config.sequence_parallel:
                 seq_len *= mpu.get_tensor_model_parallel_world_size()
+            if inference_params is not None:
+                past_seen_tokens = attention_mask.shape[1] - 1 if inference_params.key_value_memory_dict else 0
+            else:
+                past_seen_tokens = 0
             cache_position = torch.arange(
                 past_seen_tokens, past_seen_tokens + seq_len, device=input_ids.device
             )
             position_ids = cache_position.view(1, 1, -1).expand(3, input_ids.shape[0], -1)
-            
+
             attention_mask = self._build_causal_mask(input_ids=input_ids, attention_mask=attention_mask)
 
             output = self.text_decoder(
@@ -322,6 +321,7 @@ class Qwen2VLModel(MultiModalModule):
                 attention_mask=attention_mask,
                 decoder_input=input_embeds,
                 labels=None,
+                inference_params=inference_params,
             )
 
             if self.text_decoder.post_process:
