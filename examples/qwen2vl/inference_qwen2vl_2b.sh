@@ -19,7 +19,7 @@ NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
-MM_MODEL="./examples/qwen2vl/inference_qwen2vl_7b.json"
+MM_MODEL="./examples/qwen2vl/inference_qwen2vl_2b.json"
 
 TP=1
 PP=1

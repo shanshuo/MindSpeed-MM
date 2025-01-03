@@ -142,6 +142,7 @@ mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  # 转换后保存目录
 pipeline_layer_index = [0, 0, 10, 20]     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
 
 num_layers=28                   # 语言模型结构层数
+llm_num_query_groups = 4  # 2B: 2; 7B: 4;
 ```
 
 以Qwen2VL-2B为例
@@ -153,6 +154,7 @@ mm_save_dir = 'ckpt/mm_path/Qwen2-VL-2B-Instruct'  # 转换后保存目录
 pipeline_layer_index = None     # None表示不进行pp切分, 用原始权重推理的时候设置为None；若要进行pp切分，则需要传入一个列表，例如[0, 0, 10, 20]，训练的时候设置。（当前模型转换只支持语言模块PP切分）
 
 num_layers=28                   # 语言模型结构层数
+llm_num_query_groups = 2  # 2B: 2; 7B: 4;
 ```
 
 启动脚本
@@ -166,7 +168,7 @@ num_layers=28                   # 语言模型结构层数
 如果需要用转换后模型训练的话，同步修改examples/qwen2vl/finetune_qwen2vl_7b.sh中的LOAD_PATH参数，该路径为转换后或者切分后的权重，注意与原始权重 hf_path/Qwen2-VL-7B-Instruct进行区分。
 
 ```
-LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
+LOAD_PATH="ckpt/mm_path/Qwen2-VL-7B-Instruct"
 ```
 
 <a id="jump3"></a>
@@ -248,7 +250,7 @@ dataset_param->basic_parameters->dataset
 ```shell
 ...
 # 加载路径
-LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
+LOAD_PATH="ckpt/mm_path/Qwen2-VL-7B-Instruct"
 # 保存路径
 SAVE_PATH="save_dir"
 ...
@@ -284,12 +286,12 @@ $save_dir
 ```shell
     # 根据实际情况修改 ascend-toolkit 路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
-    GPUS_PER_NODE=8
+    NPUS_PER_NODE=8
     MASTER_ADDR=locahost
     MASTER_PORT=29501
     NNODES=1
     NODE_RANK=0
-    WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+    WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 ```
 
 <a id="jump4.3"></a>

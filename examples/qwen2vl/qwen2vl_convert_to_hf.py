@@ -207,6 +207,7 @@ if __name__ == "__main__":
 
     pp_index_ = [0, 0, 10, 20]
     num_layers = 28
+    llm_num_query_groups = 4  # 2B: 2; 7B: 4; 72B: 8
 
     vit_hidden_size = 1280
     vit_attention_heads_num = 16

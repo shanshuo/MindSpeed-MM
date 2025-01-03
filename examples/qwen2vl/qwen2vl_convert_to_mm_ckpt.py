@@ -18,7 +18,7 @@ def load_from_hf(_load_dir):
     return state_dict
 
 
-def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num):
+def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_heads_num, _llm_num_query_groups):
     hiddensize_per_head = _vit_hidden_size // _vit_attention_heads_num
     new_params = {}
     for key, value in _state_dict.items():
@@ -134,11 +134,11 @@ def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
         if attention_v in new_params.keys():
             attention_v_weight = new_params[attention_v]
 
-        q_chunks = torch.chunk(attention_q_weight, 4, dim=0)
-        k_chunks = torch.chunk(attention_k_weight, 4, dim=0)
-        v_chunks = torch.chunk(attention_v_weight, 4, dim=0)
+        q_chunks = torch.chunk(attention_q_weight, _llm_num_query_groups, dim=0)
+        k_chunks = torch.chunk(attention_k_weight, _llm_num_query_groups, dim=0)
+        v_chunks = torch.chunk(attention_v_weight, _llm_num_query_groups, dim=0)
         all_chunks = []
-        for j in range(4):
+        for j in range(_llm_num_query_groups):
             all_chunks.append(q_chunks[j])
             all_chunks.append(k_chunks[j])
             all_chunks.append(v_chunks[j])
@@ -170,11 +170,11 @@ def convert_hf_to_mm(_state_dict, _num_layers, _vit_hidden_size, _vit_attention_
         else:
             continue
 
-        q_chunks1 = torch.chunk(attention_q_bias, 4, dim=0)
-        k_chunks1 = torch.chunk(attention_k_bias, 4, dim=0)
-        v_chunks1 = torch.chunk(attention_v_bias, 4, dim=0)
+        q_chunks1 = torch.chunk(attention_q_bias, _llm_num_query_groups, dim=0)
+        k_chunks1 = torch.chunk(attention_k_bias, _llm_num_query_groups, dim=0)
+        v_chunks1 = torch.chunk(attention_v_bias, _llm_num_query_groups, dim=0)
         all_chunks1 = []
-        for j in range(4):
+        for j in range(_llm_num_query_groups):
             all_chunks1.append(q_chunks1[j])
             all_chunks1.append(k_chunks1[j])
             all_chunks1.append(v_chunks1[j])
@@ -274,15 +274,16 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
 
 
 if __name__ == "__main__":
-    hf_ckpt_dir = "Qwen2-VL-7B-Instruct"
-    mm_save_dir = 'ckpt/Qwen2-VL-7B-Instruct'
+    hf_ckpt_dir = "ckpt/hf_path/Qwen2-VL-7B-Instruct"
+    mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'
     pipeline_layer_index = [0, 0, 10, 20]
     num_layers = 28
+    llm_num_query_groups = 4  # 2B: 2; 7B: 4;
 
     vit_hidden_size = 1280
     vit_attention_heads_num = 16
 
     state_dict = load_from_hf(_load_dir=hf_ckpt_dir)
-    state_dict = convert_hf_to_mm(state_dict, num_layers, vit_hidden_size, vit_attention_heads_num)
+    state_dict = convert_hf_to_mm(state_dict, num_layers, vit_hidden_size, vit_attention_heads_num, llm_num_query_groups)
     state_dicts = split_by_pp(state_dict, num_layers, pipeline_layer_index)
     save_by_pp(state_dicts, mm_save_dir, _exists_ok=True)
