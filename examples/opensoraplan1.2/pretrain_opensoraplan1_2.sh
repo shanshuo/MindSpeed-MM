@@ -72,7 +72,8 @@ GPT_ARGS="
     --recompute-granularity full \
     --recompute-method block \
     --recompute-num-layers 32 \
-    --use-distributed-optimizer
+    --use-distributed-optimizer \
+    --allow-tf32 \
 "
 
 MM_ARGS="

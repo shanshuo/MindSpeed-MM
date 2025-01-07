@@ -73,7 +73,8 @@ GPT_ARGS="
     --recompute-granularity full \
     --recompute-method block \
     --recompute-num-layers 32 \
-    --use-distributed-optimizer
+    --use-distributed-optimizer \
+    --allow-tf32 \
 "
 
 MM_ARGS="
@@ -93,5 +94,5 @@ torchrun $DISTRIBUTED_ARGS $BASEPATH/pretrain_sora.py \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl 
+    --distributed-backend nccl
 

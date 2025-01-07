@@ -1,7 +1,6 @@
 {
     "frames": 93,
     "resolution": [480, 640],
-    "allow_tf32": true,
     "allow_internal_format":false,
     "load_video_features": false,
     "load_text_features": false,

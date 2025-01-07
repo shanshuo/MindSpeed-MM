@@ -4,7 +4,6 @@
     "dtype": "bf16",
     "load_video_features": false,
     "load_text_features": false,
-    "allow_tf32": false,
     "allow_internal_format": false,
     "ae": {
         "model_id": "vae3D",
@@ -27,7 +26,7 @@
     },
     "predictor": {
         "dtype": "bf16",
-        "model_id": "stdit3", 
+        "model_id": "stdit3",
         "hidden_size": 1152,
         "num_heads": 16,
         "input_size": [16, 32, 32],

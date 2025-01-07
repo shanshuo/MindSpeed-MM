@@ -3,6 +3,7 @@ import gc
 import sys
 import time
 import torch
+import torch_npu
 
 from megatron.core import mpu
 from megatron.core.utils import get_model_config
@@ -46,6 +47,7 @@ from mindspeed_mm.configs.config import merge_mm_args
 from mindspeed_mm.tools.profiler import Profiler
 from mindspeed_mm.arguments import extra_args_provider_decorator
 from mindspeed_mm.patchs import PatchesManager
+from mindspeed_mm.utils.random import seed_all
 
 _TRAIN_START_TIME = time.time()
 
@@ -94,22 +96,35 @@ def pretrain(
         extra_args_provider=extra_args_provider, args_defaults=args_defaults
     )
 
-    init_func = args_defaults.get("init_func", None)
-    if init_func:
-        init_func()
-
     args = get_args()
     merge_mm_args(args)
+
+    try:
+        ori_bs = getattr(args.mm.data.dataloader_param, "batch_size", None)
+        if ori_bs != args.micro_batch_size:
+            setattr(args.mm.data.dataloader_param, "batch_size", args.micro_batch_size)
+            print_rank_0(f"update `batch_size` from {ori_bs} to {args.micro_batch_size}")
+    except AttributeError:
+        print_rank_0("update `batch_size` failed!")
+
+    # add deterministic computing function
+    if args.use_deter_comp:
+        seed_all(args.seed)
+        print_rank_0("deterministic computing is applied for npu.")
+
+    if args.jit_compile:
+        torch_npu.npu.set_compile_mode(jit_compile=True)
+
+    torch.backends.cuda.matmul.allow_tf32 = args.allow_tf32
+    torch.npu.config.allow_internal_format = args.allow_internal_format
+
     timers = get_timers()
 
     # apply patches
     PatchesManager.apply_patches_from_config()
-    
+
     if args.log_progress:
         append_to_progress_log("Starting job")
-
-    torch.backends.cuda.matmul.allow_tf32 = getattr(args.mm.model, "allow_tf32", False)
-    torch.npu.config.allow_internal_format = getattr(args.mm.model, "allow_internal_format", False)
 
     # Set pytorch JIT layer fusion options and warmup JIT functions.
     set_jit_fusion_options()

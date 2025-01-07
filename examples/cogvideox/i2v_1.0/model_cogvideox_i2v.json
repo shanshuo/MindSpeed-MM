@@ -1,11 +1,10 @@
 {
     "frames": 25,
     "resolution": [480, 720],
-    "allow_tf32": true,
     "allow_internal_format":false,
     "load_video_features": false,
     "load_text_features": false,
-    "task": "i2v", 
+    "task": "i2v",
     "predictor": {
         "model_id": "satdit",
         "from_pretrained": null,

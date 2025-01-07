@@ -74,10 +74,6 @@ GPT_ARGS="
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
     --no-gradient-accumulation-fusion \
-    --no-load-optim \
-    --no-load-rng \
-    --no-save-optim \
-    --no-save-rng \
     --use-distributed-optimizer \
     --bf16 \
     --load $LOAD_PATH \
@@ -86,6 +82,10 @@ GPT_ARGS="
     --variable-seq-lengths \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
+    --no-load-optim \
+    --no-load-rng \
+    --no-save-optim \
+    --no-save-rng \
 "
 
 OUTPUT_ARGS="

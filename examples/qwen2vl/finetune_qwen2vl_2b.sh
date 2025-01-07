@@ -29,7 +29,6 @@ SAVE_PATH="save_dir"
 TP=1
 PP=1
 CP=1
-SEQ_LEN=1024
 MBS=1
 GRAD_ACC_STEP=24
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
@@ -56,10 +55,10 @@ GPT_ARGS="
     --num-attention-heads 12 \
     --tokenizer-type NullTokenizer \
     --vocab-size 151936 \
+    --padded-vocab-size 152064 \
     --seq-length 1024 \
     --max-position-embeddings 32768 \
     --make-vocab-size-divisible-by 1 \
-    --init-method-std 0.01 \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
     --swiglu \
@@ -73,17 +72,16 @@ GPT_ARGS="
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
     --no-gradient-accumulation-fusion \
-    --no-load-optim \
-    --no-load-rng \
-    --no-save-optim \
-    --no-save-rng \
     --seed 42 \
     --bf16 \
     --load $LOAD_PATH \
     --use-distributed-optimizer \
     --variable-seq-lengths \
-    --enable-one-logger \
     --use-flash-attn \
+    --no-load-optim \
+    --no-load-rng \
+    --no-save-optim \
+    --no-save-rng \
 "
 
 MM_ARGS="

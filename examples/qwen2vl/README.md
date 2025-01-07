@@ -422,7 +422,7 @@ original_llm_pipeline_num_layers = [1, 6, 11, 10]   # 使用qwen2vl_convert_to_m
 ```
 修改qwen2vl_convert_pp_to_pp.py中的如下内容，使之与期望的切分配置一致
 ```python
-revised_pp_size = 2                         # 期望的重切分pp_size 
+revised_pp_size = 2                         # 期望的重切分pp_size
 revised_vit_pipeline_num_layers = [32, 0]   # 期望的重切分vit模块切分层数
 revised_llm_pipeline_num_layers = [14, 14]  # 期望的重切分llm模块切分层数
 ```

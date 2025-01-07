@@ -61,13 +61,13 @@ GPT_ARGS="
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
     --no-gradient-accumulation-fusion \
+    --bf16 \
+    --use-flash-attn \
+    --use-fused-rotary-pos-emb \
     --no-load-optim \
     --no-load-rng \
     --no-save-optim \
     --no-save-rng \
-    --bf16 \
-    --use-flash-attn \
-    --use-fused-rotary-pos-emb
 "
 
 MM_ARGS="

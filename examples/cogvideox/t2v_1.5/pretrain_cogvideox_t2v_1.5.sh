@@ -75,7 +75,8 @@ GPT_ARGS="
     --recompute-num-layers 42 \
     --use-distributed-optimizer \
     --overlap-grad-reduce \
-    --overlap-param-gather
+    --overlap-param-gather \
+    --allow-tf32 \
 "
 
 MM_ARGS="

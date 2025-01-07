@@ -77,6 +77,7 @@ GPT_ARGS="
     --recompute-num-layers 32 \
     --use-distributed-optimizer \
     --sequence-parallel \
+    --allow-tf32 \
 "
 
 MM_ARGS="

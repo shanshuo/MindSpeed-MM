@@ -31,6 +31,8 @@ def extra_args_provider_decorator(extra_args_provider):
 def process_args(parser):
     parser.conflict_handler = "resolve"
     parser = _add_lora_args(parser)
+    parser = _add_training_args(parser)
+    parser = _add_network_size_args(parser)
     return parser
 
 
@@ -49,5 +51,39 @@ def _add_lora_args(parser):
     group.add_argument('--lora-register-forward-hook', nargs='+', type=str,
                        default=['word_embeddings', 'input_layernorm', 'final_layernorm'],
                        help='Lora register forward hook.')
+
+    return parser
+
+
+def _add_training_args(parser):
+    group = parser.add_argument_group(title='training')
+
+    group.add_argument('--use-deter-comp',
+                       action='store_true',
+                       default=False,
+                       help='Enable deterministic computing for npu')
+    group.add_argument('--jit-compile',
+                       action='store_true',
+                       default=False,
+                       help='Setting jit compile mode to True')
+    group.add_argument('--allow-tf32',
+                       action='store_true',
+                       default=False,
+                       help='Use tf32 to train')
+    group.add_argument('--allow-internal-format',
+                       action='store_true',
+                       default=False,
+                       help='Use internal format to train')
+
+    return parser
+
+
+def _add_network_size_args(parser):
+    group = parser.add_argument_group(title='network_size_args')
+
+    group.add_argument('--padded-vocab-size',
+                       type=int,
+                       default=None,
+                       help='set padded vocab size')
 
     return parser
