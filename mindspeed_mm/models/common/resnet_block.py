@@ -179,7 +179,7 @@ class ContextParallelResnetBlock3D(nn.Module):
                 )
         self.act = Sigmoid()
 
-    def forward(self, x, temb=None, zq=None, clear_fake_cp_cache=True, enable_cp=True):
+    def forward(self, x, temb=None, zq=None, clear_fake_cp_cache=True, enable_cp=True, is_encode=True):
         h = x
 
         if zq is not None:
@@ -188,7 +188,9 @@ class ContextParallelResnetBlock3D(nn.Module):
             h = self.norm1(h)
 
         h = self.act(h)
-        h = self.conv1(h, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
+        # i2v train image encode need close vae-cp
+        conv_enable_cp = enable_cp if is_encode else True
+        h = self.conv1(h, clear_cache=clear_fake_cp_cache, enable_cp=conv_enable_cp)
 
         if temb is not None:
             h = h + self.temb_proj(self.act(temb))[:, :, None, None, None]
@@ -200,7 +202,7 @@ class ContextParallelResnetBlock3D(nn.Module):
 
         h = self.act(h)
         h = self.dropout(h)
-        h = self.conv2(h, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
+        h = self.conv2(h, clear_cache=clear_fake_cp_cache, enable_cp=conv_enable_cp)
 
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:

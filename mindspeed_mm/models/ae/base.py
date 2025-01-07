@@ -19,7 +19,7 @@ from mindspeed_mm.utils.extra_processor import I2VProcessor
 from mindspeed_mm.models.ae.vae import VideoAutoencoderKL, VideoAutoencoder3D
 from mindspeed_mm.models.ae.casualvae import CausalVAE
 from mindspeed_mm.models.ae.wfvae import WFVAE
-from mindspeed_mm.models.ae.contextparallelcausalvae import ContextParallelCasualVAE
+from mindspeed_mm.models.ae.contextparallel_causalvae import ContextParallelCasualVAE
 
 
 AE_MODEL_MAPPINGS = {"vae": VideoAutoencoderKL,

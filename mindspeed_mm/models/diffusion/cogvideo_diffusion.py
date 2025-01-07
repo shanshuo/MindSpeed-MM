@@ -1,14 +1,19 @@
+import math
 from abc import abstractmethod
 from inspect import isfunction
 from functools import partial
-from typing import Tuple
+from typing import Union, Tuple, List, Callable
 
 import torch
 import torch.nn as nn
 import torch.distributed
+from torch import Tensor
+from tqdm.auto import tqdm
 import numpy as np
 
 from megatron.core import mpu
+
+from diffusers.schedulers import CogVideoXDPMScheduler
 
 
 def append_dims(x, target_dims):
@@ -243,6 +248,7 @@ class CogVideoDiffusion(nn.Module):
     def __init__(self,
                  sigma_sampler_config,
                  denoiser_config,
+                 scheduler_config=None,
                  block_scale=None,
                  block_size=None,
                  min_snr_value=None,
@@ -279,6 +285,18 @@ class CogVideoDiffusion(nn.Module):
         self.c_in, self.c_noise, self.c_out, self.c_skip = None, None, None, None
         self.x_start = None
         self.latents = None
+
+        self.device = kwargs.pop("device", "npu")
+        self.num_inference_steps = kwargs.pop("num_inference_steps", 5)
+        scheduler_config = {} if scheduler_config is None else scheduler_config
+        self.diffusion = CogVideoXDPMScheduler(**scheduler_config)
+        self.diffusion.set_timesteps(self.num_inference_steps)
+        self.timesteps = self.diffusion.timesteps
+        self.init_noise_sigma = self.diffusion.init_noise_sigma
+        self.step = self.diffusion.step
+        self.num_warmup_steps = max(
+            len(self.timesteps) - self.num_inference_steps * self.diffusion.order, 0
+        )
 
     def q_sample(self, latents, **kwargs):
         noise = torch.randn_like(latents)
@@ -333,3 +351,76 @@ class CogVideoDiffusion(nn.Module):
             return torch.mean((w * (model_output - target).abs()).reshape(target.shape[0], -1), 1)
         else:
             raise NotImplementedError
+
+
+    def sample(
+        self,
+        model: Callable,
+        latents: Tensor,
+        model_kwargs: dict = None,
+        extra_step_kwargs: dict = None,
+        **kwargs
+    ) -> Tensor:
+        """
+        Generate samples from the model.
+        :param model: the noise predict model.
+        :param shape: the shape of the samples, (N, C, H, W).
+        :param latents: if specified, the noise from the encoder to sample.
+                      Should be of the same shape as `shape`.
+        :param model_kwargs: if not None, a dict of extra keyword arguments to
+            pass to the model. This can be used for conditioning.
+            {
+                "attention_mask": attention_mask,
+                "encoder_hidden_states": prompt_embeds
+                "encoder_attention_mask": prompt_attention_mask
+            }
+        :return: a non-differentiable batch of samples.
+        Returns clean latents.
+        """
+        self.diffusion.set_timesteps(self.num_inference_steps, device=self.device)
+        self.timesteps = self.diffusion.timesteps
+
+        guidance_scale = self.guidance_scale
+
+        # for loop denoising to get latents
+        with tqdm(total=self.num_inference_steps) as progress_bar:
+            old_pred_original_sample = None
+            for i, t in enumerate(self.timesteps):
+                latent_model_input = torch.cat([latents] * 2)
+                latent_model_input = self.diffusion.scale_model_input(latent_model_input, t)
+                current_timestep = t.expand(latent_model_input.shape[0])
+                model_kwargs["latents"] = latent_model_input.permute(0, 2, 1, 3, 4)
+
+                with torch.no_grad():
+                    noise_pred = model(timestep=current_timestep, **model_kwargs)
+
+                if isinstance(noise_pred, tuple) or isinstance(noise_pred, list):
+                    noise_pred = noise_pred[0]
+
+                # perform guidance
+                noise_pred = noise_pred.permute(0, 2, 1, 3, 4).float()
+                self.guidance_scale = 1 + guidance_scale * (
+                        (1 - math.cos(
+                            math.pi * ((self.num_inference_steps - t.item()) / self.num_inference_steps) ** 5.0)) / 2
+                )
+
+                # perform guidance
+                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+                latents, old_pred_original_sample = self.diffusion.step(
+                    noise_pred,
+                    old_pred_original_sample,
+                    t,
+                    self.timesteps[i - 1] if i > 0 else None,
+                    latents,
+                    **extra_step_kwargs,
+                    return_dict=False,
+                )
+                latents = latents.to(latent_model_input.dtype)
+
+                # call the callback, if provided
+                if i == len(self.timesteps) - 1 or (
+                        (i + 1) > self.num_warmup_steps and (i + 1) % self.diffusion.order == 0):
+                    progress_bar.update()
+        return latents

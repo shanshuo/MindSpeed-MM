@@ -57,6 +57,7 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.vae_scaling_factor = self.vae.vae_scale_factor[2]
 
         self.use_tiling = config.get("use_tiling", True)
+        self.cogvideo_version = config.get("cogvideo_version", 1.0)
 
         if self.use_tiling:
             self.vae.enable_tiling()
@@ -76,10 +77,10 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
     def prepare_image_latents(self, image, height, width, device, dtype):
         image = self.video_processor.preprocess(image, height=height, width=width).to(device, dtype=dtype)
-        image = image.unsqueeze(2).permute(0, 2, 1, 3, 4) # [B, C, T, H, W] -> [B, T, C, H, W]
+        image = image.unsqueeze(2).permute(0, 2, 1, 3, 4)  # [B, C, T, H, W] -> [B, T, C, H, W]
 
         image_latents = [self.vae.encode(img.unsqueeze(0)) for img in image]
-        image_latents = torch.cat(image_latents, dim=0) # [B, C, T, H, W]
+        image_latents = torch.cat(image_latents, dim=0)  # [B, C, T, H, W]
 
         padding_shape = (
             image_latents.shape[0],
@@ -149,6 +150,14 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds], dim=0)
 
         # 5. Prepare latents
+        latent_frames = (self.num_frames - 1) // self.vae_scale_factor_temporal + 1
+
+        # For CogVideoX 1.5, the latent frames should be padded to make it divisible by patch_size_t
+        patch_size_t = self.predict_model.patch_size[0]
+        additional_frames = 0
+        if patch_size_t is not None and latent_frames % patch_size_t != 0:
+            additional_frames = patch_size_t - latent_frames % patch_size_t
+            self.num_frames += additional_frames * self.vae_scale_factor_temporal
         latent_channels = self.predict_model.in_channels if image is None else self.predict_model.in_channels // 2
         batch_size = batch_size * self.num_videos_per_prompt
         shape = (
@@ -189,9 +198,10 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
                                         model_kwargs=model_kwargs,
                                         extra_step_kwargs=extra_step_kwargs)
 
+        latents = latents[:, additional_frames:]
         latents = latents.permute(0, 2, 1, 3, 4)  # [batch_size, num_channels, num_frames, height, width]
         latents = 1 / self.vae_scaling_factor * latents
-        video = self.decode_latents(latents)
+        video = self.decode_latents(latents, cogvideo_version=self.cogvideo_version)
         return video
 
     def callback_on_step_end_tensor_inputs_checks(self, callback_on_step_end_tensor_inputs):

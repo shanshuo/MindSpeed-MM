@@ -1,3 +1,4 @@
+import math
 from typing import Tuple
 
 import os
@@ -30,7 +31,7 @@ from mindspeed_mm.utils.utils import (
     get_context_parallel_rank
 )
 
-CASUALVAE_MODULE_MAPPINGS = {
+CASUAL_VAE_MODULE_MAPPINGS = {
     "Conv2d": Conv2d,
     "ResnetBlock2D": ResnetBlock2D,
     "CausalConv3d": CausalConv3d,
@@ -54,8 +55,8 @@ CASUALVAE_MODULE_MAPPINGS = {
 
 
 def model_name_to_cls(model_name):
-    if model_name in CASUALVAE_MODULE_MAPPINGS:
-        return CASUALVAE_MODULE_MAPPINGS[model_name]
+    if model_name in CASUAL_VAE_MODULE_MAPPINGS:
+        return CASUAL_VAE_MODULE_MAPPINGS[model_name]
     else:
         raise ValueError(f"Model name {model_name} not supported")
 
@@ -296,7 +297,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             if (z.shape[-1] > self.tile_latent_min_size
                     or z.shape[-2] > self.tile_latent_min_size
                     or z.shape[-3] > self.tile_latent_min_size_t):
-                dec = self.tiled_decode(z, enable_cp=enable_cp)
+                dec = self.tiling_decode(z, enable_cp=enable_cp, cogvideo_version=kwargs.get("cogvideo_version", 1.0))
         else:
             if self.use_quant_layer:
                 z = self.post_quant_conv(z)
@@ -329,6 +330,36 @@ class ContextParallelCasualVAE(MultiModalModule):
             b[:, :, :, :, x] = a[:, :, :, :, -blend_extent + x] * (1 - x / blend_extent) + \
                                b[:, :, :, :, x] * (x / blend_extent)
         return b
+
+    def tiling_decode(self, z, enable_cp=True, cogvideo_version=1.0):
+        n_samples = z.shape[0]
+        n_rounds = math.ceil(z.shape[0] / n_samples)
+        all_out = []
+        for n in range(n_rounds):
+            temp_z = z[n * n_samples : (n + 1) * n_samples, :, :]
+            latent_time = temp_z.shape[2]  # check the time latent
+            fake_cp_size = min(10, latent_time // 2)
+
+            recons = []
+            start_frame = 0
+            split_first_frame = cogvideo_version > 1.0
+            for i in range(fake_cp_size):
+                end_frame = start_frame + latent_time // fake_cp_size + (1 if i < latent_time % fake_cp_size else 0)
+                use_cp = True if i == 0 and enable_cp else False
+                clear_fake_cp_cache = True if i == fake_cp_size - 1 else False
+                with torch.no_grad():
+                    recon = self.decoder(
+                        temp_z[:, :, start_frame:end_frame].contiguous(),
+                        clear_fake_cp_cache=clear_fake_cp_cache,
+                        enable_cp=use_cp,
+                        split_first_frame=split_first_frame
+                    )
+                recons.append(recon)
+                start_frame = end_frame
+            recons = torch.cat(recons, dim=2)
+            all_out.append(recons)
+        out = torch.cat(all_out, dim=0)
+        return out
 
     def tiled_encode(self, x):
         t = x.shape[2]
@@ -760,27 +791,28 @@ class Decoder(nn.Module):
             block_in, 3, kernel_size=3, padding=conv_padding
         )
 
-    def forward(self, z, enable_cp=True, **kwargs):
+    def forward(self, z, enable_cp=True, clear_fake_cp_cache=True, **kwargs):
         zq = z
-
-        h = self.conv_in(z)
-        h = self.mid.block_1(h, zq=zq, enable_cp=enable_cp)
+        is_encode = False
+        h = self.conv_in(z, clear_cache=clear_fake_cp_cache)
+        h = self.mid.block_1(h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp, is_encode=is_encode)
         if self.enable_attention:
             h = self.mid.attn_1(h)
-        h = self.mid.block_2(h, zq=zq, enable_cp=enable_cp)
+        h = self.mid.block_2(h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp, is_encode=is_encode)
 
         for i_level in reversed(range(self.num_resolutions)):
             for i_block in range(self.num_res_blocks + 1):
-                h = self.up[i_level].block[i_block](h, zq=zq, enable_cp=enable_cp)
+                h = self.up[i_level].block[i_block](h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache,
+                                                    enable_cp=enable_cp, is_encode=is_encode)
                 if len(self.up[i_level].attn) > 0:
                     h = self.up[i_level].attn[i_block](h, zq=zq)
             if hasattr(self.up[i_level], "upsample"):
                 h = self.up[i_level].upsample(h, enable_cp=enable_cp)
             if hasattr(self.up[i_level], "time_upsample"):
-                h = self.up[i_level].time_upsample(h)
+                h = self.up[i_level].time_upsample(h, enable_cp=enable_cp)
 
-        h = self.norm_out(h, zq=zq, enable_cp=enable_cp)
+        h = self.norm_out(h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp)
         if self.enable_nonlinearity:
             h = self.nonlinearity(h)
-        h = self.conv_out(h)
+        h = self.conv_out(h, clear_cache=clear_fake_cp_cache)
         return h
