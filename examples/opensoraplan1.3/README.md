@@ -203,7 +203,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 根据实际下载的数据，过滤标注文件，删去标注的json文件中未下载的部分；
 修改data.txt中的路径，示例如下:
    ```
-/data/open-sora-plan/dataset;/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
+/data/open-sora-plan/dataset,/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
    ```
 ---
 其中，第一个路径为数据集的根目录，第二个路径为标注文件的路径。
@@ -229,6 +229,12 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。
 注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，
 因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
+
+使用pp时需要在运行脚本GPT_ARGS中打开以下几个参数：
+
+    --optimization-level 2 \
+    --use-multiparameter-pipeline-model-parallel \
+    --variable-seq-lengths \
 
 【单机运行】
 
@@ -282,7 +288,6 @@ i2v(图生视频):
 
 参考上述的权重下载及转换章节，推理所需的预训练权重需要到huggingface中下载，以及参考上面的权重转换步骤进行转换。
 
-注意：推理转换权重时候，脚本中需要设置 `MODE = "inference"`
 <a id="jump5.2"></a>
 
 #### 2. 配置参数

@@ -77,9 +77,6 @@ GPT_ARGS="
     --recompute-num-layers 32 \
     --use-distributed-optimizer \
     --sequence-parallel \
-    --optimization-level 2 \
-    --use-multiparameter-pipeline-model-parallel \
-    --variable-seq-lengths \
 "
 
 MM_ARGS="

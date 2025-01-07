@@ -335,7 +335,10 @@ class VideoDitSparse(MultiModalModule):
          latents, noised_latents, timesteps, noise]
          which should be corresponded with initialize_pipeline_tensor_shapes
         """
-        return list(output_list) + list(input_list[:-1])
+        latents, noised_latents, timesteps, noise, _ = input_list
+        if timesteps.dtype != torch.bfloat16:
+            timesteps = timesteps.to(torch.bfloat16)
+        return list(output_list) + [latents, noised_latents, timesteps, noise]
 
     @staticmethod
     def initialize_pipeline_tensor_shapes():
@@ -481,7 +484,7 @@ class VideoDitSparse(MultiModalModule):
             self, latents, timestep, embedded_timestep, num_frames, height, width
     ):
         batch_size = latents.shape[1]
-        shift, scale = (self.scale_shift_table[None] + embedded_timestep[:, None]).chunk(2, dim=1)
+        shift, scale = (self.scale_shift_table[:, None] + embedded_timestep[None]).chunk(2, dim=0)
         latents = self.norm_out(latents)
         # Modulation
         latents = latents * (1 + scale) + shift

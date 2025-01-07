@@ -98,6 +98,8 @@ class DiffusersScheduler:
         t: Tensor = None,
         **kwargs
         ) -> Tensor:
+        if t.dtype != torch.int64:
+            t = t.to(torch.int64)
         if self.prediction_type == "epsilon":
             target = noise
         elif self.prediction_type == "v_prediction":
@@ -246,6 +248,9 @@ class DiffusersScheduler:
                 with torch.no_grad():
                     noise_pred = model(timestep=current_timestep, **model_kwargs)
                 
+                if isinstance(noise_pred, tuple) or isinstance(noise_pred, list):
+                    noise_pred = noise_pred[0]
+
                 if isinstance(noise_pred, tuple) or isinstance(noise_pred, list):
                     noise_pred = noise_pred[0]
 

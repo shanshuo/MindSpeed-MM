@@ -209,7 +209,7 @@ if __name__ == "__main__":
         for param_k in dit_state_dicts[k]:
             print(f"{param_k}: {dit_state_dicts[k][param_k].shape}")
 
-    save_by_pp_tp(dit_state_dicts, dit_mm_save_dir, exists_ok=False)
+    save_by_pp_tp(dit_state_dicts, dit_mm_save_dir, exists_ok=False, has_pp=(len(PP_SIZE) > 1))
 
     # 转换VAE权重
     vae_state_dict = load_from_hf(vae_hg_weight_path)
