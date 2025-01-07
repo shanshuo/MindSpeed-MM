@@ -3,9 +3,10 @@
 
 import os
 import random
-from typing import Union
+from typing import Union, List, Optional
 from concurrent.futures import ThreadPoolExecutor
 import warnings
+import copy
 
 import torch
 import numpy as np
@@ -15,8 +16,6 @@ from mindspeed_mm.data.data_utils.constants import (
     FILE_INFO,
     PROMPT_IDS,
     PROMPT_MASK,
-    PROMPT_MASK_2,
-    PROMPT_IDS_2,
     TEXT,
     VIDEO,
     IMG_FPS,
@@ -43,9 +42,7 @@ T2VOutputData = {
     VIDEO: [],
     TEXT: [],
     PROMPT_IDS: [],
-    PROMPT_MASK: [],
-    PROMPT_IDS_2: [],
-    PROMPT_MASK_2: [],
+    PROMPT_MASK: []
 }
 
 
@@ -57,7 +54,7 @@ class T2VDataset(MMBaseDataset):
         basic_param(dict): some basic parameters such as data_path, data_folder, etc.
         vid_img_process(dict): some data preprocessing parameters
         use_text_processer(bool): whether text preprocessing
-        tokenizer_config(dict): the config of tokenizer
+        tokenizer_config(dict or list(dict)): the config of tokenizer or a list of configs for multi tokenizers
         use_feature_data(bool): use vae feature instead of raw video data or use text feature instead of raw text.
         vid_img_fusion_by_splicing(bool):  videos and images are fused by splicing
         use_img_num(int): the number of fused images
@@ -72,9 +69,7 @@ class T2VDataset(MMBaseDataset):
         enable_text_preprocessing: bool = True,
         use_clean_caption: bool = True,
         support_chinese: bool = False,
-        model_max_length: int = 120,
-        tokenizer_config: Union[dict, None] = None,
-        tokenizer_config_2: Union[dict, None] = None,
+        tokenizer_config: Optional[Union[dict, List[dict]]] = None,
         use_feature_data: bool = False,
         vid_img_fusion_by_splicing: bool = False,
         use_img_num: int = 0,
@@ -164,14 +159,9 @@ class T2VDataset(MMBaseDataset):
         )
         if self.use_text_processer and tokenizer_config is not None:
             self.tokenizer = Tokenizer(tokenizer_config).get_tokenizer()
-            self.tokenizer_2 = None
-            if tokenizer_config_2 is not None:
-                self.tokenizer_2 = Tokenizer(tokenizer_config_2).get_tokenizer()
             self.text_processer = TextProcesser(
-                model_max_length=model_max_length,
                 tokenizer=self.tokenizer,
                 enable_text_preprocessing=self.enable_text_preprocessing,
-                tokenizer_2=self.tokenizer_2,
                 use_clean_caption=use_clean_caption,
                 support_chinese=support_chinese,
                 cfg=self.cfg,
@@ -210,7 +200,7 @@ class T2VDataset(MMBaseDataset):
 
     def getitem(self, index):
         # init output data
-        examples = T2VOutputData
+        examples = copy.deepcopy(T2VOutputData)
         
         if self.data_storage_mode == "standard":
             sample = self.data_samples[index]
@@ -237,7 +227,7 @@ class T2VDataset(MMBaseDataset):
                 )
                 examples[VIDEO] = video_value
                 if self.use_text_processer:
-                    prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2 = self.get_text_processer(texts)# tokenizer, tokenizer_2
+                    prompt_ids, prompt_mask = self.get_text_processer(texts)
                     examples[PROMPT_IDS], examples[PROMPT_MASK] = (
                         prompt_ids,
                         prompt_mask,
@@ -264,8 +254,6 @@ class T2VDataset(MMBaseDataset):
                 texts_value = self.get_data_from_feature_data(texts_path)
                 examples[PROMPT_IDS] = texts_value['prompt']
                 examples[PROMPT_MASK] = texts_value['prompt_mask']
-                examples[PROMPT_IDS_2] = texts_value['prompt_2'] if 'prompt_2' in texts_value.keys() else None
-                examples[PROMPT_MASK_2] = texts_value['prompt_2_mask'] if 'prompt_2_mask' in texts_value.keys() else None
             else:
                 examples = self.get_text_data(examples, sample, file_type)
                 
@@ -314,8 +302,8 @@ class T2VDataset(MMBaseDataset):
                     text = [add_aesthetic_notice_video(text[0], aes)]
                 elif file_type == "image":
                     text = [add_aesthetic_notice_image(text[0], aes)]
-        prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2 = self.get_text_processer(text)# tokenizer, tokenizer_2
-        examples[PROMPT_IDS], examples[PROMPT_MASK], examples[PROMPT_IDS_2], examples[PROMPT_MASK_2] = prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2       
+        prompt_ids, prompt_mask = self.get_text_processer(text)
+        examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
         return examples
         
     def get_merge_data(self, examples, index):
@@ -348,8 +336,8 @@ class T2VDataset(MMBaseDataset):
                     text = [add_aesthetic_notice_video(text[0], aes)]
                 elif file_type == "image":
                     text = [add_aesthetic_notice_image(text[0], aes)]
-        prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2 = self.get_text_processer(text)# tokenizer, tokenizer_2
-        examples[PROMPT_IDS], examples[PROMPT_MASK], examples[PROMPT_IDS_2], examples[PROMPT_MASK_2] = prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2
+        prompt_ids, prompt_mask = self.get_text_processer(text)
+        examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
         return examples
 
     def get_value_from_vid_or_img(self, path):
@@ -383,18 +371,28 @@ class T2VDataset(MMBaseDataset):
             raise NotImplementedError
 
     def get_text_processer(self, texts):
-        prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2 = self.text_processer(texts)# tokenizer, tokenizer_2
+        prompt_ids, prompt_mask = self.text_processer(texts)
         if self.vid_img_fusion_by_splicing and self.use_img_from_vid:
-            prompt_ids = torch.stack(
-                [prompt_ids] * (1 + self.use_img_num)
-            )  # 1+self.use_img_num, l
-            prompt_mask = torch.stack(
-                [prompt_mask] * (1 + self.use_img_num)
-            )  # 1+self.use_img_num, l
+            if not isinstance(prompt_ids, list):
+                prompt_ids = torch.stack(
+                    [prompt_ids] * (1 + self.use_img_num)
+                )  # 1+self.use_img_num, l
+                prompt_mask = torch.stack(
+                    [prompt_mask] * (1 + self.use_img_num)
+                )  # 1+self.use_img_num, l
+            else:
+                prompt_ids = [
+                    torch.stack([_prompt_ids] * (1 + self.use_img_num))
+                    for _prompt_ids in prompt_ids
+                ]
+                prompt_mask = [
+                    torch.stack([_prompt_mask] * (1 + self.use_img_num))
+                    for _prompt_mask in prompt_mask
+                ]
         if self.vid_img_fusion_by_splicing and not self.use_img_from_vid:
             raise NotImplementedError("Not support now.")
         
-        return (prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2)
+        return (prompt_ids, prompt_mask)
 
 
 class DynamicVideoTextDataset(MMBaseDataset):
@@ -419,7 +417,6 @@ class DynamicVideoTextDataset(MMBaseDataset):
         use_text_processer: bool = False,
         enable_text_preprocessing: bool = True,
         use_clean_caption: bool = True,
-        model_max_length: int = 120,
         tokenizer_config: Union[dict, None] = None,
         use_feature_data: bool = False,
         vid_img_fusion_by_splicing: bool = False,
@@ -463,7 +460,6 @@ class DynamicVideoTextDataset(MMBaseDataset):
         if self.use_text_processer and tokenizer_config is not None:
             self.tokenizer = Tokenizer(tokenizer_config).get_tokenizer()
             self.text_processer = TextProcesser(
-                model_max_length=model_max_length,
                 tokenizer=self.tokenizer,
                 use_clean_caption=use_clean_caption,
                 enable_text_preprocessing=enable_text_preprocessing
@@ -528,7 +524,7 @@ class DynamicVideoTextDataset(MMBaseDataset):
             ret["video_mask"] = self.video_mask_generator.get_mask(video)
 
         if self.get_text:
-            prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2 = self.get_text_processer(sample["text"])# tokenizer, tokenizer_2
+            prompt_ids, prompt_mask = self.get_text_processer(sample["text"])
             ret["prompt_ids"] = prompt_ids
             ret["prompt_mask"] = prompt_mask
 
@@ -540,6 +536,5 @@ class DynamicVideoTextDataset(MMBaseDataset):
         return ret
 
     def get_text_processer(self, texts):
-        prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2 = self.text_processer(texts)
-        return prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2
-
+        prompt_ids, prompt_mask = self.text_processer(texts)
+        return prompt_ids, prompt_mask

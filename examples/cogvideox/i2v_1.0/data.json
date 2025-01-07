@@ -22,12 +22,12 @@
 			}
 		},
 		"use_text_processer": true,
-		"enable_text_preprocessing": false,
-		"model_max_length": 226,
+		"enable_text_preprocessing": false,		
 		"tokenizer_config": {
 			"hub_backend": "hf",
 			"autotokenizer_name": "T5Tokenizer",
-			"from_pretrained": "5b-cogvideo/tokenizer"
+			"from_pretrained": "5b-cogvideo/tokenizer",
+			"model_max_length": 226
 		}
 	},
 	"dataloader_param": {

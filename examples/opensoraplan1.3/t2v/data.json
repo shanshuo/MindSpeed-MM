@@ -54,11 +54,11 @@
 			}
 		},
 		"use_text_processer": true,
-		"model_max_length": 512,
 		"tokenizer_config": {
 			"hub_backend": "hf",
 			"autotokenizer_name": "AutoTokenizer",
-			"from_pretrained": "./weights/google/mt5-xxl"
+			"from_pretrained": "./weights/google/mt5-xxl",
+			"model_max_length": 512
 		}
 	},
 	"dataloader_param": {

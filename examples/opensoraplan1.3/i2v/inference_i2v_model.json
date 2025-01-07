@@ -47,7 +47,8 @@
         "hub_backend": "hf",
         "autotokenizer_name": "AutoTokenizer",
         "from_pretrained": "./weights/google/mt5-xxl",
-        "local_files_only": false
+        "local_files_only": false,
+        "model_max_length": 512
     },
     
     "diffusion": {
@@ -67,7 +68,6 @@
     },
     "micro_batch_size": 1,
     "frame_interval":1,
-    "model_max_length": 512,
     "save_path":"examples/opensoraplan1.3/i2v/samples/",
     "fps":18,
     "prompt": "examples/opensoraplan1.3/i2v/cond_prompt.txt",

@@ -45,7 +45,7 @@ class TestTextEncoder:
         test_text = "This is a T5 example"
         tokenizer_output = t5_tokenizer(test_text, return_tensors='pt')
         output = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
-        judge_expression(output["last_hidden_state"].min().item() == T5_TEXT_ENCODER_OUTPUT)
+        judge_expression(output.min().item() == T5_TEXT_ENCODER_OUTPUT)
 
     def test_mt5(self):
         """
@@ -73,7 +73,7 @@ class TestTextEncoder:
         test_text = "This is a MT5 example"
         tokenizer_output = mt5_tokenizer(test_text, return_tensors='pt')
         output = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
-        judge_expression(output["last_hidden_state"].min().item() == MT5_TEXT_ENCODER_OUTPUT)
+        judge_expression(output.min().item() == MT5_TEXT_ENCODER_OUTPUT)
 
     def test_clip(self):
         """
@@ -103,4 +103,4 @@ class TestTextEncoder:
         test_text = "This is a CLIP example"
         tokenizer_output = clip_tokenizer(test_text, return_tensors='pt')
         output = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
-        judge_expression(output["last_hidden_state"].min().item() == CLIP_TEXT_ENCODER_OUTPUT)
+        judge_expression(output.min().item() == CLIP_TEXT_ENCODER_OUTPUT)

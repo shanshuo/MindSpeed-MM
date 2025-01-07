@@ -20,9 +20,7 @@ from mindspeed_mm.data.data_utils.constants import (
     VIDEO,
     PROMPT_IDS, 
     PROMPT_MASK, 
-    VIDEO_MASK,
-    PROMPT_IDS_2, 
-    PROMPT_MASK_2, 
+    VIDEO_MASK
 )
 from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.models.sora_model import SoRAModel

@@ -42,7 +42,6 @@ def prepare_pipeline(args, device):
     tokenizer = Tokenizer(args.tokenizer).get_tokenizer()
     if not hasattr(vae, 'dtype'):
         vae.dtype = args.ae.dtype
-    tokenizer.model_max_length = args.model_max_length
     sora_pipeline_class = sora_pipeline_dict[args.pipeline_class]
     sora_pipeline = sora_pipeline_class(vae=vae, text_encoder=text_encoder, tokenizer=tokenizer, scheduler=scheduler,
                                         predict_model=predict_model, config=args.pipeline_config)
@@ -101,7 +100,6 @@ def main():
         videos = sora_pipeline(prompt=batch_prompts,
                                image=batch_images,
                                fps=save_fps,
-                               max_sequence_length=args.model_max_length,
                                use_prompt_preprocess=args.use_prompt_preprocess,
                                device=device,
                                dtype=dtype,

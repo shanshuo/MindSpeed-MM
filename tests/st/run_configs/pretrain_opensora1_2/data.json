@@ -24,11 +24,11 @@
         },
         "use_text_processer": true,
         "enable_text_preprocessing": false,
-        "model_max_length": 300,
         "tokenizer_config": {
             "hub_backend": "hf",
             "autotokenizer_name": "AutoTokenizer",
-            "from_pretrained": "/home/ci_resource/models/opensora1.0/DeepFloyd/t5-v1_1-xxl"
+            "from_pretrained": "/home/ci_resource/models/opensora1.0/DeepFloyd/t5-v1_1-xxl",
+            "model_max_length": 300
         },
         "use_feature_data": false,
         "vid_img_fusion_by_splicing": false,

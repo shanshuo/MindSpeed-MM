@@ -1,6 +1,7 @@
 import os
 import random
 from typing import Union
+import copy
 
 import torch
 
@@ -9,9 +10,7 @@ from mindspeed_mm.data.data_utils.constants import (
     FILE_INFO,
     IMG_FPS,
     PROMPT_IDS,
-    PROMPT_IDS_2,
     PROMPT_MASK,
-    PROMPT_MASK_2,
     TEXT,
     VIDEO,
     MASKED_VIDEO
@@ -48,8 +47,6 @@ I2VOutputData = {
     TEXT: [],
     PROMPT_IDS: [],
     PROMPT_MASK: [],
-    PROMPT_IDS_2: [],
-    PROMPT_MASK_2: [],
 }
 
 
@@ -62,7 +59,6 @@ class I2VDataset(T2VDataset):
         use_text_processer: bool = False,
         use_clean_caption: bool = True,
         support_chinese: bool = False,
-        model_max_length: int = 120,
         tokenizer_config: Union[dict, None] = None,
         use_feature_data: bool = False,
         vid_img_fusion_by_splicing: bool = False,
@@ -81,7 +77,6 @@ class I2VDataset(T2VDataset):
             use_text_processer=use_text_processer,
             use_clean_caption=use_clean_caption,
             support_chinese=support_chinese,
-            model_max_length=model_max_length,
             tokenizer_config=tokenizer_config,
             use_feature_data=use_feature_data,
             vid_img_fusion_by_splicing=vid_img_fusion_by_splicing,
@@ -118,7 +113,7 @@ class I2VDataset(T2VDataset):
 
     def getitem(self, index):
         # init output data
-        examples = I2VOutputData
+        examples = copy.deepcopy(I2VOutputData)
 
         if self.data_storage_mode == "combine":
             examples = self.get_merge_data(examples, index)
@@ -220,7 +215,6 @@ class I2VDataset(T2VDataset):
                     text = [add_aesthetic_notice_video(text[0], aes)]
                 elif file_type == "image":
                     text = [add_aesthetic_notice_image(text[0], aes)]
-        prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2 = self.get_text_processer(text)  # tokenizer, tokenizer_2
-        examples[PROMPT_IDS], examples[PROMPT_MASK], examples[PROMPT_IDS_2], examples[
-            PROMPT_MASK_2] = prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2
+        prompt_ids, prompt_mask = self.get_text_processer(text)
+        examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
         return examples

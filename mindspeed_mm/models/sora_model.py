@@ -108,12 +108,8 @@ class SoRAModel(nn.Module):
                 if self.load_text_features:
                     prompt = prompt_ids
                 else:
-                    B, N, L = prompt_ids.shape
-                    prompt_ids = prompt_ids.view(-1, L)
-                    prompt_mask = prompt_mask.view(-1, L)
-                    hidden_states = self.text_encoder.encode(prompt_ids, prompt_mask)
-                    prompt = hidden_states["last_hidden_state"].view(B, N, L, -1)
-
+                    prompt = self.text_encoder.encode(prompt_ids, prompt_mask)
+                    
             noised_latents, noise, timesteps = self.diffusion.q_sample(latents, model_kwargs=kwargs, mask=video_mask)
             predictor_input_latent, predictor_timesteps, predictor_prompt = noised_latents, timesteps, prompt
             predictor_video_mask, predictor_prompt_mask = video_mask, prompt_mask

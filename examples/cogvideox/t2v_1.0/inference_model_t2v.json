@@ -70,7 +70,8 @@
     "tokenizer":{
         "hub_backend": "hf",
         "autotokenizer_name": "T5Tokenizer",
-        "from_pretrained": "5b-cogvideo"
+        "from_pretrained": "5b-cogvideo",
+        "model_max_length": 226
     },
     "predictor": {
         "model_id": "satdit",
@@ -147,7 +148,6 @@
 
     "frame_interval": 1,
     "micro_batch_size": 1,
-    "model_max_length": 226,
     "save_path":"./cogvideox_samples/",
     "fps": 8,
     "prompt":"examples/cogvideox/samples_prompts.txt",

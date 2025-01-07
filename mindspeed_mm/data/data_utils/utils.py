@@ -827,19 +827,15 @@ class TextProcesser:
 
     def __init__(
             self,
-            model_max_length=120,
             tokenizer=None,
-            tokenizer_2=None,
             use_clean_caption=True,
             enable_text_preprocessing=True,
             padding_type="max_length",
             support_chinese=False,
             cfg=0.1,
     ):
-        self.model_max_length = model_max_length
         self.padding = padding_type
         self.tokenizer = tokenizer
-        self.tokenizer_2 = tokenizer_2
         self.use_clean_caption = use_clean_caption
         self.support_chinese = support_chinese
         self.cfg = cfg
@@ -855,31 +851,33 @@ class TextProcesser:
         else:
             texts_info = texts
 
-        text_tokens_and_mask = self.tokenizer(
-            texts_info,
-            max_length=self.model_max_length,
-            padding=self.padding,
-            truncation=True,
-            return_attention_mask=True,
-            add_special_tokens=True,
-            return_tensors="pt",
-        )
-        prompt_ids = text_tokens_and_mask["input_ids"]
-        prompt_mask = text_tokens_and_mask["attention_mask"]
-        prompt_ids_2, prompt_mask_2 = None, None
-        if self.tokenizer_2 is not None:
-            text_tokens_and_mask_2 = self.tokenizer_2(
+        if not isinstance(self.tokenizer, list):
+            text_tokens_and_mask = self.tokenizer(
                 texts_info,
-                max_length=self.tokenizer_2.model_max_length,
-                padding='max_length',
+                max_length=self.tokenizer.model_max_length,
+                padding=self.padding,
                 truncation=True,
                 return_attention_mask=True,
                 add_special_tokens=True,
-                return_tensors='pt'
+                return_tensors="pt",
             )
-            prompt_ids_2 = text_tokens_and_mask_2['input_ids']  # 1, l
-            prompt_mask_2 = text_tokens_and_mask_2['attention_mask']  # 1, l
-        return (prompt_ids, prompt_mask, prompt_ids_2, prompt_mask_2)
+            prompt_ids = text_tokens_and_mask["input_ids"]
+            prompt_mask = text_tokens_and_mask["attention_mask"]
+        else:
+            prompt_ids, prompt_mask = [], []
+            for i, tokenizer in enumerate(self.tokenizer):
+                text_tokens_and_mask = tokenizer(
+                    texts_info,
+                    max_length=tokenizer.model_max_length,
+                    padding=self.padding,
+                    truncation=True,
+                    return_attention_mask=True,
+                    add_special_tokens=True,
+                    return_tensors="pt"
+                )
+                prompt_ids.append(text_tokens_and_mask["input_ids"])
+                prompt_mask.append(text_tokens_and_mask["attention_mask"])
+        return (prompt_ids, prompt_mask)
 
     @staticmethod
     def text_preprocessing(text, use_clean_caption=True, support_chinese=False):

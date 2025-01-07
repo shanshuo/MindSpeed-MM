@@ -13,64 +13,118 @@ TEXT_ENCODER_MAPPING = {
 
 class TextEncoder(nn.Module):
     """
-    Instantiate a text encoder model from config.
+    Configuration for initializing one or more Text Encoder Model instances.
 
     Args:
-        config (dict): the general config for Text Encoder Model
-        {
-            (1) args for our feautrues
-            "backend": type-str, "hf" or "om",
-            "model_id": type-str, "AutoModel" or other automodel name,
-            "dtype": type-str, dtype of text encoder
-            
-            (2) args for automodel.from_pretrained() of transformers or openmind
-            "pretrained_model_name_or_path": type-str, local path or hub path,
-            "local_files_only": type-bool,
-            ...
-        }
+        config (Optional[dict, list(dict)]): the general config for Text Encoder Model.
+        - If `config` is a dictionary, it specifies the parameters for a single Text Encoder Model instance.
+            e.g.
+            {
+                (1) args for our feautrues
+                "backend": type-str, "hf" or "om",
+                "model_id": type-str, "AutoModel" or other automodel name,
+                "dtype": type-str, dtype of text encoder
+                
+                (2) args for automodel.from_pretrained() of transformers or openmind
+                "pretrained_model_name_or_path": type-str, local path or hub path,
+                "local_files_only": type-bool,
+                ...
+            }
+        - If `config` is a list of dictionaries, each dictionary in the list will be used to instantiate a separate Text Encoder Model instance, 
+            effectively allowing the creation of multiple Text Encoder based on different configurations.
     """
     def __init__(self, config):
         super().__init__()
-        config = config.to_dict()
-        self.backend = config.pop("hub_backend")
-        self.use_attention_mask = config.pop("use_attention_mask", True)
-        self.ucg_rate = config.pop("ucg_rate", None)
-        model_id = config["model_id"]
-        if model_id not in TEXT_ENCODER_MAPPING:
-            raise ValueError(f"{model_id} text encoder is currently not supported")
+        
+        if isinstance(config, list) or isinstance(config, tuple):
+            self.text_encoders = nn.ModuleList()
+            for config_i in config:
+                text_encoder_i = self._init_text_encoder(config_i)
+                self.text_encoders.append(text_encoder_i)
         else:
-            self.automodel_name = TEXT_ENCODER_MAPPING[config.pop("model_id")]
+            self.text_encoders = self._init_text_encoder(config)
+
+    def get_model(self):
+        return self.text_encoders
+
+    def encode(self, input_ids, mask, **kwargs):
+        if isinstance(self.text_encoders, nn.ModuleList):
+            outputs = []
+            for i, text_encoder_i in enumerate(self.text_encoders):
+                input_ids_i = input_ids[i]
+                mask_i = mask[i]
+                output = self._single_encode(text_encoder_i, input_ids_i, mask_i)
+                outputs.append(output)
+        else:
+            outputs = self._single_encode(self.text_encoders, input_ids, mask)
+        return outputs
+    
+    def _single_encode(self, text_encoder, input_ids, attention_mask, **kwargs):
+        *BN, L = input_ids.shape
+        input_ids = input_ids.to(text_encoder.device).view(-1, L)
+        attention_mask = attention_mask.to(text_encoder.device).view(-1, L)
+        attention_mask = attention_mask if text_encoder.use_attention_mask else None
+        output = text_encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_hidden_states=text_encoder.hidden_state_skip_layer is not None,
+            **kwargs
+        )
+
+        emb = output[text_encoder.output_key]
+        if text_encoder.hidden_state_skip_layer:
+            emb = emb[-(text_encoder.hidden_state_skip_layer + 1)]
+
+        if text_encoder.ucg_rate is not None and text_encoder.ucg_rate > 0.0:
+            def expand_dims_like(x, y):
+                while x.dim() != y.dim():
+                    x = x.unsqueeze(-1)
+                return x
+
+            emb = (
+                expand_dims_like(
+                    torch.bernoulli(
+                        (1.0 - text_encoder.ucg_rate) * torch.ones(emb.shape[0], device=emb.device, dtype=emb.dtype)),
+                    emb,
+                )
+                * emb
+            )
+        
+        if text_encoder.output_key in ["last_hidden_state", "hidden_states"]:
+            emb = emb.view(*BN, L, -1)
+        elif text_encoder.output_key in ["pooler_output"]:
+            emb = emb.view(*BN, -1)
+        else:
+            raise NotImplementedError(f"Text encoder output_key: {text_encoder.output_key} is not implenmented! ")
+        
+        return emb            
+    
+    def _init_text_encoder(self, config):
+        if not isinstance(config, dict):
+            config = config.to_dict()
+
+        backend = config.pop("hub_backend")
+        use_attention_mask = config.pop("use_attention_mask", True)
+        ucg_rate = config.pop("ucg_rate", None)
+        output_key = config.pop("output_key", "last_hidden_state")
+        hidden_state_skip_layer = config.pop("hidden_state_skip_layer", None)
+        model_id = config.pop("model_id")
+        if model_id not in TEXT_ENCODER_MAPPING:
+            raise ValueError(f"Model ID {model_id} is not supported for text encoder")
+        else:
+            self.automodel_name = TEXT_ENCODER_MAPPING[model_id]
         config["pretrained_model_name_or_path"] = config.pop("from_pretrained")
         config["torch_dtype"] = get_dtype(config.pop("dtype"))
 
         # Only huggingface backend is supported, OpenMind backend will be supported soon.
         module = importlib.import_module("transformers")
         automodel = getattr(module, self.automodel_name)
-        self.model = automodel.from_pretrained(**config)
+        text_encoder = automodel.from_pretrained(**config)
+        setattr(text_encoder, "ucg_rate", ucg_rate)
+        setattr(text_encoder, "use_attention_mask", use_attention_mask)
+        setattr(text_encoder, "output_key", output_key)
+        setattr(text_encoder, "hidden_state_skip_layer", hidden_state_skip_layer)
 
-    def get_model(self):
-        return self.model
-
-    def encode(self, input_ids, mask, **kwargs):
-        attention_mask = mask if self.use_attention_mask else None
-        output = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            **kwargs)
-
-        if self.ucg_rate is not None and self.ucg_rate > 0.0:
-            def expand_dims_like(x, y):
-                while x.dim() != y.dim():
-                    x = x.unsqueeze(-1)
-                return x
-            emb = output.last_hidden_state
-            emb = (
-                expand_dims_like(
-                    torch.bernoulli(
-                        (1.0 - self.ucg_rate) * torch.ones(emb.shape[0], device=emb.device, dtype=emb.dtype)),
-                    emb,
-                )
-                * emb
-            )
-            output.last_hidden_state = emb
-        return output
+        if hidden_state_skip_layer and output_key not in ["hidden_states"]:
+            raise ValueError("If use hidden_state_skip, the output_keys must in [`hidden_states`]")
+        return text_encoder

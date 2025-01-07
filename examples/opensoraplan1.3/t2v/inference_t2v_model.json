@@ -41,7 +41,8 @@
         "model_id": "MT5",
         "hub_backend": "hf",
         "from_pretrained": "./weights/google/mt5-xxl",
-        "dtype": "fp16"
+        "dtype": "fp16",
+        "model_max_length": 512
     },
     "tokenizer":{
         "hub_backend": "hf",
@@ -67,7 +68,6 @@
     },
     "micro_batch_size": 1,
     "frame_interval":1,
-    "model_max_length": 512,
     "save_path":"examples/opensoraplan1.3/t2v/samples/",
     "fps":18,
     "prompt":"examples/opensoraplan1.3/t2v/samples_prompt.txt",
