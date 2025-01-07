@@ -69,6 +69,27 @@ def model_provider_func_wrapper(model_provider_func):
 
             model = get_peft_model(model, lora_config)
             model.add_module('module', model.get_base_model())
+
+            def _hook(_module, _x_in, _x_out):
+                _x_out.requires_grad_(True)
+
+            def _create_hooks(_model, layer):
+                """ Make the hooks function"""
+                for name, module in _model.named_modules():
+                    if isinstance(module, megatron.core.tensor_parallel.layers.VocabParallelEmbedding):
+                        _name = name.split('.')[-1]
+                        if _name in layer:
+                            module.register_forward_hook(_hook)
+
+            vis_config = args.mm.model.image_encoder.vision_encoder
+            text_config = args.mm.model.text_decoder
+            vis_recompute_granularity = getattr(vis_config, 'recompute_granularity', None)
+            text_recompute_granularity = getattr(text_config, 'recompute_granularity', None)
+            if vis_recompute_granularity == 'selective' or text_recompute_granularity == 'selective':
+                raise NotImplementedError("Only support recompute_granularity='full' for vision_encoder or text_encoder.")
+            if vis_recompute_granularity == 'full' or text_recompute_granularity == 'full':
+                _create_hooks(model, args.lora_register_forward_hook)
+
             model.print_trainable_parameters()
             megatron.training.utils.ALL_MODULE_WRAPPER_CLASSNAMES = tuple(
                 list(megatron.training.utils.ALL_MODULE_WRAPPER_CLASSNAMES) + [PeftModel, LoraModel]

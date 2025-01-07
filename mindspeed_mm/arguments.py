@@ -46,5 +46,8 @@ def _add_lora_args(parser):
                        help='Lora rank.')
     group.add_argument('--lora-alpha', type=int, default=16,
                        help='Lora alpha.')
+    group.add_argument('--lora-register-forward-hook', nargs='+', type=str,
+                       default=['word_embeddings', 'input_layernorm', 'final_layernorm'],
+                       help='Lora register forward hook.')
 
     return parser
