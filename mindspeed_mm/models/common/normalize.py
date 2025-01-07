@@ -1,7 +1,9 @@
 import torch
 import torch.nn as nn
+import torch_npu
 from einops import rearrange
 
+from megatron.legacy.model import RMSNorm
 from mindspeed_mm.models.common.communications import _conv_split, _conv_gather
 from mindspeed_mm.models.common.conv import ContextParallelCausalConv3d
 from mindspeed_mm.utils.utils import get_context_parallel_rank
@@ -32,6 +34,8 @@ def normalize(in_channels, num_groups=32, eps=1e-6, affine=True, norm_type="grou
             )
         elif norm_type == "layernorm":
             return LayerNorm(num_channels=in_channels, eps=eps)
+        elif norm_type == "rmsnorm":
+            return RMSNorm(dim=in_channels, eps=eps, **kwargs)
         else:
             raise ValueError(f"unsupported norm type: {norm_type}. ")
     else:

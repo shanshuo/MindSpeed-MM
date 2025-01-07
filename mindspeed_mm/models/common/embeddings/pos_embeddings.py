@@ -1,6 +1,7 @@
+import math
 from math import pi
 import functools
-from typing import Optional
+from typing import Optional, List
 from beartype import beartype
 from beartype.typing import Literal, Union, Optional
 from einops import rearrange, repeat
@@ -161,6 +162,114 @@ def get_1d_sincos_pos_embed(
             [np.zeros([extra_tokens, embed_dim]), pos_embed], axis=0
         )
     return pos_embed
+
+
+def get_meshgrid_nd(rope_sizes, dim=2, dtype=torch.float32):
+    """
+    Get n-D meshgrid
+    """
+    axis_grid = [torch.linspace(0, rope_sizes[i], rope_sizes[i] + 1, dtype=dtype)[:rope_sizes[i]] for i in range(dim)]
+    grid = torch.meshgrid(*axis_grid, indexing="ij") # dim x [W, H, D]
+    grid = torch.stack(grid, dim=0) # [dim, W, H, D]
+
+    return grid
+
+
+def get_1d_rotary_pos_embed(
+    dim: int,
+    pos: Union[torch.FloatTensor, int],
+    theta: float = 10000.0,
+    theta_rescale_factor: float = 1.0,
+    interpolation_factor: float = 1.0,
+):
+    """
+    Precompute the frequency tensor for complex exponential (cis) with given dimensions.
+
+    This function calculates a frequency tensor with complex exponential using the given dimension 'dim'
+    and the end index 'end'. The 'theta' parameter scales the frequencies.
+
+    Args:
+        dim (int): Dimension of the frequency tensor.
+        pos (int or torch.FloatTensor): Position indices for the frequency tensor. [S] or scalar
+        theta (float, optional): Scaling factor for frequency computation. Defaults to 10000.0.
+        theta_rescale_factor (float, optional): Rescale factor for theta. Defaults to 1.0.
+
+    Returns:
+        freqs_cos, freqs_sin: Precomputed frequency tensor with real and imaginary parts separately. [S, D]
+    """
+    if isinstance(pos, int):
+        pos = torch.arange(pos).float()
+
+    if not math.isclose(theta_rescale_factor, 1.0, rel_tol=1e-9):
+        theta *= theta_rescale_factor ** (dim / (dim - 2))
+
+    freqs = 1.0 / (
+        theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim)
+    )  # [D/2]
+
+    freqs = torch.outer(pos * interpolation_factor, freqs)  # [S, D/2]
+
+    freqs_cos = freqs.cos().repeat_interleave(2, dim=1)  # [S, D]
+    freqs_sin = freqs.sin().repeat_interleave(2, dim=1)  # [S, D]
+    return freqs_cos, freqs_sin
+
+
+def get_nd_rotary_pos_embed(
+    rope_dim_list,
+    rope_sizes,
+    theta=10000.0,
+    theta_rescale_factor: Union[float, List[float]] = 1.0,
+    interpolation_factor: Union[float, List[float]] = 1.0,
+):
+    """
+    This is a n-d version of precompute_freqs_cis, which is a RoPE for tokens with n-d structure.
+
+    Args:
+        rope_dim_list (list of int): Dimension of each rope. len(rope_dim_list) should equal to n.
+            sum(rope_dim_list) should equal to head_dim of attention layer.
+        rope_sizes (int | tuple of int | list of int): rotary embed sizes for each dim
+        theta (float): Scaling factor for frequency computation. Defaults to 10000.0.
+        theta_rescale_factor (float): Rescale factor for theta. Defaults to 1.0.
+
+    Returns:
+        pos_embed (torch.Tensor): [HW, D/2]
+    """
+
+    grid = get_meshgrid_nd(
+        rope_sizes, dim=len(rope_dim_list)
+    )  # [3, W, H, D] / [2, W, H]
+
+    if isinstance(theta_rescale_factor, int) or isinstance(theta_rescale_factor, float):
+        theta_rescale_factor = [theta_rescale_factor] * len(rope_dim_list)
+    elif isinstance(theta_rescale_factor, list) and len(theta_rescale_factor) == 1:
+        theta_rescale_factor = [theta_rescale_factor[0]] * len(rope_dim_list)
+
+    if len(theta_rescale_factor) != len(rope_dim_list):
+        raise ValueError(f"len(theta_rescale_factor): {len(theta_rescale_factor)} should equal to len(rope_dim_list): {len(rope_dim_list)}")
+
+    if isinstance(interpolation_factor, int) or isinstance(interpolation_factor, float):
+        interpolation_factor = [interpolation_factor] * len(rope_dim_list)
+    elif isinstance(interpolation_factor, list) and len(interpolation_factor) == 1:
+        interpolation_factor = [interpolation_factor[0]] * len(rope_dim_list)
+
+    if len(interpolation_factor) != len(rope_dim_list):
+        raise ValueError(f"len(interpolation_factor): {len(interpolation_factor)} should equal to len(rope_dim_list): {len(rope_dim_list)}")
+
+    # use 1/ndim of dimensions to encode grid_axis
+    embs = []
+    for i, rope_dim in enumerate(rope_dim_list):
+        emb = get_1d_rotary_pos_embed(
+            rope_dim,
+            grid[i].reshape(-1),
+            theta,
+            theta_rescale_factor=theta_rescale_factor[i],
+            interpolation_factor=interpolation_factor[i],
+        )  # 2 x [WHD, rope_dim_list[i]]
+        embs.append(emb)
+
+    cos = torch.cat([emb[0] for emb in embs], dim=1)  # (WHD, D/2)
+    sin = torch.cat([emb[1] for emb in embs], dim=1)  # (WHD, D/2)
+    return cos, sin
 
 
 class PositionEmbedding2D(nn.Module):
