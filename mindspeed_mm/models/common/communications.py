@@ -373,3 +373,22 @@ def _conv_gather(input_, dim, kernel_size):
     output = torch.cat(tensor_list, dim=dim).contiguous()
 
     return output
+
+
+def collect_tensors_across_ranks(tensor, group=None):
+    if group is None:
+        group = dist.group.WORLD
+
+    world_size = dist.get_world_size(group)
+
+    def broadcast_shapes(tensor, world_size, group):
+        shape = tensor.shape
+        shape_list = [torch.Size([]) for _ in range(world_size)]
+        dist.all_gather_object(shape_list, [shape], group=group)
+        return shape_list
+
+    shapes = broadcast_shapes(tensor, world_size, group)
+    recv_tensors = [torch.empty(*shape, dtype=tensor.dtype).to(tensor.device) for shape in shapes]
+    dist.all_gather(recv_tensors, tensor, group=group)
+
+    return recv_tensors
