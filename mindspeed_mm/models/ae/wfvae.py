@@ -401,7 +401,11 @@ class WFVAE(MultiModalModule):
                 h = self.quant_conv(h)
 
         posterior = DiagonalGaussianDistribution(h)
-        return (posterior.sample() - self.shift.to(x.device, dtype=dtype)) * self.scale.to(x.device, dtype)
+
+        if not self.training:
+            return (posterior.sample() - self.shift.to(x.device, dtype=dtype)) * self.scale.to(x.device, dtype)
+        else:
+            return posterior
 
     def tile_encode(self, x):
         b, c, t, h, w = x.shape
@@ -418,7 +422,9 @@ class WFVAE(MultiModalModule):
         return torch.cat(result, dim=2)
 
     def decode(self, z):
-        z = z / self.scale.to(z.device, dtype=z.dtype) + self.shift.to(z.device, dtype=z.dtype)
+        if not self.training:
+            z = z / self.scale.to(z.device, dtype=z.dtype) + self.shift.to(z.device, dtype=z.dtype)
+        
         self._empty_causal_cached(self.decoder)
 
         if self.use_tiling:

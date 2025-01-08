@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import importlib
 from functools import lru_cache
 from einops import rearrange
@@ -101,6 +102,40 @@ def cast_tuple(t, length=1):
 
 def quick_gelu(x: torch.Tensor) -> torch.Tensor:
     return x * torch.sigmoid(1.702 * x)
+
+
+def set_modules_requires_grad(modules, requires_grad):
+    for module in modules:
+        module.requires_grad_(requires_grad)
+
+
+def save_ae_checkpoint(
+    epoch,
+    current_step,
+    optimizer_state,
+    state_dict,
+    scaler_state,
+    sampler_state,
+    checkpoint_dir,
+    filename="checkpoint.ckpt",
+    ema_state_dict=None,
+):
+    if not os.path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir)
+    filepath = os.path.join(checkpoint_dir, filename)
+    torch.save(
+        {
+            "epoch": epoch,
+            "current_step": current_step,
+            "optimizer_state": optimizer_state,
+            "state_dict": state_dict,
+            "ema_state_dict": ema_state_dict,
+            "scaler_state": scaler_state,
+            "sampler_state": sampler_state,
+        },
+        filepath,
+    )
+    return filepath
 
 
 _CONTEXT_PARALLEL_GROUP = None

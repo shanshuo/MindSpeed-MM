@@ -9,6 +9,7 @@ import torch
 import numpy as np
 from PIL import Image
 import torchvision.transforms as T
+from torchvision.transforms import Resize
 
 
 def _is_tensor_video_clip(clip):
@@ -690,6 +691,53 @@ class JpegDegradationSimulator:
         Represent the class instance.
         """
         return f"JpegDegradationSimulator(qualities={self.qualities})"
+
+
+class CenterCropVideo:
+    def __init__(
+            self,
+            size,
+            interpolation_mode="bilinear",
+    ):
+        if isinstance(size, list):
+            size = tuple(size)
+        if isinstance(size, tuple):
+            if len(size) != 2:
+                raise ValueError(
+                    f"size should be tuple (height, width), instead got {size}"
+                )
+            self.size = size
+        else:
+            self.size = (size, size)
+
+        self.interpolation_mode = interpolation_mode
+
+    def __call__(self, clip):
+        """
+        Args:
+            clip (torch.tensor): Video clip to be cropped. Size is (T, C, H, W)
+        Returns:
+            torch.tensor: center cropped video clip.
+                size is (T, C, crop_size, crop_size)
+        """
+        clip_center_crop = center_crop(clip, self.size)
+        return clip_center_crop
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(size={self.size}, interpolation_mode={self.interpolation_mode}"
+
+
+class AffineVideo:
+    def __init__(self, gamma=2.0, beta=-1.0):
+        self.gamma = gamma
+        self.beta = beta
+    
+    def __call__(self, clip):
+        clip = self.gamma * clip + self.beta
+        return clip
+
+    def __repr__(self) -> str:
+        return self.__class__.__name__
 
 
 class MaskGenerator:
