@@ -202,7 +202,7 @@ def prepare_sampler_dataloader(
         collate_fn = None
         if "model_name" in collate_param:
             data_collate_type = collate_param.pop("model_name")
-            collate_fn = DATA_COLLATOR[data_collate_type](**collate_param)
+            collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
         else:
             collate_fn = Collate(**collate_param)
 

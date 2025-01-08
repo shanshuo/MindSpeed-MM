@@ -88,11 +88,13 @@ def forward_step(data_iterator, model):
 
 def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
-    data_config = get_args().mm.data
+    args = get_args()
+    data_config = args.mm.data
     train_dataset = build_mm_dataset(data_config.dataset_param)
     train_dataloader = build_mm_dataloader(train_dataset, data_config.dataloader_param,
                                            process_group=mpu.get_data_parallel_group(),
-                                           dataset_param=data_config.dataset_param)
+                                           dataset_param=data_config.dataset_param,
+                                           consumed_samples=args.consumed_train_samples,)
     train_dataloader, val_dataloader, test_dataloader = build_iterations(train_dataloader)
     return train_dataloader, val_dataloader, test_dataloader
 
