@@ -65,7 +65,6 @@ GPT_ARGS="
     --num-attention-heads 64 \
     --tokenizer-type NullTokenizer \
     --vocab-size 152064 \
-    --padded-vocab-size 152064 \
     --seq-length 1024 \
     --max-position-embeddings 32768 \
     --make-vocab-size-divisible-by 1 \
