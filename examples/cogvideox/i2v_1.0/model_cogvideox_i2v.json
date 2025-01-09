@@ -57,7 +57,8 @@
         "dtype": "bf16",
         "load_in_8bit": false,
         "low_cpu_mem_usage": true,
-        "ucg_rate": 0.1
+        "ucg_rate": 0.1,
+        "use_attention_mask": false
     },
    "ae": {
         "model_id": "contextparallelcasualvae",

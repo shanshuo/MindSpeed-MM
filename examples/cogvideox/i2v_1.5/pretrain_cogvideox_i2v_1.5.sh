@@ -20,11 +20,13 @@ TP=1
 PP=1
 CP=1
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$CP))
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
 MM_DATA="./examples/cogvideox/i2v_1.5/data.json"
 MM_MODEL="./examples/cogvideox/i2v_1.5/model_cogvideox_i2v_1.5.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
+LOAD_PATH="your_converted_dit_ckpt_dir"
+SAVE_PATH="your_ckpt_path_to_save"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
@@ -65,6 +67,7 @@ GPT_ARGS="
     --clip-grad 1.0 \
     --train-iters 5000 \
     --no-gradient-accumulation-fusion \
+    --load $LOAD_PATH \
     --no-load-optim \
     --no-load-rng \
     --no-save-optim \
@@ -90,6 +93,7 @@ OUTPUT_ARGS="
     --save-interval 10000 \
     --eval-interval 10000 \
     --eval-iters 10 \
+    --save $SAVE_PATH \
 "
 
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)

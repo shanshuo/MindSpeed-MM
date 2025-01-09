@@ -19,11 +19,13 @@ TP=1
 PP=1
 CP=1
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$CP))
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
 MM_DATA="./examples/cogvideox/i2v_1.0/data.json"
 MM_MODEL="./examples/cogvideox/i2v_1.0/model_cogvideox_i2v.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
+LOAD_PATH="your_converted_dit_ckpt_dir"
+SAVE_PATH="your_ckpt_path_to_save"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
@@ -52,18 +54,19 @@ GPT_ARGS="
     --rotary-base 500000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 1e-4 \
-    --min-lr 1e-4 \
+    --lr 1e-5 \
+    --min-lr 1e-5 \
     --adam-beta1 0.9 \
-    --adam-beta2 0.999 \
+    --adam-beta2 0.95 \
     --adam-eps 1e-8 \
     --lr-decay-style constant \
-    --weight-decay 1e-2 \
+    --weight-decay 1e-4 \
     --lr-warmup-init 1e-4 \
-    --lr-warmup-iters 500 \
+    --lr-warmup-iters 0 \
     --clip-grad 1.0 \
     --train-iters 5000 \
     --no-gradient-accumulation-fusion \
+    --load $LOAD_PATH \
     --no-load-optim \
     --no-load-rng \
     --no-save-optim \

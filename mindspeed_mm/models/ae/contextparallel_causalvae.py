@@ -230,7 +230,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             latents = []
             for data in data_list:
                 latents.append(self._encode(data, enable_cp=enable_cp))
-            return latents[get_context_parallel_group_rank() % self.dp_group_nums]
+            return latents[get_context_parallel_rank() // self.dp_group_nums]
 
         elif self.dp_group_nums % self.cp_size == 0 and self.cp_size < self.dp_group_nums:
             # split

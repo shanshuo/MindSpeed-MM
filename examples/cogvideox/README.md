@@ -115,7 +115,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 # checkout commit from MindSpeed core_r0.6.0
-git checkout 5dc1e83b
+git checkout 6891dfa1a6a12460fdc49d54c6ee43e0f967b4ae
 pip install -r requirements.txt 
 pip install -e .
 cd ..
@@ -149,8 +149,9 @@ pip install decord==0.6.0
 
 <a id="jump3.2"></a>
 #### transformer文件下载
-+ [CogVideoX-5B-t2v](https://cloud.tsinghua.edu.cn/d/fcef5b3904294a6885e5/?p=%2F&mode=list)
-+ [CogVideoX-5B-i2v](https://cloud.tsinghua.edu.cn/d/5cc62a2d6e7d45c0a2f6/?p=%2F1&mode=list)
++ [CogVideoX1.0-5B-t2v](https://cloud.tsinghua.edu.cn/d/fcef5b3904294a6885e5/?p=%2F&mode=list)
++ [CogVideoX1.0-5B-i2v](https://cloud.tsinghua.edu.cn/d/5cc62a2d6e7d45c0a2f6/?p=%2F1&mode=list)
++ [CogVideoX1.5-5B-i2v&t2v](https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT/tree/main)
 
 <a id="jump3.3"></a>
 #### T5模型下载
@@ -181,8 +182,9 @@ pip install decord==0.6.0
 #### 权重转换
 权重转换source_path参数请配置transformer权重文件的路径：
 ```bash
-python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --mode split
+python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 10 11 11 10 --num_layers 42 --mode split
 ```
+当开启PP时，--pp_size 后参数值个数与PP的数值相等，并且参数之和与--num_layers 参数相等，举例：当PP=4, --num_layers 4, --pp_size 1 1 1 1; 当PP=4, --num_layers 42, --pp_size 10 11 11 10
 
 ---
 <a id="jump4"></a>
@@ -220,7 +222,10 @@ data.jsonl文件内容如下示例：
 
 <a id="jump5.2"></a>
 #### 配置参数
-需根据实际任务情况修改`model_cogvideox_t2v.json`、`model_cogvideox_i2v.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
+需根据实际任务情况修改`pretrain_cogvideox_i2v.sh`/`pretrain_cogvideox_i2v_1.5.sh`、`pretrain_cogvideox_t2v.sh`/`pretrain_cogvideox_t2v_1.5.sh`和`data.json`中的权重和数据集路径，包括`LOAD_PATH`、`SAVE_PATH`、`data_path`、`data_folder`字段。`LOAD_PATH`字段中填写的权重路径位置一定要正确，填写错误的话会导致权重无法加载但运行并不会提示报错。
+
+根据实际情况修改`model_cogvideox_t2v.json`/`model_cogvideox_t2v_1.5.json`、`model_cogvideox_i2v.json`/`model_cogvideox_i2v_1.5.json`、`data.json`文件中VAE及T5模型文件的实际路径。
+
 
 `model_cogvideox_t2v.json`/`model_cogvideox_i2v.json`文件中的`head_dim`字段原模型默认配置为64。此字段调整为128会更加亲和昇腾。
 
@@ -236,13 +241,21 @@ WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 <a id="jump5.3"></a>
 #### 启动预训练
 
-t2v任务启动预训练
+t2v 1.0版本任务启动预训练
 ```shell
 bash examples/cogvideox/t2v_1.0/pretrain_cogvideox_t2v.sh
 ```
-i2v任务启动预训练
+t2v 1.5版本任务启动预训练
+```shell
+bash examples/cogvideox/t2v_1.5/pretrain_cogvideox_t2v_1.5.sh
+```
+i2v 1.0版本任务启动预训练
 ```shell
 bash examples/cogvideox/i2v_1.0/pretrain_cogvideox_i2v.sh
+```
+i2v 1.5版本任务启动预训练
+```shell
+bash examples/cogvideox/i2v_1.5/pretrain_cogvideox_i2v_1.5.sh
 ```
 ---
 

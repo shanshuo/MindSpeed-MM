@@ -7,7 +7,7 @@
     "task": "t2v",
     "predictor": {
         "model_id": "satdit",
-        "from_pretrained": "mmdit.pt",
+        "from_pretrained": null,
         "dtype": "bf16",
         "num_layers": 2,
         "num_heads": 48,
