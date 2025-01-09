@@ -641,18 +641,16 @@ class Encoder(nn.Module):
         )
 
     def forward(self, x, enable_cp=True):
-        hs = [self.conv_in(x, enable_cp=enable_cp)]
+        h = self.conv_in(x, enable_cp=enable_cp)
 
         for i_level in range(self.num_resolutions):
             for i_block in range(self.num_res_blocks):
-                h = self.down[i_level].block[i_block](hs[-1], enable_cp=enable_cp)
+                h = self.down[i_level].block[i_block](h, enable_cp=enable_cp)
                 if len(self.down[i_level].attn) > 0:
                     h = self.down[i_level].attn[i_block](h)
-                hs.append(h)
             if i_level != self.num_resolutions - 1:
-                hs.append(self.down[i_level].downsample(hs[-1]))
+                h = self.down[i_level].downsample(h)
 
-        h = hs[-1]
         h = self.mid.block_1(h, enable_cp=enable_cp)
         if self.enbale_attn1:
             h = self.mid.attn_1(h, enable_cp=enable_cp)

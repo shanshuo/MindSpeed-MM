@@ -378,3 +378,11 @@ For the full text of the license, please go to the above.
 
 Copyright Notice included in the software:
 Copyright 2024 Stability AI, Katherine Crowson and The HuggingFace Team. All rights reserved.
+
+Software Notice
+Software CogVideo
+License: Apache License 2.0
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2024 CogVideo Model Team @ Zhipu AI

@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
-import torch_npu
 from einops import rearrange
 
 from megatron.legacy.model import RMSNorm
-from mindspeed_mm.models.common.communications import _conv_split, _conv_gather
+from mindspeed_mm.models.common.communications import _conv_split, _conv_gather, all_to_all
 from mindspeed_mm.models.common.conv import ContextParallelCausalConv3d
-from mindspeed_mm.utils.utils import get_context_parallel_rank
+from mindspeed_mm.utils.utils import (get_context_parallel_rank, get_context_parallel_world_size,
+                                      get_context_parallel_group)
 
 
 class LayerNorm(nn.Module):
@@ -81,10 +81,27 @@ class ContextParallelGroupNorm(torch.nn.GroupNorm):
 
         gather_flag = input_.shape[2] > 1
         if gather_flag:
-            input_ = conv_gather_from_context_parallel_region(input_, dim=2, kernel_size=1)
-        output = super().forward(input_)
-        if gather_flag:
-            output = conv_scatter_to_context_parallel_region(output, dim=2, kernel_size=1)
+            cp_world_size = get_context_parallel_world_size()
+            if cp_world_size == 1:
+                return super().forward(input_)
+            group = get_context_parallel_group()
+            cp_rank = get_context_parallel_rank()
+            _, ch, t, _, _ = input_.shape
+            group_size = ch // self.num_groups
+            scatter_sizes = torch.tensor_split(torch.ones(self.num_groups) * group_size, cp_world_size)
+            scatter_sizes = [int(s.sum().item()) for s in scatter_sizes]
+            if cp_rank == 0:
+                t -= 1
+            gather_sizes = [t] * cp_world_size
+            gather_sizes[0] += 1
+            input_ = all_to_all(input_, group, 1, 2, scatter_sizes, gather_sizes)
+            begin = sum(scatter_sizes[:cp_rank])
+            end = begin + scatter_sizes[cp_rank]
+            output = torch.nn.functional.group_norm(
+                input_, scatter_sizes[cp_rank] // group_size, self.weight[begin: end], self.bias[begin: end], self.eps)
+            output = all_to_all(output, group, 2, 1, gather_sizes, scatter_sizes)
+        else:
+            output = super().forward(input_)
         return output
 
 
