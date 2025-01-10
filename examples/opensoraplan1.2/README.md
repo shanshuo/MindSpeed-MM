@@ -91,7 +91,7 @@
     pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh 
@@ -142,7 +142,7 @@ pip install decord==0.6.0
 
 #### 2. 权重转换
 
-MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。
+MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。
 
 ```python
 import torch
@@ -269,7 +269,7 @@ torch.save(new_checkpoint, "videodit.pth")
 启动推理脚本
 
 ```shell
-examples/opensoraplan1.2/inference_opensoraplan1_2.sh
+bash examples/opensoraplan1.2/inference_opensoraplan1_2.sh
 ```
 
 ---

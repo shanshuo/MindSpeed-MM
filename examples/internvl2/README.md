@@ -94,7 +94,7 @@
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
@@ -128,7 +128,7 @@
 
 #### 2. 权重转换
 
-MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
+MindSpeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
 
 以InternVL2-2B为例，修改`internvl_convert_to_mm_ckpt.py`中的`load_dir`、`save_dir`、`pipeline_layer_index`、`num_layers`如下：
 
@@ -138,6 +138,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/intern
   pipeline_layer_index = None     # None表示不进行pp切分；若要进行pp切分，则需要传入一个列表，例如[0, 3, 13, 23]
   num_layers=24                   # 模型结构层数
 ```
+
 *注意*： 为保证代码安全，用户需手动设置`internvl_convert_to_mm_ckpt.py`文件中`load_from_hf`函数中的`trust_remote_code=True`，同时用户需要确保所下载权重的安全性。
 
 启动脚本

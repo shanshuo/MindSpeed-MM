@@ -96,7 +96,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh 
@@ -149,7 +149,7 @@ pip install decord==0.6.0
 
 #### 2. 权重转换
 
-MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt_to_mm.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分。
+MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt_to_mm.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分。
 
 首先修改 examples/opensoraplan1.3/convert_ckpt_to_mm.py 参数
 
@@ -205,7 +205,7 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 修改data.txt中的路径，示例如下:
 
    ```
-/data/open-sora-plan/dataset;/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
+/data/open-sora-plan/dataset,/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
    ```
 
 ---
@@ -299,13 +299,13 @@ i2v(图生视频):
 t2v 启动推理脚本
 
 ```shell
-examples/opensoraplan1.3/t2v/inference_t2v.sh
+bash examples/opensoraplan1.3/t2v/inference_t2v.sh
 ```
 
 i2v 启动推理脚本
 
 ```shell
-examples/opensoraplan1.3/i2v/inference_i2v.sh
+bash examples/opensoraplan1.3/i2v/inference_i2v.sh
 ```
 
 ---

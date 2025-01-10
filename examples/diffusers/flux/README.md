@@ -1,7 +1,6 @@
 # Diffusers
 
 <p align="left">
-        <b>简体中文</b> |
 </p>
 
 - [FLUX](#jump1)
@@ -86,7 +85,7 @@
     pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
@@ -431,4 +430,4 @@ vim infer_flux_text2img_bf16.py # 进入运行推理的Python文件
 
 ### 公网地址说明
 
-代码涉及公网地址参考 public_address_statement.md
+代码涉及公网地址参考 [公网地址](https://gitee.com/ascend/MindSpeed-MM/blob/1.0.0/docs/public_address_statement.md)

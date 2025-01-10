@@ -97,7 +97,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
@@ -340,7 +340,6 @@ MindSpeed-MM修改了部分原始网络的结构名称，在微调后，可使�
 
 #### 1.修改配置
 
-
 以Qwen2VL-7B为例
 修改qwen2vl_convert_to_hf.py中的如下内容,与实际保持一致。
 
@@ -378,4 +377,3 @@ llm_pipeline_layer_index = [0]
 ```
 python examples/qwen2vl/qwen2vl_convert_to_hf.py
 ```
-

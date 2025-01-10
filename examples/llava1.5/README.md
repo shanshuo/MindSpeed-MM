@@ -93,7 +93,7 @@
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
@@ -107,7 +107,6 @@
     # 安装其余依赖库
     pip install -e .
 ```
-
 
 <a id="jump2"></a>
 
@@ -127,7 +126,7 @@
 
 #### 2. 权重转换（当前依赖openai-clip库，正在规划重构）
 
-MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。 当前训练只使用了ViT-L-14-336px和lmsys/vicuna-7b-v1.5两个模型，以下介绍这两个模型从开源仓转换成MindSpeeed-MM所需权重的方法：
+MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。 当前训练只使用了ViT-L-14-336px和lmsys/vicuna-7b-v1.5两个模型，以下介绍这两个模型从开源仓转换成MindSpeed-MM所需权重的方法：
 
 - ViT-L-14-336px权重转换
 
@@ -160,7 +159,6 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
   ```
 
   其中{dir_to_model}为下载模型权重所在的路径，转换后权重将保存在{target_dir}/converted_vicuna.pt。
-
 
 <a id="jump3"></a>
 
@@ -224,7 +222,9 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
   ...
 }
 ```
+
 根据实际情况修改`model.json`中的权重路径为转换后权重，无需预训练权重则传入null。
+
 ```json
 {
     ...
