@@ -87,7 +87,7 @@ def model_provider_func_wrapper(model_provider_func):
             text_recompute_granularity = getattr(text_config, 'recompute_granularity', None)
             if vis_recompute_granularity == 'selective' or text_recompute_granularity == 'selective':
                 raise NotImplementedError("Only support recompute_granularity='full' for vision_encoder or text_encoder.")
-            if vis_recompute_granularity == 'full' or text_recompute_granularity == 'full':
+            elif vis_recompute_granularity == 'full' or text_recompute_granularity == 'full':
                 _create_hooks(model, args.lora_register_forward_hook)
 
             model.print_trainable_parameters()
