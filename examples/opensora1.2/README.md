@@ -94,7 +94,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh 
@@ -228,6 +228,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 #### 2. 配置参数
 
 打开下面的json文件
+
 ```
 examples/opensora1.2/inference_model_102x720x1280.json
 ```

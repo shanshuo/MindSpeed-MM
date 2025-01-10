@@ -1,4 +1,5 @@
 # Qihoo-T2X 1.0 使用指南
+
 <p align="left"></p>
 
 这里是 [Qihoo-T2X](https://360cvgroup.github.io/Qihoo-T2X/) 官方开源代码仓库
@@ -27,11 +28,14 @@
 - [推理](#jump2)
   - [配置参数](#jump2.1)
   - [启动推理](#jump2.2)
+
 ---
 <a id="jump1"></a>
+
 ## 环境安装
 
 <a id="jump1.1"></a>
+
 #### 1. 仓库拉取
 
 ```shell
@@ -46,6 +50,7 @@
 ```
 
 <a id="jump1.2"></a>
+
 #### 2. 环境搭建
 
 torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
@@ -60,12 +65,12 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
-	git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
+    git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
     pip install -r requirements.txt 
     pip3 install -e .
     cd ..
@@ -79,6 +84,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 #### 3. 权重下载
 
 从Huggingface库下载对应的模型权重:
+
 - 模型地址: [Qihoo-t2i-1B](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/tree/main)；
 
  将下载的模型权重保存到本地的`pretrain_models/qihoo_t2i/XXX.pt`目录下。(XXX表示对应的名字)
@@ -103,18 +109,18 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 - 自定义的prompt可以在`examples/qihoo_t2x/demo.txt`中修改和添加。
 
-
 <a id="jump2.2"></a>
 
 #### 2. 启动推理
+
 i2v 启动推理脚本
 
 ```shell
 sh examples/qihoo_t2x/inference_qihoo.sh
 ```
 
-
 ## 文献引用
+
 ```
 @article{wang2024qihoo,
   title={Qihoo-T2X: An Efficient Proxy-Tokenized Diffusion Transformer for Text-to-Any-Task},
@@ -124,6 +130,6 @@ sh examples/qihoo_t2x/inference_qihoo.sh
 }
 ```
 
-
 ## 许可证
+
 本项目许可遵从以下协议 [Apache License (Version 2.0)](https://github.com/modelscope/modelscope/blob/master/LICENSE).

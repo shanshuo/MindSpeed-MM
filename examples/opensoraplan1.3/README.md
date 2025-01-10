@@ -96,7 +96,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh 
@@ -114,6 +114,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 ```
 
 <a id="jump1.3"></a>
+
 #### 3. Decord搭建
 
 【X86版安装】
@@ -148,7 +149,7 @@ pip install decord==0.6.0
 
 #### 2. 权重转换
 
-MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt_to_mm.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分。
+MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt_to_mm.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分。
 
 首先修改 examples/opensoraplan1.3/convert_ckpt_to_mm.py 参数
 
@@ -200,11 +201,14 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 <a id="jump3.2"></a>
 
 #### 2. 数据集处理
+
 根据实际下载的数据，过滤标注文件，删去标注的json文件中未下载的部分；
 修改data.txt中的路径，示例如下:
+
    ```
 /data/open-sora-plan/dataset,/data/open-sora-plan/annotation/v1.1.0_HQ_part3.json
    ```
+
 ---
 其中，第一个路径为数据集的根目录，第二个路径为标注文件的路径。
 
@@ -225,7 +229,8 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
 需根据实际情况修改`pretrain_t2v_model.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
 
 并行化配置参数修改：
-+ PP：流水线并行，目前支持将predictor模型切分流水线。在data.json文件中新增字段"pipeline_num_layers", 类型为list。该list的长度即为 
+
+- PP：流水线并行，目前支持将predictor模型切分流水线。在data.json文件中新增字段"pipeline_num_layers", 类型为list。该list的长度即为
 pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。
 注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，
 因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
@@ -262,15 +267,19 @@ pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 
 <a id="jump4.3"></a>
 
 #### 3. 启动预训练
+
 t2v(文生视频):
+
 ```shell
     bash examples/opensoraplan1.3/t2v/pretrain_t2v.sh
 ```
 
 i2v(图生视频):
+
 ```shell
     bash examples/opensoraplan1.3/i2v/pretrain_i2v.sh
 ```
+
 **注意**：
 
 - 多机训练需在多个终端同时启动预训练脚本(每个终端的预训练脚本只有NODE_RANK参数不同，其他参数均相同)
@@ -299,15 +308,17 @@ i2v(图生视频):
 <a id="jump5.3"></a>
 
 #### 3. 启动推理
+
 t2v 启动推理脚本
 
 ```shell
-examples/opensoraplan1.3/t2v/inference_t2v.sh
+bash examples/opensoraplan1.3/t2v/inference_t2v.sh
 ```
+
 i2v 启动推理脚本
 
 ```shell
-examples/opensoraplan1.3/i2v/inference_i2v.sh
+bash examples/opensoraplan1.3/i2v/inference_i2v.sh
 ```
 
 ---

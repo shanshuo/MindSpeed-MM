@@ -99,7 +99,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl 
+    # 建议从原仓编译安装 
 
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
@@ -113,7 +113,6 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     # 安装其余依赖库
     pip install -e .
 ```
-
 
 <a id="jump2"></a>
 
@@ -133,12 +132,13 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 #### 2. 权重转换（当前依赖openai-clip库，正在规划重构）
 
-MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。 当前训练只使用了ViT-L-14-336px和lmsys/vicuna-7b-v1.5两个模型，以下介绍这两个模型从开源仓转换成MindSpeeed-MM所需权重的方法：
+MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。 当前训练只使用了ViT-L-14-336px和lmsys/vicuna-7b-v1.5两个模型，以下介绍这两个模型从开源仓转换成MindSpeed-MM所需权重的方法：
 
 - ViT-L-14-336px权重转换
 
   脚本参考 NVIDIA/Megatron-LM中[Vision model](https://github.com/NVIDIA/Megatron-LM/blob/core_r0.8.0/examples/multimodal/README.md#vision-model) ,将[ViT-L-14-336px](https://openaipublic.azureedge.net/clip/models/3035c92b350959924f9f00213499208652fc7ea050643e8b385c2dac08641f02/ViT-L-14-336px.pt)权重下载到本地后，
   执行如下命令：
+
   ```bash
     # 安装依赖（加载原始权重需要依赖openai-clip库）
     pip install git+https://github.com/openai/CLIP.git
@@ -153,15 +153,16 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
 - lmsys/vicuna-7b-v1.5权重转换
 
   下载权重后执行如下命令：
+
   ```shell
   python examples/llava1.5/vicuna_converter.py \
     --load-dir {dir_to_model}/vicuna-7b-v1.5 \
     --save-dir {target_dir} \
     --trust-remote-code True # 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
   ```
+
   其中{dir_to_model}为下载模型权重所在的路径，转换后权重将保存在{target_dir}/converted_vicuna.pt。
   
-
 <a id="jump3"></a>
 
 ## 数据集准备及处理
@@ -224,7 +225,9 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用如�
   ...
 }
 ```
+
 根据实际情况修改`model.json`中的权重路径为转换后权重，无需预训练权重则传入null。
+
 ```json
 {
     ...
@@ -359,7 +362,9 @@ bash examples/llava1.5/inference_llava1_5.sh
 <a id="jump6"></a>
 
 ## 评测
+
 <a id="jump6.1"></a>
+
 ### 数据集准备
 
 当前模型支持AI2D(test)、ChartQA(test)、Docvqa(val)、MMMU(val)四种数据集的评测。
@@ -370,9 +375,12 @@ bash examples/llava1.5/inference_llava1_5.sh
 - [AI2D_TEST](https://opencompass.openxlab.space/utils/VLMEval/AI2D_TEST.tsv)
 - [ChartQA_TEST](https://opencompass.openxlab.space/utils/VLMEval/ChartQA_TEST.tsv)
 <a id="jump6.2"></a>
+
 ### 参数配置
+
 如果要进行评测需要将要评测的数据集名称和路径传到examples/llava1.5/evaluate_llava1_5.json
 需要更改的字段有
+
 - `text_decoder`中的`ckpt_path`为前面的权重转换章节中lmsys/vicuna-7b-v1.5权重转换脚本后的权重
 - `vision_encoder`中的`ckpt_path`为前面权重转换章节中ViT-L-14-336px权重转换后的权重
 - `vision_projector`中的`ckpt_path`为推理章节中vision_projector权重转换后的权重
@@ -381,7 +389,6 @@ bash examples/llava1.5/inference_llava1_5.sh
 - `evaluation_dataset`为评测数据集的名称可选的名称有(`ai2d_test`、`mmmu_dev_val`、`docvqa_val`、`chartqa_test`)， **注意**：需要与上面的数据集路径相对应。
 - `result_output_path`为评测结果的输出路径，**注意**：每次评测前需要将之前保存在该路径下评测文件删除。
 - `image_processer_path`下载链接为[clip-vit-large-patch14-336](https://huggingface.co/openai/clip-vit-large-patch14-336)，自行下载传入
-
 
 ```json
   "text_decoder": {
@@ -410,17 +417,24 @@ examples/llava1.5/evaluate_llava1_5.json改完后，需要将json文件的路径
 ```shell
 MM_MODEL=examples/llava1.5/evaluate_llava1_5.json
 ```
+
 评测支持多卡DP推理需要更改的配置,为NPU卡数量
 
 ```shell
 NPUS_PER_NODE=1
 ```
+
 <a id="jump6.3"></a>
+
 ### 启动评测
+
 启动shell开始推理
+
 ```shell
 bash examples/llava1.5/evaluate_llava1_5.sh
 ```
+
 评测结果会输出到`result_output_path`路径中，会输出结果文件：
+
 - *.xlsx文件，这个文件会输出每道题的预测结果和答案等详细信息。
 - *.csv文件，这个文件会输出统计准确率等数据。

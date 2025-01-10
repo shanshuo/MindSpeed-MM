@@ -106,7 +106,7 @@ pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl
 pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 
 # apex for Ascend 参考 https://gitee.com/ascend/apex
-pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+# 建议从原仓编译安装 
 
 # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
 source /usr/local/Ascend/ascend-toolkit/set_env.sh 

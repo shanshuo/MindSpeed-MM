@@ -83,7 +83,8 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
     # 安装 torch 
     pip install torch-2.1.0-cp38-cp38m-manylinux2014_aarch64.whl
-    pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
+    # apex for Ascend 参考 https://gitee.com/ascend/apex
+    # 建议从原仓编译安装
     pip install diffusers==0.30.0 accelerate==0.27.2 transformers==4.42.4  torchvision==0.16.0
     ```
 
@@ -112,4 +113,4 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 ### 公网地址说明
 
-代码涉及公网地址参考 public_address_statement.md
+代码涉及公网地址参考 [公网地址](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/public_address_statement.md)

@@ -19,6 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
+* [Dec. 30, 2024]: 🔥 MindSpeed-MM版本1.0.0发布
 * [Dec. 19, 2024]: 🎉 MindSpeed-MM生成类模型支持分布式推理
 * [Dec. 16, 2024]: 🚀 MindSpeed-MM支持Qihoo-T2X模型
 * [Dec. 05, 2024]: 🎉 MindSpeed-MM理解类模型支持Lora微调
@@ -37,14 +38,14 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 | 模型 \ 特性 | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
 |:------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
-| CogVideoX-T2V | ✔ |  |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
-| CogVideoX-I2V | ✔ |  |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
+| CogVideoX-T2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
+| CogVideoX-I2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 | Opensora1.2 |  |  |  |                                                                                         | DSP | ✔ | ✔ |  |
 | OpensoraPlan1.3-T2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 | OpensoraPlan1.3-I2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
-| InternVL2-2B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ | ✔ |
-| InternVL2-8B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ | ✔ |
-| InternVL2-76B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ | ✔ |
+| InternVL2-2B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
+| InternVL2-8B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
+| InternVL2-76B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
 | Qwen2VL-2B |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
 | Qwen2VL-7B |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
 | Qwen2VL-72B |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
@@ -95,6 +96,7 @@ MindSpeed-MM已发布版本维护策略：
 
 | **MindSpeed-MM版本** | **维护策略** | **当前状态** | **发布时间**   | **后续状态**         | **EOL日期** |
 |-----------------|-----------|--------|------------|-----------------------|-----------|
+| 1.0.0             |  常规版本  | 维护   | 2024/12/30 | 预计2025/06/30起无维护  |           |
 | 1.0.RC3             |  常规版本  | 维护   | 2024/09/30 | 预计2025/03/30起无维护  |           |
 
 ---
@@ -103,15 +105,17 @@ MindSpeed-MM已发布版本维护策略：
 
 【现版本实测性能（硬件信息：Atlas 900 A2 PODc）】
 
-下述列表中支持的模型，我们在各模型的`README`文件中提供了相应的使用说明，里面有详细的模型训练、推理、微调等流程
+下述列表中支持的模型，我们在各模型的**README**文件中提供了相应的使用说明，里面有详细的模型训练、推理、微调等流程
 
-`模型`列中的超链接指向各模型的文件夹地址， `参数量`列中的超链接指向模型的社区资源地址
+**模型**列中的超链接指向各模型的文件夹地址， **参数量**列中的超链接指向模型的社区资源地址
 
-`认证`【Pass】表示已经过测试的模型，【Test】表示测试中的模型
+**认证**【Pass】表示已经过测试的模型，【Test】表示测试中的模型
 
 Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为 (TPS)
 
-`亲和场景`为调整少量结构或参数，使得模型更加亲和昇腾，性能更优
+**亲和场景**为调整少量结构或参数，使得模型更加亲和昇腾，性能更优
+
+**A3** 为硬件 Atlas A3 训练系列产品
 
 <table>
   <a id="jump1"></a>
@@ -358,11 +362,11 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://qwen2.org/vl/">72B</a></td>
       <td>微调</td>
-      <td> 8x16 </td>
+      <td> 4x16 (A3) </td>
       <td> BF16 </td>
-      <td> / </td>
-      <td> / </td>
-      <td>【Test】</td>
+      <td> 261.25 (TPS) </td>
+      <td> 257.63 (TPS) </td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td> 语音识别 </td>
@@ -572,16 +576,18 @@ MindSpeed-MM 由华为公司的下列部门联合贡献 ：
 MindSpeed-MM 生态贡献方：
 
 * 360 AI Research
+* 北大OpenSoraPlan团队
 
 感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
 
 ---
 
-## Mindspeed-MM 相关介绍
+## MindSpeed-MM 相关介绍
 
 1. [面向大规模分布式训练的多模态套件](https://mp.weixin.qq.com/s/Qiw_qThKA72T0lLOSpjkKw)
 2. [凭借昇腾澎湃算力，Open-Sora Plan实现电影级视频生成](https://mp.weixin.qq.com/s/KY2tLthhre-SRbuWka3c2w)
 3. [MindSpeed-MM支持主流多模态理解大模型，性能实现大幅提升！](https://mp.weixin.qq.com/s/3pZRy24ITyKl3nGc33Sq7w)
+4. [基于昇腾原生训练！中大和360联合打造多模态任务新范式Qihoo-T2X](https://mp.weixin.qq.com/s/zQAy_hbL9cR3c8-NO6lKnA)
 
 ---
 

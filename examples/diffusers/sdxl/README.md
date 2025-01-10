@@ -1,7 +1,6 @@
 # Diffusers
 
 <p align="left">
-        <b>简体中文</b> |
 </p>
 
 - [SDXL](#jump1)
@@ -90,7 +89,7 @@
     pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
     
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp38-cp38m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
@@ -497,4 +496,4 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
 ### 公网地址说明
 
-[代码涉及公网地址](/MindSpeed-MM/docs/public_address_statement.md)参考 docs/public_address_statement.md
+代码涉及公网地址参考 [公网地址](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/public_address_statement.md)

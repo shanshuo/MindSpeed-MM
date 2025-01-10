@@ -24,6 +24,7 @@
   - [数据集准备](#jump6.1)
   - [配置参数](#jump6.2)
   - [启动评测](#jump6.3)
+
 ---
 <a id="jump1"></a>
 
@@ -99,7 +100,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 
     # apex for Ascend 参考 https://gitee.com/ascend/apex
-    pip install apex-0.1_ascend*-cp310-cp310m-linux_aarch64.whl
+    # 建议从原仓编译安装
 
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
@@ -134,11 +135,12 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 #### 2. 权重转换
 
-MindSpeeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl2_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
+MindSpeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl2_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
 
 以InternVL2-8B为例，`internvl2_convert_to_mm_ckpt.py`的入参`model-size`、`load-dir`、`save-dir`、`trust-remote-code`等如下：
 
 启动脚本
+
 ```shell
   # 根据实际情况修改 ascend-toolkit 路径
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
@@ -286,9 +288,11 @@ $save_dir
 ## 推理
 
 #### 1. 准备工作
+
 配置脚本前需要完成前置准备工作，包括：环境安装、权重下载及转换，详情可查看对应章节。（当前仅支持2B和8B推理功能）
 
 推理权重转换命令如下：
+
 ```shell
   # 根据实际情况修改 ascend-toolkit 路径
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
@@ -301,10 +305,12 @@ $save_dir
 ```
 
 #### 2. 配置参数
+
 【参数配置】
 
 修改inference_xx.json文件，包括`image_path`、`prompt`、`from_pretrained`以及tokenizer的`from_pretrained`等字段。
 以InternVL2-8B为例，按实际情况修改inference_8B.json，注意tokenizer_config的权重路径为转换前的权重路径。
+
 ```json
 {
     "image_path": "./examples/internvl2/view.jpg",    # 按实际情况输入图片
@@ -321,23 +327,29 @@ $save_dir
     ...
 }
 ```
+
 【启动脚本配置】
 按实际情况修改inference_internvl.sh脚本，
+
 ```shell
     # 根据实际情况修改 ascend-toolkit 路径
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
     ...
     MM_MODEL="./examples/internvl2/inference_8B.json"
 ```
+
 #### 3. 启动推理
 
 ```shell
   bash examples/internvl2/inference_internvl.sh
 ```
+
 <a id="jump6"></a>
 
 ## 评测
+
 <a id="jump6.1"></a>
+
 ### 数据集准备
 
 当前模型支持AI2D(test)、ChartQA(test)、Docvqa(val)、MMMU(val)四种数据集的评测。
@@ -348,7 +360,9 @@ $save_dir
 - [AI2D_TEST](https://opencompass.openxlab.space/utils/VLMEval/AI2D_TEST.tsv)
 - [ChartQA_TEST](https://opencompass.openxlab.space/utils/VLMEval/ChartQA_TEST.tsv)
 <a id="jump6.2"></a>
+
 ### 参数配置
+
 如果要进行评测需要将要评测的数据集名称和路径传到examples/internvl2/evaluate_internvl2_8B.json
 需要更改的字段有
 
@@ -383,17 +397,24 @@ examples/internvl2/evaluate_internvl2_8B.json改完后，需要将json文件的�
 ```shell
 MM_MODEL=examples/internvl2/evaluate_internvl2_8B.json
 ```
+
 评测支持多卡DP推理需要更改的配置,为NPU卡数量
 
 ```shell
 NPUS_PER_NODE=1
 ```
+
 <a id="jump6.3"></a>
+
 ### 启动评测
+
 启动shell开始推理
+
 ```shell
 bash examples/internvl2/evaluate_internvl2_8B.sh
 ```
+
 评测结果会输出到`result_output_path`路径中，会输出结果文件：
+
 - *.xlsx文件，这个文件会输出每道题的预测结果和答案等详细信息。
 - *.csv文件，这个文件会输出统计准确率等数据。
