@@ -11,8 +11,7 @@
         "dropout": 0.0,
         "cross_attention_dim": 2304,
         "attention_bias": true,
-        "patch_size": 2,
-        "patch_size_t": 1,
+        "patch_size_thw": [1, 2, 2],
         "activation_fn": "gelu-approximate",
         "norm_elementwise_affine": false,
         "norm_eps": 1e-06,
@@ -41,14 +40,14 @@
         "model_id": "MT5",
         "hub_backend": "hf",
         "from_pretrained": "./weights/google/mt5-xxl",
-        "dtype": "fp16",
-        "model_max_length": 512
+        "dtype": "fp16"
     },
     "tokenizer":{
         "hub_backend": "hf",
         "autotokenizer_name": "AutoTokenizer",
         "from_pretrained": "./weights/google/mt5-xxl",
-        "local_files_only": false
+        "local_files_only": false,
+        "model_max_length": 512
     },
     
     "diffusion": {

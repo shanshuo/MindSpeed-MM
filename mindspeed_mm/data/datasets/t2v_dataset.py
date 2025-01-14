@@ -10,6 +10,7 @@ import copy
 
 import torch
 import numpy as np
+from megatron.core import mpu
 
 from mindspeed_mm.data.data_utils.constants import (
     CAPTIONS,
@@ -31,6 +32,7 @@ from mindspeed_mm.data.data_utils.utils import (
 )
 from mindspeed_mm.data.datasets.mm_base_dataset import MMBaseDataset
 from mindspeed_mm.models import Tokenizer
+from mindspeed_mm.data.data_utils.utils import get_value_from_args, cal_gradient_accumulation_size
 from mindspeed_mm.data.data_utils.data_transform import (
     MaskGenerator,
     add_aesthetic_notice_image,
@@ -104,12 +106,12 @@ class T2VDataset(MMBaseDataset):
         self.fps = vid_img_process.get("fps", None)
 
         self.hw_stride = vid_img_process.get("hw_stride", 32)
-        self.ae_stride_t = vid_img_process.get("ae_stride_t", 32)
+        self.batch_size = get_value_from_args("micro_batch_size")
         self.force_resolution = vid_img_process.get("force_resolution", True)
-        self.sp_size = vid_img_process.get("sp_size", 4)
+        self.sp_size = mpu.get_context_parallel_world_size()
+        self.ae_stride_t = kwargs.get("vae_scale_factor", [4, 8, 8])[0]
         self.train_sp_batch_size = vid_img_process.get("train_sp_batch_size", 1)
-        self.gradient_accumulation_size = vid_img_process.get("gradient_accumulation_size", 1)
-        self.batch_size = vid_img_process.get("batch_size", 1)
+        self.gradient_accumulation_size = cal_gradient_accumulation_size()
         self.seed = vid_img_process.get("seed", 42)
         self.hw_aspect_thr = vid_img_process.get("hw_aspect_thr", 1.5)
         self.hw_aspect_thr = 1.5 if self.hw_aspect_thr == 0 else self.hw_aspect_thr
@@ -126,6 +128,14 @@ class T2VDataset(MMBaseDataset):
         self.video_reader_type = vid_img_process.get("video_reader_type", "torchvision")
         self.image_reader_type = vid_img_process.get("image_reader_type", "torchvision")
         self.video_reader = VideoReader(video_reader_type=self.video_reader_type)
+
+        transform_size = {
+            "max_height": self.max_height,
+            "max_width": self.max_width,
+            "max_hxw": self.max_hxw,
+            "min_hxw": self.min_hxw
+        }
+
         self.video_processer = VideoProcesser(
             num_frames=self.num_frames,
             frame_interval=self.frame_interval,
@@ -143,19 +153,22 @@ class T2VDataset(MMBaseDataset):
             min_hxw=self.min_hxw,
             force_resolution=self.force_resolution,
             seed=self.seed,
+            ae_stride_t=self.ae_stride_t,
             hw_stride=self.hw_stride,
             hw_aspect_thr=self.hw_aspect_thr,
             sp_size=self.sp_size,
             train_sp_batch_size=self.train_sp_batch_size,
             gradient_accumulation_size=self.gradient_accumulation_size,
             batch_size=self.batch_size,
-            min_num_frames=self.min_num_frames
+            min_num_frames=self.min_num_frames,
+            transform_size=transform_size
         )
         self.image_processer = ImageProcesser(
             num_frames=self.num_frames,
             train_pipeline=self.train_pipeline,
             image_reader_type=self.image_reader_type,
             image_processer_type=self.image_processer_type,
+            transform_size=transform_size
         )
         if self.use_text_processer and tokenizer_config is not None:
             self.tokenizer = Tokenizer(tokenizer_config).get_tokenizer()

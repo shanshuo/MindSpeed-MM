@@ -9,7 +9,6 @@ import torch
 import numpy as np
 from PIL import Image
 import torchvision.transforms as T
-from torchvision.transforms import Resize
 
 
 def _is_tensor_video_clip(clip):
@@ -475,12 +474,14 @@ class MaxHWResizeVideo:
 
     def __init__(
             self,
-            max_hxw,
+            transform_size=None,
             interpolation_mode="bilinear",
             align_corners=False, 
             antialias=False
     ):
-        self.max_hxw = max_hxw
+        if transform_size is None or "max_hxw" not in transform_size:
+            raise ValueError("Missing required param: max_hxw in data transform.")
+        self.max_hxw = transform_size["max_hxw"]
         self.interpolation_mode = interpolation_mode
         self.align_corners = align_corners
         self.antialias = antialias
@@ -506,7 +507,7 @@ class MaxHWResizeVideo:
         return resize_clip
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(size={self.size}, interpolation_mode={self.interpolation_mode}"
+        return f"{self.__class__.__name__}(size={self.max_hxw}, interpolation_mode={self.interpolation_mode}"
 
 
 class CenterCropResizeVideo:
@@ -517,24 +518,16 @@ class CenterCropResizeVideo:
 
     def __init__(
             self,
-            size,
+            transform_size=None,
             use_short_edge=False,
             top_crop=False,
             interpolation_mode="bilinear",
             align_corners=False,
             antialias=False,
     ):
-        if isinstance(size, list):
-            size = tuple(size)
-        if isinstance(size, tuple):
-            if len(size) != 2:
-                raise ValueError(
-                    f"size should be tuple (height, width), instead got {size}"
-                )
-            self.size = size
-        else:
-            self.size = (size, size)
-
+        if transform_size is None or "max_height" not in transform_size or "max_width" not in transform_size:
+            raise ValueError("Missing required param: max_height or max_width in data transform.")
+        self.size = (transform_size["max_height"], transform_size["max_width"])
         self.use_short_edge = use_short_edge
         self.top_crop = top_crop
         self.interpolation_mode = interpolation_mode

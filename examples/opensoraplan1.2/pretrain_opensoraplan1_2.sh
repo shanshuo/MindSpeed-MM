@@ -19,7 +19,8 @@ TP=1
 PP=1
 CP=1
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$CP))
+ACC=1
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP/$PP*$ACC))
 
 MM_DATA="./examples/opensoraplan1.2/data.json"
 MM_MODEL="./examples/opensoraplan1.2/model_opensoraplan1_2.json"
@@ -64,10 +65,6 @@ GPT_ARGS="
     --clip-grad 1.0 \
     --train-iters 5000 \
     --no-gradient-accumulation-fusion \
-    --no-load-optim \
-    --no-load-rng \
-    --no-save-optim \
-    --no-save-rng \
     --bf16 \
     --recompute-granularity full \
     --recompute-method block \

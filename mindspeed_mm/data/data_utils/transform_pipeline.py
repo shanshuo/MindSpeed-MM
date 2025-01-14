@@ -64,7 +64,7 @@ INTERPOLATIONMODE_MAPPING = {
 }
 
 
-def get_transforms(is_video=True, train_pipeline=None, image_size=None):
+def get_transforms(is_video=True, train_pipeline=None, image_size=None, transform_size=None):
     if train_pipeline is None:
         return None
     train_pipeline_info = (
@@ -79,8 +79,10 @@ def get_transforms(is_video=True, train_pipeline=None, image_size=None):
         # 动态数据集场景下，用户须传入image_size,按照用户传的值做transforms
         if image_size and "size" in param_info and param_info["size"] == "auto":
             param_info["size"] = image_size
+        elif transform_size and param_info.get("transform_size", None) == "auto":
+            param_info["transform_size"] = transform_size
         trans_type = pp_in.get("trans_type", "")
-        trans_info = TransformMaping(
+        trans_info = TransformMapping(
             is_video=is_video, trans_type=trans_type, param=param_info
         ).get_trans_func()
         pipeline.append(trans_info)
@@ -88,7 +90,7 @@ def get_transforms(is_video=True, train_pipeline=None, image_size=None):
     return output_transforms
 
 
-class TransformMaping:
+class TransformMapping:
     """used for transforms mapping"""
 
     def __init__(self, is_video=True, trans_type="", param=None):

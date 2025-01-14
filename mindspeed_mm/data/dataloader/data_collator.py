@@ -1,8 +1,13 @@
 from dataclasses import dataclass
-from typing import Dict, Sequence, List, Union
+from typing import Dict, Sequence, List, Union, Tuple
+import math
+from collections import Counter
+import random
+import warnings
 
 import numpy as np
 import torch
+from torch.nn import functional as F
 from transformers import WhisperProcessor
 
 from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
@@ -10,6 +15,17 @@ from mindspeed_mm.data.data_utils.func_utils.collator import MultiModalDataColla
 from mindspeed_mm.data.data_utils.func_utils.convert import load_tokenizer, IGNORE_INDEX
 from mindspeed_mm.data.data_utils.func_utils.model_args import ProcessorArguments
 from mindspeed_mm.data.data_utils.func_utils.template import get_template_and_fix_tokenizer
+from mindspeed_mm.data.data_utils.utils import get_value_from_args
+from mindspeed_mm.data.data_utils.constants import (
+    PROMPT_IDS,
+    PROMPT_MASK,
+    VIDEO,
+    VIDEO_MASK,
+    PROMPT_IDS_2,
+    PROMPT_MASK_2,
+    MASKED_VIDEO,
+    INPUT_MASK
+)
 
 
 @dataclass
@@ -163,9 +179,304 @@ class DataCollatorForQwen2vl:
         return self.data_collator(*args, **kwargs)
 
 
+class DataCollatorForOpenSoraPlan:
+    def __init__(
+            self,
+            batch_size: int = 1,
+            num_frames: int = 13,
+            group_frame: bool = False,
+            group_resolution: bool = False,
+            group_data: bool = False,
+            max_height: int = 480,
+            max_width: int = 640,
+            vae_scale_factor: Tuple[int] = (4, 8, 8),
+            use_video_feature: bool = False,
+            use_text_feature: bool = False,
+            **kwargs
+    ):
+        self.batch_size = batch_size
+        self.group_frame = group_frame
+        self.group_resolution = group_resolution
+        self.group_data = group_data
+
+        self.max_height = max_height
+        self.max_width = max_width
+        predictor_model_config = get_value_from_args("mm.model.predictor")
+        patch_size_thw = predictor_model_config.patch_size_thw
+        self.patch_size = patch_size_thw[1]
+        self.patch_size_t = patch_size_thw[0]
+        self.ae_stride = vae_scale_factor[1]
+        self.ae_stride_t = vae_scale_factor[0]
+        self.ae_stride_thw = vae_scale_factor
+
+        self.num_frames = num_frames
+        self.max_thw = (self.num_frames, self.max_height, self.max_width)
+
+        self.use_video_feature = use_video_feature
+        self.use_text_feature = use_text_feature
+
+    def package(self, batch):
+        batch_tubes = [i.get(VIDEO, None) for i in batch]  # b [c t h w]
+        input_ids = [i.get(PROMPT_IDS, None) for i in batch]  # b [1 l]
+        cond_mask = [i.get(PROMPT_MASK, None) for i in batch]  # b [1 l]
+        input_ids_2 = [i.get(PROMPT_IDS_2, None) for i in batch]  # b [1 l]
+        cond_mask_2 = [i.get(PROMPT_MASK_2, None) for i in batch]  # b [1 l]
+
+        if all([i is None or not any(i) for i in input_ids_2]):
+            input_ids_2 = None
+        if all([i is None or not any(i) for i in cond_mask_2]):
+            cond_mask_2 = None
+        return batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2
+
+    def package_feature(self, batch):
+        batch_tubes = []
+        input_ids = []
+        cond_mask = []
+        input_ids_2 = []
+        cond_mask_2 = []
+        for i in batch:
+            if i.get(VIDEO).dim() == 4:
+                batch_tubes.append(i.get(VIDEO, None))  # b [c t h w]
+            else:
+                raise ValueError(f"video shape must have dim 4, but got {i.get(VIDEO).dim()}")
+
+            if i.get(PROMPT_IDS).dim() == 2 or i.get(PROMPT_IDS).dim() == 3:
+                input_ids.append(i.get(PROMPT_IDS, None))  # b [1 l]
+            else:
+                raise ValueError(
+                    f"prompt shape must have dim 2 for non featured data or 3 for featured data, but got {i.get(PROMPT_IDS).dim()}")
+
+            if i.get(PROMPT_MASK, None) is None or i.get(PROMPT_MASK).dim() == 2:
+                cond_mask.append(i.get(PROMPT_MASK, None))  # b [1 l]
+            else:
+                raise ValueError(
+                    f"prompt mask must be None or have dim 2 for non featured and featured data, but got {i.get(PROMPT_MASK).dim()}")
+
+        if not self.use_text_feature:
+            input_ids_2 = [i.get(PROMPT_IDS_2, None) for i in batch]  # b [1 l]
+            cond_mask_2 = [i.get(PROMPT_MASK_2, None) for i in batch]  # b [1 l]
+        else:
+            input_ids_2 = [None]
+            cond_mask_2 = [None]
+            warnings.warn("input_ids_2 and cond_mask_2 features are not supported yet and will be None for now",
+                          FutureWarning)
+
+        if all([i is None or not any(i) for i in input_ids_2]):
+            input_ids_2 = None
+        if all([i is None or not any(i) for i in cond_mask_2]):
+            cond_mask_2 = None
+
+        if i.get(VIDEO_MASK, None) is None or i.get(VIDEO_MASK).dim() == 3:
+            video_mask = [i.get(VIDEO_MASK, None) for i in batch]
+            if all([i is None or not any(i) for i in video_mask]):
+                video_mask = None
+        else:
+            raise ValueError(f"video_mask shape must be None or have dim 3, but got {i.get(VIDEO_MASK).dim()}")
+        return batch_tubes, video_mask, input_ids, cond_mask, input_ids_2, cond_mask_2
+
+    def __call__(self, batch):
+        if not self.use_video_feature:
+            batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.package(batch)
+
+            ds_stride = self.ae_stride * self.patch_size
+            t_ds_stride = self.ae_stride_t * self.patch_size_t
+
+            processed_res = self.process(
+                batch_tubes,
+                input_ids,
+                cond_mask,
+                input_ids_2,
+                cond_mask_2,
+                t_ds_stride,
+                ds_stride,
+                self.max_thw,
+                self.ae_stride_thw,
+            )
+            if torch.any(torch.isnan(processed_res.pad_batch_tubes)):
+                raise AssertionError("after pad_batch_tubes.")
+            return {
+                VIDEO: processed_res.pad_batch_tubes,
+                PROMPT_IDS: processed_res.input_ids,
+                VIDEO_MASK: processed_res.attention_mask,
+                PROMPT_MASK: processed_res.cond_mask,
+                PROMPT_IDS_2: processed_res.input_ids_2,
+                PROMPT_MASK_2: processed_res.cond_mask_2,
+                MASKED_VIDEO: processed_res.masked_video,
+                INPUT_MASK: processed_res.input_mask,
+            }
+        else:
+            batch_tubes, video_mask, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.package_feature(batch)
+            return {
+                VIDEO: torch.stack(batch_tubes),
+                PROMPT_IDS: torch.stack(input_ids),
+                VIDEO_MASK: torch.stack(video_mask) if video_mask else None,
+                PROMPT_MASK: torch.stack(cond_mask) if cond_mask else None,
+                PROMPT_IDS_2: torch.stack(input_ids_2) if input_ids_2 else None,
+                PROMPT_MASK_2: torch.stack(cond_mask_2) if cond_mask_2 else None,
+                MASKED_VIDEO: None,
+                INPUT_MASK: None,
+            }
+
+    def process(
+            self,
+            batch_tubes,
+            input_ids,
+            cond_mask,
+            input_ids_2,
+            cond_mask_2,
+            t_ds_stride,
+            ds_stride,
+            max_thw,
+            ae_stride_thw,
+    ):
+        # pad to max multiple of ds_stride
+        batch_input_size = [i.shape for i in batch_tubes]  # [(c t h w), (c t h w)]
+        if len(batch_input_size) != self.batch_size:
+            raise AssertionError("batch_input_size and batch_size are not equal.")
+
+        is_grouped = self.group_frame or self.group_resolution or self.group_data or self.batch_size == 1
+        if is_grouped:  #
+            len_each_batch = batch_input_size
+            idx_length_dict = dict([*zip(list(range(self.batch_size)), len_each_batch)])
+            count_dict = Counter(len_each_batch)
+            if len(count_dict) != 1:
+                sorted_by_value = sorted(count_dict.items(), key=lambda item: item[1])
+                pick_length = sorted_by_value[-1][0]  # the highest frequency
+                candidate_batch = [
+                    idx
+                    for idx, length in idx_length_dict.items()
+                    if length == pick_length
+                ]
+                random_select_batch = [
+                    random.choice(candidate_batch)
+                    for _ in range(len(len_each_batch) - len(candidate_batch))
+                ]
+                print(
+                    batch_input_size,
+                    idx_length_dict,
+                    count_dict,
+                    sorted_by_value,
+                    pick_length,
+                    candidate_batch,
+                    random_select_batch,
+                )
+                pick_idx = candidate_batch + random_select_batch
+
+                batch_tubes = [batch_tubes[i] for i in pick_idx]
+                batch_input_size = [
+                    i.shape for i in batch_tubes
+                ]  # [(c t h w), (c t h w)]
+                input_ids = [input_ids[i] for i in pick_idx]  # b [1, l]
+                cond_mask = [cond_mask[i] for i in pick_idx]  # b [1, l]
+                if input_ids_2 is not None:
+                    input_ids_2 = [input_ids_2[i] for i in pick_idx]  # b [1, l]
+                if cond_mask_2 is not None:
+                    cond_mask_2 = [cond_mask_2[i] for i in pick_idx]  # b [1, l]
+
+            for i in range(1, self.batch_size):
+                if batch_input_size[0] != batch_input_size[i]:
+                    raise AssertionError(
+                        f"batch_input_size{0} and batch_input_size{i} are not equal."
+                    )
+            max_t = max([i[1] for i in batch_input_size])
+            max_h = max([i[2] for i in batch_input_size])
+            max_w = max([i[3] for i in batch_input_size])
+        else:
+            max_t, max_h, max_w = max_thw
+        pad_max_t, pad_max_h, pad_max_w = (
+            self.pad_to_multiple(max_t - 1 + self.ae_stride_t, t_ds_stride),
+            self.pad_to_multiple(max_h, ds_stride),
+            self.pad_to_multiple(max_w, ds_stride),
+        )
+        pad_max_t = pad_max_t + 1 - self.ae_stride_t
+        each_pad_t_h_w = [
+            [pad_max_t - i.shape[1], pad_max_h - i.shape[2], pad_max_w - i.shape[3]]
+            for i in batch_tubes
+        ]
+        pad_batch_tubes = [
+            F.pad(im, (0, pad_w, 0, pad_h, 0, pad_t), value=0)
+            for (pad_t, pad_h, pad_w), im in zip(each_pad_t_h_w, batch_tubes)
+        ]
+        pad_batch_tubes = torch.stack(pad_batch_tubes, dim=0)
+
+        max_tube_size = [pad_max_t, pad_max_h, pad_max_w]
+        max_latent_size = [
+            ((max_tube_size[0] - 1) // ae_stride_thw[0] + 1),
+            max_tube_size[1] // ae_stride_thw[1],
+            max_tube_size[2] // ae_stride_thw[2],
+        ]
+        valid_latent_size = [
+            [
+                int(math.ceil((i[1] - 1) / ae_stride_thw[0])) + 1,
+                int(math.ceil(i[2] / ae_stride_thw[1])),
+                int(math.ceil(i[3] / ae_stride_thw[2])),
+            ]
+            for i in batch_input_size
+        ]
+        attention_mask = [
+            F.pad(
+                torch.ones(i, dtype=pad_batch_tubes.dtype),
+                (
+                    0,
+                    max_latent_size[2] - i[2],
+                    0,
+                    max_latent_size[1] - i[1],
+                    0,
+                    max_latent_size[0] - i[0],
+                ),
+                value=0,
+            )
+            for i in valid_latent_size
+        ]
+        attention_mask = torch.stack(attention_mask)  # b t h w
+        if self.batch_size == 1 or self.group_frame or self.group_resolution:
+            if not torch.all(attention_mask.bool()):
+                raise AssertionError("All elements of attention_mask are zero")
+
+        input_ids = torch.stack(input_ids)  # b 1 l
+        cond_mask = torch.stack(cond_mask)  # b 1 l
+        input_ids_2 = torch.stack(input_ids_2) if input_ids_2 is not None else input_ids_2  # b 1 l
+        cond_mask_2 = torch.stack(cond_mask_2) if cond_mask_2 is not None else cond_mask_2  # b 1 l
+
+        # if opensoraplan i2v dataset, batch_tube has masked_video and mask
+        if pad_batch_tubes.shape[1] == 7:
+            pad_batch_tubes, masked_video, input_mask = pad_batch_tubes[:, :3], pad_batch_tubes[:,
+                                                                                3:6], pad_batch_tubes[:, 6:7]
+        else:
+            masked_video = None
+            input_mask = None
+
+        processed_res = ProcessedData(pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2,
+                                      masked_video, input_mask)
+        return processed_res
+
+
+    def pad_to_multiple(self, number, ds_stride):
+        remainder = number % ds_stride
+        if remainder == 0:
+            return number
+        else:
+            padding = ds_stride - remainder
+            return number + padding
+
+
+class ProcessedData:
+    def __init__(self, pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2, masked_video,
+                 input_mask):
+        self.pad_batch_tubes = pad_batch_tubes
+        self.attention_mask = attention_mask
+        self.input_ids = input_ids
+        self.cond_mask = cond_mask
+        self.input_ids_2 = input_ids_2
+        self.cond_mask_2 = cond_mask_2
+        self.masked_video = masked_video
+        self.input_mask = input_mask
+
+
 DATA_COLLATOR = {
     "llava": DataCollatorForLlava,
     "internvl": DataCollatorForInternvl,
     "whisper": DataCollatorSpeechSeq2SeqWithPadding,
-    "qwen2vl": DataCollatorForQwen2vl
+    "qwen2vl": DataCollatorForQwen2vl,
+    "open_sora_plan": DataCollatorForOpenSoraPlan
 }

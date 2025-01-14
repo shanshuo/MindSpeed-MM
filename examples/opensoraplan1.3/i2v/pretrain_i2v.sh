@@ -19,7 +19,8 @@ TP=1
 PP=1
 CP=1
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$CP/$TP/$PP))
+ACC=1
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP/$PP*$ACC))
 
 MM_DATA="./examples/opensoraplan1.3/i2v/data_i2v.json"
 MM_MODEL="./examples/opensoraplan1.3/i2v/pretrain_i2v_model.json"
@@ -67,10 +68,6 @@ GPT_ARGS="
     --train-iters 5000 \
     --no-gradient-accumulation-fusion \
     --load $LOAD_PATH \
-    --no-load-optim \
-    --no-load-rng \
-    --no-save-optim \
-    --no-save-rng \
     --bf16 \
     --recompute-granularity full \
     --recompute-method block \

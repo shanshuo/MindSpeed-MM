@@ -8,7 +8,6 @@
 import os
 import re
 import gc
-import sys
 import html
 import math
 import copy
@@ -16,6 +15,7 @@ import random
 import urllib.parse as ul
 from fractions import Fraction
 from collections import Counter
+from logging import getLogger
 from typing import Any, Dict, Optional, Tuple, Union, Sequence
 
 try:
@@ -49,6 +49,8 @@ from transformers.models.clip.image_processing_clip import CLIPImageProcessor
 from transformers.trainer_pt_utils import LabelSmoother
 from packaging import version
 import tokenizers
+from megatron.training import get_args
+from megatron.core import mpu
 
 from mindspeed_mm.data.data_utils.data_transform import (
     TemporalRandomCrop, 
@@ -62,6 +64,7 @@ from mindspeed_mm.data.data_utils.conversation import get_conv_template
 from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
 
 
+logger = getLogger(__name__)
 VID_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
 IS_TOKENIZER_GREATER_THAN_0_14 = version.parse(tokenizers.__version__) >= version.parse("0.14")
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
@@ -311,6 +314,7 @@ class VideoProcesser:
             gradient_accumulation_size=1,
             batch_size=1,
             min_num_frames=29,
+            transform_size=None,
             **kwargs,
     ):
         self.num_frames = num_frames
@@ -324,7 +328,7 @@ class VideoProcesser:
 
         self.max_height = max_height
         self.max_width = max_width
-        
+        self.transform_size = transform_size
         if self.data_storage_mode == "combine" or self.data_storage_mode == "sorafeatured":
             self.train_fps = train_fps
             self.speed_factor = speed_factor
@@ -351,7 +355,8 @@ class VideoProcesser:
             self.video_transforms = get_transforms(is_video=True, train_pipeline=self.train_pipeline,
                                                    image_size=image_size)
         else:
-            self.video_transforms = get_transforms(is_video=True, train_pipeline=self.train_pipeline)
+            self.video_transforms = get_transforms(is_video=True, train_pipeline=self.train_pipeline,
+                                                   transform_size=self.transform_size)
         if self.data_storage_mode == "standard":
             if self.data_process_type == "CogvideoX":
                 return self.cog_data_process(vframes)
@@ -603,7 +608,7 @@ class VideoProcesser:
                 if fps is None or (duration is None and i.get("num_frames", None) is None):
                     continue
 
-                i["num_frames"] = int(fps * duration) if i.get("num_frames", None) is None else i["num_frames"]
+                i["num_frames"] = round(fps * duration) if i.get("num_frames", None) is None else i["num_frames"]
 
                 # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
                 frame_interval = 1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
@@ -716,14 +721,15 @@ class ImageProcesser:
             min_dynamic_patch=1,
             max_dynamic_patch=6,
             use_thumbnail=False,
+            transform_size=None,
             **kwargs,
     ):
         self.num_frames = num_frames
         self.image_transforms = get_transforms(
-            is_video=False, train_pipeline=train_pipeline
+            is_video=False, train_pipeline=train_pipeline, transform_size=transform_size
         )
         self.video_transforms = get_transforms(
-            is_video=True, train_pipeline=train_pipeline
+            is_video=True, train_pipeline=train_pipeline, transform_size=transform_size
         )
         self.train_pipeline = train_pipeline
         self.image_reader_type = image_reader_type
@@ -1582,3 +1588,27 @@ def build_iterations(train_dl=None, val_dl=None, test_dl=None, iterator_type="cy
 
     return train_data_iterator, valid_data_iterator, test_data_iterator
 
+
+def get_value_from_args(key: str, default_value=None):
+    """
+    Get value from global args
+    """
+    try:
+        keys = key.split(".")
+        config = get_args()
+        for key in keys:
+            config = getattr(config, key)
+        return config
+    except AttributeError as e:
+        if default_value is None:
+            raise KeyError(f"Configuration key '{key}' not found, please check.") from e
+        logger.info(f"Configuration key '{key}' not found, using default value: {default_value}.")
+        return default_value
+
+
+def cal_gradient_accumulation_size():
+    args = get_args()
+    world_size = torch.distributed.get_world_size()
+    acc = int(args.global_batch_size / world_size / args.micro_batch_size * mpu.get_tensor_model_parallel_world_size() \
+              * mpu.get_context_parallel_world_size() * mpu.get_pipeline_model_parallel_world_size())
+    return acc

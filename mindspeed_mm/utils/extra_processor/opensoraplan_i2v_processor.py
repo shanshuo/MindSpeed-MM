@@ -10,16 +10,13 @@ class OpenSoraPlanI2VProcessor:
     Args:
         config (dict): the processor config
         {
-            "ae_stride_t": 4,
-            "ae_stride_h": 8,
-            "ae_stride_w": 8
+            "vae_scale_factor": [4, 8 ,8]
         }
     """
 
     def __init__(self, config):
-        ae_stride_t = config.get("ae_stride_t", 4)
-        ae_stride_h = config.get("ae_stride_h", 8)
-        ae_stride_w = config.get("ae_stride_w", 8)
+        vae_scale_factor = config.get("vae_scale_factor", [4, 8, 8])
+        ae_stride_t, ae_stride_h, ae_stride_w = vae_scale_factor
         self.mask_compressor = MaskCompressor(ae_stride_h=ae_stride_h, ae_stride_w=ae_stride_w, ae_stride_t=ae_stride_t)
 
     def __call__(self, vae_model, videos, video_latents, **kwargs):

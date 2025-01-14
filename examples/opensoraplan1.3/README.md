@@ -154,7 +154,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 首先修改 examples/opensoraplan1.3/convert_ckpt_to_mm.py 参数
 
     TP_SIZE = 1  # TP（Tensor Parallel）size，需要和训练脚本的TP保持一致
-    PP_SIZE = [8, 8, 8, 8] # PP (Pipeline Parallel) size, 需要和训练脚本保持一致
+    PP_SIZE = [32] # PP (Pipeline Parallel) size, 需要和训练脚本保持一致
     dit_hg_weight_path = "raw_ckpt/open-sora-plan/any93x640x640/" #huggingface下载的dit预训练权重路径
     dit_mm_save_dir = "mm_ckpt/open-sora-plan/pretrained-checkpoint-dit" #转换到MindSpeed-MM的dit权重存放路径
 
@@ -228,18 +228,65 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 
 需根据实际情况修改`pretrain_t2v_model.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
 
-并行化配置参数修改：
+【并行化配置参数】：
 
-- PP：流水线并行，目前支持将predictor模型切分流水线。在data.json文件中新增字段"pipeline_num_layers", 类型为list。该list的长度即为
-pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。
-注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，
-因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
+默认场景无需调整，当增大模型参数规模或者视频序列长度时，需要根据实际情况启用以下并行策略，并通过调试确定最优并行策略。
 
-使用pp时需要在运行脚本GPT_ARGS中打开以下几个参数：
++ CP: 序列并行，当前支持Ulysess序列并行。
 
+  - 使用场景：在视频序列（分辨率X帧数）较大时，可以开启来降低内存占用。
+  
+  - 使能方式：在启动脚本中设置 CP > 1，如：CP=2；
+  
+  - 限制条件：head数量需要能够被TP*CP整除
+
+
++ TP: 张量模型并行
+
+  - 使用场景：模型参数规模较大时，单卡上无法承载完整的模型，通过开启TP可以降低静态内存和运行时内存。
+
+  - 使能方式：在启动脚本中设置 TP > 1，如：TP=8
+
+  - 限制条件：head 数量需要能够被TP*CP整除
+
+
++ SP: Megatron序列并行
+  
+  - 使用场景：在张量模型并行的基础上，进一步对 LayerNorm 和 Dropout 模块的序列维度进行切分，以降低动态内存。 
+
+  - 使能方式：在 GPT_ARGS 设置 --sequence-parallel
+  
+  - 限制条件：前置必要条件为开启TP
+
+
++ PP：流水线并行（在研）
+
+  目前支持将predictor模型切分流水线。在data.json文件中新增字段"pipeline_num_layers", 类型为list。该list的长度即为 pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
+
+  - 使用场景：模型参数较大时候，通过流线线方式切分并行，降低内存 
+
+  - 使能方式：使用pp时需要在运行脚本GPT_ARGS中打开以下几个参数
+  
+  ```shell
+    PP = 4 # PP > 1 开启 
+  
     --optimization-level 2 \
     --use-multiparameter-pipeline-model-parallel \
     --variable-seq-lengths \
+  
+    # 同时pretrain_xx_model.json中修改相应配置 
+    "pipeline_num_layers": [8, 8, 8, 8],
+  ```
+
+【动态/固定分辨率】
+- 支持使用动态分辨率或固定分辨率进行训练，默认为动态分辨率训练，如切换需修改启动脚本pretrain_xxx.sh
+```shell
+    # 以t2v实例，使用动态分辨率训练
+    MM_DATA="./examples/opensoraplan1.3/t2v/data_dynamic_resolution.json"
+    
+    # 以t2v实例，使用固定分辨率训练
+    MM_DATA="./examples/opensoraplan1.3/t2v/data_static_resolution.json"
+```
 
 【单机运行】
 

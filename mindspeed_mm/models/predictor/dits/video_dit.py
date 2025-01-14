@@ -55,7 +55,7 @@ class VideoDiT(MultiModalModule):
         cross_attention_dim: Optional[int] = None,
         attention_bias: bool = False,
         input_size: Tuple[int] = None,
-        patch_size: Tuple[int] = None,
+        patch_size_thw: Tuple[int] = None,
         activation_fn: str = "geglu",
         norm_type: str = "layer_norm",
         num_embeds_ada_norm: Optional[int] = None,
@@ -68,7 +68,7 @@ class VideoDiT(MultiModalModule):
     ):
         super().__init__(config=None)
         # Validate inputs and init args.
-        if patch_size is not None:
+        if patch_size_thw is not None:
             if norm_type not in ["ada_norm", "ada_norm_zero", "ada_norm_single"]:
                 raise NotImplementedError(
                     f"Forward pass is not implemented when `patch_size` is not None and `norm_type` is '{norm_type}'."
@@ -77,7 +77,7 @@ class VideoDiT(MultiModalModule):
                 raise ValueError(
                     f"When using a `patch_size` and this `norm_type` ({norm_type}), `num_embeds_ada_norm` cannot be None."
                 )
-        self.patch_size_t, self.patch_size_h, self.patch_size_w = patch_size
+        self.patch_size_t, self.patch_size_h, self.patch_size_w = patch_size_thw
         self.norm_type = norm_type
         self.in_channels = in_channels
         self.out_channels = out_channels

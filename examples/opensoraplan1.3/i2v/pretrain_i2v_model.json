@@ -1,13 +1,10 @@
 {
-    "frames": 93,
     "task": "i2v",
-    "resolution": [352, 640],
-    "allow_internal_format": false,
     "load_video_features": false,
     "load_text_features": false,
     "predictor": {
         "model_id": "videoditsparsei2v",
-        "from_pretrained": "your pretrained ckpt path",
+        "from_pretrained": null,
         "dtype": "bf16",
         "num_layers" : 32,
         "num_heads": 24,
@@ -17,8 +14,7 @@
         "dropout":0.0,
         "cross_attention_dim":2304,
         "attention_bias":true,
-        "patch_size":2,
-        "patch_size_t":1,
+        "patch_size_thw": [1, 2, 2],
         "activation_fn":"gelu-approximate",
         "norm_elementwise_affine":false,
         "norm_eps":1e-06,
@@ -61,14 +57,11 @@
         "use_attention": true,
         "norm_type": "layernorm",
         "t_interpolation": "trilinear",
-        "vae_scale_factor":[4,8,8],
         "use_tiling": false,
         "connect_res_layer_num": 2,
         "i2v_processor": {
             "processor_id": "opensoraplan_i2v_processor",
-            "ae_stride_t": 4,
-            "ae_stride_h": 8,
-            "ae_stride_w": 8
+            "vae_scale_factor": [4, 8, 8]
         }
     }
 }

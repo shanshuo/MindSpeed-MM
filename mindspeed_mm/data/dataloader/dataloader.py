@@ -15,16 +15,20 @@
 
 from typing import Optional
 from dataclasses import dataclass
+import inspect
 
 import torch
 from torch.distributed import ProcessGroup
 from torch.distributed.distributed_c10d import _get_default_group
 from torch.utils.data import DataLoader, BatchSampler, SequentialSampler
 
-from mindspeed_mm.data.data_utils.utils import get_seed_worker, collate_fn_default
+from mindspeed_mm.data.data_utils.utils import (
+    get_seed_worker,
+    collate_fn_default,
+    cal_gradient_accumulation_size
+)
 from mindspeed_mm.data.datasets.t2v_dataset import DynamicVideoTextDataset
 from mindspeed_mm.data.dataloader.sampler import (
-    Collate,
     LengthGroupedSampler,
     StatefulDistributedSampler,
     VariableVideoBatchSampler,
@@ -94,7 +98,6 @@ def prepare_sampler_dataloader(
     group_frame=False,
     group_resolution=False,
     group_data=False,
-    gradient_accumulation_size=1,
     initial_global_step_for_sampler=0,
     collate_param=None,
     dataset_param=None,
@@ -119,6 +122,7 @@ def prepare_sampler_dataloader(
         :class:`torch.utils.data.DataLoader`: A DataLoader used for training or testing.
     """
     process_group = process_group if process_group is not None else _get_default_group()
+    gradient_accumulation_size = cal_gradient_accumulation_size()
     if sampler_type == "stateful_distributed_sampler":
         collate_fn = None
         if collate_param:
@@ -171,9 +175,17 @@ def prepare_sampler_dataloader(
                 shuffle=shuffle,
             )
 
-        if collate_param is None:
-            raise ValueError("collate_param must be provided.")
-        collate_fn = Collate(**collate_param)
+        if collate_param is None or "model_name" not in collate_param:
+            raise ValueError("collate_param with model_name must be provided.")
+
+        # Inject params to collate params to avoid duplicate configs
+        collate_param.update(dataset_param.preprocess_parameters.to_dict())
+        group_param = dict(group_data=group_data, group_resolution=group_resolution, group_frame=group_frame,
+                           batch_size=batch_size)
+        collate_param.update(group_param)
+
+        data_collate_type = collate_param.pop("model_name")
+        collate_fn = DATA_COLLATOR[data_collate_type](**collate_param)
 
         return DataLoader(
             dataset,
@@ -197,14 +209,11 @@ def prepare_sampler_dataloader(
             data_sharding=data_sharding,
         )
 
-        if collate_param is None:
-            raise ValueError("collate_param must be provided.")
+        if collate_param is None or "model_name" not in collate_param:
+            raise ValueError("collate_param with model_name must be provided.")
         collate_fn = None
-        if "model_name" in collate_param:
-            data_collate_type = collate_param.pop("model_name")
-            collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
-        else:
-            collate_fn = Collate(**collate_param)
+        data_collate_type = collate_param.pop("model_name")
+        collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
 
         return DataLoader(
             dataset,

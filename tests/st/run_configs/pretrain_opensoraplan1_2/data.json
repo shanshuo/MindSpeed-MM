@@ -3,7 +3,6 @@
 		"dataset_type": "t2v",
 		"basic_parameters": {
 			"data_path": "/home/ci_resource/data/OpenSoraPlan/v1.2/pixabay_v2/train_data.txt",
-			"data_folder": "/home/ci_resource/data/OpenSoraPlan/v1.2/",
 			"data_storage_mode": "combine"
 		},
 		"preprocess_parameters": {
@@ -17,15 +16,15 @@
 			"speed_factor": 1.0,
 			"drop_short_ratio": 1.0,
 			"cfg": 0.1,
-			"dataloader_num_workers": 4,
 			"train_pipeline": {
-				"video": [{
+				"video": [
+					{
 						"trans_type": "ToTensorVideo"
 					},
 					{
 						"trans_type": "CenterCropResizeVideo",
 						"param": {
-							"size": [480, 640],
+							"transform_size": "auto",
 							"use_short_edge": false,
 							"top_crop": false,
 							"align_corners": true,
@@ -36,13 +35,14 @@
 						"trans_type": "ae_norm"
 					}
 				],
-				"image": [{
+				"image": [
+					{
 						"trans_type": "ToTensorVideo"
 					},
 					{
 						"trans_type": "CenterCropResizeVideo",
 						"param": {
-							"size": [480, 640],
+							"transform_size": "auto",
 							"use_short_edge": false,
 							"top_crop": true,
 							"align_corners": true,
@@ -66,7 +66,6 @@
 	"dataloader_param": {
 		"dataloader_mode": "sampler",
         "sampler_type": "LengthGroupedSampler",
-		"batch_size": 1,
 		"num_workers": 4,
 		"shuffle": false,
 		"drop_last": true,
@@ -74,16 +73,7 @@
 		"group_frame": false,
 		"group_resolution": false,
 		"collate_param": {
-			"batch_size": 1,
-			"num_frames": 93,
-			"group_frame": false,
-			"group_resolution": false,
-			"max_height": 480,
-			"max_width": 640,
-			"ae_stride": 8,
-			"ae_stride_t": 4,
-			"patch_size": 2,
-			"patch_size_t": 1
+			"model_name": "open_sora_plan"
 		}
 	}
 }

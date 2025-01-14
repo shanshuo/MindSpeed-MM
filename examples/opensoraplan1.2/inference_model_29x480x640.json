@@ -70,7 +70,7 @@
         "cross_attention_dim":2304,
         "attention_bias":true,
         "input_size":[8, 60, 80],
-        "patch_size":[1, 2, 2],
+        "patch_size_thw":[1, 2, 2],
         "activation_fn":"gelu-approximate",
         "num_embeds_ada_norm":1000,
         "norm_type":"ada_norm_single",

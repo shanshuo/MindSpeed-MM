@@ -1,7 +1,4 @@
 {
-    "frames": 29,
-    "resolution": [480, 640],
-    "allow_internal_format":false,
     "load_video_features": false,
     "load_text_features": false,
     "predictor": {
@@ -17,7 +14,7 @@
         "cross_attention_dim": 2304,
         "attention_bias": true,
         "input_size": [24, 60, 80],
-        "patch_size": [1, 2, 2],
+        "patch_size_thw": [1, 2, 2],
         "activation_fn": "gelu-approximate",
         "num_embeds_ada_norm": 1000,
         "norm_type": "ada_norm_single",

@@ -56,8 +56,7 @@ class VideoDitSparse(MultiModalModule):
         dropout: float = 0.0,
         cross_attention_dim: Optional[int] = None,
         attention_bias: bool = False,
-        patch_size: Optional[int] = None,
-        patch_size_t: Optional[int] = None,
+        patch_size_thw: Tuple[int] = None,
         activation_fn: str = "geglu",
         only_cross_attention: bool = False,
         double_self_attention: bool = False,
@@ -92,13 +91,13 @@ class VideoDitSparse(MultiModalModule):
         self.out_channels = in_channels if out_channels is None else out_channels
         inner_dim = num_heads * head_dim
         self.num_layers = num_layers
-        self.patch_size_t = patch_size_t
-        self.patch_size = patch_size
+        self.patch_size_t = patch_size_thw[0]
+        self.patch_size = patch_size_thw[1]
 
         if self.pre_process:
             self.caption_projection = PixArtAlphaTextProjection(in_features=caption_channels, hidden_size=inner_dim)
             self.pos_embed = PatchEmbed2D(
-                patch_size=patch_size,
+                patch_size=self.patch_size,
                 in_channels=in_channels,
                 embed_dim=inner_dim,
             )
@@ -135,7 +134,7 @@ class VideoDitSparse(MultiModalModule):
         if self.post_process:
             self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=False, eps=1e-6)
             self.scale_shift_table = nn.Parameter(torch.randn(2, inner_dim) / inner_dim ** 0.5)
-            self.proj_out = nn.Linear(inner_dim, patch_size_t * patch_size * patch_size * out_channels)
+            self.proj_out = nn.Linear(inner_dim, self.patch_size_t * self.patch_size * self.patch_size * out_channels)
             setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
 
     def prepare_sparse_mask(self, video_mask, prompt_mask, sparse_n):
@@ -659,8 +658,7 @@ class VideoDitSparseI2V(VideoDitSparse):
             dropout: float = 0.0,
             cross_attention_dim: Optional[int] = None,
             attention_bias: bool = False,
-            patch_size: Optional[int] = None,
-            patch_size_t: Optional[int] = None,
+            patch_size_thw: Tuple[int] = None,
             activation_fn: str = "geglu",
             only_cross_attention: bool = False,
             double_self_attention: bool = False,
@@ -686,8 +684,7 @@ class VideoDitSparseI2V(VideoDitSparse):
             dropout=dropout,
             cross_attention_dim=cross_attention_dim,
             attention_bias=attention_bias,
-            patch_size=patch_size,
-            patch_size_t=patch_size_t,
+            patch_size_thw=patch_size_thw,
             activation_fn=activation_fn,
             only_cross_attention=only_cross_attention,
             double_self_attention=double_self_attention,
@@ -709,7 +706,7 @@ class VideoDitSparseI2V(VideoDitSparse):
             self.pos_embed_masked_hidden_states = nn.ModuleList(
                 [
                     PatchEmbed2D(
-                        patch_size=patch_size,
+                        patch_size=patch_size_thw[1],
                         in_channels=in_channels,
                         embed_dim=inner_dim,
                     ),
@@ -720,7 +717,7 @@ class VideoDitSparseI2V(VideoDitSparse):
             self.pos_embed_mask = nn.ModuleList(
                 [
                     PatchEmbed2D(
-                        patch_size=patch_size,
+                        patch_size=patch_size_thw[1],
                         in_channels=self.vae_scale_factor_t,
                         embed_dim=inner_dim,
                     ),
