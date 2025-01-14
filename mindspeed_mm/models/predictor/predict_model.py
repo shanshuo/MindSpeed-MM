@@ -3,7 +3,17 @@ from megatron.training.utils import print_rank_0
 from megatron.core import mpu
 
 from mindspeed_mm.models.common.checkpoint import load_checkpoint
-from .dits import VideoDiT, Latte, STDiT, STDiT3, VideoDitSparse, SatDiT, VideoDitSparseI2V, PTDiT
+from .dits import (
+    VideoDiT, 
+    Latte, 
+    STDiT, 
+    STDiT3, 
+    VideoDitSparse, 
+    SatDiT, 
+    VideoDitSparseI2V, 
+    PTDiT,
+    HunyuanVideoDiT
+)
 
 PREDICTOR_MODEL_MAPPINGS = {
     "videodit": VideoDiT,
@@ -14,6 +24,7 @@ PREDICTOR_MODEL_MAPPINGS = {
     "stdit3": STDiT3,
     "satdit": SatDiT,
     "ptdit": PTDiT,
+    "hunyuanvideodit": HunyuanVideoDiT
 }
 
 

@@ -5,5 +5,16 @@ from .stdit import STDiT
 from .stdit3 import STDiT3
 from .sat_dit import SatDiT
 from .pt_dit_diffusers import PTDiTDiffuser as PTDiT
+from .hunyuan_video_dit import HunyuanVideoDiT
 
-__all__ = ["VideoDiT", "VideoDitSparse", "Latte", "STDiT", "STDiT3", "SatDiT", "VideoDitSparseI2V", "PTDiT"]
+__all__ = [
+    "VideoDiT", 
+    "VideoDitSparse", 
+    "Latte", 
+    "STDiT", 
+    "STDiT3", 
+    "SatDiT", 
+    "VideoDitSparseI2V", 
+    "PTDiT",
+    "HunyuanVideoDiT"
+]
