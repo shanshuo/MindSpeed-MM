@@ -55,9 +55,10 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.vae_scale_factor_temporal = self.vae.vae_scale_factor[0]
         self.vae_scale_factor_spatial = self.vae.vae_scale_factor[1]
         self.vae_scaling_factor = self.vae.vae_scale_factor[2]
+        self.vae_invert_scale_latents = config.get("vae_invert_scale_latents", False)
 
         self.use_tiling = config.get("use_tiling", True)
-        self.cogvideo_version = config.get("cogvideo_version", 1.0)
+        self.cogvideo_version = config.get("version", 1.0)
 
         if self.use_tiling:
             self.vae.enable_tiling()
@@ -79,8 +80,11 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         image = self.video_processor.preprocess(image, height=height, width=width).to(device, dtype=dtype)
         image = image.unsqueeze(2).permute(0, 2, 1, 3, 4)  # [B, C, T, H, W] -> [B, T, C, H, W]
 
-        image_latents = [self.vae.encode(img.unsqueeze(0)) for img in image]
+        image_latents = [self.vae.encode(img.unsqueeze(0), invert_scale_latents=self.vae_invert_scale_latents) for img in image]
         image_latents = torch.cat(image_latents, dim=0)  # [B, C, T, H, W]
+
+        if self.vae_invert_scale_latents:
+            image_latents = 1 / self.vae_scaling_factor * image_latents
 
         padding_shape = (
             image_latents.shape[0],
@@ -89,6 +93,10 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             height // self.vae_scale_factor_spatial,
             width // self.vae_scale_factor_spatial
         )
+
+        if self.predict_model.patch_size[0] is not None:
+            first_frame = image_latents[:, :, : image_latents.size(2) % self.predict_model.patch_size[0], ...]
+            image_latents = torch.cat([first_frame, image_latents], dim=2)
 
         latent_padding = torch.zeros(padding_shape, device=device, dtype=dtype)
         image_latents = torch.cat([image_latents, latent_padding], dim=2)

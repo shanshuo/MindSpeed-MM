@@ -215,11 +215,11 @@ class ContextParallelCasualVAE(MultiModalModule):
             x = torch.cat([x, x[-1:].repeat_interleave(split_size - remain, dim=0)], dim=0)
             return torch.tensor_split(x, split_size, dim=0)
 
-    def encode(self, x, enable_cp=True):
+    def encode(self, x, enable_cp=True, **kwargs):
         if self.cp_size <= 1:
             enable_cp = False
         if not enable_cp:
-            return self._encode(x, enable_cp=False)
+            return self._encode(x, enable_cp=False, **kwargs)
 
         if self.cp_size % self.dp_group_nums == 0 and self.cp_size > self.dp_group_nums:
             # loop cp
@@ -229,7 +229,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             data_list = data_list[::self.dp_group_nums]
             latents = []
             for data in data_list:
-                latents.append(self._encode(data, enable_cp=enable_cp))
+                latents.append(self._encode(data, enable_cp=enable_cp, **kwargs))
             return latents[get_context_parallel_rank() // self.dp_group_nums]
 
         elif self.dp_group_nums % self.cp_size == 0 and self.cp_size < self.dp_group_nums:
@@ -238,7 +238,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             data_list = self._bs_split_and_pad(x, self.dp_group_nums // self.cp_size)
             data = data_list[get_context_parallel_rank() % (self.dp_group_nums // self.cp_size)]
 
-            _latent = self._encode(data, enable_cp=enable_cp)
+            _latent = self._encode(data, enable_cp=enable_cp, **kwargs)
 
             if mpu.get_tensor_model_parallel_world_size() > 1:
                 latents_tp = [torch.empty_like(_latent) for _ in range(mpu.get_tensor_model_parallel_world_size())]
@@ -258,11 +258,11 @@ class ContextParallelCasualVAE(MultiModalModule):
             return latents[:bs]
 
         elif self.cp_size == self.dp_group_nums:
-            return self._encode(x, enable_cp=enable_cp)
+            return self._encode(x, enable_cp=enable_cp, **kwargs)
         else:
             raise NotImplementedError(f"Not supported megatron data parallel group nums {self.dp_group_nums} and VAE cp_size {self.cp_size}!")
 
-    def _encode(self, x, enable_cp=True):
+    def _encode(self, x, enable_cp=True, **kwargs):
         x = x.permute(0, 2, 1, 3, 4).contiguous()
 
         if self.cp_size > 0 and enable_cp:
@@ -280,7 +280,8 @@ class ContextParallelCasualVAE(MultiModalModule):
         if self.cp_size > 0 and enable_cp:
             res = _conv_gather(res, dim=2, kernel_size=1)
 
-        res = 0.7 * res
+        if not kwargs.get("invert_scale_latents", False):
+            res = 0.7 * res
 
         return res
 

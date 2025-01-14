@@ -1,9 +1,9 @@
 {
     "ae": {
         "model_id": "contextparallelcasualvae",
-        "from_pretrained": "5b-cogvideo/vae/3d-vae.pt",
+        "from_pretrained": "1.5b-cogvideo/vae/3d-vae.pt",
         "cp_size": 1,
-        "dtype": "float16",
+        "dtype": "bf16",
         "z_channels": 16,
         "conv_padding": 0,
         "num_res_blocks": 3,
@@ -62,21 +62,20 @@
     "text_encoder": {
         "model_id": "T5",
         "hub_backend": "hf",
-        "from_pretrained": "5b-cogvideo",
-        "dtype": "float16",
+        "from_pretrained": "1.5b-cogvideo/t5-v1_1-xxl",
+        "dtype": "bf16",
         "low_cpu_mem_usage": true,
         "use_attention_mask": false
     },
     "tokenizer":{
         "hub_backend": "hf",
         "autotokenizer_name": "T5Tokenizer",
-        "from_pretrained": "5b-cogvideo",
-        "model_max_length": 226
+        "from_pretrained": "1.5b-cogvideo/t5-v1_1-xxl"
     },
     "predictor": {
         "model_id": "satdit",
-        "from_pretrained": "cogv/mmdit0.pt",
-        "dtype": "float16",
+        "from_pretrained": "conv/release/mp_rank_00/model_optim_rng.pt",
+        "dtype": "bf16",
         "num_layers": 42,
         "num_heads": 48,
         "head_dim": 64,
@@ -85,21 +84,23 @@
         "dropout": 0.0,
         "cross_attention_dim": null,
         "attention_bias": true,
-        "input_size": [13, 60, 90],
-        "patch_type": "2D",
-        "patch_size": [1, 2, 2],
+        "input_size": [22, 96, 170],
+        "patch_type": "3D",
+        "patch_size": [2, 2, 2],
         "activation_fn": "gelu-approximate",
         "num_embeds_ada_norm": 1000,
         "norm_type": "qk_ln",
         "norm_elementwise_affine": true,
         "norm_eps": 1e-5,
+        "norm_out_eps": 1e-5,
         "caption_channels": null,
         "time_embed_dim": 512,
-        "text_length": 226,
+        "text_length": 224,
         "text_hidden_size": 4096,
         "concat_text_embed": true,
         "interpolation_scale": [1.0, 1.0, 1.0],
-        "use_rope": true
+        "use_rope": true,
+        "ofs_embed_dim": 512
     },
     "diffusion": {
         "model_id": "cogvideo_diffusion",
@@ -140,19 +141,22 @@
     "pipeline_config": {
         "use_dynamic_cfg": true,
         "seed": 42,
-        "input_size": [49, 480, 720],
+        "input_size": [81, 768, 1360],
         "guidance_scale": 6.0,
-        "use_tiling": true
+        "use_tiling": true,
+        "version": 1.5,
+        "vae_invert_scale_latents": true
     },
 
     "frame_interval": 1,
     "micro_batch_size": 1,
-    "save_path":"./cogvideox_samples_i2v/",
-    "fps": 8,
+    "model_max_length": 224,
+    "save_path":"./cogvideox_samples/",
+    "fps": 16,
     "prompt":"examples/cogvideox/samples_i2v_prompts.txt",
     "image": "examples/cogvideox/samples_i2v_images.txt",
     "use_prompt_preprocess": true,
     "pipeline_class": "CogVideoXPipeline",
     "device":"npu",
-    "dtype": "float16"
+    "dtype": "bf16"
 }
