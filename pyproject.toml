@@ -46,6 +46,14 @@ test = [
     "transformers[sentencepiece]",
 ]
 
+
+evaluate = [
+    "portalocker==2.8.2",
+    "rich==13.7.1",
+    "xlsxwriter==3.2.0",
+    "openpyxl==3.1.5"
+]
+
 lint = [
     "black",
 ]

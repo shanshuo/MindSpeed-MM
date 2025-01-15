@@ -397,8 +397,7 @@ examples/internvl2/evaluate_internvl2_8B.json改完后，需要将json文件的�
 ```shell
 MM_MODEL=examples/internvl2/evaluate_internvl2_8B.json
 ```
-
-评测支持多卡DP推理需要更改的配置,为NPU卡数量
+评测支持多卡DP评测需要更改的配置,为NPU卡数量
 
 ```shell
 NPUS_PER_NODE=1
@@ -407,9 +406,13 @@ NPUS_PER_NODE=1
 <a id="jump6.3"></a>
 
 ### 启动评测
+评测额外依赖一些python包，使用下面命令进行安装
 
-启动shell开始推理
+```shell
+ pip install -e ".[evaluate]"
+```
 
+启动shell开始评测
 ```shell
 bash examples/internvl2/evaluate_internvl2_8B.sh
 ```

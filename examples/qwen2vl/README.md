@@ -489,17 +489,20 @@ MM_MODEL=examples/qwen2vl/evaluate_qwen2vl_7b.json
 LOAD_PATH="./qwen_7b_pp1/Qwen2-VL-7B-Instruct"
 
 ```
-
-评测支持多卡DP推理需要更改的配置,为NPU卡数量
+评测支持多卡DP评测需要更改的配置,为NPU卡数量
 
 ```shell
 NPUS_PER_NODE=1
 ```
 
 ### 启动评测
+评测额外依赖一些python包，使用下面命令进行安装
 
-启动shell开始推理
+```shell
+pip install -e ".[evaluate]"
+```
 
+启动shell开始评测
 ```shell
 bash examples/qwen2vl/evaluate_qwen2vl_7b.sh
 ```
