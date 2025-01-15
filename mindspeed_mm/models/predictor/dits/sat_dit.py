@@ -14,7 +14,7 @@ from torch import nn
 from mindspeed_mm.models.common.ffn import FeedForward as TensorParallelFeedForward
 from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
 from mindspeed_mm.models.common.embeddings.pos_embeddings import Rotary3DPositionEmbedding
-from mindspeed_mm.models.common.embeddings.time_embeddings import TimeStepEmbedding
+from mindspeed_mm.models.common.embeddings.time_embeddings import TimeStepEmbedding, timestep_embedding
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.embeddings.patch_embeddings import VideoPatchEmbed2D, VideoPatch2D, VideoPatch3D
 from mindspeed_mm.models.common.attention import SelfAttentionBNSD, ParallelSelfAttentionSBH
@@ -80,6 +80,7 @@ class SatDiT(MultiModalModule):
         pre_process: bool = True,
         post_process: bool = True,
         global_layer_idx: Optional[Tuple] = None,
+        ofs_embed_dim: int = None,
         **kwargs
     ):
         super().__init__(config=None)
@@ -99,6 +100,7 @@ class SatDiT(MultiModalModule):
         self.patch_size = patch_size
         self.patch_type = patch_type
         self.patch_size_t, self.patch_size_h, self.patch_size_w = patch_size
+        self.ofs_embed_dim = ofs_embed_dim
         self.norm_type = norm_type
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -132,8 +134,14 @@ class SatDiT(MultiModalModule):
         # Initialize blocks
 
         if self.pre_process:
-        # Init PatchEmbed
+            if self.ofs_embed_dim is not None:
+                self.ofs_embed = nn.Sequential(
+                    nn.Linear(self.ofs_embed_dim, self.ofs_embed_dim),
+                    nn.SiLU(),
+                    nn.Linear(self.ofs_embed_dim, self.ofs_embed_dim),
+                )
             self.time_embed = TimeStepEmbedding(inner_dim, self.time_embed_dim)
+            # Init PatchEmbed
             if self.patch_type == "3D":
                 self.patch_embed = VideoPatch3D(in_channels, inner_dim, self.patch_size)
             else:
@@ -467,6 +475,11 @@ class SatDiT(MultiModalModule):
 
         if self.time_embed is not None:
             timestep_vid = self.time_embed(timestep)
+            if self.ofs_embed_dim is not None:
+                ofs_emb = timestep_embedding(latents.new_full((1,), fill_value=2.0), self.ofs_embed_dim, dtype=self.dtype)
+                ofs_emb = self.ofs_embed(ofs_emb)
+                timestep_vid = timestep_vid + ofs_emb
+
         if self.caption_projection is not None:
             prompt = self.caption_projection(prompt)
             if latents_vid is None:

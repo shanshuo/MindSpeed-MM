@@ -313,6 +313,10 @@ if __name__ == "__main__":
 
         if args.task == "i2v":
             CONVERT_MAPPING.update({"mixins.pos_embed.pos_embedding": "pos_embed.pos_embedding"})
+            CONVERT_MAPPING.update({"ofs_embed.0.bias": "ofs_embed.0.bias"})
+            CONVERT_MAPPING.update({"ofs_embed.0.weight": "ofs_embed.0.weight"})
+            CONVERT_MAPPING.update({"ofs_embed.2.bias": "ofs_embed.2.bias"})
+            CONVERT_MAPPING.update({"ofs_embed.2.weight": "ofs_embed.2.weight"})
 
         # inplace state dict
         for i in range(args.num_layers):
