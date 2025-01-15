@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from functools import wraps
 
 
@@ -33,6 +32,7 @@ def process_args(parser):
     parser = _add_lora_args(parser)
     parser = _add_training_args(parser)
     parser = _add_network_size_args(parser)
+    parser = _add_dummy_optimizer_args(parser)
     return parser
 
 
@@ -85,5 +85,16 @@ def _add_network_size_args(parser):
                        type=int,
                        default=None,
                        help='set padded vocab size')
+
+    return parser
+
+
+def _add_dummy_optimizer_args(parser):
+    group = parser.add_argument_group(title='dummy optimizer args')
+
+    group.add_argument('--enable-dummy-optimizer',
+                       action='store_true',
+                       default=False,
+                       help='enable dummy optimizer')
 
     return parser
