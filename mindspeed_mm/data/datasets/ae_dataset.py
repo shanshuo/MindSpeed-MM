@@ -70,11 +70,11 @@ class TrainVideoDataset(data.Dataset):
             sample_rate = random.randint(1, self.sample_rate)
         else:
             sample_rate = self.sample_rate
-        size = self.sequence_length * sample_rate
+        size = self.num_frames * sample_rate
         temporal_sample = TemporalRandomCrop(size)
         start_frame_ind, end_frame_ind = temporal_sample(total_frames)
         frame_indice = np.linspace(
-            start_frame_ind, end_frame_ind - 1, self.sequence_length, dtype=int
+            start_frame_ind, end_frame_ind - 1, self.num_frames, dtype=int
         )
 
         video_data = decord_vr.get_batch(frame_indice).asnumpy()

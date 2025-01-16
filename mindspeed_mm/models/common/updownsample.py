@@ -368,8 +368,6 @@ class CachedCausal3DUpsample(nn.Module):
         self.causal_cached = deque()
 
     def forward(self, x):
-        x_dtype = x.dtype
-        x = x.to(torch.float32)
         if x.size(2) > 1 or len(self.causal_cached) > 0:
             if self.enable_cached and len(self.causal_cached) > 0:
                 x = torch.cat([self.causal_cached.popleft(), x], dim=2)
@@ -391,5 +389,5 @@ class CachedCausal3DUpsample(nn.Module):
             if self.enable_cached:
                 self.causal_cached.append(x[:, :, -1:])
             x = F.interpolate(x, scale_factor=(1, 2, 2), mode="trilinear")
-        x = x.to(x_dtype)
+
         return self.conv(x)

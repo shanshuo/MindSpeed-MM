@@ -32,6 +32,7 @@ VIDEO_TRANSFORM_MAPPING = {
     "norm_fun": transforms.Normalize,
     "ae_norm": AENorm,
     "MaxHWResizeVideo": MaxHWResizeVideo,
+    "Resize": transforms.Resize,
     "CenterCropVideo": CenterCropVideo,
     "AffineVideo": AffineVideo
 }

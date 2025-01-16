@@ -8,7 +8,6 @@ from mindspeed_mm.data.dataloader.dataloader import (
     prepare_sampler_dataloader,
     prepare_variable_dataloader,
 )
-from mindspeed_mm.data.dataloader.sampler import AESampler
 from mindspeed_mm.data.datasets.image_dataset import ImageDataset
 from mindspeed_mm.data.datasets.t2i_dataset import T2IDataset
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset, DynamicVideoTextDataset
@@ -17,6 +16,7 @@ from mindspeed_mm.data.datasets.video_dataset import VideoDataset
 from mindspeed_mm.data.datasets.audio_dataset import AudioDataset
 from mindspeed_mm.data.datasets.qwen2vl_dataset import Qwen2vlDataset
 from mindspeed_mm.data.datasets.ae_dataset import TrainVideoDataset
+from mindspeed_mm.models.ae.training.global_vars import get_ae_args
 
 __all__ = [
     "build_mm_dataset", "build_mm_dataloader"
@@ -101,3 +101,42 @@ def build_mm_dataloader(dataset, dataloader_param, process_group=None, consumed_
         return data_loader
     else:
         raise NotImplementedError(dataloader_param["dataloader_mode"])
+
+
+def build_ae_dataset(dataset_param):
+    """
+    Build an AE dataset based on different tasks
+
+    Args:
+        dataset_param
+    Return:
+        dataset
+    """
+    if not isinstance(dataset_param, dict):
+        dataset_param = dataset_param.to_dict()
+    return TrainVideoDataset(**dataset_param)
+
+
+def build_ae_dataloader(dataset, dataloader_param, process_group=None):
+    """
+    Build an AE dataloader based on different tasks
+
+    Args:
+        dataloader_param_dict
+    Return:
+        dataloader
+    """
+    if not isinstance(dataloader_param, dict):
+        dataloader_param = dataloader_param.to_dict()
+    dataloader_mode = dataloader_param.pop("dataloader_mode")
+
+    if dataloader_mode == "sampler":
+        args = get_ae_args()
+        batch_size = args.micro_batch_size
+        num_workers = args.num_workers
+        data_loader = prepare_sampler_dataloader(
+            dataset, batch_size=batch_size, num_workers=num_workers, **dataloader_param, process_group=process_group
+        )
+        return data_loader
+    else:
+        raise NotImplementedError(dataloader_mode)

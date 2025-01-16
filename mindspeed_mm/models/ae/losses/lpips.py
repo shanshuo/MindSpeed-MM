@@ -12,11 +12,11 @@ class LPIPS(nn.Module):
         self.scaling_layer = ScalingLayer()
         self.chns = [64, 128, 256, 512, 512]  # vg16 features
         self.net = vgg16(pretrained=True, requires_grad=False)
-        self.layer0 = NetLinLayer(self.chns[0], use_dropout=use_dropout)
-        self.layer1 = NetLinLayer(self.chns[1], use_dropout=use_dropout)
-        self.layer2 = NetLinLayer(self.chns[2], use_dropout=use_dropout)
-        self.layer3 = NetLinLayer(self.chns[3], use_dropout=use_dropout)
-        self.layer4 = NetLinLayer(self.chns[4], use_dropout=use_dropout)
+        self.lin0 = NetLinLayer(self.chns[0], use_dropout=use_dropout)
+        self.lin1 = NetLinLayer(self.chns[1], use_dropout=use_dropout)
+        self.lin2 = NetLinLayer(self.chns[2], use_dropout=use_dropout)
+        self.lin3 = NetLinLayer(self.chns[3], use_dropout=use_dropout)
+        self.lin4 = NetLinLayer(self.chns[4], use_dropout=use_dropout)
         
         
         self.load_state_dict(torch.load(perceptual_from_pretrained, map_location=torch.device("cpu")), strict=False)
@@ -27,7 +27,7 @@ class LPIPS(nn.Module):
         in0_input, in1_input = (self.scaling_layer(inputs), self.scaling_layer(targets))
         outs0, outs1 = self.net(in0_input), self.net(in1_input)
         feats0, feats1, diffs = {}, {}, {}
-        layers = [self.layer0, self.layer1, self.layer2, self.layer3, self.layer4]
+        layers = [self.lin0, self.lin1, self.lin2, self.lin3, self.lin4]
         for chn_idx in range(len(self.chns)):
             feats0[chn_idx], feats1[chn_idx] = normalize_tensor(outs0[chn_idx]), normalize_tensor(outs1[chn_idx])
             diffs[chn_idx] = (feats0[chn_idx] - feats1[chn_idx]) ** 2

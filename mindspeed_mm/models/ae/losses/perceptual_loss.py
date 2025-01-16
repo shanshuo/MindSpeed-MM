@@ -75,6 +75,7 @@ class LPIPSWithDiscriminator3D(nn.Module):
         learn_logvar: bool = False,
         wavelet_weight=0.01,
         loss_type: str = "l1",
+        use_dropout: bool = True,
         **kwargs
     ):
 
@@ -84,7 +85,7 @@ class LPIPSWithDiscriminator3D(nn.Module):
         self.wavelet_weight = wavelet_weight
         self.kl_weight = kl_weight
         self.pixel_weight = pixelloss_weight
-        self.perceptual_loss = LPIPS(perceptual_from_pretrained).eval()
+        self.perceptual_loss = LPIPS(perceptual_from_pretrained, use_dropout).eval()
         self.perceptual_weight = perceptual_weight
         self.logvar = nn.Parameter(
             torch.full((), logvar_init), requires_grad=learn_logvar

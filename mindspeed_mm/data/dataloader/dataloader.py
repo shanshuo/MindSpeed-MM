@@ -33,6 +33,7 @@ from mindspeed_mm.data.dataloader.sampler import (
     StatefulDistributedSampler,
     VariableVideoBatchSampler,
     BaseRandomBatchSampler,
+    AESampler
 )
 from mindspeed_mm.data.dataloader.data_collator import DATA_COLLATOR
 
@@ -122,7 +123,6 @@ def prepare_sampler_dataloader(
         :class:`torch.utils.data.DataLoader`: A DataLoader used for training or testing.
     """
     process_group = process_group if process_group is not None else _get_default_group()
-    gradient_accumulation_size = cal_gradient_accumulation_size()
     if sampler_type == "stateful_distributed_sampler":
         collate_fn = None
         if collate_param:
@@ -147,6 +147,7 @@ def prepare_sampler_dataloader(
         )
     
     elif sampler_type == "LengthGroupedSampler":
+        gradient_accumulation_size = cal_gradient_accumulation_size()
         if group_data and (group_frame or group_resolution):
             raise AssertionError(
                 "group_data and (group_frame or group_resolution) cannot be true at the same time!"
@@ -230,6 +231,20 @@ def prepare_sampler_dataloader(
                                                       pin_memory,
                                                       process_group,
                                                       num_workers))
+    elif sampler_type == "AESampler":
+        sampler = AESampler(
+            dataset,
+            num_replicas=process_group.size(),
+            rank=process_group.rank(),
+            shuffle=shuffle,
+        )
+        return DataLoader(
+            dataset,
+            batch_size=batch_size,
+            sampler=sampler,
+            pin_memory=pin_memory,
+            num_workers=num_workers,
+        )
     else:
         raise NotImplementedError(f"sampler type: {sampler_type}")
 
