@@ -287,6 +287,7 @@ class Qwen2VLModel(MultiModalModule):
         if self.add_image_encoder and pixel_values is not None:
             vit_embeds = self.image_encoder(pixel_values, image_grid_thw)
             vit_embeds = vit_embeds.reshape(-1, 1, vit_embeds.shape[-1]).clone()
+            output = vit_embeds
         else:
             vit_embeds = self.input_tensor
 

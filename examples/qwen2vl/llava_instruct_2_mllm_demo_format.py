@@ -15,11 +15,11 @@ for item in info_json:
             "images": [],
             "messages": []
         } 
-    img_path = os.path.join("./data/COCO2017/train2017", item["image"])
-    print(f"img_path: {img_path}")
-    if not os.path.exists(img_path):
-        continue
     else:
+        img_path = os.path.join("./data/COCO2017/train2017", item["image"])
+        print(f"img_path: {img_path}")
+        if not os.path.exists(img_path):
+            continue
         new_item = {
             "images": [img_path],
             "messages": []
