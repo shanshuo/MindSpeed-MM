@@ -15,6 +15,7 @@ from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.models.qwen2vl_model import Qwen2VLModel
 from mindspeed_mm.training import pretrain
 from mindspeed_mm.utils.transformer_model_config import get_model_config
+from mindspeed_mm.patchs import dummy_optimizer_patch # noqa
 
 
 def model_provider(pre_process=True, post_process=True):

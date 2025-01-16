@@ -11,7 +11,7 @@
 
 ## 使用方法
 
-1. 在模型入口脚本中导入 patch 模块（InternVL 已支持）；
+1. 在模型入口脚本中导入 patch 模块（InternVL/Qwen2VL 已支持）；
 
    ```python
    from mindspeed_mm.patchs import dummy_optimizer_patch
