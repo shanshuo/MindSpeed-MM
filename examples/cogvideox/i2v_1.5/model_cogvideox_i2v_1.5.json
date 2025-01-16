@@ -10,6 +10,7 @@
         "from_pretrained": null,
         "dtype": "bf16",
         "num_layers": 2,
+        "pipeline_num_layers":null,
         "num_heads": 48,
         "head_dim": 64,
         "in_channels": 32,

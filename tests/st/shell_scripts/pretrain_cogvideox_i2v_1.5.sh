@@ -1,4 +1,5 @@
 #!/bin/bash
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
@@ -16,17 +17,18 @@ NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
-TP=1
-PP=1
-CP=1
+TP=2
+PP=2
+CP=2
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP/$PP))
+BASEPATH=$(cd `dirname $0`; cd ../../../; pwd)
 
-MM_DATA="./examples/cogvideox/i2v_1.5/data.json"
-MM_MODEL="./examples/cogvideox/i2v_1.5/model_cogvideox_i2v_1.5.json"
-MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="your_converted_dit_ckpt_dir"
-SAVE_PATH="your_ckpt_path_to_save"
+MM_DATA="$BASEPATH/tests/st/run_configs/pretrain_cogvideox_i2v_1_5/data.json"
+MM_MODEL="$BASEPATH/tests/st/run_configs/pretrain_cogvideox_i2v_1_5/model.json"
+MM_TOOL="$BASEPATH/mindspeed_mm/tools/tools.json"
+LOAD_PATH="./"
+SAVE_PATH=""
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $GPUS_PER_NODE \
@@ -65,7 +67,7 @@ GPT_ARGS="
     --lr-warmup-init 1e-5 \
     --lr-warmup-iters 0 \
     --clip-grad 1.0 \
-    --train-iters 5000 \
+    --train-iters 3 \
     --no-gradient-accumulation-fusion \
     --load $LOAD_PATH \
     --no-load-optim \
@@ -73,6 +75,9 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --bf16 \
+    --sequence-parallel \
+    --optimization-level 2 \
+    --use-multiparameter-pipeline-model-parallel \
     --recompute-granularity full \
     --recompute-method block \
     --recompute-num-layers 42 \
@@ -93,18 +98,10 @@ OUTPUT_ARGS="
     --save-interval 10000 \
     --eval-interval 10000 \
     --eval-iters 10 \
-    --save $SAVE_PATH \
 "
 
-logfile=$(date +%Y%m%d)_$(date +%H%M%S)
-mkdir -p logs
-torchrun $DISTRIBUTED_ARGS pretrain_sora.py \
+torchrun $DISTRIBUTED_ARGS $BASEPATH/pretrain_sora.py \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl >> logs/train_${logfile}.log 2>&1
-
-chmod 440 logs/train_${logfile}.log
-STEP_TIME=`grep "elapsed time per iteration" logs/train_${logfile}.log | awk -F ':' '{print$5}' | awk -F '|' '{print$1}' | head -n 200 | tail -n 100 | awk '{sum+=$1} END {if (NR != 0) printf("%.1f",sum/NR)}'`
-SPS=`awk 'BEGIN{printf "%.3f\n", '${GBS}'*1000/'${STEP_TIME}'}'`
-echo "Elapsed Time Per iteration: $STEP_TIME, Average Samples per Second: $SPS"
+    --distributed-backend nccl 

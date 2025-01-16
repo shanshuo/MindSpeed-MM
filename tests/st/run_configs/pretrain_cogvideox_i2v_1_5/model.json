@@ -1,25 +1,26 @@
 {
-    "frames": 25,
-    "resolution": [480, 720],
+    "frames": 21,
+    "resolution": [768, 1360],
     "allow_internal_format":false,
     "load_video_features": false,
     "load_text_features": false,
-    "task": "t2v",
+    "task": "i2v",
     "predictor": {
         "model_id": "satdit",
         "from_pretrained": null,
         "dtype": "bf16",
-        "num_layers": 2,
-        "pipeline_num_layers":null,
+        "num_layers": 4,
+        "pipeline_num_layers": [2,2],
         "num_heads": 48,
         "head_dim": 64,
-        "in_channels": 16,
+        "in_channels": 32,
         "out_channels": 16,
         "dropout": 0.0,
         "cross_attention_dim": null,
         "attention_bias": true,
-        "input_size": [7, 60, 90],
-        "patch_size": [1, 2, 2],
+        "input_size": [6, 96, 170],
+        "patch_type": "3D",
+        "patch_size": [2, 2, 2],
         "activation_fn": "gelu-approximate",
         "num_embeds_ada_norm": 1000,
         "norm_type": "qk_ln",
@@ -27,10 +28,11 @@
         "norm_eps": 1e-5,
         "caption_channels": null,
         "time_embed_dim": 512,
-        "text_length": 226,
+        "text_length": 224,
         "text_hidden_size": 4096,
         "concat_text_embed": true,
         "interpolation_scale": [1.0, 1.0, 1.0],
+        "learnable_pos_embed": true,
         "use_rope": true
     },
     "diffusion": {
@@ -53,7 +55,7 @@
     "text_encoder": {
         "model_id": "T5",
         "hub_backend": "hf",
-        "from_pretrained": "5b-cogvideo",
+        "from_pretrained": "/home/ci_resource/models/cogvideox1_0/text_encoder",
         "dtype": "bf16",
         "load_in_8bit": false,
         "low_cpu_mem_usage": true,
@@ -62,7 +64,7 @@
     },
    "ae": {
         "model_id": "contextparallelcasualvae",
-        "from_pretrained": "3d-vae.pt",
+        "from_pretrained": "/home/ci_resource/models/cogvideox1_0/vae/3d-vae.pt",
         "cp_size": 1,
         "dtype": "bf16",
         "z_channels": 16,
@@ -117,6 +119,12 @@
         ],
         "encoder_gather_norm": true,
         "decoder_gather_norm": true,
-        "use_quant_layer": false
+        "use_quant_layer": false,
+        "i2v_processor": {
+            "processor_id": "cogvideox_i2v_processor",
+            "noised_image_all_concat": false,
+            "noised_image_dropout": 0.05,
+            "noised_image_input": true
+        }
     }
 }

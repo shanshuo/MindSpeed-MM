@@ -184,7 +184,43 @@ pip install decord==0.6.0
 ```bash
 python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 10 11 11 10 --num_layers 42 --mode split
 ```
-当开启PP时，--pp_size 后参数值个数与PP的数值相等，并且参数之和与--num_layers 参数相等，举例：当PP=4, --num_layers 4, --pp_size 1 1 1 1; 当PP=4, --num_layers 42, --pp_size 10 11 11 10
+其中--tp_size 后为实际的tp切分策略， --task 的值为t2v或i2v，
+当开启PP时，--pp_size 后参数值个数与PP的数值相等，并且参数之和与--num_layers 参数相等，举例：当PP=4, --num_layers 4, --pp_size 1 1 1 1; 当PP=4, --num_layers 42, --pp_size 10 11 11 10 
+
+转换后的权重结构如下：
+
+TP=1,PP=1时：
+```
+CogVideoX-5B-Converted
+├── release
+│   └──mp_rank_00
+│      └──model_optim_rng.pt
+└──latest_ckeckpointed_iterations.txt
+```
+TP=2,PP=1, TP>2的情况依此类推：
+```
+CogVideoX-5B-Converted
+├── release
+│   ├──mp_rank_00
+│   │    └──model_optim_rng.pt
+│   └──mp_rank_01
+│      └──model_optim_rng.pt
+└──latest_ckeckpointed_iterations.txt
+```
+TP=1,PP=4, PP>1及TP>1的情况依此类推：
+```
+CogVideoX-5B-Converted
+├── release
+│   ├──mp_rank_00_000
+│   │   └──model_optim_rng.pt
+│   ├──mp_rank_00_001
+│   │   └──model_optim_rng.pt
+│   ├──mp_rank_00_002
+│   │   └──model_optim_rng.pt
+│   └──mp_rank_00_003
+│       └──model_optim_rng.pt
+└──latest_ckeckpointed_iterations.txt
+```
 
 ---
 <a id="jump4"></a>
@@ -222,12 +258,51 @@ data.jsonl文件内容如下示例：
 
 <a id="jump5.2"></a>
 #### 配置参数
-需根据实际任务情况修改`pretrain_cogvideox_i2v.sh`/`pretrain_cogvideox_i2v_1.5.sh`、`pretrain_cogvideox_t2v.sh`/`pretrain_cogvideox_t2v_1.5.sh`和`data.json`中的权重和数据集路径，包括`LOAD_PATH`、`SAVE_PATH`、`data_path`、`data_folder`字段。`LOAD_PATH`字段中填写的权重路径位置一定要正确，填写错误的话会导致权重无法加载但运行并不会提示报错。
+<a id="jump5.2"></a>
+CogvideoX训练阶段的启动文件为shell脚本，主要分为如下4个：
+|            | I2V | T2V |
+|:------------:|:----:|:----:|
+| 1.0 |  pretrain_cogvideox_i2v.sh |pretrain_cogvideox_t2v.sh  |
+| 1.5 | pretrain_cogvideox_i2v_1.5.sh |pretrain_cogvideox_t2v_1.5.sh |
 
-根据实际情况修改`model_cogvideox_t2v.json`/`model_cogvideox_t2v_1.5.json`、`model_cogvideox_i2v.json`/`model_cogvideox_i2v_1.5.json`、`data.json`文件中VAE及T5模型文件的实际路径。
+模型参数的配置文件如下：
+|            | I2V | T2V |
+|:------------:|:----:|:----:|
+| 1.0 |  model_cogvideox_i2v.json |model_cogvideox_t2v.json  |
+| 1.5 | model_cogvideox_i2v_1.5.json |model_cogvideox_t2v_1.5.json |
+
+以及涉及训练数据集的`data.json`文件
+
+默认的配置已经经过测试，用户可按照自身环境修改如下内容：
+
+1. 权重配置
+
+  需根据实际任务情况在启动脚本文件（如`pretrain_cogvideox_i2v.sh`）中的`LOAD_PATH="your_converted_dit_ckpt_dir"`变量中添加转换后的权重的实际路径，如`LOAD_PATH="./CogVideoX-5B-Converted"`,其中`./CogVideoX-5B-Converted`为转换后的权重的实际路径，其文件夹内容结构如权重转换一节所示。`LOAD_PATH`变量中填写的完整路径一定要正确，填写错误的话会导致权重无法加载但运行并不会提示报错。
+
+根据需要填写`SAVE_PATH`变量中的路径，用以保存训练后的权重。
+
+2. 数据集路径配置
+
+  根据实际情况修改`data.json`中的数据集路径，分别为`"data_path":"/data_path/data.jsonl"`、`"data_folder":"/data_path/"`，替换`"/data_path/"`为实际的数据集路径。
+
+3. VAE及T5模型路径配置
+
+  根据实际情况修改模型参数配置文件（如`model_cogvideox_i2v.json`）以及`data.json`文件中VAE及T5模型文件的实际路径。其中，T5文件的路径字段为`"from_pretrained": "5b-cogvideo/tokenizer"`及`"from_pretrained": "5b-cogvideo"`，替换`5b-cogvideo`为实际的路径；VAE模型文件的路径字段为`"from_pretrained": "3d-vae.pt"`，替换`3d-vae.pt`为实际的路径。
+
+  当需要卸载VAE跟T5时，将模型参数配置文件中的`"load_video_features": false`及`"load_text_features": false`字段中的值分别改为`true`。
+
+4. 切分策略配置
+
+* 当PP开启时，在启动脚本文件中添加`--optimization-level 2 --use-multiparameter-pipeline-model-parallel`参数，并且在模型参数配置文件中的将`pipeline_num_layers`参数的值由`null`改为实际切分情况，例如PP=4，num_layers=42时，`"pipeline_num_layers":[11, 10, 11, 10]`,具体值根据实际的PP切分策略确定。
+
+* 当开启VAE CP时，修改模型参数配置文件中的`ae`字典内的关键字`cp_size`的值为所需要的值。
+
+* 当开启SP时，在启动脚本文件中添加`--sequence-parallel`参数。
 
 
-`model_cogvideox_t2v.json`/`model_cogvideox_i2v.json`文件中的`head_dim`字段原模型默认配置为64。此字段调整为128会更加亲和昇腾。
+
+
+模型参数配置文件中的`head_dim`字段原模型默认配置为64。此字段调整为128会更加亲和昇腾。
 
 在sh启动脚本中可以修改运行卡数(NNODES为节点数，GPUS_PER_NODE为每个节点的卡数，相乘即为总运行卡数)：
 ```shell

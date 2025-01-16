@@ -224,6 +224,11 @@ class T2VDataset(MMBaseDataset):
                     texts_path = os.path.join(self.data_folder, texts_path)
                 video_value = self.get_data_from_feature_data(path)
                 texts = self.get_data_from_feature_data(texts_path)
+                if "image_latent" in sample:
+                    image_latent_path = sample["image_latent"]
+                    if self.data_folder:
+                        image_latent_path = os.path.join(self.data_folder, image_latent_path)
+                    examples.update(self.get_data_from_feature_data(image_latent_path))
                 examples[VIDEO] = video_value
                 examples[TEXT] = texts
                 examples[PROMPT_IDS] = texts

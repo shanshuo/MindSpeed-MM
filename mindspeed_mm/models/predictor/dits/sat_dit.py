@@ -531,8 +531,10 @@ class SatDiT(MultiModalModule):
         latent_size = (self.out_channels, *self.input_size)
         seq_len = self.seq_len 
 
-        if self.enable_sequence_parallelism or self.sequence_parallel:
+        if self.enable_sequence_parallelism and not self.sequence_parallel:
             prev_output_shape = (seq_len // mpu.get_context_parallel_world_size(), micro_batch_size, self.inner_dim) # SBH
+        elif self.sequence_parallel:
+            prev_output_shape = (seq_len // mpu.get_context_parallel_world_size() // mpu.get_tensor_model_parallel_world_size(), micro_batch_size, self.inner_dim) # SBH
         else:
             prev_output_shape = (micro_batch_size, seq_len, self.inner_dim) # BSH
 
