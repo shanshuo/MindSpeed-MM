@@ -236,15 +236,9 @@
         config_gc()
         ```
 
-    3. 【Optional】在文件918行左右将`compute_vae_encodings_fn`进行修改
-
-        ```python
-        compute_vae_encodings_fn = functools.partial(compute_vae_encode, accelerator=accelerator, vae=vae)
-        ```
-
     <a id="jump2.1"></a>
 
-    4. 【Optional】Ubuntu系统需在文件1216行附近添加 `accelerator.print("")`
+    3. 【Optional】Ubuntu系统需在文件1216行附近添加 `accelerator.print("")`
 
         ```python
         if global_step >= args.max_train_steps:
@@ -252,7 +246,7 @@
         accelerator.print("")
         ```
 
-    5. 【FPS打印方式请参考train_text_to_image_sdxl_pretrain.py】
+    4. 【FPS打印方式请参考train_text_to_image_sdxl_pretrain.py】
 
 3. 【启动 SDXL 预训练脚本】
 
