@@ -52,14 +52,14 @@ GPT_ARGS="
     --pipeline-model-parallel-size ${PP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 1 \
-    --hidden-size 1 \
-    --ffn-hidden-size 1 \
-    --num-attention-heads 1 \
+    --num-layers 28 \
+    --hidden-size 1536 \
+    --ffn-hidden-size 8960 \
+    --num-attention-heads 12 \
     --tokenizer-type NullTokenizer \
-    --vocab-size 1 \
-    --seq-length 1 \
-    --max-position-embeddings 1 \
+    --vocab-size 151936 \
+    --seq-length 1024 \
+    --max-position-embeddings 32768 \
     --make-vocab-size-divisible-by 1 \
     --init-method-std 0.01 \
     --normalization RMSNorm \

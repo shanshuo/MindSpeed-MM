@@ -1125,7 +1125,7 @@ class GenerationMixin:
                 # update generated ids, model inputs, and length for next step
                 input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
 
-                if streamer is not None:
+                if streamer is not None and mpu.get_tensor_model_parallel_rank() == 0:
                     streamer.put(next_tokens.cpu())
                 # if eos_token was found in one sentence, set sentence to finished
                 if eos_token_id_tensor is not None:
@@ -1151,7 +1151,7 @@ class GenerationMixin:
             if done:
                 break
             copy_from_last_to_first_pipeline_stage(input_ids_padding.size(), torch.int64, input_ids_padding)
-        if mpu.is_pipeline_last_stage():
+        if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
             if streamer is not None:
                 streamer.end()
 
@@ -1313,7 +1313,7 @@ class GenerationMixin:
 
                 # update generated ids, model inputs, and length for next step
                 input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
-                if streamer is not None:
+                if streamer is not None and mpu.get_tensor_model_parallel_rank() == 0:
                     streamer.put(next_tokens.cpu())
 
                 # if eos_token was found in one sentence, set sentence to finished
@@ -1339,7 +1339,7 @@ class GenerationMixin:
             if done:
                 break
             copy_from_last_to_first_pipeline_stage(input_ids_padding.size(), torch.int64, input_ids_padding)
-        if mpu.is_pipeline_last_stage():
+        if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
             if streamer is not None:
                 streamer.end()
 

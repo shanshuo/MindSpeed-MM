@@ -64,7 +64,7 @@
         "attention_softmax_in_fp32": true,
         "params_dtype": "bf16",
         "bf16": true,
-        "parallel_output": true,
+        "parallel_output": false,
         "group_query_attention": true,
         "num_query_groups": 8,
         "mrope_section": [16, 24, 24],
