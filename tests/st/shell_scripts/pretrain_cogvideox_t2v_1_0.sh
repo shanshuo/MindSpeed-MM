@@ -62,7 +62,7 @@ GPT_ARGS="
     --lr-decay-style constant \
     --weight-decay 1e-2 \
     --clip-grad 1.0 \
-    --train-iters 3 \
+    --train-iters 10 \
     --no-gradient-accumulation-fusion \
     --no-load-optim \
     --no-load-rng \
