@@ -36,19 +36,20 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 已支持特性概览
 
-| 模型 \ 特性 | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
-|:------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
-| CogVideoX-T2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
-| CogVideoX-I2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
-| Opensora1.2 |  |  |  |                                                                                         | DSP | ✔ | ✔ |  |
+|       模型 \ 特性       | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
+|:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
+|    CogVideoX-T2V    | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
+|    CogVideoX-I2V    | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
+|     Opensora1.2     |  |  |  |                                                                                         | DSP | ✔ | ✔ |  |
 | OpensoraPlan1.3-T2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 | OpensoraPlan1.3-I2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
-| InternVL2-2B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-| InternVL2-8B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-| InternVL2-76B |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-| Qwen2VL-2B |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
-| Qwen2VL-7B |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
-| Qwen2VL-72B |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
+|    InternVL2-2B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
+|    InternVL2-8B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
+|    InternVL2-26B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
+|    InternVL2-76B    |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
+|     Qwen2VL-2B      |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
+|     Qwen2VL-7B      |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
+|     Qwen2VL-72B     |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
 
 备注：
 
@@ -302,7 +303,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="7"> 多模态理解 </td>
+      <td rowspan="8"> 多模态理解 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/llava1.5">LLaVA 1.5</a></td>
       <td><a href="https://github.com/haotian-liu/LLaVA">7B</a></td>
       <td>全参微调</td>
@@ -313,7 +314,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
    <tr>
-      <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/internvl2">Intern-VL-2.0</a></td>
+      <td rowspan="4"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/internvl2">Intern-VL-2.0</a></td>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-2B">2B</a></td>
       <td>微调</td>
       <td> 1x8 </td>
@@ -330,6 +331,15 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 12.86 (SPS) </td>
       <td> 11.00 (SPS) </td>
       <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td><a href="https://huggingface.co/OpenGVLab/InternVL2-26B">26B</a></td>
+      <td>微调</td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 3.31 (SPS) </td>
+      <td> 3.26 (SPS) </td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-Llama3-76B">76B</a></td>

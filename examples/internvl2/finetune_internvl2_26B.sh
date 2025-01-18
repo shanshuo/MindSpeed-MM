@@ -16,18 +16,18 @@ NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
-MBS=4
-GRAD_ACC_STEP=16
+MBS=1
+GRAD_ACC_STEP=128
 TP=1
-PP=1
+PP=8
 CP=1
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
-MM_DATA="./examples/internvl2/data_2B.json"
-MM_MODEL="./examples/internvl2/model_2B.json"
+MM_DATA="./examples/internvl2/data_26B.json"
+MM_MODEL="./examples/internvl2/model_26B.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="pretrained/InternVL2-2B"
+LOAD_PATH="pretrained/InternVL2-26B_pp8"
 SAVE_PATH="save_dir"
 
 MM_ARGS="
@@ -50,20 +50,20 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 24 \
-    --hidden-size 2048 \
-    --num-attention-heads 16 \
+    --num-layers 48 \
+    --hidden-size 6144 \
+    --num-attention-heads 48 \
     --seq-length 4096 \
-    --max-position-embeddings 4096 \
+    --max-position-embeddings 32768 \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --tokenizer-type NullTokenizer \
     --vocab-size 92553 \
     --position-embedding-type rope \
-    --rotary-base 100000 \
+    --rotary-base 1000000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 4e-5 \
+    --lr 2e-5 \
     --min-lr 0.0 \
     --train-iters 5000 \
     --lr-decay-style cosine \

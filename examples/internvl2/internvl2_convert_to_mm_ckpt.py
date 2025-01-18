@@ -57,13 +57,17 @@ def get_model_config(model_size, enable_vpp, is_inference=False):
         if not enable_vpp:
             pp_size = 8
             vp_size = 1
-            vit_pipeline_num_layers = [26, 19, 0, 0, 0, 0, 0, 0]
+            vit_pipeline_num_layers = [38, 7, 0, 0, 0, 0, 0, 0]
             llm_pipeline_num_layers = [0, 2, 8, 8, 8, 8, 8, 6]
         else:
             pp_size = 8
-            vp_size = 2
-            vit_pipeline_num_layers = [[13, 13, 13, 6, 0, 0, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0]]
-            llm_pipeline_num_layers = [[0, 0, 0, 1, 4, 4, 4, 4], [4, 4, 4, 4, 4, 4, 4, 3]]
+            vp_size = 3
+            vit_pipeline_num_layers = [[8, 8, 8, 7, 7, 7, 0, 0],
+                                       [0, 0, 0, 0, 0, 0, 0, 0],
+                                       [0, 0, 0, 0, 0, 0, 0, 0]]
+            llm_pipeline_num_layers = [[0, 0, 0, 0, 0, 0, 1, 2],
+                                       [3, 3, 3, 3, 3, 3, 3, 3],
+                                       [3, 3, 3, 3, 3, 3, 2, 1]]
     elif model_size == '76B':
         vit_num_layers = 45
         llm_num_layers = 80
