@@ -53,11 +53,11 @@ GPT_ARGS="
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
     --num-layers 28 \
-    --hidden-size 1536 \
-    --ffn-hidden-size 8960 \
-    --num-attention-heads 12 \
+    --hidden-size 3584 \
+    --ffn-hidden-size 18944 \
+    --num-attention-heads 28 \
     --tokenizer-type NullTokenizer \
-    --vocab-size 151936 \
+    --vocab-size 152064 \
     --seq-length 1024 \
     --max-position-embeddings 32768 \
     --make-vocab-size-divisible-by 1 \
