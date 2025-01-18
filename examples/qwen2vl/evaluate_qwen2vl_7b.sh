@@ -34,7 +34,7 @@ PP=1
 CP=1
 SEQ_LEN=1024
 MBS=1
-GRAD_ACC_STEP=96
+GRAD_ACC_STEP=1
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
@@ -67,8 +67,6 @@ GPT_ARGS="
     --swiglu \
     --use-fused-swiglu \
     --seed 42 \
-    --bf16 \
-    --load $LOAD_PATH \
     --bf16 \
     --load $LOAD_PATH \
     --vocab-size 1 \

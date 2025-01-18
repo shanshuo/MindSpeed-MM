@@ -52,7 +52,7 @@
         "persist_layer_norm": true,
         "activation_func": "silu",
         "vocab_size": 92553,
-        "rotary_base": 100000,
+        "rotary_base": 1000000,
         "is_encoder_decoder": false
     },
     "image_encoder": {

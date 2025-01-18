@@ -1,3 +1,4 @@
+from typing import Any, Dict
 from PIL import Image
 
 import torch
@@ -117,6 +118,13 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
             "input_ids": input_ids,
         }
         return model_inputs
+    
+    def _update_model_kwargs_for_generation(self, model_kwargs:Dict[str, Any], model_inputs:Dict[str, Any]):
+        # update position_ids
+        if "position_ids" in model_kwargs:
+            model_kwargs["position_ids"] = model_inputs["position_ids"]
+
+        return model_kwargs
 
     @torch.no_grad()
     def _inference(

@@ -25,7 +25,7 @@ from megatron.training.arguments import core_transformer_config_from_args
 from .utils import is_enable_lora, merge_dicts, modify_keys_with_dict
 
 
-def unrap_model_wrapper(fn):
+def unwrap_model_wrapper(fn):
     @wraps(fn)
     def wrapper(model, module_instances=None):
         if not module_instances:
@@ -171,5 +171,5 @@ def apply_patches():
     megatron.core.transformer.module.MegatronModule.state_dict_for_save_checkpoint \
         = state_dict_for_save_checkpoint_wrapper(
         megatron.core.transformer.module.MegatronModule.state_dict_for_save_checkpoint)
-    megatron.training.checkpointing.unwrap_model = unrap_model_wrapper(megatron.training.checkpointing.unwrap_model)
-    megatron.training.training.unwrap_model = unrap_model_wrapper(megatron.training.training.unwrap_model)
+    megatron.training.checkpointing.unwrap_model = unwrap_model_wrapper(megatron.training.checkpointing.unwrap_model)
+    megatron.training.training.unwrap_model = unwrap_model_wrapper(megatron.training.training.unwrap_model)

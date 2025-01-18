@@ -1,3 +1,5 @@
+from typing import Any, Dict
+
 import torch
 from PIL import Image
 from transformers import StoppingCriteria
@@ -186,22 +188,26 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
         """
         input_ids = kwargs.pop("input_ids")
-        if input_ids.shape[-1] == 1:
-            kwargs_dict = {"input_ids": input_ids, "attention_mask": kwargs["attention_mask"],
-                           "decoder_input": kwargs["decoder_input"],
-                           "position_ids": None}
-            return kwargs_dict
-
         if input_ids.shape[-1] > 1:
             cur_inputs_embeds = self.model.embedding.word_embeddings(input_ids[-1][-1]).unsqueeze(0).unsqueeze(0)
             kwargs["input_ids"] = input_ids
             kwargs["attention_mask"] = self.generate_inverted_triangle_mask(kwargs["attention_mask"].shape[-1] + 1,
-                                                                            cur_inputs_embeds.device).unsqueeze(
-                0).unsqueeze(0)
+                                                                            cur_inputs_embeds.device).unsqueeze(0).unsqueeze(0)
             kwargs["decoder_input"] = torch.cat([kwargs["decoder_input"], cur_inputs_embeds], dim=0)
             kwargs["position_ids"] = None
+        
+        kwargs_dict = {"input_ids": input_ids,
+                       "attention_mask": kwargs["attention_mask"],
+                       "decoder_input": kwargs["decoder_input"],
+                       "position_ids": None}
 
-        return kwargs
+        return kwargs_dict
+
+    def _update_model_kwargs_for_generation(self, model_kwargs:Dict[str, Any], model_inputs:Dict[str, Any]):
+        model_kwargs["attention_mask"] = model_inputs["attention_mask"]
+        model_kwargs["decoder_input"] = model_inputs["decoder_input"]
+
+        return model_kwargs
 
     @staticmethod
     def generate_inverted_triangle_mask(size, device):

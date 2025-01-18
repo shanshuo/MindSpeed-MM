@@ -1,5 +1,5 @@
 # Copyright (c) 2023; NVIDIA CORPORATION. All rights reserved.
-from typing import Optional, Dict, Union
+from typing import Optional, Dict, Tuple, Union
 import torch
 from torch.nn import CrossEntropyLoss
 
@@ -282,6 +282,8 @@ class Qwen2VLModel(MultiModalModule):
             position_ids: Optional[torch.LongTensor] = None,
             packed_seq_params: Optional[PackedSeqParams] = None,
             extra_block_kwargs: Optional[dict] = None,
+            cache_position: Optional[torch.LongTensor] = None,
+            rope_deltas: Optional[torch.LongTensor] = None
     ) -> Union[Dict[str, torch.Tensor], torch.Tensor]:
 
         if self.add_image_encoder and pixel_values is not None:
@@ -309,10 +311,11 @@ class Qwen2VLModel(MultiModalModule):
                 past_seen_tokens = attention_mask.shape[1] - 1 if inference_params.key_value_memory_dict else 0
             else:
                 past_seen_tokens = 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + seq_len, device=input_ids.device
-            )
-            position_ids = cache_position.view(1, 1, -1).expand(3, input_ids.shape[0], -1)
+            if position_ids is None:
+                cache_position = torch.arange(
+                    past_seen_tokens, past_seen_tokens + seq_len, device=input_ids.device
+                )
+                position_ids = cache_position.view(1, 1, -1).expand(3, input_ids.shape[0], -1)
 
             attention_mask = self._build_causal_mask(input_ids=input_ids, attention_mask=attention_mask)
 

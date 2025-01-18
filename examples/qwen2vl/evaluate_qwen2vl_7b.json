@@ -142,6 +142,9 @@
         ],
         "max_new_tokens": 256,
         "pad_token_id": 151643,
+        "vision_start_token_id": 151652,
+        "image_token_id": 151655,
+        "video_token_id": 151656,
         "temperature": 0.01,
         "top_k": 1,
         "top_p": 0.001,
@@ -156,7 +159,8 @@
         "max_matching_ngram_size": null,
         "stop_strings": null
     },
-
+    "min_pixels": 1003520,
+    "max_pixels": 12845056,
     "dataset_path": "./AI2D_TEST.tsv",
     "evaluation_dataset":"ai2d_test",
     "evaluation_model":"qwen2_vl_7b",

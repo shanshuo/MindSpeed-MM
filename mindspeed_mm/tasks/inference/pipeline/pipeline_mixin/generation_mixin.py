@@ -324,6 +324,12 @@ class GenerationMixin:
         raise NotImplementedError(
             "A model class needs to define a `prepare_inputs_for_generation` method in order to use `.generate()`."
         )
+    
+    
+    def _update_model_kwargs_for_generation(self, *args, **kwargs):
+        raise NotImplementedError(
+            "A model class needs to define a `_update_model_kwargs_for_generation` method in order to use `.generate()`."
+        )
 
     def _prepare_model_inputs(
             self,
@@ -1090,13 +1096,14 @@ class GenerationMixin:
         # Therefore, padding should be done according to the maximum generated sequence length.
         input_ids_padding = torch.nn.functional.pad(input_ids, (0, stopping_criteria.max_length - input_ids_length),
                                                     "constant", 0)
+        
         while True:
             input_ids = input_ids_padding[:, :input_ids_length]
             model_kwargs["input_ids"] = input_ids
-            model_kwargs = self.prepare_inputs_for_generation(**model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(**model_kwargs)
 
             outputs = self.model(
-                **model_kwargs,
+                **model_inputs,
             )
             input_ids_length += 1
             if mpu.is_pipeline_last_stage():
@@ -1107,7 +1114,7 @@ class GenerationMixin:
                 if isinstance(outputs, dict) and "logits" in outputs:
                     outputs = outputs["logits"]
 
-                next_token_logits = outputs[:, -1, :]
+                next_token_logits = outputs[:, -1, :].float()
                 # pre-process distribution
                 next_token_scores = logits_processor(input_ids, next_token_logits)
                 next_token_scores = logits_warper(input_ids, next_token_scores)
@@ -1146,6 +1153,7 @@ class GenerationMixin:
                                                             "constant", 0)
                 if this_peer_finished and not synced_gpus:
                     done = torch.ones(1, dtype=torch.uint8, device=torch.cuda.current_device())
+            model_kwargs = self._update_model_kwargs_for_generation(model_kwargs, model_inputs)
             # if finish the inference, send 'done' to each rank
             done = broadcast_from_last_pipeline_stage(1, torch.uint8, done)
             if done:
@@ -1286,10 +1294,10 @@ class GenerationMixin:
             # prepare model inputs
             input_ids = input_ids_padding[:, :input_ids_length]
             model_kwargs["input_ids"] = input_ids
-            model_kwargs = self.prepare_inputs_for_generation(**model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(**model_kwargs)
             # forward pass to get next token
             outputs = self.model(
-                **model_kwargs
+                **model_inputs
             )
             input_ids_length += 1
             if mpu.is_pipeline_last_stage():
@@ -1297,7 +1305,7 @@ class GenerationMixin:
                     continue  # don't waste resources running the code we don't need
                 if isinstance(outputs, dict) and "logits" in outputs:
                     outputs = outputs["logits"]
-                next_token_logits = outputs[:, -1, :]
+                next_token_logits = outputs[:, -1, :].float()
 
                 # pre-process distribution
                 next_tokens_scores = logits_processor(input_ids, next_token_logits)
@@ -1334,6 +1342,7 @@ class GenerationMixin:
                                                             "constant", 0)
                 if this_peer_finished and not synced_gpus:
                     done = torch.ones(1, dtype=torch.uint8, device=torch.cuda.current_device())
+            model_kwargs = self._update_model_kwargs_for_generation(model_kwargs, model_inputs)
             # if finish the inference, send 'done' to each rank
             done = broadcast_from_last_pipeline_stage(1, torch.uint8, done)
             if done:

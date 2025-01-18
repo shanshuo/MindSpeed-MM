@@ -27,7 +27,7 @@
     "lm_position_embedding_type": "rope",
     "is_encoder_decoder": false,
     "freeze": true,
-    "ckpt_path": "./llava_weights_mm/splitqkv.pt"
+    "ckpt_path": "/<your_vicuna_weights_path>/converted_vicuna.pt"
   },
   "image_encoder": {
     "vision_encoder": {
@@ -59,7 +59,7 @@
       "patch_size": 14,
       "image_size": 336,
       "freeze": true,
-      "ckpt_path": "./llava_weights_mm/clip_weights.pt"
+      "ckpt_path": "/<your_clip_weights_path>/converted_clip.pt"
     },
     "vision_projector": {
       "model_id": "mlp",
@@ -75,7 +75,7 @@
       "params_dtype": "fp16",
       "activation_func": "gelu",
       "freeze": true,
-      "ckpt_path": "./llava_weights_mm/projector.pth"
+      "ckpt_path": "/<your_clip_weights_path>/converted_mlp.pt"
     }
   },
   "text_encoder": null,
@@ -86,7 +86,8 @@
     "hub_backend": "hf",
     "autotokenizer_name": "AutoTokenizer",
     "from_pretrained": "./llava_7b",
-    "local_files_only": false
+    "local_files_only": false,
+    "use_fast": false
   },
   "generation_config": {
     "bos_token_id": 1,

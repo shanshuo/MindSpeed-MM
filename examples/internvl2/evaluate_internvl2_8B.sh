@@ -60,7 +60,7 @@ GPT_ARGS="
     --tokenizer-type NullTokenizer \
     --vocab-size 92553 \
     --position-embedding-type rope \
-    --rotary-base 100000 \
+    --rotary-base 1000000 \
     --swiglu \
     --no-masked-softmax-fusion \
     --lr 4e-5 \

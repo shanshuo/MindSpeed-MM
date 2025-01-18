@@ -140,6 +140,9 @@
         ],
         "max_new_tokens": 256,
         "pad_token_id": 151643,
+        "vision_start_token_id": 151652,
+        "image_token_id": 151655,
+        "video_token_id": 151656,
         "temperature": 0.01,
         "top_k": 1,
         "top_p": 0.001,
@@ -154,6 +157,8 @@
         "max_matching_ngram_size": null,
         "stop_strings": null
     },
+    "min_pixels": 1003520,
+    "max_pixels": 12845056,
     "image_processer_path": "ckpt/hf_path/Qwen2-VL-2B-Instruct/preprocessor_config.json",
     "image_path": "examples/qwen2vl/demo.jpeg",
     "prompts": "Describe this image and keep it within 100 words."

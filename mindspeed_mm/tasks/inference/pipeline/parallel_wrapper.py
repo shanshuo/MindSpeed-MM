@@ -124,7 +124,9 @@ class ParallelWrapper:
            Ensure the first dimension of `model_forward_kwargs` is the batch size.
         """
 
-        first_dims = [v.shape[0] for v in model_forward_kwargs.values() if v is not None]
+        first_dims = [v.shape[0] for k, v in model_forward_kwargs.items() if (k != "position_ids" and k != "cache_position" and v is not None)]
+        if "position_ids" in model_forward_kwargs.keys():
+            first_dims.append(model_forward_kwargs["position_ids"].shape[1])
         if not len(set(first_dims)) == 1:
             raise Exception(
                 "All values in model_forward_kwargs must have the same first dimension, which represents the batch size.")

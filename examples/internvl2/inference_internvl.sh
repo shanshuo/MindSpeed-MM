@@ -49,29 +49,15 @@ GPT_ARGS="
     --num-attention-heads 16 \
     --seq-length 4096 \
     --max-position-embeddings 4096 \
-    --attention-dropout 0.0 \
-    --hidden-dropout 0.0 \
     --tokenizer-type NullTokenizer \
     --vocab-size 92553 \
     --position-embedding-type rope \
     --rotary-base 100000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 4e-5 \
-    --min-lr 0.0 \
-    --train-iters 5000 \
-    --lr-decay-style cosine \
-    --weight-decay 0.05 \
-    --clip-grad 1.0 \
-    --adam-beta1 0.9 \
-    --adam-beta2 0.999 \
-    --no-gradient-accumulation-fusion \
-    --no-load-optim \
-    --no-load-rng \
-    --no-save-optim \
-    --no-save-rng \
     --use-distributed-optimizer \
     --bf16 \
+    --use-flash-attn \
 "
 
 OUTPUT_ARGS="

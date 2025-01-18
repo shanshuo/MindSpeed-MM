@@ -392,13 +392,13 @@ bash examples/llava1.5/inference_llava1_5.sh
 
 ```json
   "text_decoder": {
-    "ckpt_path": "./llava_weights_mm/splitqkv.pt"
+    "ckpt_path": "/<your_vicuna_weights_path>/converted_vicuna.pt"
   },
   "vision_encoder": {
-    "ckpt_path": "./llava_weights_mm/clip_weights.pt"
+    "ckpt_path": "/<your_clip_weights_path>/converted_clip.pt"
   }
   "vision_projector": {
-    "ckpt_path": "./llava_weights_mm/projector.pth"
+    "ckpt_path": "/<your_clip_weights_path>/converted_mlp.pt"
   }
    "tokenizer": {
     "from_pretrained": "./llava_7b",
