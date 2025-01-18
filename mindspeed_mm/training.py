@@ -99,14 +99,6 @@ def pretrain(
     args = get_args()
     merge_mm_args(args)
 
-    try:
-        ori_bs = getattr(args.mm.data.dataloader_param, "batch_size", None)
-        if ori_bs != args.micro_batch_size:
-            setattr(args.mm.data.dataloader_param, "batch_size", args.micro_batch_size)
-            print_rank_0(f"update `batch_size` from {ori_bs} to {args.micro_batch_size}")
-    except AttributeError:
-        print_rank_0("update `batch_size` failed!")
-
     # add deterministic computing function
     if args.use_deter_comp:
         seed_all(args.seed)

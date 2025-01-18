@@ -83,6 +83,7 @@ GPT_ARGS="
     --variable-seq-lengths \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
+    --num-workers 4 \
 "
 
 OUTPUT_ARGS="

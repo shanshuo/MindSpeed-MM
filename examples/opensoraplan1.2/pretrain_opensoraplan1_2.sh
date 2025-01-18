@@ -71,6 +71,7 @@ GPT_ARGS="
     --recompute-num-layers 32 \
     --use-distributed-optimizer \
     --allow-tf32 \
+    --num-workers 4 \
 "
 
 MM_ARGS="

@@ -15,11 +15,9 @@
 
 from typing import Optional
 from dataclasses import dataclass
-import inspect
 
 import torch
 from torch.distributed import ProcessGroup
-from torch.distributed.distributed_c10d import _get_default_group
 from torch.utils.data import DataLoader, BatchSampler, SequentialSampler
 
 from mindspeed_mm.data.data_utils.utils import (
@@ -46,6 +44,8 @@ def prepare_base_dataloader(
     drop_last=False,
     pin_memory=False,
     num_workers=0,
+    prefetch_factor=None,
+    persistent_workers=None,
     collate_param=None,
     **kwargs,
 ):
@@ -71,7 +71,8 @@ def prepare_base_dataloader(
     if collate_param:
         data_collate_type = collate_param.pop("model_name")
         collate_fn = DATA_COLLATOR[data_collate_type](**collate_param)
-
+    if persistent_workers is None:
+        persistent_workers = True if num_workers > 0 else False
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -80,7 +81,9 @@ def prepare_base_dataloader(
         drop_last=drop_last,
         pin_memory=pin_memory,
         num_workers=num_workers,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
+        prefetch_factor=prefetch_factor,
+        persistent_workers=persistent_workers
     )
 
 
@@ -92,6 +95,8 @@ def prepare_sampler_dataloader(
     drop_last=False,
     pin_memory=False,
     num_workers=0,
+    prefetch_factor=None,
+    persistent_workers=None,
     process_group: Optional[ProcessGroup] = None,
     consumed_samples=0,
     data_sharding=False,
@@ -122,7 +127,9 @@ def prepare_sampler_dataloader(
     Returns:
         :class:`torch.utils.data.DataLoader`: A DataLoader used for training or testing.
     """
-    process_group = process_group if process_group is not None else _get_default_group()
+    if persistent_workers is None:
+        persistent_workers = True if num_workers > 0 else False
+
     if sampler_type == "stateful_distributed_sampler":
         collate_fn = None
         if collate_param:
@@ -143,9 +150,11 @@ def prepare_sampler_dataloader(
             drop_last=drop_last,
             pin_memory=pin_memory,
             num_workers=num_workers,
-            collate_fn=collate_fn
+            collate_fn=collate_fn,
+            prefetch_factor=prefetch_factor,
+            persistent_workers=persistent_workers
         )
-    
+
     elif sampler_type == "LengthGroupedSampler":
         gradient_accumulation_size = cal_gradient_accumulation_size()
         if group_data and (group_frame or group_resolution):
@@ -196,8 +205,10 @@ def prepare_sampler_dataloader(
             num_workers=num_workers,
             sampler=sampler if sampler is not None else None,
             drop_last=drop_last,
+            prefetch_factor=prefetch_factor,
+            persistent_workers=persistent_workers
         )
-    
+
     elif sampler_type == "BaseRandomBatchSampler":
         batch_sampler = BaseRandomBatchSampler(
             dataset,
@@ -223,6 +234,8 @@ def prepare_sampler_dataloader(
             worker_init_fn=get_seed_worker(seed),
             num_workers=num_workers,
             batch_sampler=batch_sampler,
+            prefetch_factor=prefetch_factor,
+            persistent_workers=persistent_workers
         )
     elif sampler_type == "SequentialSampler":
         return build_sequential_loader(DataLoaderArgs(dataset,
@@ -230,7 +243,10 @@ def prepare_sampler_dataloader(
                                                       drop_last,
                                                       pin_memory,
                                                       process_group,
-                                                      num_workers))
+                                                      num_workers,
+                                                      shuffle,
+                                                      prefetch_factor,
+                                                      persistent_workers))
     elif sampler_type == "AESampler":
         sampler = AESampler(
             dataset,
@@ -244,6 +260,8 @@ def prepare_sampler_dataloader(
             sampler=sampler,
             pin_memory=pin_memory,
             num_workers=num_workers,
+            prefetch_factor=prefetch_factor,
+            persistent_workers=persistent_workers
         )
     else:
         raise NotImplementedError(f"sampler type: {sampler_type}")
@@ -317,6 +335,9 @@ class DataLoaderArgs:
     pin_memory: bool
     process_group: object
     num_workers: int
+    shuffle: bool
+    prefetch_factor: Optional[int]
+    persistent_workers: int
 
 
 def build_sequential_loader(args: DataLoaderArgs):
@@ -342,7 +363,8 @@ def build_sequential_loader(args: DataLoaderArgs):
                                               num_workers=args.num_workers,
                                               pin_memory=args.pin_memory,
                                               collate_fn=None,
-                                              prefetch_factor=4 if args.num_workers > 0 else None)
+                                              persistent_workers=args.persistent_workers,
+                                              prefetch_factor=args.prefetch_factor)
     return data_loader
 
 
@@ -353,12 +375,16 @@ def prepare_variable_dataloader(
         drop_last=False,
         pin_memory=False,
         num_workers=0,
+        prefetch_factor=None,
+        persistent_workers=None,
         process_group: Optional[ProcessGroup] = None,
         bucket_config=None,
         num_bucket_build_workers=1,
         sampler_type="variable_video_batch_sampler",
         **kwargs,
     ):
+    if persistent_workers is None:
+        persistent_workers = True if num_workers > 0 else False
     if isinstance(dataset, DynamicVideoTextDataset) and sampler_type == "variable_video_batch_sampler":
         batch_sampler = VariableVideoBatchSampler(
             dataset,
@@ -379,6 +405,8 @@ def prepare_variable_dataloader(
                     pin_memory=pin_memory,
                     num_workers=num_workers,
                     collate_fn=collate_fn_default,
+                    prefetch_factor=prefetch_factor,
+                    persistent_workers=persistent_workers,
                     **kwargs,
                 )
     else:

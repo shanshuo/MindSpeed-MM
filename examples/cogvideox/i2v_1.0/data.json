@@ -22,7 +22,7 @@
 			}
 		},
 		"use_text_processer": true,
-		"enable_text_preprocessing": false,		
+		"enable_text_preprocessing": false,
 		"tokenizer_config": {
 			"hub_backend": "hf",
 			"autotokenizer_name": "T5Tokenizer",
@@ -33,13 +33,12 @@
 	"dataloader_param": {
 		"dataloader_mode": "sampler",
         "sampler_type": "SequentialSampler",
-		"batch_size": 1,
-		"num_workers": 8,
 		"shuffle": true,
 		"drop_last": true,
 		"pin_memory": true,
 		"group_frame": false,
 		"group_resolution": false,
-		"collate_param": {}
+		"collate_param": {},
+		"prefetch_factor": 4
 	}
 }

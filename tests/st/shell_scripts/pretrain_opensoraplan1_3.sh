@@ -78,6 +78,7 @@ GPT_ARGS="
     --use-distributed-optimizer \
     --sequence-parallel \
     --allow-tf32 \
+    --num-workers 4 \
 "
 
 MM_ARGS="

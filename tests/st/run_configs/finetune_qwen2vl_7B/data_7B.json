@@ -40,14 +40,12 @@
     },
     "dataloader_param": {
         "dataloader_mode": "sampler",
-        "batch_size": 1,
         "drop_last": true,
         "sampler_type": "BaseRandomBatchSampler",
         "collate_param": {
             "model_name": "qwen2vl",
             "ignore_pad_token_for_loss": true
         },
-        "pin_memory": true,
-        "num_workers": 8
+        "pin_memory": true
     }
 }

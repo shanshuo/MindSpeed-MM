@@ -17,7 +17,7 @@ WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 TP=1
 PP=1
 CP=1
-MBS=1
+MBS=8
 GBS=$(($WORLD_SIZE*$MBS/$CP))
 
 BASEPATH=$(cd `dirname $0`; cd ../../../; pwd)
@@ -66,7 +66,8 @@ GPT_ARGS="
     --no-save-rng \
     --bf16 \
     --use-flash-attn \
-    --use-fused-rotary-pos-emb
+    --use-fused-rotary-pos-emb \
+    --num-workers 8 \
 "
 
 MM_ARGS="

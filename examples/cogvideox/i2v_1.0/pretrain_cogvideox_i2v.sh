@@ -79,6 +79,7 @@ GPT_ARGS="
     --overlap-grad-reduce \
     --overlap-param-gather \
     --allow-tf32 \
+    --num-workers 8 \
 "
 
 MM_ARGS="

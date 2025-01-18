@@ -58,8 +58,7 @@
 	"dataloader_param": {
 		"dataloader_mode": "sampler",
 		"sampler_type": "LengthGroupedSampler",
-		"num_workers": 4,
-		"shuffle": false,
+		"shuffle": true,
 		"drop_last": true,
 		"pin_memory": true,
 		"group_frame": false,

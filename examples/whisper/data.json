@@ -13,9 +13,7 @@
     },
     "dataloader_param": {
         "dataloader_mode": "sampler",
-        "batch_size": 8,
-        "num_workers": 4,
-        "shuffle": false,
+        "shuffle": true,
         "drop_last": false,
         "pin_memory": true,
         "collate_param": {

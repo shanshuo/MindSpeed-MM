@@ -14,7 +14,7 @@
                     {"trans_type": "Resize", "param": {"size": [448, 448], "interpolation": "BICUBIC"}},
                     {"trans_type": "ToTensor"},
                     {"trans_type": "norm_fun", "param": {"mean":[0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}}
-                ]   
+                ]
             }
         },
         "tokenizer_config": {
@@ -40,9 +40,7 @@
     },
     "dataloader_param": {
         "dataloader_mode": "sampler",
-        "batch_size": 1,
-        "num_workers": 8,
-        "shuffle": false,
+        "shuffle": true,
         "drop_last": true,
         "pin_memory": true,
         "sampler_type": "BaseRandomBatchSampler",

@@ -78,7 +78,7 @@ GPT_ARGS="
     --bf16 \
     --variable-seq-lengths \
     --use-distributed-optimizer \
-    --enable-one-logger
+    --num-workers 8 \
 "
 
 MM_ARGS="

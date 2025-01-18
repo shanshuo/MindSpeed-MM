@@ -65,7 +65,8 @@ GPT_ARGS="
     --no-load-rng \
     --no-save-optim \
     --no-save-rng \
-    --bf16
+    --bf16 \
+    --num-workers 8 \
 "
 
 MM_ARGS="

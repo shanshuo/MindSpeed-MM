@@ -65,7 +65,9 @@ GPT_ARGS="
     --no-load-rng \
     --no-save-optim \
     --no-save-rng \
-    --bf16 
+    --bf16 \
+    --num-workers 4 \
+    --seed 42 \
 "
 
 MM_ARGS="
@@ -85,4 +87,4 @@ torchrun $DISTRIBUTED_ARGS $BASEPATH/pretrain_sora.py \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl 
+    --distributed-backend nccl

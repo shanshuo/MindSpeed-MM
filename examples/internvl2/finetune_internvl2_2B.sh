@@ -16,7 +16,7 @@ NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
-MBS=1
+MBS=4
 GRAD_ACC_STEP=16
 TP=1
 PP=1
@@ -84,6 +84,7 @@ GPT_ARGS="
     --no-load-rng \
     --no-save-optim \
     --no-save-rng \
+    --num-workers 4 \
 "
 
 OUTPUT_ARGS="

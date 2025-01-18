@@ -63,7 +63,8 @@ GPT_ARGS="
     --bf16 \
     --use-distributed-optimizer \
     --overlap-grad-reduce \
-    --overlap-param-gather
+    --overlap-param-gather \
+    --num-workers 4 \
 "
 
 MM_ARGS="

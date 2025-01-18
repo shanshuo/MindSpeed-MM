@@ -2,7 +2,7 @@
     "dataset_param": {
         "dataset_type": "t2v",
         "basic_parameters": {
-            "data_path": "train.json", 
+            "data_path": "train.json",
             "data_folder": "/your_data_folder/"
         },
         "preprocess_parameters": {
@@ -35,8 +35,6 @@
     },
     "dataloader_param": {
         "dataloader_mode": "sampler",
-        "batch_size": 2,
-        "num_workers": 8,
         "shuffle": true,
         "drop_last": true,
         "pin_memory": true

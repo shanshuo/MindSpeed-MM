@@ -38,9 +38,7 @@
     },
     "dataloader_param": {
         "dataloader_mode": "sampler",
-        "batch_size": 8,
-        "num_workers": 8,
-        "shuffle": false,
+        "shuffle": true,
         "drop_last": true,
         "pin_memory": true,
         "sampler_type": "BaseRandomBatchSampler",
