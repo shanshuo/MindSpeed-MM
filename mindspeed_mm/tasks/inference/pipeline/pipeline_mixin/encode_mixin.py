@@ -15,6 +15,8 @@ class MMEncoderMixin:
     def encode_texts(self,
                      prompt,
                      device,
+                     tokenizer=None,
+                     text_encoder=None,
                      do_classifier_free_guidance=False,
                      negative_prompt=None,
                      prompt_embeds: Optional[torch.FloatTensor] = None,
@@ -25,10 +27,12 @@ class MMEncoderMixin:
                      prompt_to_lower=True,
                      use_prompt_preprocess=True
                      ):
+        tokenizer = self.tokenizer if tokenizer is None else tokenizer
+        text_encoder = self.text_encoder if text_encoder is None else text_encoder
         max_length = max_length if max_length else self.tokenizer.model_max_length
 
         if device is None:
-            device = self.text_encoder.device
+            device = text_encoder.device
 
         if prompt is not None and isinstance(prompt, str):
             batch_size = 1
@@ -42,7 +46,7 @@ class MMEncoderMixin:
             if use_prompt_preprocess and isinstance(self, InputsCheckMixin):
                 prompt = self.preprocess_text(prompt, clean_caption, prompt_to_lower)
 
-            text_inputs = self.tokenizer(
+            text_inputs = tokenizer(
                 prompt,
                 padding="max_length",
                 max_length=max_length,
@@ -52,30 +56,38 @@ class MMEncoderMixin:
                 return_tensors="pt",
             )
             text_input_ids = text_inputs.input_ids
-            untruncated_ids = self.tokenizer(prompt, padding="longest", return_tensors="pt").input_ids
+            untruncated_ids = tokenizer(prompt, padding="longest", return_tensors="pt").input_ids
 
             if untruncated_ids.shape[-1] >= text_input_ids.shape[-1] and not torch.equal(
                     text_input_ids, untruncated_ids
             ):
-                removed_text = self.tokenizer.batch_decode(
+                removed_text = tokenizer.batch_decode(
                     untruncated_ids[:, max_length - 1: -1]
                 )
                 logger.warning(
                     "The following part of your input was truncated because CLIP can only handle sequences up to"
                     f" {max_length} tokens: {removed_text}"
                 )
-            if hasattr(self.text_encoder,
-                       "use_attention_mask") and self.text_encoder.use_attention_mask:
+            if hasattr(text_encoder,
+                       "use_attention_mask") and text_encoder.use_attention_mask:
                 attention_mask = text_inputs.attention_mask.to(device)
             else:
                 attention_mask = None
             prompt_embeds_attention_mask = attention_mask
             if clip_skip is None:
-                prompt_embeds = self.text_encoder(text_input_ids.to(device), attention_mask=attention_mask)
-                if isinstance(prompt_embeds, transformers.utils.ModelOutput):
+                prompt_embeds = text_encoder(
+                    text_input_ids.to(device), 
+                    attention_mask=attention_mask,
+                    output_hidden_states=hasattr(text_encoder, "hidden_state_skip_layer") and text_encoder.hidden_state_skip_layer is not None
+                )
+                if hasattr(text_encoder, "output_key"):
+                    prompt_embeds = prompt_embeds[text_encoder.output_key]
+                elif isinstance(prompt_embeds, transformers.utils.ModelOutput):
                     prompt_embeds = prompt_embeds[0]
+                if hasattr(text_encoder, "hidden_state_skip_layer") and text_encoder.hidden_state_skip_layer is not None:
+                    prompt_embeds = prompt_embeds[-(text_encoder.hidden_state_skip_layer + 1)]
             else:
-                prompt_embeds = self.text_encoder(
+                prompt_embeds = text_encoder(
                     text_input_ids.to(device), attention_mask=attention_mask, output_hidden_states=True
                 )
                 # Access the `hidden_states` first, that contains a tuple of
@@ -86,23 +98,21 @@ class MMEncoderMixin:
                 # representations. The `last_hidden_states` that we typically use for
                 # obtaining the final prompt representations passes through the LayerNorm
                 # layer.
-                prompt_embeds = self.text_encoder.text_model.final_layer_norm(prompt_embeds)
+                prompt_embeds = text_encoder.text_model.final_layer_norm(prompt_embeds)
         else:
-            if hasattr(self.text_encoder, "use_attention_mask") and self.text_encoder.use_attention_mask:
+            if hasattr(text_encoder, "use_attention_mask") and text_encoder.use_attention_mask:
                 prompt_embeds_attention_mask = torch.ones_like(prompt_embeds)
             else:
                 prompt_embeds_attention_mask = None
 
-        if self.text_encoder is not None:
-            prompt_embeds_dtype = self.text_encoder.dtype
+        if text_encoder is not None:
+            prompt_embeds_dtype = text_encoder.dtype
         elif self.transformer is not None:
             prompt_embeds_dtype = self.transformer.dtype
         else:
             prompt_embeds_dtype = prompt_embeds.dtype
 
         prompt_embeds = prompt_embeds.to(dtype=prompt_embeds_dtype, device=device)
-
-        bs_embed, seq_len, _ = prompt_embeds.shape
 
         # get unconditional embeddings for classifier free guidance
         if do_classifier_free_guidance and negative_prompt_embeds is None:
@@ -124,7 +134,7 @@ class MMEncoderMixin:
                 uncond_tokens = self.preprocess_text(uncond_tokens, clean_caption)
 
             max_length = prompt_embeds.shape[1]
-            uncond_input = self.tokenizer(
+            uncond_input = tokenizer(
                 uncond_tokens,
                 padding="max_length",
                 max_length=max_length,
@@ -134,21 +144,26 @@ class MMEncoderMixin:
                 return_tensors="pt",
             )
             #  参数控制
-            if hasattr(self.text_encoder,
-                       "use_attention_mask") and self.text_encoder.use_attention_mask:
+            if hasattr(text_encoder,
+                       "use_attention_mask") and text_encoder.use_attention_mask:
                 attention_mask = uncond_input.attention_mask.to(device)
             else:
                 attention_mask = None
             negative_prompt_attention_mask = attention_mask
-            negative_prompt_embeds = self.text_encoder(
+            negative_prompt_embeds = text_encoder(
                 uncond_input.input_ids.to(device),
                 attention_mask=attention_mask,
+                output_hidden_states=hasattr(text_encoder.hidden_state_skip_layer) and text_encoder.hidden_state_skip_layer is not None
             )
-            if isinstance(negative_prompt_embeds, transformers.utils.ModelOutput):
+            if hasattr(text_encoder, "output_key"):
+                negative_prompt_embeds = negative_prompt_embeds[text_encoder.output_key]
+            elif isinstance(negative_prompt_embeds, transformers.utils.ModelOutput):
                 negative_prompt_embeds = negative_prompt_embeds[0]
+            if hasattr(text_encoder, "hidden_state_skip_layer"):
+                negative_prompt_embeds = negative_prompt_embeds[-(text_encoder.hidden_state_skip_layer + 1)]
         else:
-            if hasattr(self.text_encoder,
-                       "use_attention_mask") and self.text_encoder.use_attention_mask and negative_prompt_embeds is not None:
+            if hasattr(text_encoder,
+                       "use_attention_mask") and text_encoder.use_attention_mask and negative_prompt_embeds is not None:
                 negative_prompt_attention_mask = torch.ones_like(negative_prompt_embeds)
             else:
                 negative_prompt_attention_mask = None
