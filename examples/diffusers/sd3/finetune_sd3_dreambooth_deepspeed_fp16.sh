@@ -83,7 +83,8 @@ accelerate launch --config_file ${config_file} \
   --validation_epochs=25 \
   --mixed_precision=$mixed_precision \
   --checkpointing_steps=500 \
-  --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log 2>&1 &
+  --output_dir=${output_path} \
+  2>&1 | tee ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log
 wait
 chmod 440 ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log
 

@@ -85,7 +85,8 @@ torchrun $DISTRIBUTED_ARGS pretrain_whisper.py \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl >> logs/train_${logfile}.log 2>&1
+    --distributed-backend nccl \
+    2>&1 | tee logs/train_${logfile}.log
 
 chmod 440 logs/train_${logfile}.log
 STEP_TIME=`grep "elapsed time per iteration" logs/train_${logfile}.log | awk -F ':' '{print$5}' | awk -F '|' '{print$1}' | head -n 200 | tail -n 50 | awk '{sum+=$1} END {if (NR != 0) printf("%.1f",sum/NR)}'`

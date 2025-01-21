@@ -58,4 +58,7 @@ mkdir -p logs
 torchrun $DISTRIBUTED_ARGS pretrain_ae.py \
     $TRAINING_ARGS \
     $AE_ARGS \
-    $OUTPUT_ARGS  >> logs/train_${logfile}.log 2>&1
+    $OUTPUT_ARGS \
+    2>&1 | tee logs/train_${logfile}.log
+chmod 440 logs/train_${logfile}.log
+chmod -R 640 $SAVE_PATH

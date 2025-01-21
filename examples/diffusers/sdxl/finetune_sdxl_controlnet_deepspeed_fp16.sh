@@ -73,7 +73,8 @@ accelerate launch --config_file ./sdxl/accelerate_deepspeed_config.yaml \
  --pretrained_vae_model_name_or_path=$vae_name \
  --seed=1234 \
  --enable_npu_flash_attention \
- --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_sdxl_controlnet_deepspeed.log 2>&1 &
+ --output_dir=${output_path} \
+ 2>&1 | tee ${output_path}/train_${mixed_precision}_sdxl_controlnet_deepspeed.log
 wait
 chmod 440 ${output_path}/train_${mixed_precision}_sdxl_controlnet_deepspeed.log
 

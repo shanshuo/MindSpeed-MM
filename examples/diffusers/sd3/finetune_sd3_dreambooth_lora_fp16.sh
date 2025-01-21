@@ -52,7 +52,8 @@ accelerate launch ./examples/dreambooth/train_dreambooth_lora_sd3.py \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \
   --max_train_steps=$max_train_steps \
-  --seed="0" > ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log 2>&1 &
+  --seed="0" \
+  2>&1 | tee ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log
 wait
 chmod 440 ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log
 

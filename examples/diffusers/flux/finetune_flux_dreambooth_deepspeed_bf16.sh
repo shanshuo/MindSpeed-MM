@@ -84,7 +84,8 @@ accelerate launch --config_file ${config_file} \
   --validation_epochs=200 \
   --checkpointing_steps=50000 \
   --seed="0" \
-  --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_FLUX.log 2>&1 &
+  --output_dir=${output_path} \
+  2>&1 | tee ${output_path}/train_${mixed_precision}_FLUX.log
 wait
 chmod 440 ${output_path}/train_${mixed_precision}_FLUX.log
 

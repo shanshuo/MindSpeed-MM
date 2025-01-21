@@ -66,7 +66,8 @@ accelerate launch --config_file ./sdxl/accelerate_deepspeed_config.yaml \
   --dataloader_num_workers=8 \
   --seed=1234 \
   --enable_npu_flash_attention \
-  --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_sdxl_finetune_deepspeed.log 2>&1 &
+  --output_dir=${output_path} \
+  2>&1 | tee ${output_path}/train_${mixed_precision}_sdxl_finetune_deepspeed.log
 wait
 chmod 440 ${output_path}/train_${mixed_precision}_sdxl_finetune_deepspeed.log
 

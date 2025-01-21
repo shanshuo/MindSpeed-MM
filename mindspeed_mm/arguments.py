@@ -33,6 +33,7 @@ def process_args(parser):
     parser = _add_training_args(parser)
     parser = _add_network_size_args(parser)
     parser = _add_dummy_optimizer_args(parser)
+    parser = _add_logging_args(parser)
     return parser
 
 
@@ -97,4 +98,15 @@ def _add_dummy_optimizer_args(parser):
                        default=False,
                        help='enable dummy optimizer')
 
+    return parser
+
+
+def _add_logging_args(parser):
+    group = parser.add_argument_group(title='mm_logging')
+
+    group.add_argument('--log-tps',
+                       action='store_true',
+                       default=False,
+                       help='calculate and log average tokens per sample')
+    
     return parser

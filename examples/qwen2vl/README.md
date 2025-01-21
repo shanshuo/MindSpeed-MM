@@ -270,7 +270,7 @@ dataset_param->basic_parameters->dataset
 }
 ```
 
-【模型保存加载配置】
+【模型保存加载及日志信息配置】
 
 根据实际情况配置`examples/qwen2vl/finetune_qwen2vl_7b.sh`的参数，包括加载、保存路径以及保存间隔`--save-interval`（注意：分布式优化器保存文件较大耗时较长，请谨慎设置保存间隔）
 
@@ -294,6 +294,7 @@ OUTPUT_ARGS="
     --log-interval 1 \  # 日志间隔
     --save-interval 5000 \  # 保存间隔
     ...
+    --log-tps \  # 增加此参数可使能在训练中打印每步语言模块的平均序列长度，并在训练结束后计算每秒吞吐tokens量。
 "
 ```
 
