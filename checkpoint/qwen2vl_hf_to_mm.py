@@ -26,7 +26,7 @@ Qwen2-VL-7B-Instruct/
 ├── tokenizer.json
 └── vocab.json
 
-mindspeed-mm模型目录：
+mindspeed-mm模型目录(这里是tp1/pp4训练保存的模型)：
 Qwen2-VL-7B-Instruct/
 ├── latest_checkpointed_iteration.txt
 └── release

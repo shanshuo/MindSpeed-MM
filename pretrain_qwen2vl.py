@@ -53,10 +53,16 @@ def get_batch(data_iterator):
     input_ids = batch['input_ids'].to(torch.cuda.current_device())
     labels = batch['labels'].to(torch.cuda.current_device())
     attention_mask = batch['attention_mask'].to(torch.cuda.current_device())
-    if 'pixel_values' in batch and 'image_grid_thw' in batch:
-        pixel_values = batch['pixel_values'].to(torch.cuda.current_device())
-        image_grid_thw = batch['image_grid_thw'].to(torch.cuda.current_device())
-    else:
+    has_image = 'pixel_values' in batch and 'image_grid_thw' in batch
+    has_video = 'pixel_values_videos' in batch and 'video_grid_thw' in batch
+    if has_image or has_video:
+        if has_image:
+            pixel_values = batch['pixel_values'].to(torch.cuda.current_device())
+            image_grid_thw = batch['image_grid_thw'].to(torch.cuda.current_device())
+        if has_video:
+            pixel_values = batch['pixel_values_videos'].to(torch.cuda.current_device())
+            image_grid_thw = batch['video_grid_thw'].to(torch.cuda.current_device())
+    else:  # 只有文本
         pixel_values = None
         image_grid_thw = None
     batch = {

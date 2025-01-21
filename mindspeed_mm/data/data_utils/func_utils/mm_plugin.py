@@ -4,6 +4,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, TypedDict, Union
+import av
 
 import numpy as np
 from typing_extensions import override
@@ -24,7 +25,6 @@ class LengthParams:
 
 
 if TYPE_CHECKING:
-    import av
     import torch
     from av.stream import Stream
     from transformers import ProcessorMixin

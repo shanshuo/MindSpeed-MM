@@ -357,7 +357,7 @@ mm-convert  Qwen2VLConverter mm_to_hf \
   --cfg.parallel_config.tp_size 1
 # 其中：
 # save_hf_dir: mm微调后转换回hf模型格式的目录
-# mm_dir: 转换后保存目录
+# mm_dir: 微调后保存的权重目录
 # hf_dir: huggingface权重目录
 # llm_pp_layers: llm在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
 # vit_pp_layers: vit在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
@@ -369,9 +369,6 @@ mm-convert  Qwen2VLConverter mm_to_hf \
 
 权重下载及转换部分会把权重进行pp切分，在微调后，如果需要对权重重新进行pp切分，可使用`mm-convert`权重转换工具对微调后的权重进行切分。
 
-#### 1.修改路径
-
-修改qwen2vl_convert_pp_to_pp.py中的如下内容,与实际保持一致：
 
 ```bash
 mm-convert  Qwen2VLConverter resplit_pp \
@@ -395,10 +392,22 @@ mm-convert  Qwen2VLConverter resplit_pp \
 ```
 
 
-#### 3.执行转换脚本
+## Qwen2vl支持视频理解
 
-```bash
-python examples/qwen2vl/qwen2vl_convert_pp_to_pp.py
+### 1、加载视频数据集
+
+数据集中的视频数据集取自llamafactory，https://github.com/hiyouga/LLaMA-Factory/tree/main/data
+
+视频取自mllm_demo_data，使用时需要将该数据放到自己的data文件夹中去，同时将llamafactory上的mllm_video_demo.json也放到自己的data文件中
+
+以data_72b.json为例加载数据集：参照data_72b_video.json
+
+
+### 2、修改模型配置
+
+以72b为例，需要修改model_72b.json：
+```
+"img_context_token_id": 151656
 ```
 
 ## 评测
