@@ -128,47 +128,57 @@ class VideoDitSparse(MultiModalModule):
         setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
 
     def prepare_sparse_mask(self, video_mask, prompt_mask, sparse_n):
-        video_mask = video_mask.unsqueeze(1)
-        prompt_mask = prompt_mask.unsqueeze(1)
-        _len = video_mask.shape[-1]
-        if _len % (sparse_n * sparse_n) == 0:
-            pad_len = 0
-        else:
-            pad_len = sparse_n * sparse_n - _len % (sparse_n * sparse_n)
-
-        video_mask_sparse = F.pad(video_mask, (0, pad_len, 0, 0), value=-9980.0)
-        video_mask_sparse_1d = rearrange(
-            video_mask_sparse,
-            'b 1 1 (g k) -> (k b) 1 1 g',
-            k=sparse_n
-        )
-        video_mask_sparse_1d_group = rearrange(
-            video_mask_sparse,
-            'b 1 1 (n m k) -> (m b) 1 1 (n k)',
-            m=sparse_n,
-            k=sparse_n
-        )
-        prompt_mask_sparse = prompt_mask.repeat(sparse_n, 1, 1, 1)
+        if (video_mask == 0).all() and (prompt_mask == 0).all():
+            return {
+                False: (None, None),
+                True: (None, None)
+            }            
 
         def get_attention_mask(mask, repeat_num):
             mask = mask.to(torch.bool)
             mask = mask.repeat(1, 1, repeat_num, 1)
             return mask
 
-        video_mask_sparse_1d = get_attention_mask(video_mask_sparse_1d, video_mask_sparse_1d.shape[-1])
-        video_mask_sparse_1d_group = get_attention_mask(
-            video_mask_sparse_1d_group, video_mask_sparse_1d_group.shape[-1]
-        )
+        _len = video_mask.shape[-1]
+        if _len % (sparse_n * sparse_n) == 0:
+            pad_len = 0
+        else:
+            pad_len = sparse_n * sparse_n - _len % (sparse_n * sparse_n)
+        prompt_mask = prompt_mask.unsqueeze(1)
+        repeat_num = int((_len + pad_len) / sparse_n)
+        prompt_mask_sparse = prompt_mask.repeat(sparse_n, 1, 1, 1)
         prompt_mask_sparse_1d = get_attention_mask(
-            prompt_mask_sparse, video_mask_sparse_1d.shape[-1]
+            prompt_mask_sparse, repeat_num
         )
         prompt_mask_sparse_1d_group = prompt_mask_sparse_1d
-
-        if (video_mask_sparse_1d == False).all():
+        if (video_mask == 0).all():
             video_mask_sparse_1d = None
-        if (video_mask_sparse_1d_group == False).all():
             video_mask_sparse_1d_group = None
-        
+        else:
+            video_mask = video_mask.unsqueeze(1)
+            video_mask_sparse = F.pad(video_mask, (0, pad_len, 0, 0), value=-9980.0)
+            video_mask_sparse_1d = rearrange(
+                video_mask_sparse,
+                'b 1 1 (g k) -> (k b) 1 1 g',
+                k=sparse_n
+            )
+            video_mask_sparse_1d_group = rearrange(
+                video_mask_sparse,
+                'b 1 1 (n m k) -> (m b) 1 1 (n k)',
+                m=sparse_n,
+                k=sparse_n
+            )
+
+            video_mask_sparse_1d = get_attention_mask(video_mask_sparse_1d, video_mask_sparse_1d.shape[-1])
+            video_mask_sparse_1d_group = get_attention_mask(
+                video_mask_sparse_1d_group, video_mask_sparse_1d_group.shape[-1]
+            )
+
+            if (video_mask_sparse_1d == False).all():
+                video_mask_sparse_1d = None
+            if (video_mask_sparse_1d_group == False).all():
+                video_mask_sparse_1d_group = None
+            
         return {
             False: (video_mask_sparse_1d, prompt_mask_sparse_1d),
             True: (video_mask_sparse_1d_group, prompt_mask_sparse_1d_group)
