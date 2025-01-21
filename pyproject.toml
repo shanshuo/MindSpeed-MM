@@ -27,7 +27,9 @@ dependencies = [
     "qwen_vl_utils",
     "imageio",
     "imageio-ffmpeg",
-    "peft==0.7.1"
+    "peft==0.7.1",
+    "pydantic>=2.10.4",
+    "jsonargparse[all]>=4.35.0"
 ]
 
 [build-system]
@@ -58,3 +60,5 @@ lint = [
     "black",
 ]
 
+[project.scripts]
+mm-convert = "checkpoint.convert_cli:main"

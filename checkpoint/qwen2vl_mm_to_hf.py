@@ -1,48 +1,30 @@
+#!/usr/bin/env python
+# -*- coding: UTF-8 -*-
+"""
+Copyright:   Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
+@File    : qwen2vl_mm_to_hf.py
+@Time    : 2025/01/14
+@Desc    : qwen2vl mindspeed-mm模型转换成huggingface模型
+"""
 import json
-import os
 import shutil
 from pathlib import Path
+from typing import cast
 
-import mindspeed.megatron_adaptor  # noqa
 import torch
 from safetensors.torch import save_file
+from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
+# 注意mindspeed-mm训练后保存的checkpoint中存储了patch相关信息，在load时需要加下面这行以支持反序列化
+from mindspeed.megatron_adaptor # noqa
 
-MODEL_CONFIG_DICT = {
-    '2B': {
-        'model_size': '2B',
-        'vit_hidden_size': 1280,
-        'vit_num_attention_heads': 16,
-        'vit_num_layers': 32,
-        'llm_hidden_size': 1536,
-        'llm_num_query_groups': 2,
-        'llm_num_attention_heads': 12,
-        'llm_num_layers': 28,
-    },
-    '7B': {
-        'model_size': '7B',
-        'vit_hidden_size': 1280,
-        'vit_num_attention_heads': 16,
-        'vit_num_layers': 32,
-        'llm_hidden_size': 3584,
-        'llm_num_query_groups': 4,
-        'llm_num_attention_heads': 28,
-        'llm_num_layers': 28,
-    },
-    '72B': {
-        'model_size': '72B',
-        'vit_hidden_size': 1280,
-        'vit_num_attention_heads': 16,
-        'vit_num_layers': 32,
-        'llm_hidden_size': 8192,
-        'llm_num_query_groups': 8,
-        'llm_num_attention_heads': 64,
-        'llm_num_layers': 80,
-    }
-}
+from checkpoint.utils import LATEST_TXT, ConvertHFConfig
 
 
-def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int], _pp_index: int = 0) -> str:
-    index = _pp_index
+def rename_pp_parameter(param_name: str,
+                        vit_pp_list: list[int],
+                        llm_pp_list: list[int],
+                        pp_index: int = 0) -> str:
+    index = pp_index
     llm_pp_list = [sum(llm_pp_list[:i + 1]) for i in range(len(llm_pp_list))]
     vit_pp_list = [sum(vit_pp_list[:i + 1]) for i in range(len(vit_pp_list))]
     llm_pp_list = [0] + llm_pp_list[0:-1]
@@ -60,14 +42,11 @@ def rename_pp_parameter(param_name: str, model_dir: Path, vit_pp_list: list[int]
     return param_name
 
 
-def load_from_mm(_load_dir: str, vit_pp_list: list[int], llm_pp_list: list[int], _tp_size: int = 1) -> list[dict]:
-    LATEST_TXT = "latest_checkpointed_iteration.txt"
-    mm_save_dir = Path(_load_dir)
-    save_iteration = mm_save_dir.joinpath(LATEST_TXT).read_text()
-    save_dir = mm_save_dir.joinpath(f"iter_{int(save_iteration):07}" if save_iteration != "release" else save_iteration)
+def load_from_mm(load_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int], tp_size: int = 1) -> list[dict]:
+    save_iteration = load_dir.joinpath(LATEST_TXT).read_text()
+    save_dir = load_dir.joinpath(f"iter_{int(save_iteration):07}" if save_iteration != "release" else save_iteration)
     state_dicts = []
-
-    for tp_rank in range(_tp_size):
+    for tp_rank in range(tp_size):
         pp_state_dict = {}
         for pp_rank in range(len(vit_pp_list)):
             if len(vit_pp_list) > 1:
@@ -78,14 +57,14 @@ def load_from_mm(_load_dir: str, vit_pp_list: list[int], llm_pp_list: list[int],
             print(str(pt_path).center(100, '_'))
             # 注意output_layer存在_extra_state其值为None
             pp_state_dict.update(
-                {rename_pp_parameter(param, pt_path, vit_pp_list, llm_pp_list, pp_rank): tensor
+                {rename_pp_parameter(param, vit_pp_list, llm_pp_list, pp_rank): tensor
                  for param, tensor in torch.load(pt_path, map_location='cpu')['model'].items() if tensor is not None})
         state_dicts.append(pp_state_dict)
 
     return state_dicts
 
 
-def merge_by_tp(_state_dicts: list[dict], _tp_size: int) -> dict:
+def merge_by_tp(_state_dicts: list[dict[str, torch.Tensor]], _tp_size: int) -> dict:
     if len(_state_dicts) == 0:
         raise AssertionError(f'_state_dicts is empty.')
     if len(_state_dicts) == 1:
@@ -109,18 +88,12 @@ def merge_by_tp(_state_dicts: list[dict], _tp_size: int) -> dict:
     return return_state_dict
 
 
-def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
-    vit_hidden_size = _model_config['vit_hidden_size']
-    vit_num_attention_heads = _model_config['vit_num_attention_heads']
-    llm_hidden_size = _model_config['llm_hidden_size']
-    llm_num_attention_heads = _model_config['llm_num_attention_heads']
-    llm_num_query_groups = _model_config['llm_num_query_groups']
-
-    vit_head_hidden_size = vit_hidden_size // vit_num_attention_heads
-    llm_head_hidden_size = llm_hidden_size // llm_num_attention_heads
-    q_size = llm_head_hidden_size * llm_num_attention_heads // llm_num_query_groups
-    k_size = llm_head_hidden_size * llm_num_query_groups // llm_num_query_groups
-    v_size = llm_head_hidden_size * llm_num_query_groups // llm_num_query_groups
+def convert_mm_to_hf(_state_dict: dict[str, torch.Tensor], cfg: Qwen2VLConfig) -> dict:
+    vit_head_hidden_size = cfg.vision_config.embed_dim // cfg.vision_config.num_heads
+    llm_head_hidden_size = cfg.hidden_size // cfg.num_attention_heads
+    q_size = llm_head_hidden_size * cfg.num_attention_heads // cfg.num_key_value_heads
+    k_size = llm_head_hidden_size * cfg.num_key_value_heads // cfg.num_key_value_heads
+    v_size = llm_head_hidden_size * cfg.num_key_value_heads // cfg.num_key_value_heads
 
     new_params = {}
     for key, value in _state_dict.items():
@@ -144,16 +117,19 @@ def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
             if 'qkv.weight' in new_key:
                 res = value * 0
                 i = 0
-                for j in range(vit_num_attention_heads):
+                for j in range(cfg.vision_config.num_heads):
                     q_part = value[i * vit_head_hidden_size: (i + 1) * vit_head_hidden_size, :]
                     res[vit_head_hidden_size * j: vit_head_hidden_size * (j + 1), :] = q_part
 
                     k_part = value[(i + 1) * vit_head_hidden_size: (i + 2) * vit_head_hidden_size, :]
-                    res[vit_hidden_size + vit_head_hidden_size * j: vit_hidden_size + vit_head_hidden_size * (j + 1),
+                    res[
+                    cfg.vision_config.embed_dim + vit_head_hidden_size * j: cfg.vision_config.embed_dim + vit_head_hidden_size * (
+                            j + 1),
                     :] = k_part
 
                     v_part = value[(i + 2) * vit_head_hidden_size: (i + 3) * vit_head_hidden_size, :]
-                    res[vit_hidden_size * 2 + vit_head_hidden_size * j: vit_hidden_size * 2 + vit_head_hidden_size * (
+                    res[
+                    cfg.vision_config.embed_dim * 2 + vit_head_hidden_size * j: cfg.vision_config.embed_dim * 2 + vit_head_hidden_size * (
                             j + 1), :] = v_part
 
                     i = i + 3
@@ -161,17 +137,18 @@ def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
             elif 'qkv.bias' in new_key:
                 res = value * 0
                 i = 0
-                for j in range(vit_num_attention_heads):
+                for j in range(cfg.vision_config.num_heads):
                     q_part = value[i * vit_head_hidden_size: (i + 1) * vit_head_hidden_size]
                     res[vit_head_hidden_size * j: vit_head_hidden_size * (j + 1)] = q_part
 
                     k_part = value[(i + 1) * vit_head_hidden_size: (i + 2) * vit_head_hidden_size]
-                    res[vit_hidden_size + vit_head_hidden_size * j: vit_hidden_size + vit_head_hidden_size * (
+                    res[
+                    cfg.vision_config.embed_dim + vit_head_hidden_size * j: cfg.vision_config.embed_dim + vit_head_hidden_size * (
                             j + 1)] = k_part
 
                     v_part = value[(i + 2) * vit_head_hidden_size: (i + 3) * vit_head_hidden_size]
                     res[
-                    vit_hidden_size * 2 + vit_head_hidden_size * j: vit_hidden_size * 2 + vit_head_hidden_size * (
+                    cfg.vision_config.embed_dim * 2 + vit_head_hidden_size * j: cfg.vision_config.embed_dim * 2 + vit_head_hidden_size * (
                             j + 1)] = v_part
 
                     i = i + 3
@@ -183,7 +160,7 @@ def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
         else:
             # self_attention.linear_qkv.weight 和 self_attention.linear_qkv.bias
             if 'self_attention.linear_qkv' in key:
-                qkv_chunks = torch.chunk(value, llm_num_query_groups, dim=0)
+                qkv_chunks = torch.chunk(value, cfg.num_key_value_heads, dim=0)
                 q_chunks = []
                 k_chunks = []
                 v_chunks = []
@@ -239,83 +216,47 @@ def convert_mm_to_hf(_state_dict: dict, _model_config: dict) -> dict:
     return new_params
 
 
-def copy_except_safetensors(src_dir: str, dst_dir: str) -> None:
-    # 如果目标目录不存在，则创建它
-    if not os.path.exists(dst_dir):
-        os.makedirs(dst_dir)
-
-    # 遍历源目录及其子目录
-    for root, dirs, files in os.walk(src_dir):
-        # 构造目标路径
-        dst_root = os.path.join(dst_dir, os.path.relpath(root, src_dir))
-
-        # 复制文件，但排除 .safetensors 文件
-        for file in files:
-            if not file.endswith('.safetensors'):
-                src_file = os.path.join(root, file)
-                dst_file = os.path.join(dst_root, file)
-                # 确保目标文件的父目录存在
-                os.makedirs(os.path.dirname(dst_file), exist_ok=True)
-                shutil.copy2(src_file, dst_file)
+def copy_files_except_suffix(source_path: Path, target_path: Path, except_suffix: str = '.safetensors'):
+    """拷贝源路径下除了以except_suffix为后缀的其他所有文件到目标路径，包含子目录"""
+    target_path.mkdir(parents=True, exist_ok=True)
+    for item in source_path.rglob('*'):
+        if item.is_file() and item.suffix != except_suffix:
+            relative_path = item.relative_to(source_path)
+            destination = target_path / relative_path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(item, destination)
+            print(f"Copied: {item} -> {destination}")
 
 
-def check_pp_config(_pp_size: int, _vit_num_layers: int, _vit_pipeline_num_layers: list[int], _llm_num_layers: int,
-                    _llm_pipeline_num_layers: list[int]) -> None:
-    if len(_vit_pipeline_num_layers) != _pp_size:
-        raise AssertionError(f'length of vit_pipeline_num_layers must be equal to pp_size, '
-                             f'but got {len(_vit_pipeline_num_layers)} and {_pp_size}.')
-    if sum(_vit_pipeline_num_layers) != _vit_num_layers:
-        raise AssertionError(f'sum of vit_pipeline_num_layers must be equal to vit_num_layers, '
-                             f'but got {sum(_vit_pipeline_num_layers)} and {_vit_num_layers}.')
-    if len(_llm_pipeline_num_layers) != _pp_size:
-        raise AssertionError(f'length of llm_pipeline_num_layers must be equal to pp_size, '
-                             f'but got {len(_llm_pipeline_num_layers)} and {_pp_size}.')
-    if sum(_llm_pipeline_num_layers) != _llm_num_layers:
-        raise AssertionError(f'sum of llm_pipeline_num_layers must be equal to llm_num_layers, '
-                             f'but got {sum(_llm_pipeline_num_layers)} and {_llm_num_layers}.')
-
-
-def split_by_index_json(_state_dict: dict, _model_path: str) -> list[dict]:
-    index_json_path = os.path.join(_model_path, 'model.safetensors.index.json')
+def split_by_index_json(state_dict: dict[str, torch.Tensor], hf_dir: Path) -> list[dict[str, torch.Tensor]]:
+    index_json_path = hf_dir.joinpath('model.safetensors.index.json')
     return_dicts = []
-    with open(index_json_path, 'r', encoding='utf-8') as file:
-        weight_map = json.load(file)['weight_map']
+    weight_map = json.loads(index_json_path.read_text()).get('weight_map', {})
     for key, value in weight_map.items():
         index = int(value.split('-')[1])
         while index > len(return_dicts):
             return_dicts.append({})
-        return_dicts[index - 1][key] = _state_dict[key]
+        return_dicts[index - 1][key] = state_dict[key]
     return return_dicts
 
 
-def save_by_index_json(_state_dicts: list[dict], _save_dir: str) -> None:
+def save_by_index_json(state_dicts: list[dict], save_dir: Path) -> None:
     metadata = {
         'format': 'pt'
     }
-    for index, state_dict in enumerate(_state_dicts, start=1):
-        name = f'model-{index:05}-of-{len(_state_dicts):05}.safetensors'
-        save_file(state_dict, Path(_save_dir).joinpath(name), metadata=metadata)
+    for index, state_dict in enumerate(state_dicts, start=1):
+        name = f'model-{index:05}-of-{len(state_dicts):05}.safetensors'
+        save_file(state_dict, Path(save_dir).joinpath(name), metadata=metadata)
 
 
-if __name__ == "__main__":
-    mm_save_dir = "save_dir"  # 微调后保存的权重目录
-    hf_save_dir = "Qwen2-VL-7B-Save"  # 希望保存的hf目录
-    model_path = "ckpt/hf_path/Qwen2-VL-7B-Instruct"  # hf原仓目录
-    model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
-    # model parameters
-    model_config = MODEL_CONFIG_DICT[model_size]
-
-    # PP parameters: 7B
-    pp_size = 4
-    vit_pipeline_num_layers = [32, 0, 0, 0]
-    llm_pipeline_num_layers = [1, 6, 11, 10]
-    tp_size = 1
-
-    check_pp_config(pp_size, model_config["vit_num_layers"], vit_pipeline_num_layers, model_config["llm_num_layers"],
-                    llm_pipeline_num_layers)
-    state_dicts = load_from_mm(mm_save_dir, vit_pipeline_num_layers, llm_pipeline_num_layers, tp_size)
-    state_dict = merge_by_tp(state_dicts, tp_size)
-    state_dict = convert_mm_to_hf(state_dict, model_config)
-    state_dicts = split_by_index_json(state_dict, model_path)
-    copy_except_safetensors(model_path, hf_save_dir)
-    save_by_index_json(state_dicts, hf_save_dir)
+def main(convert_config: ConvertHFConfig):
+    # qwen2vl获取到的config类型是Qn2VLConfig
+    config = cast(Qwen2VLConfig, convert_config.hf_config.config)
+    parallel_config = convert_config.parallel_config
+    state_dicts = load_from_mm(convert_config.mm_dir, parallel_config.vit_pp_layers, parallel_config.llm_pp_layers,
+                               parallel_config.tp_size)
+    state_dict = merge_by_tp(state_dicts, parallel_config.tp_size)
+    state_dict = convert_mm_to_hf(state_dict, config)
+    state_dicts = split_by_index_json(state_dict, convert_config.hf_config.hf_dir)
+    copy_files_except_suffix(convert_config.hf_config.hf_dir, convert_config.save_hf_dir)
+    save_by_index_json(state_dicts, convert_config.save_hf_dir)

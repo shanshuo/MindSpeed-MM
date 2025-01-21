@@ -108,72 +108,46 @@ pip install -e .
 
 #### 2. 权重转换
 
-MindSpeed-MM修改了部分原始网络的结构名称，使用examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分 (目前支持72B、7B和2B特定的切分方式)。
+MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工具对原始预训练权重进行转换。该工具实现了huggingface权重和MindSpeed-MM权重的互相转换以及PP（Pipeline Parallel）权重的重切分。参考[权重转换工具](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/权重转换工具.md)
 
-以Qwen2VL-72B为例
-修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
+```bash
+# 2b
+mm-convert  Qwen2VLConverter hf_to_mm \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-2B-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-2B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [28] \
+  --cfg.parallel_config.vit_pp_layers [32] \
+  --cfg.parallel_config.tp_size 1
 
-```python
-hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-72B-Instruct'  # huggingface权重目录
-mm_save_dir = 'ckpt/mm_path/Qwen2-VL-72B-Instruct'  # 转换后保存目录
-model_size = "72B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
-#model parameters
-model_config = MODEL_CONFIG_DICT[model_size]
+# 7b
+mm-convert  Qwen2VLConverter hf_to_mm \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-7B-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-7B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [1,6,11,10] \
+  --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
+  --cfg.parallel_config.tp_size 1
 
-#PP parameters: 72B
-pp_size = 16  # 切分的PPstage数量，注意要和finetune脚本中配置的PP一致
-llm_pipeline_num_layers = [4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 6, 6, 4]  # LLM在每个卡上切分的层数，和为 llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-vit_pipeline_num_layers = [32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]  # vit在每个卡上切分的层数，和为 vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-tp_size = 1
+# 72b
+mm-convert  Qwen2VLConverter hf_to_mm \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-72B-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-72B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [4,5,5,5,5,5,5,5,5,5,5,5,5,6,6,4] \
+  --cfg.parallel_config.vit_pp_layers [32,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] \
+  --cfg.parallel_config.tp_size 1
+# 其中：
+# mm_dir: 转换后保存目录
+# hf_dir: huggingface权重目录
+# llm_pp_layers: llm在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
+# vit_pp_layers: vit在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
+# tp_size: tp并行数量，注意要和微调启动脚本中的配置一致
 ```
 
-以Qwen2VL-7B为例
-修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
-
-```python
-hf_ckpt_dir = "ckpt/hf_path/Qwen2-VL-7B-Instruct"  #hf原始的权重保存路径
-mm_save_dir = 'ckpt/mm_path/Qwen2-VL-7B-Instruct'  #转换后的权重保存路径
-model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
-#model parameters
-model_config = MODEL_CONFIG_DICT[model_size]
-
-#PP parameters: 7B
-pp_size = 4
-vit_pipeline_num_layers = [32, 0, 0, 0]  # vit在每个卡上切分的层数，和为llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-llm_pipeline_num_layers = [1, 6, 11, 10]  # llm在每个卡上切分的层数，和为vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-tp_size = 1
-```
-
-以Qwen2VL-2B为例
-修改qwen2vl_convert_to_mm_ckpt.py中的如下内容,与实际保持一致：
-
-```python
-hf_ckpt_dir = 'ckpt/hf_path/Qwen2-VL-2B-Instruct'  # huggingface权重目录
-mm_save_dir = 'ckpt/mm_path/Qwen2-VL-2B-Instruct'  # 转换后保存目录
-model_size = "2B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
-#model parameters
-model_config = MODEL_CONFIG_DICT[model_size]
-
-#PP parameters: 2B
-pp_size = 1  # 2B不需要切分PP
-llm_pipeline_num_layers = [28]  # LLM在每个卡上切分的层数，和为llm_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-vit_pipeline_num_layers = [32]  # vit在每个卡上切分的层数，和为vit_num_layers，注意要和model.json中配置的pipeline_num_layers一致
-tp_size = 1
-```
-
-启动脚本
-
-  ```shell
-  # 根据实际情况修改 ascend-toolkit 路径
-  source /usr/local/Ascend/ascend-toolkit/set_env.sh
-  python examples/qwen2vl/qwen2vl_convert_to_mm_ckpt.py
-  ```
-
-如果需要用转换后模型训练的话，同步修改examples/qwen2vl/finetune_qwen2vl_7b.sh中的LOAD_PATH参数，该路径为转换后或者切分后的权重，注意与原始权重 hf_path/Qwen2-VL-7B-Instruct进行区分。
+如果需要用转换后模型训练的话，同步修改`examples/qwen2vl/finetune_qwen2vl_7b.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重 `ckpt/hf_path/Qwen2-VL-7B-Instruct`进行区分。
 
 ```shell
-LOAD_PATH="ckpt/Qwen2-VL-7B-Instruct"
+LOAD_PATH="ckpt/mm_path/Qwen2-VL-7B-Instruct"
 ```
+
 
 ## 数据集准备及处理
 
@@ -371,79 +345,55 @@ PP=4 #PP并行参数
 
 ## 训练后权重转回huggingface格式
 
-MindSpeed-MM修改了部分原始网络的结构名称，在微调后，如果需要将权重转回huggingface格式，可使用examples/qwen2vl/qwen2vl_convert_to_hg.py脚本对微调后的权重进行转换，将权重名称修改为与原始网络一致。
-
-#### 1.修改路径
-
-修改qwen2vl_convert_to_hf.py中的如下内容,与实际保持一致：
-
-```python
-mm_save_dir = "save_dir"                # 微调后保存的权重目录
-hg_save_dir = "Qwen2-VL-7B-Save"        # 希望保存的hf目录
-model_path = "Qwen2-VL-7B-Instruct"     # hf原仓目录
-```
-
-#### 2.修改配置
-
-修改qwen2vl_convert_to_hf.py中的如下内容,与qwen2vl_convert_to_mm_ckpt.py保持一致：
-
-```python
-pp_size = 4
-vit_pipeline_num_layers = [32, 0, 0, 0]
-llm_pipeline_num_layers = [1, 6, 11, 10]
-tp_size = 1
-```
-
-在qwen2vl_convert_to_hf.py中根据模型选择模型配置
-
-```python
-model_size = "7B"  # 根据需要转换的模型，指定配置（ 2B 7B 72B ）
-#model parameters
-model_config = MODEL_CONFIG_DICT[model_size]
-```
-
-#### 3.执行转换脚本
+MindSpeed-MM修改了部分原始网络的结构名称，在微调后，如果需要将权重转回huggingface格式，可使用`mm-convert`权重转换工具对微调后的权重进行转换，将权重名称修改为与原始网络一致。
 
 ```bash
-python examples/qwen2vl/qwen2vl_convert_to_hf.py
+mm-convert  Qwen2VLConverter mm_to_hf \
+  --cfg.save_hf_dir "ckpt/mm_to_hf/Qwen2-VL-7B-Instruct" \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-7B-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-7B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [1,6,11,10] \
+  --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
+  --cfg.parallel_config.tp_size 1
+# 其中：
+# save_hf_dir: mm微调后转换回hf模型格式的目录
+# mm_dir: 转换后保存目录
+# hf_dir: huggingface权重目录
+# llm_pp_layers: llm在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
+# vit_pp_layers: vit在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
+# tp_size: tp并行数量，注意要和微调启动脚本中的配置一致
 ```
+
 
 ## 训练后重新切分权重（pp切分）
 
-权重下载及转换部分会把权重进行pp切分，在微调后，如果需要对权重重新进行pp切分，可使用examples/qwen2vl/qwen2vl_convert_pp_to_pp.py脚本对微调后的权重进行切分
+权重下载及转换部分会把权重进行pp切分，在微调后，如果需要对权重重新进行pp切分，可使用`mm-convert`权重转换工具对微调后的权重进行切分。
 
 #### 1.修改路径
 
 修改qwen2vl_convert_pp_to_pp.py中的如下内容,与实际保持一致：
 
-```python
-mm_save_dir = "save_dir"            # 微调后保存的权重目录
-new_save_dir = "new_pp_save_dir"    # 希望重新pp切分后保存的目录
+```bash
+mm-convert  Qwen2VLConverter resplit_pp \
+  --cfg.source_dir "ckpt/mm_path/Qwen2-VL-7B-Instruct" \
+  --cfg.target_dir "ckpt/mm_resplit_pp/Qwen2-VL-7B-Instruct" \
+  --cfg.source_parallel_config.llm_pp_layers [1,6,11,10] \
+  --cfg.source_parallel_config.vit_pp_layers [32,0,0,0] \
+  --cfg.source_parallel_config.tp_size 1 \
+  --cfg.target_parallel_config.llm_pp_layers [4,24] \
+  --cfg.target_parallel_config.vit_pp_layers [32,0] \
+  --cfg.target_parallel_config.tp_size 1 
+# 其中
+# source_dir: 微调后保存的权重目录
+# target_dir: 希望重新pp切分后保存的目录
+# source_parallel_config.llm_pp_layers: 微调时llm的pp配置
+# source_parallel_config.vit_pp_layers: 微调时vit的pp配置
+# source_parallel_config.tp_size: 微调时tp并行配置
+# target_parallel_config.llm_pp_layers: 期望的重切分llm模块切分层数
+# target_parallel_config.vit_pp_layers: 期望的重切分vit模块切分层数
+# target_parallel_config.tp_size: 微调时tp并行配置（注意当前仅支持pp重切分，不支持tp重切分，因此target tp size要和source tp size一致）
 ```
 
-#### 2.修改配置
-
-修改qwen2vl_convert_pp_to_pp.py中的如下内容,与qwen2vl_convert_to_mm_ckpt.py保持一致：
-
-```python
-vit_num_layers = 32     # vit模型层数
-llm_num_layers = 28     # llm模型层数
-```
-
-```python
-original_tp_size = 1                                # 使用qwen2vl_convert_to_mm_ckpt.py切分时配置的tp_size
-original_pp_size = 4                                # 使用qwen2vl_convert_to_mm_ckpt.py切分时配置的pp_size
-original_vit_pipeline_num_layers = [32, 0, 0, 0]    # 使用qwen2vl_convert_to_mm_ckpt.py切分时配置的vit模块切分层数
-original_llm_pipeline_num_layers = [1, 6, 11, 10]   # 使用qwen2vl_convert_to_mm_ckpt.py切分时配置的llm模块切分层数
-```
-
-修改qwen2vl_convert_pp_to_pp.py中的如下内容，使之与期望的切分配置一致
-
-```python
-revised_pp_size = 2                         # 期望的重切分pp_size
-revised_vit_pipeline_num_layers = [32, 0]   # 期望的重切分vit模块切分层数
-revised_llm_pipeline_num_layers = [14, 14]  # 期望的重切分llm模块切分层数
-```
 
 #### 3.执行转换脚本
 

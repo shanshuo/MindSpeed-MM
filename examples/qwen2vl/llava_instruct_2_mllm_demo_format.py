@@ -25,16 +25,16 @@ for item in info_json:
             "messages": []
         }
 
-    for i, trun in enumerate(item["conversations"]):
-        if trun["from"] == "human":
-            new_item["messages"].append({"role": "user", "content": trun["value"]})
-        elif trun["from"] == "gpt":
-            new_item["messages"].append({"role": "assistant", "content": trun["value"]})
+    for i, turn in enumerate(item["conversations"]):
+        if turn["from"] == "human":
+            new_item["messages"].append({"role": "user", "content": turn["value"]})
+        elif turn["from"] == "gpt":
+            new_item["messages"].append({"role": "assistant", "content": turn["value"]})
         else:
-            raise ValueError(f"unknown role: {trun['from']}")
+            raise ValueError(f"unknown role: {turn['from']}")
     mllm_format_llava_instruct_data.append(new_item)
 
-output_json = json.dumps(mllm_format_llava_instruct_data)
+output_json = json.dumps(mllm_format_llava_instruct_data, ensure_ascii=False)
 if os.path.exists(mllm_format_json_path):
     print(f"{mllm_format_json_path} already exists, please rename it or remove it")
 with os.fdopen(os.open(mllm_format_json_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, stat.S_IWUSR | stat.S_IRUSR), "w") as f:
