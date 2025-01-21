@@ -33,6 +33,7 @@
         "concat_text_embed": true,
         "interpolation_scale": [1.0, 1.0, 1.0],
         "learnable_pos_embed": true,
+        "ofs_embed_dim": 512,
         "use_rope": true
     },
     "diffusion": {

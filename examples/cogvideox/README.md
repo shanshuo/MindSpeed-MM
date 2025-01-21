@@ -151,7 +151,8 @@ pip install decord==0.6.0
 #### transformer文件下载
 + [CogVideoX1.0-5B-t2v](https://cloud.tsinghua.edu.cn/d/fcef5b3904294a6885e5/?p=%2F&mode=list)
 + [CogVideoX1.0-5B-i2v](https://cloud.tsinghua.edu.cn/d/5cc62a2d6e7d45c0a2f6/?p=%2F1&mode=list)
-+ [CogVideoX1.5-5B-i2v&t2v](https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT/tree/main)
++ [CogVideoX1.5-5B-t2v](https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT/tree/main/transformer_t2v)
++ [CogVideoX1.5-5B-i2v](https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT/tree/main/transformer_i2v)
 
 <a id="jump3.3"></a>
 #### T5模型下载
@@ -289,7 +290,7 @@ CogvideoX训练阶段的启动文件为shell脚本，主要分为如下4个：
 
   根据实际情况修改模型参数配置文件（如`model_cogvideox_i2v.json`）以及`data.json`文件中VAE及T5模型文件的实际路径。其中，T5文件的路径字段为`"from_pretrained": "5b-cogvideo/tokenizer"`及`"from_pretrained": "5b-cogvideo"`，替换`5b-cogvideo`为实际的路径；VAE模型文件的路径字段为`"from_pretrained": "3d-vae.pt"`，替换`3d-vae.pt`为实际的路径。
 
-  当需要卸载VAE跟T5时，将模型参数配置文件中的`"load_video_features": false`及`"load_text_features": false`字段中的值分别改为`true`。
+  当需要卸载VAE跟T5时，将模型参数配置文件中的`"load_video_features": false`及`"load_text_features": false`字段中的值分别改为`true`。将`data.json`中的`"use_feature_data"`字段的值改为`true`。
 
 4. 切分策略配置
 
@@ -349,33 +350,42 @@ bash examples/cogvideox/i2v_1.5/pretrain_cogvideox_i2v_1.5.sh
 
 | t2v配置文件                                           |               修改字段               |                修改说明                 |
 |---------------------------------------------------|:--------------------------------:|:-----------------------------------:|
-| examples/cogvideox/t2v_*/inference_model_t2v.json |         from_pretrained          |            修改为下载的权重所对应路径            |
+| examples/cogvideox/t2v_*/inference_model_t2v_*.json |         from_pretrained          |            修改为下载和转换后的权重所对应的路径            |
 | examples/cogvideox/samples_prompts.txt            |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
 
 
 | i2v配置文件                                           |               修改字段               |       修改说明       |
 |---------------------------------------------------|:--------------------------------:|:----------------:|
-| examples/cogvideox/i2v_*/inference_model_i2v.json |         from_pretrained          |  修改为下载的权重所对应路径   |
+| examples/cogvideox/i2v_*/inference_model_i2v.json |         from_pretrained          |  修改为下载和转换后的权重所对应的路径   |
 | examples/cogvideox/samples_i2v_images.txt         |               文件内容               |       图片路径       |
 | examples/cogvideox/samples_i2v_prompts.txt        |               文件内容               |    自定义prompt     |
 
 
 如果使用训练后保存的权重进行推理，需要使用脚本进行转换，权重转换source_path参数请配置训练时的保存路径
 ```bash
-python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --mode merge
+python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 42  --num_layers 42 --mode merge
 ```
 
 <a id="jump6.3"></a>
 #### 启动推理
-t2v 启动推理脚本
+t2v 1.0版本启动推理脚本
 
 ```bash
 bash examples/cogvideox/t2v_1.0/inference_cogvideox_t2v.sh
 ```
-i2v 启动推理脚本
+t2v 1.5版本启动推理脚本
+
+```bash
+bash examples/cogvideox/t2v_1.5/inference_cogvideox_t2v_1.5.sh
+```
+i2v 1.0版本启动推理脚本
 
 ```bash
 bash examples/cogvideox/i2v_1.0/inference_cogvideox_i2v.sh
 ```
+i2v 1.5版本启动推理脚本
 
+```bash
+bash examples/cogvideox/i2v_1.5/inference_cogvideox_i2v_1.5.sh
+```
 ---

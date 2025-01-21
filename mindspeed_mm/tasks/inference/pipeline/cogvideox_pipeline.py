@@ -94,12 +94,12 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             width // self.vae_scale_factor_spatial
         )
 
+        latent_padding = torch.zeros(padding_shape, device=device, dtype=dtype)
+        image_latents = torch.cat([image_latents, latent_padding], dim=2)
+        
         if self.predict_model.patch_size[0] is not None:
             first_frame = image_latents[:, :, : image_latents.size(2) % self.predict_model.patch_size[0], ...]
             image_latents = torch.cat([first_frame, image_latents], dim=2)
-
-        latent_padding = torch.zeros(padding_shape, device=device, dtype=dtype)
-        image_latents = torch.cat([image_latents, latent_padding], dim=2)
         return image_latents
 
     @torch.no_grad()
