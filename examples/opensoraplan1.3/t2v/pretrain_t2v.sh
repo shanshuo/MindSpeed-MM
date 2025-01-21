@@ -81,6 +81,8 @@ GPT_ARGS="
     --recompute-method block \
     --recompute-num-layers 32 \
     --optimizer-selection fused_ema_adamw \
+    --attention-mask-type general \
+    --context-parallel-algo ulysses_cp_algo\
 "
 
 MM_ARGS="
