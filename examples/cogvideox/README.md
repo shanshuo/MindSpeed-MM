@@ -25,6 +25,9 @@
       - [准备工作](#准备工作-1)
       - [配置参数](#配置参数-1)
       - [启动推理](#启动推理)
+  - [预训练模型扩参示例(15B)](#预训练模型扩参示例15b)
+      - [模型参数修改](#模型参数修改)
+      - [启动脚本修改](#启动脚本修改)
 
 ---
 <a id="jump1"></a>
@@ -388,4 +391,51 @@ i2v 1.5版本启动推理脚本
 ```bash
 bash examples/cogvideox/i2v_1.5/inference_cogvideox_i2v_1.5.sh
 ```
+---
+
+
+<a id="jump7"></a>
+## 预训练模型扩参示例(15B)
+
+<a id="jump7.1"></a>
+#### 模型参数修改
+通过增加扩散模型层数等配置可以模拟15B参数量，如下所示，修改模型参数配置文件（`model_cogvideox_i2v.json`）中`"predictor"`下的`"num_layers"`、`"num_heads"`和`"head_dim"`的值
+
+```
+"predictor": {
+    "num_layers": 64,
+    "num_heads": 32,
+    "head_dim": 128,
+    ...
+}
+```
+
+<a id="jump7.2"></a>
+#### 启动脚本修改
+
+修改GPT_ARGS参数如下，根据实际分辨率、帧数调整启动脚本中的分布式配置（单机16卡CP4效果较佳）：
+
+```shell
+GPUS_PER_NODE=16
+MASTER_ADDR={主节点IP}
+MASTER_PORT=6000
+NNODES=1
+NODE_RANK=0
+WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
+
+TP=4
+PP=1
+CP=4
+MBS=1
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
+
+GPT_ARGS="
+    --num-attention-heads 64 \
+    --seq-length 32 \
+    --max-position-embeddings 32 \
+    --recompute-num-layers 64 \
+    ...
+"
+```
+
 ---
