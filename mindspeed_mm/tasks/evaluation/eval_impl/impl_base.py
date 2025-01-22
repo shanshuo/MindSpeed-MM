@@ -20,7 +20,7 @@ class BaseEvalImpl:
     def __init__(self, dataset: BaseEvalDataset, inference_pipeline, args, model_prompt_template=None):
 
         self.rank = mpu.get_data_parallel_group().rank()
-        self.world_size = mpu.get_data_parallel_group().size()
+        self.world_size = mpu.get_data_parallel_world_size()
 
         self.output_path = args.result_output_path
         os.makedirs(self.output_path, exist_ok=True)
@@ -94,18 +94,19 @@ class BaseEvalImpl:
             if (i + 1) % 20 == 0:
                 save_pkl(self.result, self.out_file)
 
-        res = {k: self.result[k] for k in self.data_indices}
-        save_pkl(res, self.out_file)
+        if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:
+            res = {k: self.result[k] for k in self.data_indices}
+            save_pkl(res, self.out_file)
 
     def gather_result(self):
         """
         获取每张卡上的计算结果
 
         """
-        if self.world_size > 1:
+        if self.world_size > 0:
             print("rank:", self.rank, " finish evaluate")
             dist.barrier()
-        if self.rank == 0:
+        if torch.distributed.get_rank() == 0:
             data_all = {}
             for i in range(self.world_size):
                 data_all.update(load_pkl(self._out_file(i)))
@@ -123,13 +124,13 @@ class BaseEvalImpl:
 
             for i in range(self.world_size):
                 os.remove(self._out_file(i))
-        if self.world_size > 1:
+        if self.world_size > 0:
             dist.barrier()
 
     def analyse_result(self):
-        if self.world_size > 1:
+        if self.world_size > 0:
             dist.barrier()
-        if self.rank == 0:
+        if torch.distributed.get_rank() == 0:
             data = pd.read_excel(self.result_path)
             data = data.sort_values(by='index')
             data['prediction'] = [str(x) for x in data['prediction']]
@@ -184,7 +185,7 @@ class BaseEvalImpl:
 
             save_csv(acc, self.report_file)
             logger_rank_0(f"save acc file to {self.report_file}")
-        if self.world_size > 1:
+        if self.world_size > 0:
             dist.barrier()
 
     def _out_file(self, rank):

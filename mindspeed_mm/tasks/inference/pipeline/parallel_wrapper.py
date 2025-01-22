@@ -15,17 +15,18 @@
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reversed.
 # Copyright (c) Huawei Technologies Co., Ltd. 2024. All rights reserved.
 from copy import deepcopy
+
 import torch
 from torch.nn.parallel.distributed import DistributedDataParallel as torchDDP
-from megatron.training import get_args
-from megatron.core import mpu, InferenceParams
-from megatron.inference.text_generation.communication import recv_from_prev_pipeline_rank_, send_to_next_pipeline_rank
-from megatron.training.training import get_model
-from megatron.training.checkpointing import load_checkpoint
-from megatron.core.distributed import DistributedDataParallel as LocalDDP
-from megatron.legacy.model import Float16Module as MegatronFloat16Module
-from megatron.training.utils import unwrap_model
 
+from megatron.core import mpu, InferenceParams
+from megatron.core.distributed import DistributedDataParallel as LocalDDP
+from megatron.inference.text_generation.communication import recv_from_prev_pipeline_rank_, send_to_next_pipeline_rank
+from megatron.legacy.model import Float16Module as MegatronFloat16Module
+from megatron.training import get_args
+from megatron.training.checkpointing import load_checkpoint
+from megatron.training.training import get_model
+from megatron.training.utils import unwrap_model
 from mindspeed_mm.utils.transformer_model_config import get_model_config
 
 
@@ -48,6 +49,8 @@ class ParallelWrapper:
                 "warning: Both `max_new_tokens` (= %s) and `max_length` (= %s) seem to have been set. `max_new_tokens` will take precedence. "
                 % (self.vlm_config.generation_config.max_new_tokens, self.vlm_config.generation_config.max_length))
         self.inference_params = None
+        # Some models input parameters do not support the splitting into micro batch sizes.
+        self.split_batch = getattr(self.vlm_config.generation_config, "split_batch", True)
 
     def __call__(self, **kwargs):
         """Invocation of the forward methods. """
@@ -64,11 +67,14 @@ class ParallelWrapper:
 
         # Pipelining case.
         if self.pipeline_size_larger_than_one:
-            current_batch_x_seqlen = input_ids.size(0) * input_ids.size(1)
-            micro_batch_size = 1
-            if current_batch_x_seqlen >= self.pipelining_batch_x_seqlen:
-                micro_batch_size = max(1, self.pipelining_batch_x_seqlen // input_ids.size(1))
-            return self._with_pipelining_forward_step(model_forward_kwargs, micro_batch_size)
+            if not self.split_batch:
+                return self._with_pipelining_forward_step_without_split_batch(model_forward_kwargs)
+            else:
+                current_batch_x_seqlen = input_ids.size(0) * input_ids.size(1)
+                micro_batch_size = 1
+                if current_batch_x_seqlen >= self.pipelining_batch_x_seqlen:
+                    micro_batch_size = max(1, self.pipelining_batch_x_seqlen // input_ids.size(1))
+                return self._with_pipelining_forward_step(model_forward_kwargs, micro_batch_size)
 
         return self._no_pipelining_forward_step(model_forward_kwargs)
 
@@ -118,6 +124,43 @@ class ParallelWrapper:
             logits = output_tensor
 
         return logits
+
+    def _with_pipelining_forward_step_without_split_batch(self, model_forward_kwargs):
+        # Some models input parameters do not support the splitting into micro batch sizes.
+
+        input_ids = model_forward_kwargs.get("input_ids", None)
+        batch_size = input_ids.size(0)
+        sequence_length = input_ids.size(1)
+
+        # Preallocate memory for output logits.
+        logits = None
+        if mpu.is_pipeline_last_stage():
+            args = get_args()
+            logits = torch.empty(
+                (batch_size, sequence_length, args.padded_vocab_size),
+                dtype=torch.float32, device=torch.cuda.current_device())
+
+        # Preallocate recv buffer.
+        recv_buffer = _allocate_recv_buffer(batch_size, sequence_length)
+
+        output = self._forward_step_helper(model_forward_kwargs, recv_buffer=recv_buffer)
+        # Adjust the batch size offset to account for the micro-batch.
+        if self.inference_params is not None:
+            self.inference_params.batch_size_offset += batch_size
+
+        if mpu.is_pipeline_last_stage():
+            if isinstance(output, dict):
+                logits = output["logits"]
+        if self.inference_params is not None:
+            # Once we are done with all the micro-batches, we can
+            # adjust the sequence length offset.
+            self.inference_params.sequence_len_offset += sequence_length
+            # and reset the batch size offset
+            self.inference_params.batch_size_offset = 0
+
+        return logits
+
+
 
     def _with_pipelining_forward_step(self, model_forward_kwargs, micro_batch_size):
         """No interleaving is supported.

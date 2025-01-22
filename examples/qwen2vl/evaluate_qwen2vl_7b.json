@@ -94,6 +94,7 @@
         "bos_token_id": 151643,
         "do_sample": true,
         "kv_cache":true,
+        "split_batch":false,
         "output_attentions": false,
         "output_hidden_states": false,
         "max_length": 20,
