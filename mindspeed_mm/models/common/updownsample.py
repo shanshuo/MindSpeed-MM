@@ -1,4 +1,4 @@
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional
 from collections import deque
 from einops import rearrange
 
@@ -6,9 +6,10 @@ import torch
 import torch_npu
 from torch import nn
 import torch.nn.functional as F
+from diffusers.models.normalization import RMSNorm
 
 from mindspeed_mm.utils.utils import cast_tuple, video_to_image
-from mindspeed_mm.models.common.conv import CausalConv3d, WfCausalConv3d
+from mindspeed_mm.models.common.conv import CausalConv3d, WfCausalConv3d, TimePaddingCausalConv3d
 from mindspeed_mm.utils.utils import get_context_parallel_rank
 
 
@@ -391,3 +392,169 @@ class CachedCausal3DUpsample(nn.Module):
             x = F.interpolate(x, scale_factor=(1, 2, 2), mode="trilinear")
 
         return self.conv(x)
+
+
+class DownsampleCausal3D(nn.Module):
+    """
+    A 3D downsampling layer with an optional convolution.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        use_conv: bool = False,
+        out_channels: Optional[int] = None,
+        padding: int = 1,
+        name: str = "conv",
+        kernel_size=3,
+        norm_type=None,
+        eps=None,
+        elementwise_affine=None,
+        bias=True,
+        stride=2,
+    ):
+        super().__init__()
+        self.channels = channels
+        self.out_channels = out_channels or channels
+        self.use_conv = use_conv
+        self.padding = padding
+        stride = stride
+        self.name = name
+
+        if norm_type == "ln_norm":
+            self.norm = nn.LayerNorm(channels, eps, elementwise_affine)
+        elif norm_type == "rms_norm":
+            self.norm = RMSNorm(channels, eps, elementwise_affine)
+        elif norm_type is None:
+            self.norm = None
+        else:
+            raise ValueError(f"unknown norm_type: {norm_type}")
+
+        if use_conv:
+            conv = TimePaddingCausalConv3d(
+                self.channels, self.out_channels, kernel_size=kernel_size, stride=stride, bias=bias
+            )
+        else:
+            raise NotImplementedError
+
+        if name == "conv":
+            self.Conv2d_0 = conv
+            self.conv = conv
+        elif name == "Conv2d_0":
+            self.conv = conv
+        else:
+            self.conv = conv
+
+    def forward(self, hidden_states: torch.FloatTensor, scale: float = 1.0) -> torch.FloatTensor:
+        if self.norm is not None:
+            hidden_states = self.norm(hidden_states.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+
+        hidden_states = self.conv(hidden_states)
+
+        return hidden_states
+
+
+class UpsampleCausal3D(nn.Module):
+    """
+    A 3D upsampling layer with an optional convolution.
+    """
+
+    def __init__(
+        self,
+        channels: int,
+        use_conv: bool = False,
+        use_conv_transpose: bool = False,
+        out_channels: Optional[int] = None,
+        name: str = "conv",
+        kernel_size: Optional[int] = None,
+        padding=1,
+        norm_type=None,
+        eps=None,
+        elementwise_affine=None,
+        bias=True,
+        interpolate=True,
+        upsample_factor=(2, 2, 2),
+    ):
+        super().__init__()
+        self.channels = channels
+        self.out_channels = out_channels or channels
+        self.use_conv = use_conv
+        self.use_conv_transpose = use_conv_transpose
+        self.name = name
+        self.interpolate = interpolate
+        self.upsample_factor = upsample_factor
+
+        if norm_type == "ln_norm":
+            self.norm = nn.LayerNorm(channels, eps, elementwise_affine)
+        elif norm_type == "rms_norm":
+            self.norm = RMSNorm(channels, eps, elementwise_affine)
+        elif norm_type is None:
+            self.norm = None
+        else:
+            raise ValueError(f"unknown norm_type: {norm_type}")
+
+        conv = None
+        if use_conv_transpose:
+            raise NotImplementedError
+        elif use_conv:
+            if kernel_size is None:
+                kernel_size = 3
+            conv = TimePaddingCausalConv3d(self.channels, self.out_channels, kernel_size=kernel_size, bias=bias)
+
+        if name == "conv":
+            self.conv = conv
+        else:
+            self.Conv2d_0 = conv
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        output_size: Optional[int] = None,
+        scale: float = 1.0,
+    ) -> torch.FloatTensor:
+
+        if self.norm is not None:
+            raise NotImplementedError
+
+        if self.use_conv_transpose:
+            return self.conv(hidden_states)
+
+        # Cast to float32 to as 'upsample_nearest2d_out_frame' op does not support bfloat16
+        dtype = hidden_states.dtype
+        if dtype == torch.bfloat16:
+            hidden_states = hidden_states.to(torch.float32)
+
+        # upsample_nearest_nhwc fails with large batch sizes
+        if hidden_states.shape[0] >= 64:
+            hidden_states = hidden_states.contiguous()
+
+        # size and do not make use of `scale_factor=2`
+        if self.interpolate:
+            B, C, T, H, W = hidden_states.shape
+            first_h, other_h = hidden_states.split((1, T - 1), dim=2)
+            if output_size is None:
+                if T > 1:
+                    other_h = F.interpolate(other_h, scale_factor=self.upsample_factor, mode="nearest")
+
+                first_h = first_h.squeeze(2)
+                first_h = F.interpolate(first_h, scale_factor=self.upsample_factor[1:], mode="nearest")
+                first_h = first_h.unsqueeze(2)
+            else:
+                raise NotImplementedError
+
+            if T > 1:
+                hidden_states = torch.cat((first_h, other_h), dim=2)
+            else:
+                hidden_states = first_h
+
+        # If the input is bfloat16, we cast back to bfloat16
+        if dtype == torch.bfloat16:
+            hidden_states = hidden_states.to(dtype)
+
+        if self.use_conv:
+            if self.name == "conv":
+                hidden_states = self.conv(hidden_states)
+            else:
+                hidden_states = self.Conv2d_0(hidden_states)
+
+        return hidden_states

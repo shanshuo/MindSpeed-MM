@@ -326,3 +326,33 @@ class ContextParallelCausalConv3d(nn.Module):
         output_parallel = self.conv(input_parallel)
         output = output_parallel
         return output
+
+
+class TimePaddingCausalConv3d(nn.Module):
+    """
+    Implements a causal 3D convolution layer where each position only depends on previous timesteps and current spatial locations.
+    This maintains temporal causality in video generation tasks.
+    """
+
+    def __init__(
+        self,
+        chan_in,
+        chan_out,
+        kernel_size: Union[int, Tuple[int, int, int]],
+        stride: Union[int, Tuple[int, int, int]] = 1,
+        dilation: Union[int, Tuple[int, int, int]] = 1,
+        pad_mode='replicate',
+        **kwargs
+    ):
+        super().__init__()
+
+        self.pad_mode = pad_mode
+        padding = (kernel_size // 2, kernel_size // 2, kernel_size // 2, kernel_size // 2, kernel_size - 1, 0)  # W, H, T
+        self.time_causal_padding = padding
+
+        self.conv = nn.Conv3d(chan_in, chan_out, kernel_size, stride=stride, dilation=dilation, **kwargs)
+
+    def forward(self, x):
+        dtype_org = x.dtype
+        x = F.pad(x.float(), self.time_causal_padding, mode=self.pad_mode).to(dtype_org)
+        return self.conv(x)
