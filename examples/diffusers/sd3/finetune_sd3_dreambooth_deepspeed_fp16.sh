@@ -13,6 +13,7 @@ num_processors=8
 max_train_steps=2000
 mixed_precision="fp16"
 resolution=1024
+gradient_accumulation_steps=1
 config_file="${scripts_path}/${mixed_precision}_accelerate_config.yaml"
 
 #如果使用 input_dir="dog"，请修改dataset_name为input_dir
@@ -44,18 +45,7 @@ export HCCL_CONNECT_TIMEOUT=1200
 export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
-# cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径
 cur_path=$(pwd)
-cur_path_last_dirname=${cur_path##*/}
-if [ x"${cur_path_last_dirname}" == x"test" ]; then
-  test_path_dir=${cur_path}
-  cd ..
-  cur_path=$(pwd)
-else
-  test_path_dir=${cur_path}/test
-fi
-
-echo ${test_path_dir}
 
 #创建DeviceID输出目录，不需要修改
 output_path=${cur_path}/logs
@@ -66,23 +56,24 @@ mkdir -p ${output_path}
 start_time=$(date +%s)
 echo "start_time: ${start_time}"
 
-#如果数据集为pokemon或其他，需要把 sks dog 修改为pokemon或其他
+#如果数据集为sks dog或其他，需要把 pokemon 修改为sks dog或其他
 accelerate launch --config_file ${config_file} \
   ./examples/dreambooth/train_dreambooth_sd3.py \
   --pretrained_model_name_or_path=$model_name \
   --dataset_name=$dataset_name --caption_column="text" \
-  --instance_prompt="A photo of sks dog" \
+  --instance_prompt="A photo of pokemon" \
   --train_batch_size=$batch_size \
   --resolution=$resolution --random_flip \
-  --gradient_accumulation_steps=1 \
+  --gradient_accumulation_steps=$gradient_accumulation_steps \
   --gradient_checkpointing \
   --max_train_steps=$max_train_steps \
   --learning_rate=1e-05 --lr_scheduler="constant_with_warmup" --lr_warmup_steps=0 \
   --max_grad_norm=1 \
-  --validation_prompt="A photo of sks dog in a bucket" \
+  --validation_prompt="A photo of pokemon in a bucket" \
   --validation_epochs=25 \
   --mixed_precision=$mixed_precision \
   --checkpointing_steps=500 \
+  --seed="0" \
   --output_dir=${output_path} \
   2>&1 | tee ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log
 wait

@@ -45,18 +45,7 @@ export HCCL_CONNECT_TIMEOUT=1200
 export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
-# cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径
 cur_path=$(pwd)
-cur_path_last_dirname=${cur_path##*/}
-if [ x"${cur_path_last_dirname}" == x"test" ]; then
-  test_path_dir=${cur_path}
-  cd ..
-  cur_path=$(pwd)
-else
-  test_path_dir=${cur_path}/test
-fi
-
-echo ${test_path_dir}
 
 #创建DeviceID输出目录，不需要修改
 output_path=${cur_path}/logs
@@ -67,7 +56,7 @@ mkdir -p ${output_path}
 start_time=$(date +%s)
 echo "start_time: ${start_time}"
 
-#如果数据集为pokemon或其他，需要把 sks dog 修改为pokemon或其他
+#如果数据集为sks dog或其他，需要把 pokemon 修改为sks dog或其他
 accelerate launch --config_file ${config_file} \
   ./examples/dreambooth/train_dreambooth_lora_sd3.py \
   --pretrained_model_name_or_path=$model_name \
@@ -80,7 +69,7 @@ accelerate launch --config_file ${config_file} \
   --max_train_steps=$max_train_steps \
   --learning_rate=1e-05 --lr_scheduler="constant_with_warmup" --lr_warmup_steps=0 \
   --max_grad_norm=1 \
-  --validation_prompt="A photo of sks dog in a bucket" \
+  --validation_prompt="A photo of pokemon in a bucket" \
   --validation_epochs=25 \
   --mixed_precision=$mixed_precision \
   --checkpointing_steps=500 \

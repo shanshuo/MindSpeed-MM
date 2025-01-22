@@ -103,7 +103,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     ```shell
     git clone https://github.com/huggingface/diffusers.git -b v0.30.0
     cd diffusers
-    git checkout 94643fac8a27345f695500085d78cc8fa01f5fa9
+    git checkout 5f724735437d91ed05304da478f3b2022fe3f6fb
     cp -r ../MindSpeed-MM/examples/diffusers/sd3 ./sd3
     ```
 
@@ -203,6 +203,11 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     --instance_data_dir=$input_dir
     ```
 
+    | 数据集 | 路径设置 | accelerate 设置 |
+    |:----------:|:----------:|:----------:|
+    | dog | input_dir="dog" | --instance_data_dir=$input_dir; --instance_prompt="A photo of sks dog" |
+    | pokemon | dataset_name="pokemon-blip-captions" | --dataset_name=$dataset_name --caption_column="text"; --instance_prompt="A photo of pokemon" |
+
     修改`fp16_accelerate_config.yaml`的`deepspeed_config_file`的路径:
 
     ```shell
@@ -231,17 +236,14 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
     ```shell
     vim examples/dreambooth/train_dreambooth_sd3.py
-    # 或
-    vim examples/dreambooth/train_dreambooth_lora_sd3.py
     ```
 
-    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近），并增加patch引用`from patch_sd3 import create_save_model_hook`
-    - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`（dreambooth在1681行附近,lora在1833行附近），并在`if args.checkpoints_total_limit is not None`后增加`and accelerator.is_main_process`
+    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
+    - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`（dreambooth在1681行附近），并在`if args.checkpoints_total_limit is not None`后增加`and accelerator.is_main_process`
 
     ```python
     from accelerate import Accelerator, DistributedType
     # from accelerate import Accelerator # 原代码
-    from patch_sd3 import create_save_model_hook # 添加此行patch引用代码
     from accelerate.logging import get_logger # 原代码
      
     if accelerator.is_main_process or accelerator.distributed_type == DistributedType.DEEPSPEED:
@@ -249,26 +251,6 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
       if global_step % args.checkpointing_steps == 0:  # 原代码 不进行修改
         if args.checkpoints_total_limit is not None and accelerator.is_main_process: # 添加
     ```
-
-    Lora任务需调用patch任务进行权重保存：
-
-    在`train_dreambooth_lora_sd3.py`文件中找到代码`accelerator.register_save_state_pre_hook(save_model_hook)`进行修改(1368行附近)，修改如下：
-
-   ```python
-   # 添加
-   save_Model_Hook = create_save_model_hook(
-          accelerator=accelerator,
-          unwrap_model=unwrap_model,
-          transformer=transformer,
-          text_encoder_one=text_encoder_one,
-          text_encoder_two=text_encoder_two,
-          args=args,
-          weight_dtype=weight_dtype
-   )
-   accelerator.register_save_state_pre_hook(save_Model_Hook) # 修改
-   # accelerator.register_save_state_pre_hook(save_model_hook) # 原代码
-   accelerator.register_load_state_pre_hook(load_model_hook) # 原代码 不修改
-   ```
 
 5. 【修改文件】
 
@@ -303,25 +285,25 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 SD3 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
-| 芯片 | 卡数 |     任务     |  FPS  | batch_size | AMP_Type | Torch_Version | deepspeed |
-|:---:|:---:|:----------:|:-----:|:----------:|:---:|:---:|:---:|
-| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调  |   17.08 |     4      | bf16 | 2.1 | ✔ |
-| 竞品A | 8p | Dreambooth-全参微调  |  17.51 |     4      | bf16 | 2.1 | ✔ |
-| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调 |  16.57 |     4      | fp16 | 2.1 | ✔ |
-| 竞品A | 8p | Dreambooth-全参微调 |   16.36 |     4      | fp16 | 2.1 | ✔ |
-| Atlas 900 A2 PODc |8p | Dreambooth-全参微调 | 11.91  | 1 | fp16 | 2.1 | ✘ |
-| 竞品A | 8p | Dreambooth-全参微调 | 12.08 | 1 | fp16 | 2.1 | ✘ |
-| Atlas 900 A2 PODc |8p | DreamBooth-LoRA | 122.47 | 8 | fp16 | 2.1 | ✘ |
-| 竞品A | 8p | DreamBooth-LoRA | 120.32 | 8 | fp16 | 2.1 | ✘ |
+| 芯片 | 卡数 |     任务     |  FPS  | batch_size | AMP_Type | Resolution | Torch_Version | deepspeed |
+|:---:|:---:|:----------:|:-----:|:----------:|:---:|:---:|:---:|:---:|
+| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调  |   17.08 |     4      | bf16 | 1024 | 2.1 | ✔ |
+| 竞品A | 8p | Dreambooth-全参微调  |  17.51 |     4      | bf16 | 1024 | 2.1 | ✔ |
+| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调 |  16.57 |     4      | fp16 | 1024 | 2.1 | ✔ |
+| 竞品A | 8p | Dreambooth-全参微调 |   16.36 |     4      | fp16 | 1024 | 2.1 | ✔ |
+| Atlas 900 A2 PODc |8p | Dreambooth-全参微调 | 11.91  | 1 | fp16 | 1024 | 2.1 | ✘ |
+| 竞品A | 8p | Dreambooth-全参微调 | 12.08 | 1 | fp16 | 1024 | 2.1 | ✘ |
+| Atlas 900 A2 PODc |8p | DreamBooth-LoRA | 122.47 | 8 | fp16 | 1024 | 2.1 | ✘ |
+| 竞品A | 8p | DreamBooth-LoRA | 120.32 | 8 | fp16 | 1024 | 2.1 | ✘ |
 
 SD3.5 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
-| 芯片 | 卡数 |     任务     |  FPS  | batch_size | AMP_Type | Torch_Version | deepspeed |
-|:---:|:---:|:----------:|:-----:|:----------:|:---:|:---:|:---:|
-| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调  |   26.24 |     8      | bf16 | 2.1 | ✔ |
-| 竞品A | 8p | Dreambooth-全参微调  |  28.33 |     8      | bf16 | 2.1 | ✔ |
-| Atlas 900 A2 PODc | 8p | Dreambooth-Lora |  47.93 |     8      | fp16 | 2.1 | ✔ |
-| 竞品A | 8p | Dreambooth-Lora |   47.95 |     8      | fp16 | 2.1 | ✔ |
+| 芯片 | 卡数 |     任务     |  FPS  | batch_size | AMP_Type | Resolution | Torch_Version | deepspeed |
+|:---:|:---:|:----------:|:-----:|:----------:|:---:|:---:|:---:|:---:|
+| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调  |   26.24 |     8      | bf16 | 512 | 2.1 | ✔ |
+| 竞品A | 8p | Dreambooth-全参微调  |  28.33 |     8      | bf16 | 512 | 2.1 | ✔ |
+| Atlas 900 A2 PODc | 8p | Dreambooth-Lora |  47.93 |     8      | fp16 | 512 | 2.1 | ✔ |
+| 竞品A | 8p | Dreambooth-Lora |   47.95 |     8      | fp16 | 512 | 2.1 | ✔ |
 
 ## 推理
 
