@@ -25,5 +25,17 @@ MODEL_CONSTANTS = {
         "IGNORE_INDEX": -100,
         "IMG_START_TOKEN": "<img>",
         "IMG_END_TOKEN": "</img>"
+    },
+    'internvl2_5': {
+        'IMG_CONTEXT_TOKEN': '<IMG_CONTEXT>',
+        'IMG_START_TOKEN': '<img>',
+        'IMG_END_TOKEN': '</img>',
+        'QUAD_START_TOKEN': '<quad>',
+        'QUAD_END_TOKEN': '</quad>',
+        'REF_START_TOKEN': '<ref>',
+        'REF_END_TOKEN': '</ref>',
+        'BOX_START_TOKEN': '<box>',
+        'BOX_END_TOKEN': '</box>',
+        "IGNORE_INDEX": -100
     }
 }

@@ -386,3 +386,11 @@ For the full text of the license, please go to the above.
 
 Copyright Notice included in the software:
 Copyright 2024 CogVideo Model Team @ Zhipu AI
+
+Software Notice
+Software InternVL
+License: MIT License
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2024 OpenGVLab

@@ -12,6 +12,8 @@ from mindspeed_mm.models.text_encoder.text_encoder import TextEncoder
 from mindspeed_mm.models.vision.vision_model import VisionModel
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.module_spec.internvl_layer_spec import get_language_layer_spec, get_vit_layer_spec
+from mindspeed_mm.models.common.module_spec.qwen2vl_layer_spec import get_qwen2vlllm_layer_local_spec
+from mindspeed_mm.models.common.mm_gpt_model import MMGPTModel
 
 
 class InternVLModel(MultiModalModule):
@@ -49,6 +51,7 @@ class InternVLModel(MultiModalModule):
         self.text_encoder = None
         self.image_encoder = None
         self.video_encoder = None
+        self.text_decoder_model_id = None
         self.text_decoder = None
 
         #  This attribute is needed to check if an all-reduce is required
@@ -73,6 +76,7 @@ class InternVLModel(MultiModalModule):
         if self.add_video_encoder:
             raise NotImplementedError("Not support video_encoder now")
         if self.add_text_decoder:
+            self.text_decoder_model_id = getattr(config.text_decoder, "model_id", None)
             self.text_decoder = self._build_text_decoder_model(config.text_decoder)
 
     def _build_image_encoder_model(self, config):
@@ -136,7 +140,98 @@ class InternVLModel(MultiModalModule):
             post_process=post_process,
         )
 
+    # copy from Qwen2VL
+    def _build_qwen2llm_decoder_model(self, config):
+        if self.pp_size <= 1:
+            return MMGPTModel(
+                config=config,
+                transformer_layer_spec=get_qwen2vlllm_layer_local_spec(),
+                vocab_size=config.vocab_size,
+                max_sequence_length=config.max_position_embeddings,
+                parallel_output=config.parallel_output,
+                position_embedding_type=config.position_embedding_type,
+                share_embeddings_and_output_weights=self.share_embeddings_and_output_weights,
+                rotary_base=config.rope_theta,
+                pre_process=self.pre_process,
+                post_process=self.post_process
+            )
+
+        if self.pp_size != len(config.pipeline_num_layers):
+            raise ValueError(f"length of pipeline_num_layers must equal to pipeline-model-parallel-size, "
+                             f"but got pipeline_num_layers length:{len(config.pipeline_num_layers)} "
+                             f"and pipeline-model-parallel-size:{self.pp_size}.")
+
+        local_num_layers = config.pipeline_num_layers[self.pp_rank]
+        if local_num_layers == 0:
+            self.add_text_decoder = False
+            return None
+
+        pipeline_start_index = sum(config.pipeline_num_layers[:self.pp_rank])
+        pipeline_end_index = sum(config.pipeline_num_layers[:self.pp_rank + 1])
+
+        pre_process = pipeline_start_index == 0
+        post_process = pipeline_end_index == config.num_layers
+
+        print(
+            f"text decoder pipeline config:\
+            pp_rank:{self.pp_rank},\
+            pre_process:{pre_process},\
+            post_process:{post_process},\
+            local_num_layers:{local_num_layers}"
+        )
+        # num_layers will be divided by pp_size in TransformerBlock from megatron.core
+        config.num_layers = self.pp_size * local_num_layers
+
+        return MMGPTModel(
+            config=config,
+            transformer_layer_spec=get_qwen2vlllm_layer_local_spec(),
+            vocab_size=config.vocab_size,
+            max_sequence_length=config.max_position_embeddings,
+            parallel_output=config.parallel_output,
+            position_embedding_type=config.position_embedding_type,
+            share_embeddings_and_output_weights=self.share_embeddings_and_output_weights,
+            rotary_base=config.rope_theta,
+        )
+
+    def _build_causal_mask(self, input_ids, attention_mask):
+        if get_args().use_flash_attn:
+            return attention_mask
+        seq_len = input_ids.shape[1]
+        past_seen_token = 0
+        cache_position = torch.arange(
+            past_seen_token, past_seen_token + seq_len, device=input_ids.device)
+        dtype, device = torch.bfloat16, input_ids.device
+        min_dtype = torch.finfo(dtype).min
+        sequence_length = input_ids.shape[1]
+
+        target_length = (
+            attention_mask.shape[-1]
+            if isinstance(attention_mask, torch.Tensor)
+            else past_seen_token + sequence_length + 1
+        )
+        batch_size = input_ids.shape[0]
+
+        if attention_mask is not None and attention_mask.dim() == 4:
+            return attention_mask
+        else:
+            causal_mask = torch.full((sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device)
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(padding_mask,
+                                                                                                    min_dtype)
+            return causal_mask < 0
+
     def _build_text_decoder_model(self, config):
+        # override self.text_decoder if Qwen2.5llm
+        if self.text_decoder_model_id == 'Qwen2.5llm':
+            return self._build_qwen2llm_decoder_model(config)
         transformer_layer_spec = get_language_layer_spec()
         if self.pp_size <= 1:
             return GPTModel(
@@ -333,6 +428,7 @@ class InternVLModel(MultiModalModule):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> torch.Tensor:
+        output = None
         if self.add_image_encoder:
             vit_embeds = self.image_encoder(image)
             if self.image_encoder.post_process:
@@ -345,16 +441,30 @@ class InternVLModel(MultiModalModule):
         if self.add_text_decoder:
             input_embeds = None
             if self.text_decoder.pre_process:
+                seq_len = input_ids.shape[1]
                 input_embeds = self.text_decoder.embedding(input_ids=input_ids, position_ids=position_ids).clone()
                 input_embeds = input_embeds.transpose(0, 1)
                 B, S, H = input_embeds.shape
                 input_embeds = input_embeds.reshape(B * S, H)
-                input_ids = input_ids.reshape(B * S)
-                selected = (input_ids == self.img_context_token_id)
+                input_ids = input_ids if self.text_decoder_model_id == 'Qwen2.5llm' else input_ids.reshape(B * S)
+                selected = (input_ids.reshape(B * S) == self.img_context_token_id) if self.text_decoder_model_id == 'Qwen2.5llm' \
+                            else (input_ids == self.img_context_token_id)
                 input_embeds[selected] = input_embeds[selected] * 0.0 + vit_embeds.squeeze(0)
                 input_embeds = input_embeds.reshape(B, S, H).transpose(0, 1)
 
-            attention_mask = self._prepare_decoder_attention_mask(attention_mask)
+            if self.text_decoder_model_id == 'Qwen2.5llm':
+                start_processed_tokens = 0
+                if self.config.sequence_parallel:
+                    seq_len *= mpu.get_tensor_model_parallel_world_size()
+                end_processed_tokens = start_processed_tokens + seq_len
+                cache_position = torch.arange(
+                    start_processed_tokens, end_processed_tokens, device=input_ids.device
+                )
+
+                position_ids = cache_position.view(1, 1, -1).expand(3, input_ids.shape[0], -1)
+                attention_mask = self._build_causal_mask(input_ids=input_ids, attention_mask=attention_mask)
+            else:
+                attention_mask = self._prepare_decoder_attention_mask(attention_mask)
 
             output = self.text_decoder(
                 input_ids=input_ids,
