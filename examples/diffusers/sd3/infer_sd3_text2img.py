@@ -7,7 +7,7 @@ import os
 import torch
 from diffusers import StableDiffusion3Pipeline
 
-output_path = "./infer_result_lora"
+output_path = "./infer_result"
 os.makedirs(output_path, exist_ok=True)
 
 MODEL_PATH = "stabilityai/stable-diffusion-3.5-large"  # 模型权重路径 或 微调结果路径

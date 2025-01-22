@@ -298,12 +298,12 @@ SD3 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
 SD3.5 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
-| 芯片 | 卡数 |     任务     |  FPS  | batch_size | AMP_Type | Resolution | Torch_Version | deepspeed |
-|:---:|:---:|:----------:|:-----:|:----------:|:---:|:---:|:---:|:---:|
-| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调  |   26.24 |     8      | bf16 | 512 | 2.1 | ✔ |
-| 竞品A | 8p | Dreambooth-全参微调  |  28.33 |     8      | bf16 | 512 | 2.1 | ✔ |
-| Atlas 900 A2 PODc | 8p | Dreambooth-Lora |  47.93 |     8      | fp16 | 512 | 2.1 | ✔ |
-| 竞品A | 8p | Dreambooth-Lora |   47.95 |     8      | fp16 | 512 | 2.1 | ✔ |
+| 芯片 | 卡数 |     任务     |  FPS  | batch_size | AMP_Type | Resolution | Torch_Version | deepspeed | gradient checkpointing |
+|:---:|:---:|:----------:|:-----:|:----------:|:---:|:---:|:---:|:---:|:---:|
+| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调  |   26.24 |     8      | bf16 | 512 | 2.1 | ✔ | ✔ |
+| 竞品A | 8p | Dreambooth-全参微调  |  28.33 |     8      | bf16 | 512 | 2.1 | ✔ | ✔ |
+| Atlas 900 A2 PODc | 8p | Dreambooth-Lora |  47.93 |     8      | fp16 | 512 | 2.1 | ✔ | ✘ |
+| 竞品A | 8p | Dreambooth-Lora |   47.95 |     8      | fp16 | 512 | 2.1 | ✔ | ✘ |
 
 ## 推理
 
@@ -318,7 +318,7 @@ SD3.5 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
   调用推理脚本
 
   ```shell
-  cd examples/dreambooth/ # 从diffusers目录进入dreambooth目录
+  cd sd3/ # # 进入sd3目录
   ```
 
 【SD3/SD3.5模型推理】

@@ -19,6 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
+* [Jan. 22, 2025]: 🚀 MindSpeed-MM支持Qwen2VL视频模态
 * [Dec. 30, 2024]: 🔥 MindSpeed-MM版本1.0.0发布
 * [Dec. 19, 2024]: 🎉 MindSpeed-MM生成类模型支持分布式推理
 * [Dec. 16, 2024]: 🚀 MindSpeed-MM支持Qihoo-T2X模型
