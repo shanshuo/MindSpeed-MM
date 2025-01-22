@@ -5,18 +5,18 @@ Network="StableDiffusion3Dreambooth"
 scripts_path="./sd3"
 
 # 预训练模型
-model_name="stabilityai/stable-diffusion-3-medium-diffusers"
-dataset_name="pokemon-blip-captions"
-# input_dir="dog"
-batch_size=4
+model_name="stabilityai/stable-diffusion-3.5-large"
+# dataset_name="pokemon-blip-captions"
+input_dir="dog"
+batch_size=8
 num_processors=8
 max_train_steps=2000
 mixed_precision="bf16"
-resolution=1024
+resolution=512
 gradient_accumulation_steps=1
 config_file="${scripts_path}/${mixed_precision}_accelerate_config.yaml"
 
-#如果使用 input_dir="dog"，请修改dataset_name为input_dir
+#如果使用 dataset_name="pokemon-blip-captions"，请修改input_dir为dataset_name
 for para in $*; do
   if [[ $para == --model_name* ]]; then
     model_name=$(echo ${para#*=})
@@ -28,8 +28,8 @@ for para in $*; do
     mixed_precision=$(echo ${para#*=})
   elif [[ $para == --resolution* ]]; then
     resolution=$(echo ${para#*=})
-  elif [[ $para == --dataset_name* ]]; then
-    dataset_name=$(echo ${para#*=})
+  elif [[ $para == --input_dir* ]]; then
+    input_dir=$(echo ${para#*=})
   elif [[ $para == --config_file* ]]; then
     config_file=$(echo ${para#*=})
   fi
@@ -45,18 +45,7 @@ export HCCL_CONNECT_TIMEOUT=1200
 export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
-# cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径
 cur_path=$(pwd)
-cur_path_last_dirname=${cur_path##*/}
-if [ x"${cur_path_last_dirname}" == x"test" ]; then
-  test_path_dir=${cur_path}
-  cd ..
-  cur_path=$(pwd)
-else
-  test_path_dir=${cur_path}/test
-fi
-
-echo ${test_path_dir}
 
 #创建DeviceID输出目录，不需要修改
 output_path=${cur_path}/logs
@@ -71,7 +60,7 @@ echo "start_time: ${start_time}"
 accelerate launch --config_file ${config_file} \
   ./examples/dreambooth/train_dreambooth_sd3.py \
   --pretrained_model_name_or_path=$model_name \
-  --dataset_name=$dataset_name --caption_column="text" \
+  --instance_data_dir=$input_dir \
   --instance_prompt="A photo of sks dog" \
   --train_batch_size=$batch_size \
   --resolution=$resolution --random_flip \
@@ -84,6 +73,7 @@ accelerate launch --config_file ${config_file} \
   --validation_epochs=25 \
   --mixed_precision=$mixed_precision \
   --checkpointing_steps=500 \
+  --seed="0" \
   --output_dir=${output_path} > ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log 2>&1 &
 wait
 chmod 440 ${output_path}/train_${mixed_precision}_sd3_dreambooth_deepspeed.log
