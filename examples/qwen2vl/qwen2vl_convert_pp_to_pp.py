@@ -12,7 +12,7 @@ if __name__ == "__main__":
 
     original_pp_size = 4
     original_vit_pipeline_num_layers = [32, 0, 0, 0]
-    original_llm_pipeline_num_layers = [1, 6, 11, 10]
+    original_llm_pipeline_num_layers = [1, 10, 10, 7]
 
     revised_pp_size = 2
     revised_vit_pipeline_num_layers = [32, 0]

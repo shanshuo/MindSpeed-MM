@@ -45,7 +45,7 @@
     "text_decoder": {
         "model_id": "qwen2lm",
         "num_layers": 28,
-        "pipeline_num_layers": [1, 6, 11, 10],
+        "pipeline_num_layers": [1, 10, 10, 7],
         "hidden_size": 3584,
         "ffn_hidden_size": 18944,
         "num_attention_heads": 28,

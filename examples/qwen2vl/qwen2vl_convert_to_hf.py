@@ -308,7 +308,7 @@ if __name__ == "__main__":
     # PP parameters: 7B
     pp_size = 4
     vit_pipeline_num_layers = [32, 0, 0, 0]
-    llm_pipeline_num_layers = [1, 6, 11, 10]
+    llm_pipeline_num_layers = [1, 10, 10, 7]
     tp_size = 1
 
     check_pp_config(pp_size, model_config["vit_num_layers"], vit_pipeline_num_layers, model_config["llm_num_layers"],

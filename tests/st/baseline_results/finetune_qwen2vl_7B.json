@@ -5,9 +5,9 @@
         7.737589E-01
     ],
     "time": [
-        15660.4,
-        998,
-        998
+        15389.1,
+        979.6,
+        959.4
     ],
     "memo info": [
         {
@@ -17,18 +17,18 @@
         },
         {
             "rank": 2,
-            "allocated memory": 16019,
-            "max allocated memory": 16537
+            "allocated memory": 26687,
+            "max allocated memory": 27205
         },
         {
             "rank": 4,
-            "allocated memory": 29354,
-            "max allocated memory": 29872
+            "allocated memory": 26687,
+            "max allocated memory": 27205
         },
         {
             "rank": 6,
-            "allocated memory": 32924,
-            "max allocated memory": 35003
+            "allocated memory": 24923,
+            "max allocated memory": 27002
         }
     ],
     "warm_up": 1

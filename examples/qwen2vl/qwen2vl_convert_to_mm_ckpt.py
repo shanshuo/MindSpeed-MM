@@ -390,7 +390,7 @@ if __name__ == "__main__":
     # PP parameters: 7B
     pp_size = 4
     vit_pipeline_num_layers = [32, 0, 0, 0]
-    llm_pipeline_num_layers = [1, 6, 11, 10]
+    llm_pipeline_num_layers = [1, 10, 10, 7]
     tp_size = 1
 
     state_dict = load_from_hf(hf_ckpt_dir)
