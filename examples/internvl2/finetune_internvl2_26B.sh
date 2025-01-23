@@ -85,6 +85,7 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --num-workers 4 \
+    --enable-dummy-optimizer \
 "
 
 OUTPUT_ARGS="

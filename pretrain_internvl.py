@@ -17,7 +17,7 @@ from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
 from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.models.internvl_model import InternVLModel
 from mindspeed_mm.utils.transformer_model_config import get_model_config
-from mindspeed_mm.patchs import vpp_patches, dummy_optimizer_patch  # noqa
+from mindspeed_mm.patchs import dummy_optimizer_patch  # noqa
 
 
 def model_provider(pre_process=True, post_process=True):
@@ -155,6 +155,7 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
 
 
 if __name__ == "__main__":
+    from mindspeed_mm.patchs import vpp_patches  # noqa
     train_valid_test_datasets_provider.is_distributed = True
     pretrain(
         train_valid_test_datasets_provider,
