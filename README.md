@@ -48,9 +48,9 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 |    InternVL2-8B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
 |    InternVL2-26B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
 |    InternVL2-76B    |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-|     Qwen2VL-2B      |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
-|     Qwen2VL-7B      |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
-|     Qwen2VL-72B     |  |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
+|     Qwen2VL-2B      | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
+|     Qwen2VL-7B      | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
+|     Qwen2VL-72B     | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
 
 备注：
 
@@ -111,7 +111,7 @@ MindSpeed-MM已发布版本维护策略：
 
 **模型**列中的超链接指向各模型的文件夹地址， **参数量**列中的超链接指向模型的社区资源地址
 
-**认证**【Pass】表示已经过测试的模型，【Test】表示测试中的模型
+**认证**【Pass】表示已经通过测试的模型，【Test】表示测试中的模型
 
 Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为 (TPS)
 
@@ -266,7 +266,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3.5</a></td>
-      <td><a href="https://github.com/huggingface/diffusers/tree/5f724735437d91ed05304da478f3b2022fe3f6fb">2B</a></td>
+      <td><a href="https://github.com/huggingface/diffusers/tree/5f724735437d91ed05304da478f3b2022fe3f6fb"> 8.1B </a></td>
       <td>全参微调</td>
       <td> 1x8 </td>
       <td> BF16 </td>
@@ -275,7 +275,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://github.com/huggingface/diffusers/tree/94643fac8a27345f695500085d78cc8fa01f5fa9">2B</a></td>
+      <td><a href="https://github.com/huggingface/diffusers/tree/94643fac8a27345f695500085d78cc8fa01f5fa9"> 8.1B </a></td>
       <td>Lora微调</td>
       <td> 1x8 </td>
       <td> FP16 </td>
@@ -340,7 +340,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 3.31 (SPS) </td>
       <td> 3.26 (SPS) </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-Llama3-76B">76B</a></td>
