@@ -15,7 +15,7 @@ import torch
 from safetensors.torch import save_file
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 # 注意mindspeed-mm训练后保存的checkpoint中存储了patch相关信息，在load时需要加下面这行以支持反序列化
-from mindspeed.megatron_adaptor # noqa
+import mindspeed.megatron_adaptor # noqa
 
 from checkpoint.utils import LATEST_TXT, ConvertHFConfig
 

@@ -10,7 +10,8 @@ with open(llava_json_path, "r") as f:
 
 mllm_format_llava_instruct_data = []
 for item in info_json:
-    if item.get('image', None):
+    # image对应的key或值为空
+    if not item.get('image'):
         new_item = {
             "images": [],
             "messages": []
