@@ -39,8 +39,8 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         self.device = infer_config.device
         self.dtype = infer_config.dtype
         self.model_config = infer_config.text_decoder
-        self.template = "internlm2-chat"
-        self.system_message = "你是一个有用无害的人工智能助手"
+        self.template = infer_config.template
+        self.text_decoder_model_id = getattr(infer_config.text_decoder, "model_id", None)
         self.generation_config = infer_config.generation_config
         self.main_input_name = "input_ids"
         self.image_size = self.infer_config.image_encoder.vision_encoder.image_size
@@ -94,8 +94,15 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
     ):
         B, S = input_ids.shape
         attention_mask = torch.ones(B, S).npu()
-        attention_mask = self.infer_model._prepare_decoder_attention_mask(attention_mask)
-        position_ids = kwargs.get("position_ids", None)
+        if self.text_decoder_model_id == "Qwen2.5llm":
+            attention_mask = self.infer_model._build_causal_mask(input_ids=input_ids, attention_mask=attention_mask)
+            cache_position = torch.arange(
+                0, S, device=input_ids.device
+            )
+            position_ids = cache_position.view(1, 1, -1).expand(3, input_ids.shape[0], -1)
+        else:
+            attention_mask = self.infer_model._prepare_decoder_attention_mask(attention_mask)
+            position_ids = kwargs.get("position_ids", None)
         if attention_mask is not None and position_ids is None:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
@@ -165,8 +172,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
         self.img_context_token_id = self.tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
 
-        template = get_conv_template("internlm2-chat")
-        template.system_message = self.system_message
+        template = get_conv_template(self.template)
         template.append_message(template.roles[0], question)
         template.append_message(template.roles[1], None)
         query = template.get_prompt()
@@ -243,8 +249,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
             num_patches_list = []
 
         self.img_context_token_id = self.tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
-        template = get_conv_template("internlm2-chat")
-        template.system_message = '你是由上海人工智能实验室联合商汤科技开发的书生多模态大模型，英文名叫InternVL, 是一个有用无害的人工智能助手。'
+        template = get_conv_template(self.template)
         eos_token_id = self.tokenizer.convert_tokens_to_ids(template.sep)
 
         template.append_message(template.roles[0], question)
