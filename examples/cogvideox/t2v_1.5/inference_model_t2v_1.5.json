@@ -62,7 +62,7 @@
     "text_encoder": {
         "model_id": "T5",
         "hub_backend": "hf",
-        "from_pretrained": "1.5b-cogvideo",
+        "from_pretrained": "1.5b-cogvideo/t5-v1_1-xxl",
         "dtype": "bf16",
         "low_cpu_mem_usage": true,
         "use_attention_mask": false
@@ -70,7 +70,8 @@
     "tokenizer":{
         "hub_backend": "hf",
         "autotokenizer_name": "T5Tokenizer",
-        "from_pretrained": "1.5b-cogvideo"
+        "from_pretrained": "1.5b-cogvideo/t5-v1_1-xxl",
+        "model_max_length": 224
     },
     "predictor": {
         "model_id": "satdit",
@@ -148,8 +149,7 @@
 
     "frame_interval": 1,
     "micro_batch_size": 1,
-    "model_max_length": 224,
-    "save_path":"./cogvideox_samples/",
+    "save_path":"./cogvideox_samples_t2v_1.5/",
     "fps": 16,
     "prompt":"examples/cogvideox/samples_prompts.txt",
     "use_prompt_preprocess": true,

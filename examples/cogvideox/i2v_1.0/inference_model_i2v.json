@@ -75,7 +75,7 @@
     },
     "predictor": {
         "model_id": "satdit",
-        "from_pretrained": "cogv/mmdit0.pt",
+        "from_pretrained": null,
         "dtype": "float16",
         "num_layers": 42,
         "num_heads": 48,

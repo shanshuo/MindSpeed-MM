@@ -1,9 +1,7 @@
-# Copyright (c) 2023 Amphion.
-# This source code is licensed under the MIT license found in the
-# LICENSE file in the root directory of this source tree.
-
 import torch
 import numpy as np
+
+from diffusers.utils.torch_utils import randn_tensor
 
 
 class DiagonalGaussianDistribution(object):
@@ -17,8 +15,17 @@ class DiagonalGaussianDistribution(object):
         if self.deterministic:
             self.var = self.std = torch.zeros_like(self.mean).to(device=self.parameters.device)
 
-    def sample(self):
-        x = self.mean + self.std * torch.randn_like(self.mean).to(device=self.parameters.device)
+    def sample(self, generator=None):
+        if generator:
+            sample = randn_tensor(
+                self.mean.shape,
+                generator=generator,
+                device=self.parameters.device,
+                dtype=self.parameters.dtype,
+            )
+        else:
+            sample = torch.randn_like(self.mean).to(device=self.parameters.device)
+        x = self.mean + self.std * sample
         return x
 
     def kl(self, other=None):

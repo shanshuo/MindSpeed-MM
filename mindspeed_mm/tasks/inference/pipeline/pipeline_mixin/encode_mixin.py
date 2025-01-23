@@ -153,13 +153,13 @@ class MMEncoderMixin:
             negative_prompt_embeds = text_encoder(
                 uncond_input.input_ids.to(device),
                 attention_mask=attention_mask,
-                output_hidden_states=hasattr(text_encoder.hidden_state_skip_layer) and text_encoder.hidden_state_skip_layer is not None
+                output_hidden_states=hasattr(text_encoder, "hidden_state_skip_layer") and text_encoder.hidden_state_skip_layer is not None
             )
             if hasattr(text_encoder, "output_key"):
                 negative_prompt_embeds = negative_prompt_embeds[text_encoder.output_key]
             elif isinstance(negative_prompt_embeds, transformers.utils.ModelOutput):
                 negative_prompt_embeds = negative_prompt_embeds[0]
-            if hasattr(text_encoder, "hidden_state_skip_layer"):
+            if hasattr(text_encoder, "hidden_state_skip_layer") and text_encoder.hidden_state_skip_layer is not None:
                 negative_prompt_embeds = negative_prompt_embeds[-(text_encoder.hidden_state_skip_layer + 1)]
         else:
             if hasattr(text_encoder,

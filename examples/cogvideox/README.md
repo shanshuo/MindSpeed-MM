@@ -349,19 +349,37 @@ bash examples/cogvideox/i2v_1.5/pretrain_cogvideox_i2v_1.5.sh
 <a id="jump6.2"></a>
 #### 配置参数
 
-检查对应配置是否完成
+CogvideoX推理启动文件为shell脚本，主要分为如下4个：
+|            | I2V | T2V |
+|:------------:|:----:|:----:|
+| 1.0 |  inference_cogvideox_i2v.sh |inference_cogvideox_t2v.sh  |
+| 1.5 | inference_cogvideox_i2v_1.5.sh |inference_cogvideox_t2v_1.5.sh |
 
-| t2v配置文件                                           |               修改字段               |                修改说明                 |
-|---------------------------------------------------|:--------------------------------:|:-----------------------------------:|
-| examples/cogvideox/t2v_*/inference_model_t2v_*.json |         from_pretrained          |            修改为下载和转换后的权重所对应的路径            |
-| examples/cogvideox/samples_prompts.txt            |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
+模型参数的配置文件如下：
+|            | I2V | T2V |
+|:------------:|:----:|:----:|
+| 1.0 |  inference_model_i2v.json |inference_model_t2v.json  |
+| 1.5 | inference_model_i2v_1.5.json |inference_model_t2v_1.5.json |
+
+1. 权重配置
+
+  需根据实际任务情况在启动脚本文件（如`inference_cogvideox_i2v.sh`）中的`LOAD_PATH="your_converted_dit_ckpt_dir"`变量中添加转换后的权重的实际路径，如`LOAD_PATH="./CogVideoX-5B-Converted"`,其中`./CogVideoX-5B-Converted`为转换后的权重的实际路径，其文件夹内容结构如权重转换一节所示。`LOAD_PATH`变量中填写的完整路径一定要正确，填写错误的话会导致权重无法加载但运行并不会提示报错。
+
+2. VAE及T5模型路径配置
+
+  根据实际情况修改模型参数配置文件（如`inference_model_i2v.json`）中VAE及T5模型文件的实际路径。其中，T5文件的路径字段为`"from_pretrained": "5b-cogvideo"`，替换`5b-cogvideo`为实际的路径；VAE模型文件的路径字段为`"from_pretrained": "3d-vae.pt"`，替换`3d-vae.pt`为实际的路径。
+
+3. prompts配置
+
+| t2v prompts配置文件                               |               修改字段               |                修改说明                 |
+|----------------------------------------|:--------------------------------:|:-----------------------------------:|
+| examples/cogvideox/samples_prompts.txt |               文件内容               |      自定义prompt      |
 
 
-| i2v配置文件                                           |               修改字段               |       修改说明       |
-|---------------------------------------------------|:--------------------------------:|:----------------:|
-| examples/cogvideox/i2v_*/inference_model_i2v.json |         from_pretrained          |  修改为下载和转换后的权重所对应的路径   |
-| examples/cogvideox/samples_i2v_images.txt         |               文件内容               |       图片路径       |
-| examples/cogvideox/samples_i2v_prompts.txt        |               文件内容               |    自定义prompt     |
+| i2v prompts配置文件                                   |               修改字段               |       修改说明       |
+|--------------------------------------------|:--------------------------------:|:----------------:|
+| examples/cogvideox/samples_i2v_images.txt  |               文件内容               |       图片路径       |
+| examples/cogvideox/samples_i2v_prompts.txt |               文件内容               |    自定义prompt     |
 
 
 如果使用训练后保存的权重进行推理，需要使用脚本进行转换，权重转换source_path参数请配置训练时的保存路径

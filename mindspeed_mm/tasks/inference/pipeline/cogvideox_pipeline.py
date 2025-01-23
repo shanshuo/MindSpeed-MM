@@ -80,7 +80,8 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         image = self.video_processor.preprocess(image, height=height, width=width).to(device, dtype=dtype)
         image = image.unsqueeze(2).permute(0, 2, 1, 3, 4)  # [B, C, T, H, W] -> [B, T, C, H, W]
 
-        image_latents = [self.vae.encode(img.unsqueeze(0), invert_scale_latents=self.vae_invert_scale_latents) for img in image]
+        image_latents = [self.vae.encode(img.unsqueeze(0), invert_scale_latents=self.vae_invert_scale_latents,
+                                         generator=self.generator) for img in image]
         image_latents = torch.cat(image_latents, dim=0)  # [B, C, T, H, W]
 
         if self.vae_invert_scale_latents:
@@ -113,8 +114,6 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
         **kwargs
     ):
-        self.max_sequence_length = kwargs.pop("max_sequence_length", 226)
-
         height = self.height or self.predict_model.config.sample_size * self.vae_scale_factor_spatial
         width = self.width or self.predict_model.config.sample_size * self.vae_scale_factor_spatial
 
@@ -150,7 +149,6 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             do_classifier_free_guidance=True,
             prompt_embeds=prompt_embeds,
             negative_prompt_embeds=negative_prompt_embeds,
-            max_length=self.max_sequence_length,
             clean_caption=False,
             prompt_to_lower=False
         )
@@ -166,17 +164,6 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         if patch_size_t is not None and latent_frames % patch_size_t != 0:
             additional_frames = patch_size_t - latent_frames % patch_size_t
             self.num_frames += additional_frames * self.vae_scale_factor_temporal
-        latent_channels = self.predict_model.in_channels if image is None else self.predict_model.in_channels // 2
-        batch_size = batch_size * self.num_videos_per_prompt
-        shape = (
-            batch_size,
-            (self.num_frames - 1) // self.vae_scale_factor_temporal + 1,
-            latent_channels,
-            height // self.vae_scale_factor_spatial,
-            width // self.vae_scale_factor_spatial
-        )
-        latents = self.prepare_latents(shape, generator=self.generator, device=device, dtype=prompt_embeds.dtype,
-                                       latents=latents)
 
         # prepare image_latents for i2v task
         if image is not None:
@@ -193,7 +180,19 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         else:
             image_latents = None
 
-    
+        # prepare latents for all task
+        latent_channels = self.predict_model.in_channels if image is None else self.predict_model.in_channels // 2
+        batch_size = batch_size * self.num_videos_per_prompt
+        shape = (
+            batch_size,
+            (self.num_frames - 1) // self.vae_scale_factor_temporal + 1,
+            latent_channels,
+            height // self.vae_scale_factor_spatial,
+            width // self.vae_scale_factor_spatial
+        )
+        latents = self.prepare_latents(shape, generator=self.generator, device=device, dtype=prompt_embeds.dtype,
+                                       latents=latents)
+
         # 6 prepare extra step kwargs
         extra_step_kwargs = self.prepare_extra_step_kwargs(self.generator, eta)
 
