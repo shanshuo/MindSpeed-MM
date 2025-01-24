@@ -4,6 +4,8 @@ from typing import Optional, Union, Callable
 from tqdm.auto import tqdm
 import torch
 
+from diffusers.training_utils import compute_density_for_timestep_sampling
+
 
 def rescale_noise_cfg(noise_cfg, noise_pred_text, guidance_rescale=0.0):
     """
@@ -49,6 +51,10 @@ class FlowMatchDiscreteScheduler:
             shift: float = 1.0,
             reverse: bool = True,
             solver: str = "euler",
+            sample_method: str = "logit_normal",
+            logit_mean: float = 0.0,
+            logit_std: float = 1.0,
+            precondition_outputs: bool = False,
             n_tokens: Optional[int] = None,
             **kwargs
         ):
@@ -59,6 +65,10 @@ class FlowMatchDiscreteScheduler:
         self.n_tokens = n_tokens
         self.reverse = reverse
         self.solver = solver
+        self.sample_method = sample_method
+        self.logit_mean = logit_mean
+        self.logit_std = logit_std
+        self.precondition_outputs = precondition_outputs
 
         sigmas = torch.linspace(1, 0, num_train_timesteps + 1)
 
@@ -226,6 +236,59 @@ class FlowMatchDiscreteScheduler:
 
         return prev_sample
     
+    def get_sigmas(
+        self,
+        timesteps: torch.Tensor,
+        n_dim: int = 4,
+        dtype: torch.dtype = torch.float32
+    ):
+        sigmas = self.sigmas.to(device=timesteps.device, dtype=dtype)
+        schedule_timesteps = self.timesteps.to(timesteps.device)
+
+        # self.begin_index is None when scheduler is used for training, or pipeline does not implement set_begin_index
+        if self.begin_index is None:
+            step_indices = [self.index_for_timestep(t, schedule_timesteps) for t in timesteps]
+        elif self.step_index is not None:
+            # add_noise is called after first denoising step (for inpainting)
+            step_indices = [self.step_index] * timesteps.shape[0]
+        else:
+            # add_noise is called before first denoising step to create initial latent
+            step_indices = [self.begin_index] * timesteps.shape[0]
+        
+        sigma = sigmas[step_indices].flatten()
+        while len(sigma.shape) < n_dim:
+            sigma = sigma.unsqueeze(-1)
+        
+        return sigma
+    
+    def q_sample(
+        self,
+        x_start: Optional[torch.Tensor],
+        t: Optional[torch.Tensor] = None,
+        noise: Optional[torch.Tensor] = None,
+        **kwargs
+    ):
+        b, _, _, _, _ = x_start.shape
+        if noise is None:
+            noise = torch.randn_like(x_start)
+        
+        if noise.shape != x_start.shape:
+            raise ValueError("The shape of noise and x_start must be equal.")
+        
+        indices = (compute_density_for_timestep_sampling(
+            weighting_scheme=self.sample_method,
+            batch_size=b,
+            logit_mean=self.logit_mean,
+            logit_std=self.logit_std
+        ) * self.num_train_timesteps).long()
+
+        # add noise
+        timesteps = self.timesteps[indices].to(x_start.device)
+        sigmas = self.get_sigmas(timesteps, n_dim=len(x_start.shape), dtype=x_start.dtype)
+        x_t = (1.0 - sigmas) * x_start + sigmas * noise
+
+        return x_t, noise, timesteps
+
     def sample(
         self,
         model: Callable,
@@ -239,7 +302,7 @@ class FlowMatchDiscreteScheduler:
         extra_step_kwargs: dict = None,
         **kwargs
     ) -> torch.Tensor:
-        
+        dtype = latents.dtype
         # denoising loop
         num_inference_steps = self.num_train_timesteps if self.num_inference_timesteps is None else self.num_inference_timesteps
         self.set_timesteps(self.num_inference_timesteps, device=device)
@@ -251,7 +314,7 @@ class FlowMatchDiscreteScheduler:
                     torch.cat([latents] * 2)
                     if do_classifier_free_guidance
                     else latents
-                )
+                ).to(dtype)
                 latent_model_input = self.scale_model_input(latent_model_input, t)
 
                 t_expand = t.repeat(latent_model_input.shape[0])
@@ -261,7 +324,7 @@ class FlowMatchDiscreteScheduler:
                         [embedded_guidance_scale] * latent_model_input.shape[0],
                         dtype=torch.float32,
                         device=device,
-                    ).to(latent_model_input.dtype) * 1000.0
+                    ).to(dtype) * 1000.0
                     model_kwargs.update({"guidance": guidance_expand})
 
                 with torch.no_grad():
@@ -290,3 +353,27 @@ class FlowMatchDiscreteScheduler:
                 propress_bar.update()
         
         return latents
+
+    def training_losses(
+        self,
+        model_output: torch.Tensor,
+        x_start: Optional[torch.Tensor] = None,
+        x_t: Optional[torch.Tensor] = None,
+        noise: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None,
+        t: Optional[torch.Tensor] = None,
+        **kwargs
+    ):
+        if self.precondition_outputs:
+            sigmas = self.get_sigmas(t, n_dim=len(model_output.shape), dtype=x_start.dtype)
+            model_output = model_output * (-sigmas) + x_t
+            target = x_start
+        else:
+            target = noise - x_start
+
+        loss = torch.mean(
+            ((model_output.float() - target.float()) ** 2).reshape(target.shape[0], -1),
+            1,
+        )
+
+        return loss

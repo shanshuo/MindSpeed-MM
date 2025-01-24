@@ -8,6 +8,11 @@ import torch_npu
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
 from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
+from mindspeed.core.context_parallel.unaligned_cp.mapping import (
+    split_forward_gather_backward,
+    gather_forward_split_backward,
+    all_to_all
+)
 
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.embeddings import (
@@ -103,6 +108,11 @@ class HunyuanVideoDiT(MultiModalModule):
             raise ValueError("recompute_granularity does not support selective mode in HunyuanvideoDiT")
         if self.distribute_saved_activations:
             raise NotImplementedError("distribute_saved_activations is currently not supported")
+        
+        # context parallel setting
+        self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
+        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
+            raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
         
         if sum(rope_dim_list) != head_dim:
             raise ValueError(
@@ -290,7 +300,7 @@ class HunyuanVideoDiT(MultiModalModule):
             guidance: torch.Tensor = None,
             **kwargs
     ):
-        _, _, ot, oh, ow = x.shape
+        bs, _, ot, oh, ow = x.shape
         tt, th, tw = (
             ot // self.patch_size[0],
             oh // self.patch_size[1],
@@ -340,10 +350,6 @@ class HunyuanVideoDiT(MultiModalModule):
         max_seqlen_q = img_seq_len + txt_seq_len
         max_seqlen_kv = max_seqlen_q
 
-        txt_seq_len = torch.tensor(txt_seq_len)
-        max_seqlen_q = torch.tensor(max_seqlen_q)
-        max_seqlen_kv = torch.tensor(max_seqlen_kv)
-
         rope_sizes = list(x.shape)[-3:]
         rope_sizes = [rope_sizes[i] // self.patch_size[i] for i in range(3)]
         freqs_cos, freqs_sin = get_nd_rotary_pos_embed(
@@ -354,6 +360,36 @@ class HunyuanVideoDiT(MultiModalModule):
         )
         freqs_cos = freqs_cos.unsqueeze(0).unsqueeze(2).to(device=vec.device, dtype=vec.dtype) # b s n d
         freqs_sin = freqs_sin.unsqueeze(0).unsqueeze(2).to(device=vec.device, dtype=vec.dtype) # b s n d
+
+        if bs == 1:
+            txt = txt[:, :prompt_mask.sum()]
+            txt_seq_len = txt.shape[1]
+
+        # cp split
+        if self.context_parallel_algo is not None:
+            img = split_forward_gather_backward(
+                img, 
+                mpu.get_context_parallel_group(),
+                dim=1,
+                grad_scale="down"
+            ) # b s n d
+            freqs_cos = split_forward_gather_backward(
+                freqs_cos,
+                mpu.get_context_parallel_group(),
+                dim=1,
+                grad_scale="down"
+            )
+            freqs_sin = split_forward_gather_backward(
+                freqs_sin,
+                mpu.get_context_parallel_group(),
+                dim=1,
+                grad_scale="down"
+            )
+            img_seq_len = img_seq_len // mpu.get_context_parallel_world_size()
+        
+        img_seq_len = torch.tensor(img_seq_len)
+        max_seqlen_q = torch.tensor(max_seqlen_q)
+        max_seqlen_kv = torch.tensor(max_seqlen_kv)
 
         # --------------------------- Pass through DiT blocks --------------------------
         if self.recompute_granularity == "full":
@@ -376,7 +412,7 @@ class HunyuanVideoDiT(MultiModalModule):
                 "single_stream",
                 (x, ),
                 vec,
-                txt_seq_len,
+                img_seq_len,
                 cu_seqlens_q,
                 cu_seqlens_kv,
                 max_seqlen_q,
@@ -401,10 +437,10 @@ class HunyuanVideoDiT(MultiModalModule):
                 )
             x = torch.cat([img, txt], dim=1)
             for _, block in enumerate(self.single_blocks):
-                output = block(
+                x = block(
                     x=x,
                     vec=vec,
-                    txt_len=txt_seq_len,
+                    img_len=img_seq_len,
                     cu_seqlens_q=cu_seqlens_q,
                     cu_seqlens_kv=cu_seqlens_kv,
                     max_seqlen_q=max_seqlen_q,
@@ -414,6 +450,13 @@ class HunyuanVideoDiT(MultiModalModule):
                 )[0]
             img = x[:, :img_seq_len]
 
+        if self.enable_context_parallel:
+            img = gather_forward_split_backward(
+                img, 
+                mpu.get_context_parallel_group(),
+                dim=1,
+                grad_scale="up"
+            )
         # --------------------- Final layer ------------
         shift, scale = self.adaLN_modulation(vec).unsqueeze(1).chunk(2, dim=-1)
         x = self.norm_final(img) * (1 + scale) + shift
@@ -443,6 +486,12 @@ class MMDoubleStreamBlock(nn.Module):
         head_dim = hidden_size // heads_num
         self.head_dim = head_dim
         mlp_hidden_dim = int(hidden_size * mlp_width_ratio)
+
+        # context parallel setting
+        args = get_args()
+        self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
+        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
+            raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
 
         self.img_mod = ModulateDiT(
             hidden_size,
@@ -566,26 +615,17 @@ class MMDoubleStreamBlock(nn.Module):
         txt_k = self.txt_attn_k_norm(txt_k)
 
         # Run actual attention
-        q = torch.cat((img_q, txt_q), dim=1)
-        k = torch.cat((img_k, txt_k), dim=1)
-        v = torch.cat((img_v, txt_v), dim=1)
-
-        q = q.view(-1, self.heads_num, self.head_dim) # [b*s, n, d]
-        k = k.view(-1, self.heads_num, self.head_dim)
-        v = v.view(-1, self.heads_num, self.head_dim)
-
-        attn = torch_npu.npu_fusion_attention(
-            q,
-            k,
-            v,
-            head_num=self.heads_num,
-            atten_mask=None, 
-            input_layout="TND",
-            scale=1 / math.sqrt(self.head_dim),
-            actual_seq_qlen=cu_seqlens_q.tolist(),
-            actual_seq_kvlen=cu_seqlens_kv.tolist()
-        )[0]
-        attn = attn.view(img.shape[0], max_seqlen_q, self.heads_num * self.head_dim) # reshape [b, s, n*d]
+        attn = parallel_attention(
+            (img_q, txt_q),
+            (img_k, txt_k),
+            (img_v, txt_v),
+            heads_num=self.heads_num,
+            head_dim=self.head_dim,
+            attn_mask=None,
+            actual_seq_qlen=cu_seqlens_q,
+            actual_seq_kvlen=cu_seqlens_kv,
+            context_parallel_algo=self.context_parallel_algo,
+        )
 
         img_attn, txt_attn = attn[:, :img.shape[1]], attn[:, img.shape[1]:]
 
@@ -631,6 +671,12 @@ class MMSingleStreamBlock(nn.Module):
         self.mlp_hidden_dim = mlp_hidden_dim
         self.scale = qk_scale or head_dim ** -0.5
 
+        # context parallel setting
+        args = get_args()
+        self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
+        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
+            raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
+
         self.linear1 = nn.Linear(hidden_size, hidden_size * 3 + mlp_hidden_dim)
         self.linear2 = nn.Linear(hidden_size + mlp_hidden_dim, hidden_size)
 
@@ -659,7 +705,7 @@ class MMSingleStreamBlock(nn.Module):
             self,
             x: torch.Tensor,
             vec: torch.Tensor,
-            txt_len: int,
+            img_len: int,
             cu_seqlens_q: Optional[torch.Tensor] = None,
             cu_seqlens_kv: Optional[torch.Tensor] = None,
             max_seqlen_q: Optional[torch.Tensor] = None,
@@ -681,34 +727,108 @@ class MMSingleStreamBlock(nn.Module):
 
         # Apply RoPE if needed
         if freqs_cos is not None and freqs_sin is not None:
-            img_q, txt_q = q[:, :-txt_len, :, :], q[: -txt_len:, :, :] # b s n d
-            img_k, txt_k = k[:, :-txt_len, :, :], k[: -txt_len:, :, :]
+            img_q, txt_q = q[:, :img_len, :, :], q[:, img_len:, :, :] # b s n d
+            img_k, txt_k = k[:, :img_len, :, :], k[:, img_len:, :, :]
 
             img_q = npu_rotary_position_embedding(img_q, freqs_cos, freqs_sin, mode=1)
             img_k = npu_rotary_position_embedding(img_k, freqs_cos, freqs_sin, mode=1)
-
-            q = torch.cat((img_q, txt_q), dim=1)
-            k = torch.cat((img_k, txt_k), dim=1)
         
         if cu_seqlens_q.shape[0] != 2 * x.shape[0] + 1:
             raise ValueError(f"cu_seqlens_q.shape: {cu_seqlens_q.shape}, x.shape[0]: {x.shape[0]}")
         
-        q = q.view(-1, self.heads_num, self.head_dim) # [b*s, n, d]
-        k = k.view(-1, self.heads_num, self.head_dim)
-        v = v.view(-1, self.heads_num, self.head_dim)
-
-        attn = torch_npu.npu_fusion_attention(
-            q,
-            k,
-            v,
-            head_num=self.heads_num,
-            atten_mask=None,
-            input_layout="TND",
-            scale=1 / math.sqrt(self.head_dim),
-            actual_seq_qlen=cu_seqlens_q.tolist(),
-            actual_seq_kvlen=cu_seqlens_kv.tolist()
-        )[0]
-        attn = attn.view(x.shape[0], max_seqlen_q, self.heads_num * self.head_dim) # b s n*d
+        img_v = v[:, :img_len, :, :]
+        txt_v = v[:, img_len:, :, :]
+        attn = parallel_attention(
+            (img_q, txt_q),
+            (img_k, txt_k),
+            (img_v, txt_v),
+            heads_num=self.heads_num,
+            head_dim=self.head_dim,
+            attn_mask=None,
+            actual_seq_qlen=cu_seqlens_q,
+            actual_seq_kvlen=cu_seqlens_kv,
+            context_parallel_algo=self.context_parallel_algo
+        )
 
         output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
         return (x + output * mod_gate, )
+    
+
+def parallel_attention(
+    q: Tuple[torch.Tensor, torch.Tensor],
+    k: Tuple[torch.Tensor, torch.Tensor],
+    v: Tuple[torch.Tensor, torch.Tensor],
+    heads_num: int, 
+    head_dim: int,
+    attn_mask: Optional[torch.Tensor] = None,
+    actual_seq_qlen: Optional[torch.Tensor] = None,
+    actual_seq_kvlen: Optional[torch.Tensor] = None,
+    context_parallel_algo: str = None,
+):
+    img_q, txt_q = q
+    img_k, txt_k = k
+    img_v, txt_v = v
+    bs, img_seq_len, _, _ = img_q.shape
+    # input: b s n d, output: b s h
+
+    if context_parallel_algo == "ulysses_cp_algo":
+        img_q = all_to_all(img_q, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)
+        img_k = all_to_all(img_k, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)
+        img_v = all_to_all(img_v, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)
+        
+        def shrink_head(txt, dim=2):
+            txt = split_forward_gather_backward(txt, mpu.get_context_parallel_group(), dim=dim)
+            return txt
+        
+        if bs == 1:
+            attn = torch_npu.npu_fusion_attention(
+                torch.cat([img_q, shrink_head(txt_q, 2)], dim=1),
+                torch.cat([img_k, shrink_head(txt_k, 2)], dim=1),
+                torch.cat([img_v, shrink_head(txt_v, 2)], dim=1),
+                head_num=heads_num // mpu.get_context_parallel_world_size(),
+                atten_mask=attn_mask,
+                input_layout="BSND",
+                scale=1 / math.sqrt(head_dim)
+            )[0]
+            img_attn = attn[:, :img_seq_len * mpu.get_context_parallel_world_size()] # b img_seq sub_n d
+            txt_attn = attn[:, img_seq_len * mpu.get_context_parallel_world_size():] # b txt_seq sub_n d
+        else:
+            raise NotImplementedError("not implemented ulysses_cp_algo for batch_size > 1")
+        
+        img_attn = all_to_all(img_attn, mpu.get_context_parallel_group(), scatter_dim=1, gather_dim=2) # b sub_img_seq n d
+        txt_attn = gather_forward_split_backward(txt_attn, mpu.get_context_parallel_group(), dim=2) # b txt_seq n d
+        attn = torch.cat([img_attn, txt_attn], dim=1)
+        attn = attn.view(bs, -1, heads_num * head_dim)
+    else:
+        q = torch.cat((img_q, txt_q), dim=1)
+        k = torch.cat((img_k, txt_k), dim=1)
+        v = torch.cat((img_v, txt_v), dim=1)
+        if bs == 1:
+            attn = torch_npu.npu_fusion_attention(
+                q,
+                k,
+                v,
+                head_num=heads_num,
+                atten_mask=attn_mask,
+                input_layout="BSND",
+                scale=1 / math.sqrt(head_dim),
+            )[0]
+            attn = attn.view(bs, -1, heads_num * head_dim)
+        else:
+            q = q.view(-1, heads_num * head_dim)
+            k = k.view(-1, heads_num * head_dim)
+            v = v.view(-1, heads_num * head_dim)
+            attn = torch_npu.npu_fusion_attention(
+                q,
+                k,
+                v,
+                head_num=heads_num,
+                atten_mask=attn_mask,
+                input_layout="TND",
+                scale=1 / math.sqrt(head_dim),
+                actual_seq_qlen=actual_seq_qlen.tolist(),
+                actual_seq_kvlen=actual_seq_kvlen.tolist()
+            )[0]
+            attn = attn.view(bs, -1, heads_num * head_dim)
+
+    return attn
