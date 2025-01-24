@@ -191,6 +191,8 @@ class InternVLModel(MultiModalModule):
             position_embedding_type=config.position_embedding_type,
             share_embeddings_and_output_weights=self.share_embeddings_and_output_weights,
             rotary_base=config.rope_theta,
+            pre_process=pre_process,
+            post_process=post_process
         )
 
     def _build_causal_mask(self, input_ids, attention_mask):
@@ -440,8 +442,8 @@ class InternVLModel(MultiModalModule):
 
         if self.add_text_decoder:
             input_embeds = None
+            seq_len = input_ids.shape[1]
             if self.text_decoder.pre_process:
-                seq_len = input_ids.shape[1]
                 input_embeds = self.text_decoder.embedding(input_ids=input_ids, position_ids=position_ids).clone()
                 input_embeds = input_embeds.transpose(0, 1)
                 B, S, H = input_embeds.shape

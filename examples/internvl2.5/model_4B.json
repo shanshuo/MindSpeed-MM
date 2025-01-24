@@ -12,6 +12,7 @@
     "text_decoder": {
 	    "model_id": "Qwen2.5llm",
 	    "num_layers": 36,
+	    "pipeline_num_layers": [36],
 	    "hidden_size": 2048,
 	    "ffn_hidden_size": 11008,
 	    "num_attention_heads": 16,
@@ -47,6 +48,7 @@
         "vision_encoder": {
             "model_id": "InternViT",
             "num_layers": 24,
+            "pipeline_num_layers": [24],
             "hidden_size": 1024,
             "ffn_hidden_size": 4096,
             "num_attention_heads": 16,

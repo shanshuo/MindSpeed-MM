@@ -1,6 +1,7 @@
 import argparse
 import os
 from copy import deepcopy
+from dataclasses import dataclass
 import stat
 import re 
 
@@ -14,11 +15,65 @@ llm_arch = ''
 class InternVLModelConfig:
     model_size: str
     pp_size: int
-    vp_size: int
+    vpp_size: int
     vit_num_layers: int
     vit_pipeline_num_layers: list
     llm_num_layers: int
     llm_pipeline_num_layers: list
+
+
+model_config_dict = {
+    '1B': InternVLModelConfig(model_size='1B',
+                              pp_size=1,
+                              vpp_size=1,
+                              vit_num_layers=24,
+                              vit_pipeline_num_layers=[24, ],
+                              llm_num_layers=24,
+                              llm_pipeline_num_layers=[24, ]
+                              ),
+    '2B': InternVLModelConfig(model_size='2B',
+                              pp_size=1,
+                              vpp_size=1,
+                              vit_num_layers=24,
+                              vit_pipeline_num_layers=[24, ],
+                              llm_num_layers=24,
+                              llm_pipeline_num_layers=[24, ]),
+    '4B': InternVLModelConfig(model_size='4B',
+                              pp_size=1,
+                              vpp_size=1,
+                              vit_num_layers=24,
+                              vit_pipeline_num_layers=[24, ],
+                              llm_num_layers=36,
+                              llm_pipeline_num_layers=[36, ]),
+    '8B': InternVLModelConfig(model_size='8B',
+                              pp_size=1,
+                              vpp_size=1,
+                              vit_num_layers=24,
+                              vit_pipeline_num_layers=[24, ],
+                              llm_num_layers=32,
+                              llm_pipeline_num_layers=[32, ]),
+    '26B': InternVLModelConfig(model_size='26B',
+                              pp_size=1,
+                              vpp_size=1,
+                              vit_num_layers=45,
+                              vit_pipeline_num_layers=[45, ],
+                              llm_num_layers=48,
+                              llm_pipeline_num_layers=[48, ]),
+    '38B': InternVLModelConfig(model_size='38B',
+                              pp_size=1,
+                              vpp_size=1,
+                              vit_num_layers=45,
+                              vit_pipeline_num_layers=[45, ],
+                              llm_num_layers=64,
+                              llm_pipeline_num_layers=[64, ]),
+    '78B': InternVLModelConfig(model_size='78B',
+                              pp_size=1,
+                              vpp_size=1,
+                              vit_num_layers=45,
+                              vit_pipeline_num_layers=[45, ],
+                              llm_num_layers=80,
+                              llm_pipeline_num_layers=[80, ])
+}
 
 
 def load_from_hf(load_dir, trust_remote_code):
@@ -29,39 +84,25 @@ def load_from_hf(load_dir, trust_remote_code):
     config = AutoConfig.from_pretrained(load_dir, trust_remote_code=trust_remote_code)
     global llm_arch
     llm_arch = config.llm_config.architectures[0]
-    return hf_model
+    return hf_model, config
 
 
 def get_model_config(model_size, enable_vpp) -> InternVLModelConfig:
-    if model_size == '4B':
-        if not enable_vpp:
-            pp_size = 1
-            vp_size = 1
-            vit_num_layers = 24
-            vit_pipeline_num_layers = [24, ]
-            llm_num_layers = 36
-            num_key_value_heads = 2
-            llm_pipeline_num_layers = [36, ]
-        else:
-            raise ValueError("Configure the PP layer count to be greater than 4 for 4B model before enabling VPP.")     
-    else:
+    if model_size not in model_config_dict:
+        raise KeyError(f" {model_size} not exist in model config dict.")
+    if model_size != '4B':
         raise ValueError(f'Unsupported model size: {model_size}')
-    
-    model_config = InternVLModelConfig
-    model_config.model_size = model_size
-    model_config.pp_size = pp_size
-    model_config.vp_size = vp_size
-    model_config.vit_num_layers = vit_num_layers
-    model_config.vit_pipeline_num_layers = vit_pipeline_num_layers
-    model_config.llm_num_layers = llm_num_layers
-    model_config.llm_pipeline_num_layers = llm_pipeline_num_layers
-    return model_config, num_key_value_heads
+    if enable_vpp:
+        raise ValueError("InternVL2.5 does not support vpp right now.")
+    return model_config_dict.get(model_size)
 
 
 def merge_pp_index(model_config):
     pp_size = model_config.pp_size
-    vpp_size = model_config.vp_size = vp_size
-    vit_num_layer = model_config.vit_num_layers
+    vp_size = model_config.vpp_size
+    if pp_size > 1 or vp_size > 1:
+        raise ValueError("InternVL2.5 only support pp_size=1 and vp_size=1.")
+    vit_num_layers = model_config.vit_num_layers
     vit_pipeline_num_layers = model_config.vit_pipeline_num_layers
     llm_num_layers = model_config.llm_num_layers
     llm_pipeline_num_layers = model_config.llm_pipeline_num_layers
@@ -95,7 +136,8 @@ def merge_pp_index(model_config):
     return split_method
 
 
-def convert_hg_to_mm(_state_dict, _num_layers, llm_num_query_groups):
+def convert_hg_to_mm(_state_dict, model_config, num_key_value_heads):
+    _num_layers = model_config.llm_num_layers
     new_dict = {}
     for key, value in _state_dict.items():
         new_key = None
@@ -330,13 +372,12 @@ def split_model_by_pipeline(state_dict, pp_split):
 
 def save_by_pp(_state_dicts, model_config, _save_dir, _latest_checkpointed_iteration='release', _exists_ok=False):
     pp_size = model_config.pp_size
-    vpp_size = model_config.vpp_size
+    vp_size = model_config.vpp_size
     if os.path.exists(_save_dir):
         if not _exists_ok:
             print(f'save dir: {_save_dir} exists, please check.')
             return
-    else:
-        os.makedirs(_save_dir)
+    os.makedirs(_save_dir)
     flags = os.O_WRONLY | os.O_CREAT
     mode = stat.S_IWUSR | stat.S_IRUSR
     with os.fdopen(os.open(os.path.join(_save_dir, 'latest_checkpointed_iteration.txt'), flags, mode), 'w') as fout:
@@ -362,14 +403,14 @@ def save_by_pp(_state_dicts, model_config, _save_dir, _latest_checkpointed_itera
             else:
                 save_dict = {'model': _state_dicts[pp_rank]}
             torch.save(save_dict, save_path)
-    else:
-        _state_dict = _state_dicts[0]
-        tp_rank = 0
-        os.makedirs(os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}'))
-        save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}', 'model_optim_rng.pt')
-        save_dict = {}
-        save_dict['model'] = _state_dict
-        torch.save(save_dict, save_path)
+        return
+    _state_dict = _state_dicts[0]
+    tp_rank = 0
+    os.makedirs(os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}'))
+    save_path = os.path.join(_save_dir, directory, f'mp_rank_{tp_rank:02d}', 'model_optim_rng.pt')
+    save_dict = {}
+    save_dict['model'] = _state_dict
+    torch.save(save_dict, save_path)
 
 
 if __name__ == '__main__':
@@ -390,20 +431,23 @@ if __name__ == '__main__':
     if unrecognized_args:
         print(f"Unrecognized Args: {unrecognized_args}")
 
-    hf_model = load_from_hf(args.load_dir, args.trust_remote_code)
+    hf_model, hf_config = load_from_hf(args.load_dir, args.trust_remote_code)
+    num_key_value_heads = hf_config.llm_config.num_key_value_heads
     state_dict = hf_model.state_dict()
-    model_config, num_key_value_heads = get_model_config(
+    model_config = get_model_config(
         args.model_size, args.vpp)
     pp_split = merge_pp_index(model_config)
     
     for key, value in state_dict.items():
         print(key, value.shape)
-    state_dict = convert_hg_to_mm(state_dict, llm_num_layers, num_key_value_heads)
+    state_dict = convert_hg_to_mm(state_dict, model_config, num_key_value_heads)
     pipeline_state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
+    
     if len(remains) > 0:
         print(remains)
         raise RuntimeWarning("There are some weights ungrouped.")
 
+    
     for rank, pipeline_state_dict in enumerate(pipeline_state_dicts):
         print(20 * '#', f'stage {rank}', 20 * '#')
         for key, value in pipeline_state_dict.items():
