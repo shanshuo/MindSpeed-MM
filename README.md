@@ -39,8 +39,8 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 |       模型 \ 特性       | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
 |:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
-|    CogVideoX-T2V    | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
-|    CogVideoX-I2V    | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
+|   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
+|   CogVideoX系列-I2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 |     Opensora1.2     |  |  |  |                                                                                         | DSP | ✔ | ✔ |  |
 | OpensoraPlan1.3-T2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 | OpensoraPlan1.3-I2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
@@ -69,7 +69,6 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 研发中的特性与模型
 
-* 【新模型】 CogVideoX 1.5: [5B](https://huggingface.co/THUDM/CogVideoX1.5-5B)
 * 【新模型】 MiniCPM-V 2.6: [8B](https://huggingface.co/openbmb/MiniCPM-V-2_6)
 * 【新模型】 WF-VAE: [WF-VAE](https://arxiv.org/abs/2411.17459) training
 * 【模型特性】 CogVideoX: PP, TP+SP
@@ -188,7 +187,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX-T2V</a></td>
+      <td rowspan="1"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX-T2V</a></td>
       <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 5B </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
@@ -198,16 +197,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-    <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 亲和场景 </a></td>
-      <td> 预训练 </td>
-      <td> 1x8 </td>
-      <td> BF16 </td>
-      <td> 0.92 (SPS) </td>
-      <td> 0.96 (SPS) </td>
-      <td>【Pass】</td>
-    </tr>
-    <tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX-I2V</a></td>
+      <td rowspan="1"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX-I2V</a></td>
       <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 5B </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
@@ -216,13 +206,24 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.46 (SPS) </td>
       <td>【Pass】</td>
     </tr>
-    <tr>
-    <td><a href="https://huggingface.co/THUDM/CogVideoX-5b"> 亲和场景 </a></td>
+  <tr>
+      <td rowspan="1"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX 1.5-T2V</a></td>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT"> 5B </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
-      <td> 0.92 (SPS) </td>
-      <td> 0.96 (SPS) </td>
+      <td> 1.88 (SPS) </td>
+      <td> 2.09 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td rowspan="1"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX 1.5-I2V</a></td>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT"> 5B </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 1.81 (SPS) </td>
+      <td> 2.01 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
