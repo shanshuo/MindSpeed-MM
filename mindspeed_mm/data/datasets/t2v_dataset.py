@@ -249,7 +249,10 @@ class T2VDataset(MMBaseDataset):
                     examples[PROMPT_IDS], examples[PROMPT_MASK] = (
                         prompt_ids,
                         prompt_mask,
-                    )        
+                    )
+            # for feature extract, trace source file name
+            examples[FILE_INFO] = sample[FILE_INFO]
+
         elif self.data_storage_mode == "sorafeatured":
             sample = self.data_samples[index]
             
@@ -259,14 +262,14 @@ class T2VDataset(MMBaseDataset):
                     video_path = os.path.join(self.data_folder, video_path)
                 video_value = self.get_data_from_feature_data(video_path)
                 examples[VIDEO] = video_value['latents']
-                examples[VIDEO_MASK] = video_value['video_mask'] if 'video_mask' in video_value.keys() else None
+                if 'video_mask' in video_value.keys():
+                    examples[VIDEO_MASK] = video_value['video_mask']
                 file_type = 'video' 
-                warnings("Only extracted video feature with aesthetic is supported for now", FutureWarning)
             else:
                 examples, file_type = self.get_video_data(examples, index)
                 
             if self.use_text_feature:
-                texts_path = sample['cap']
+                texts_path = sample['path']
                 if self.data_folder:
                     texts_path = os.path.join(self.data_folder, texts_path)
                 texts_value = self.get_data_from_feature_data(texts_path)
@@ -362,20 +365,23 @@ class T2VDataset(MMBaseDataset):
                     text = [add_aesthetic_notice_image(text[0], aes)]
         prompt_ids, prompt_mask = self.get_text_processer(text)
         examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
+
+        # for feature extract, trace source file name
+        examples[FILE_INFO] = file_path
         return examples
 
     def get_value_from_vid_or_img(self, path):
         file_type = self.get_type(path)
         if file_type == "video":
             vframes, _, is_decord_read = self.video_reader(path)
-            video_value = self.video_processer(vframes, is_decord_read)
+            video_value = self.video_processer(vframes=vframes, is_decord_read=is_decord_read)
         elif file_type == "image":
             video_value = self.image_processer(path)
         return video_value
 
     def get_vid_img_fusion(self, path):
         vframes, _, is_decord_read = self.video_reader(path)
-        video_value = self.video_processer(vframes, is_decord_read)
+        video_value = self.video_processer(vframes=vframes, is_decord_read=is_decord_read)
         if self.use_img_num != 0 and self.use_img_from_vid:
             select_image_idx = np.linspace(
                 0, self.num_frames - 1, self.use_img_num, dtype=int

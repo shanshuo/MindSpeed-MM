@@ -1,0 +1,72 @@
+{
+    "dataset_param": {
+        "dataset_type": "t2v",
+        "use_feature_data": false,
+        "basic_parameters": {
+            "data_path": "data.jsonl",
+            "data_folder": "<your_data_folder>",
+            "data_storage_mode": "standard"
+        },
+        "preprocess_parameters": {
+            "video_reader_type": "decoder",
+            "image_reader_type": "Image",
+            "num_frames": 93,
+            "frame_interval": 1,
+            "max_height": 480,
+            "max_width": 848,
+            "train_fps": 24,
+            "speed_factor": 1.0,
+            "drop_short_ratio": 0.0,
+            "cfg": 0.0,
+            "dataloader_num_workers": 8,
+            "train_pipeline": {
+                "video": [
+                    {
+                        "trans_type": "ToTensorVideo"
+                    },
+                    {
+                        "trans_type": "CenterCropResizeVideo",
+                        "param": {
+                            "size": [480, 848]
+                        }
+                    },
+                    {
+                        "trans_type": "norm_fun",
+                        "param": {
+                            "mean": 0.5,
+                            "std": 0.5
+                        }
+                    }
+                ]
+            }
+        },
+        "use_text_processer": true,
+        "enable_text_preprocessing": false,
+        "tokenizer_config": [
+            {
+                "autotokenizer_name": "AutoTokenizer",
+                "hub_backend": "hf",
+                "from_pretrained": "llava-llama-3-8b-text-encoder-tokenizer",
+                "model_max_length": 256
+            },
+            {
+                "autotokenizer_name": "CLIPTokenizer",
+                "hub_backend": "hf",
+                "from_pretrained": "clip-vit-large-patch14",
+                "model_max_length": 77
+            }
+        ]
+    },
+    "dataloader_param": {
+        "dataloader_mode": "sampler",
+        "sampler_type": "SequentialSampler",
+        "batch_size": 1,
+        "num_workers": 8,
+        "shuffle": false,
+        "drop_last": true,
+        "pin_memory": true,
+        "group_frame": false,
+        "group_resolution": false,
+        "collate_param": {}
+    }
+}
