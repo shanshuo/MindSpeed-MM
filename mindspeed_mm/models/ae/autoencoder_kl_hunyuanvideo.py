@@ -1,3 +1,4 @@
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 from typing import Dict, Optional, Tuple, Union
 
 import numpy as np
@@ -676,22 +677,20 @@ class AutoencoderKLHunyuanVideo(MultiModalModule):
 
         Returns:
         """
-        x = x.transpose(1, 2).contiguous()
-
         if self.use_temporal_tiling and x.shape[2] > self.tile_sample_min_tsize:
             posterior = self.temporal_tiled_encode(x)
             if do_sample:
-                z = posterior.sample()
+                z = posterior.sample() * self.scaling_factor
             else:
-                z = posterior.mode()
+                z = posterior.mode() * self.scaling_factor
             return z
 
         if self.use_spatial_tiling and (x.shape[-1] > self.tile_sample_min_size or x.shape[-2] > self.tile_sample_min_size):
             posterior = self.spatial_tiled_encode(x)
             if do_sample:
-                z = posterior.sample()
+                z = posterior.sample() * self.scaling_factor
             else:
-                z = posterior.mode()
+                z = posterior.mode() * self.scaling_factor
             return z
 
         if self.use_slicing and x.shape[0] > 1:
@@ -704,9 +703,9 @@ class AutoencoderKLHunyuanVideo(MultiModalModule):
         posterior = DiagonalGaussianDistribution(moments)
 
         if do_sample:
-            z = posterior.sample()
+            z = posterior.sample() * self.scaling_factor
         else:
-            z = posterior.mode()
+            z = posterior.mode() * self.scaling_factor
 
         return z
 

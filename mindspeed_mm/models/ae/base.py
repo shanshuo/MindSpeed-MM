@@ -20,13 +20,15 @@ from mindspeed_mm.models.ae.vae import VideoAutoencoderKL, VideoAutoencoder3D
 from mindspeed_mm.models.ae.casualvae import CausalVAE
 from mindspeed_mm.models.ae.wfvae import WFVAE
 from mindspeed_mm.models.ae.contextparallel_causalvae import ContextParallelCasualVAE
+from mindspeed_mm.models.ae.autoencoder_kl_hunyuanvideo import AutoencoderKLHunyuanVideo
 
 
 AE_MODEL_MAPPINGS = {"vae": VideoAutoencoderKL,
                      "vae3D": VideoAutoencoder3D,
                      "casualvae": CausalVAE,
                      "wfvae": WFVAE,
-                     "contextparallelcasualvae": ContextParallelCasualVAE}
+                     "contextparallelcasualvae": ContextParallelCasualVAE,
+                     "autoencoder_kl_hunyuanvideo": AutoencoderKLHunyuanVideo}
 
 
 class AEModel(nn.Module):

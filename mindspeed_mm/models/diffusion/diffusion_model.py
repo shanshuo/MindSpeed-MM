@@ -4,6 +4,7 @@ from .ddpm import DDPM
 from .iddpm import IDDPM
 from .rflow import RFlow
 from .cogvideo_diffusion import CogVideoDiffusion
+from .flow_match_discrete_scheduler import FlowMatchDiscreteScheduler
 from .diffusers_scheduler import DIFFUSERS_SCHEDULE_MAPPINGS, DiffusersScheduler
 
 
@@ -11,7 +12,8 @@ DIFFUSION_MODEL_MAPPINGS = {
     "ddpm": DDPM,
     "iddpm": IDDPM,
     "rflow": RFlow,
-    "cogvideo_diffusion": CogVideoDiffusion
+    "cogvideo_diffusion": CogVideoDiffusion,
+    "flow_match_discrete_scheduler": FlowMatchDiscreteScheduler
 }
 
 

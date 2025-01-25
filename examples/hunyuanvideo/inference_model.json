@@ -1,7 +1,7 @@
 {
     "ae": {
         "model_id": "autoencoder_kl_hunyuanvideo",
-        "from_pretrained": "hunyuan-video-t2v-720P/vae/pytorch_model.pt",
+        "from_pretrained": "hunyuan-video-t2v-720p/vae/pytorch_model.pt",
         "dtype": "float16",
         "latent_channels": 16,
         "block_out_channels": [128, 256, 512, 512],
@@ -64,6 +64,7 @@
     ],
     "predictor": {
         "model_id": "hunyuanvideodit",
+        "from_pretrained": null,
         "dtype": "bf16",
         "patch_size": [1, 2, 2], 
         "in_channels": 16,

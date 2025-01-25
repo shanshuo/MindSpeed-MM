@@ -8,11 +8,6 @@ import torch_npu
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
 from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
-from mindspeed.core.context_parallel.unaligned_cp.mapping import (
-    split_forward_gather_backward,
-    gather_forward_split_backward,
-    all_to_all
-)
 
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.embeddings import (
@@ -144,6 +139,9 @@ class HunyuanVideoDiT(MultiModalModule):
             )
         
         # time modulation
+        self.time_in = TimeStepEmbedding(timestep_hidden_dim, time_embed_dim=self.hidden_size)
+
+        # txt modulation
         self.vector_in = MLP(
             in_channels=self.text_states_dim[1],
             hidden_channels=self.hidden_size,
@@ -367,6 +365,10 @@ class HunyuanVideoDiT(MultiModalModule):
 
         # cp split
         if self.context_parallel_algo is not None:
+            from mindspeed.core.context_parallel.unaligned_cp.mapping import (
+                split_forward_gather_backward,
+                gather_forward_split_backward,
+            )
             img = split_forward_gather_backward(
                 img, 
                 mpu.get_context_parallel_group(),
@@ -450,7 +452,7 @@ class HunyuanVideoDiT(MultiModalModule):
                 )[0]
             img = x[:, :img_seq_len]
 
-        if self.enable_context_parallel:
+        if self.context_parallel_algo is not None:
             img = gather_forward_split_backward(
                 img, 
                 mpu.get_context_parallel_group(),
@@ -609,7 +611,7 @@ class MMDoubleStreamBlock(nn.Module):
         txt_modulated = txt_modulated * (1 + txt_mod1_scale) + txt_mod1_shift
 
         txt_qkv = self.txt_attn_qkv(txt_modulated)
-        txt_q, txt_k, txt_v = rearrange(txt_qkv, "B L (K H D) - > K B L H D", K=3, H=self.heads_num)
+        txt_q, txt_k, txt_v = rearrange(txt_qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
 
         txt_q = self.txt_attn_q_norm(txt_q)
         txt_k = self.txt_attn_k_norm(txt_k)
@@ -772,6 +774,11 @@ def parallel_attention(
     # input: b s n d, output: b s h
 
     if context_parallel_algo == "ulysses_cp_algo":
+        from mindspeed.core.context_parallel.unaligned_cp.mapping import (
+            split_forward_gather_backward,
+            gather_forward_split_backward,
+            all_to_all
+        )
         img_q = all_to_all(img_q, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)
         img_k = all_to_all(img_k, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)
         img_v = all_to_all(img_v, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)

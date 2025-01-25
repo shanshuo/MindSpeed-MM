@@ -27,7 +27,11 @@
                     {
                         "trans_type": "CenterCropResizeVideo",
                         "param": {
-                            "size": [480, 848]
+                            "use_short_edge": false,
+							"top_crop": false,
+							"align_corners": false,
+							"antialias": false,
+							"transform_size": "auto"
                         }
                     },
                     {

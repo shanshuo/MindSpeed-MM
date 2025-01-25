@@ -8,6 +8,7 @@ TEXT_ENCODER_MAPPING = {
     "T5": "T5EncoderModel",
     "MT5": "MT5EncoderModel",
     "CLIP": "CLIPTextModel",
+    "Auto": "AutoModel"
 }
 
 

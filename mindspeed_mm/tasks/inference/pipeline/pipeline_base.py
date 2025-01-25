@@ -12,8 +12,9 @@ class MMPipeline(DiffusionPipeline):
         else:
             latents = latents.to(device)
 
-        # scale the initial noise by the standard deviation required by the scheduler
-        latents = latents * self.scheduler.init_noise_sigma
+        if hasattr(self.scheduler, "init_noise_sigma"):
+            # scale the initial noise by the standard deviation required by the scheduler
+            latents = latents * self.scheduler.init_noise_sigma
         return latents
 
     def decode_latents(self, latents, value_range=(-1, 1), normalize=True, **kwargs):
