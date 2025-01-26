@@ -1,6 +1,7 @@
 import copy
 
 from torch.utils.data import ConcatDataset
+from torch.distributed.distributed_c10d import _get_default_group
 
 from megatron.core import mpu
 from megatron.training import get_args, print_rank_0
@@ -141,6 +142,7 @@ def build_ae_dataloader(dataset, dataloader_param, process_group=None):
     if not isinstance(dataloader_param, dict):
         dataloader_param = dataloader_param.to_dict()
     dataloader_mode = dataloader_param.pop("dataloader_mode")
+    process_group = process_group if process_group is not None else _get_default_group()
 
     if dataloader_mode == "sampler":
         args = get_ae_args()
