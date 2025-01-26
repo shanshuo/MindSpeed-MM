@@ -68,13 +68,50 @@ def convert_sharegpt(
             {"role": tag_mapping.get(message[dataset_attr.role_tag]),
              "content": message[dataset_attr.content_tag]}
         )
-    invalid = len(aligned_messages) % 2 != 0
-    if invalid:
-        logger.warning("Invalid message count in %s.", messages)
+
+    is_valid_message_count = (not dataset_attr.ranking and len(aligned_messages) % 2 != 0) or \
+                             (dataset_attr.ranking and len(aligned_messages) % 2 == 0)
+    if is_valid_message_count:
+        logger.warning_rank0(f"Invalid message count in {messages}.")
         broken_data = True
 
-    prompt = aligned_messages[:-1]
-    response = aligned_messages[-1:]
+    if (
+        dataset_attr.ranking
+        and isinstance(example[dataset_attr.chosen], dict)
+        and isinstance(example[dataset_attr.rejected], dict)
+    ):  # pairwise example
+        chosen = example[dataset_attr.chosen]
+        rejected = example[dataset_attr.rejected]
+        chosen_role = chosen.get(dataset_attr.role_tag, None)
+        rejected_role = rejected.get(dataset_attr.role_tag, None)
+        chosen_content = chosen.get(dataset_attr.content_tag, None)
+        rejected_content = rejected.get(dataset_attr.content_tag, None)
+        chosen_role_tag = tag_mapping.get(chosen_role, None)
+        rejected_role_tag = tag_mapping.get(rejected_role, None)
+
+        if chosen_role is None or rejected_role is None:
+            logger.warning_rank0(f"Missing role tag in {[chosen, rejected]}.")
+            broken_data = True
+        elif chosen_role not in accept_tags[-1] or rejected_role not in accept_tags[-1]:
+            logger.warning_rank0(f"Invalid role tag in {[chosen, rejected]}.")
+            broken_data = True
+
+        if chosen_content is None or rejected_content is None:
+            logger.warning_rank0(f"Missing content tag in {[chosen, rejected]}.")
+            broken_data = True
+
+        if chosen_role_tag is None or rejected_role_tag is None:
+            logger.warning_rank0(f"Invalid role tag(tag_mapping) in {[chosen, rejected]}.")
+            broken_data = True
+
+        prompt = aligned_messages
+        response = [
+            {"role": chosen_role_tag, "content": chosen_content},
+            {"role": rejected_role_tag, "content": rejected_content},
+        ]
+    else:  # normal example
+        prompt = aligned_messages[:-1]
+        response = aligned_messages[-1:]
 
     if broken_data:
         logger.warning("Skipping this abnormal example.")
@@ -143,6 +180,8 @@ class DatasetAttr:
     Dataset attributes.
     """
 
+    # basic configs
+    ranking: bool = False
     # common columns
     system: Optional[str] = None
     images: Optional[str] = None
@@ -157,6 +196,9 @@ class DatasetAttr:
     observation_tag: Optional[str] = "observation"
     function_tag: Optional[str] = "function_call"
     system_tag: Optional[str] = "system"
+    # rlhf columns
+    chosen: Optional[str] = None
+    rejected: Optional[str] = None
 
 
 @dataclass
@@ -416,3 +458,83 @@ def load_tokenizer(model_args: "ModelArguments") -> "TokenizerModule":
         processor = None
 
     return {"tokenizer": tokenizer, "processor": processor}
+
+
+@dataclass
+class EncodePairwiseParams:
+    images: Sequence["ImageInput"]
+    videos: Sequence["VideoInput"]
+    template: "Template"
+    tokenizer: "PreTrainedTokenizer"
+    processor: Optional["ProcessorMixin"]
+    cutoff_len: int
+
+
+def _encode_pairwise_example(
+    prompt: Sequence[Dict[str, str]],
+    response: Sequence[Dict[str, str]],
+    system: Optional[str],
+    params: EncodePairwiseParams
+) -> Tuple[List[int], List[int], List[int], List[int]]:
+    chosen_messages = params.template.mm_plugin.process_messages(prompt + [response[0]], params.images, params.videos, params.processor)
+    rejected_messages = params.template.mm_plugin.process_messages(prompt + [response[1]], params.images, params.videos, params.processor)
+    prompt_ids, chosen_ids = params.template.encode_oneturn(params.tokenizer, chosen_messages, system)
+    _, rejected_ids = params.template.encode_oneturn(params.tokenizer, rejected_messages, system)
+
+    if params.template.efficient_eos:
+        chosen_ids += [params.tokenizer.eos_token_id]
+        rejected_ids += [params.tokenizer.eos_token_id]
+
+    prompt_ids, _ = params.template.mm_plugin.process_token_ids(prompt_ids, None, params.images, params.videos)
+    # consider the response is more important
+    source_len, target_len = infer_seqlen(len(prompt_ids), max(len(chosen_ids), len(rejected_ids)), params.cutoff_len)
+    prompt_ids = prompt_ids[:source_len]
+    chosen_ids = chosen_ids[:target_len]
+    rejected_ids = rejected_ids[:target_len]
+
+    chosen_input_ids = prompt_ids + chosen_ids
+    chosen_labels = [IGNORE_INDEX] * source_len + chosen_ids
+    rejected_input_ids = prompt_ids + rejected_ids
+    rejected_labels = [IGNORE_INDEX] * source_len + rejected_ids
+    return chosen_input_ids, chosen_labels, rejected_input_ids, rejected_labels
+
+
+def preprocess_pairwise_dataset(
+    examples: Dict[str, List[Any]],
+    template: "Template",
+    tokenizer: "PreTrainedTokenizer",
+    processor: Optional["ProcessorMixin"],
+    data_args: "DataArguments",
+) -> Dict[str, List[Any]]:
+    # build input pairs with format `<bos> X`, `Y1 <eos>` and `Y2 <eos>`
+    model_inputs = defaultdict(list)
+    for i in range(len(examples["_prompt"])):
+        if len(examples["_prompt"][i]) % 2 != 1 or len(examples["_response"][i]) < 2:
+            logger.warning_rank0(
+                "Dropped invalid example: {}".format(examples["_prompt"][i] + examples["_response"][i])
+            )
+            continue
+
+        params = EncodePairwiseParams(images=examples["_images"][i] or [],
+                                      videos=examples["_videos"][i] or [],
+                                      template=template,
+                                      tokenizer=tokenizer,
+                                      processor=processor,
+                                      cutoff_len=data_args.cutoff_len,
+                                      )
+        chosen_input_ids, chosen_labels, rejected_input_ids, rejected_labels = _encode_pairwise_example(
+                                                                                prompt=examples["_prompt"][i],
+                                                                                response=examples["_response"][i],
+                                                                                system=examples["_system"][i],
+                                                                                params=params
+                                                                                )
+        model_inputs["chosen_input_ids"].append(chosen_input_ids)
+        model_inputs["chosen_attention_mask"].append([1] * len(chosen_input_ids))
+        model_inputs["chosen_labels"].append(chosen_labels)
+        model_inputs["rejected_input_ids"].append(rejected_input_ids)
+        model_inputs["rejected_attention_mask"].append([1] * len(rejected_input_ids))
+        model_inputs["rejected_labels"].append(rejected_labels)
+        model_inputs["images"].append(examples["_images"][i])
+        model_inputs["videos"].append(examples["_videos"][i])
+
+    return model_inputs

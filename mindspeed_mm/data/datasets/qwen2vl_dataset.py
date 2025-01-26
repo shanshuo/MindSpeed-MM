@@ -5,8 +5,14 @@ from datasets import load_dataset
 from torch.utils.data import Dataset
 from transformers.training_args import TrainingArguments
 
-from mindspeed_mm.data.data_utils.func_utils.convert import DataArguments, DatasetAttr, load_tokenizer, \
-    convert_sharegpt, preprocess_supervised_dataset
+from mindspeed_mm.data.data_utils.func_utils.convert import (
+    DataArguments,
+    DatasetAttr,
+    load_tokenizer,
+    convert_sharegpt,
+    preprocess_supervised_dataset,
+    preprocess_pairwise_dataset
+)
 from mindspeed_mm.data.data_utils.func_utils.log import get_logger
 from mindspeed_mm.data.data_utils.func_utils.model_args import ProcessorArguments
 from mindspeed_mm.data.data_utils.func_utils.template import get_template_and_fix_tokenizer
@@ -50,13 +56,22 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
             **kwargs,
         )
         # -----------------convert text to token id ----------------------------------------------------------------------
-        preprocess_func = partial(
-            preprocess_supervised_dataset,
-            template=template,
-            tokenizer=tokenizer,
-            processor=processor,
-            data_args=data_args,
-        )
+        if dataset_attr.ranking:
+            preprocess_func = partial(
+                preprocess_pairwise_dataset,
+                template=template,
+                tokenizer=tokenizer,
+                processor=processor,
+                data_args=data_args,
+            )
+        else:
+            preprocess_func = partial(
+                preprocess_supervised_dataset,
+                template=template,
+                tokenizer=tokenizer,
+                processor=processor,
+                data_args=data_args,
+            )
         dataset = dataset.map(
             preprocess_func,
             batched=True,

@@ -50,13 +50,12 @@ class Template:
             self,
             tokenizer: "PreTrainedTokenizer",
             messages: Sequence[Dict[str, str]],
-            system: Optional[str] = None,
-            tools: Optional[str] = None,
+            system: Optional[str] = None
     ) -> Tuple[List[int], List[int]]:
         r"""
         Returns a single pair of token ids representing prompt and response respectively.
         """
-        encoded_messages = self._encode(tokenizer, messages, system, tools)
+        encoded_messages = self._encode(tokenizer, messages, system)
         prompt_ids = []
         for encoded_ids in encoded_messages[:-1]:
             prompt_ids += encoded_ids

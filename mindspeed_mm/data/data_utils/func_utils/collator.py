@@ -58,3 +58,31 @@ class MultiModalDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
         features: Dict[str, "torch.Tensor"] = super().__call__(features)
         features.update(mm_inputs)
         return features
+
+
+@dataclass
+class PairwiseDataCollatorWithPadding(MultiModalDataCollatorForSeq2Seq):
+    r"""
+    Data collator for pairwise data.
+    """
+
+    def __call__(self, features: Sequence[Dict[str, Any]]) -> Dict[str, "torch.Tensor"]:
+        r"""
+        Pads batched data to the longest sequence in the batch.
+
+        We generate 2 * n examples where the first n examples represent chosen examples and
+        the last n examples represent rejected examples.
+        """
+        concatenated_features = []
+        for key in ("chosen", "rejected"):
+            for feature in features:
+                target_feature = {
+                    "input_ids": feature[f"{key}_input_ids"],
+                    "attention_mask": feature[f"{key}_attention_mask"],
+                    "labels": feature[f"{key}_labels"],
+                    "images": feature["images"],
+                    "videos": feature["videos"],
+                }
+                concatenated_features.append(target_feature)
+
+        return super().__call__(concatenated_features)
