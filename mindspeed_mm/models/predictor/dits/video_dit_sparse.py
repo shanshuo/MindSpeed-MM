@@ -9,7 +9,6 @@ from diffusers.models.embeddings import PixArtAlphaTextProjection
 from diffusers.models.normalization import AdaLayerNormSingle
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
-from mindspeed.core.parallel_state import get_context_parallel_group_for_hybrid_ulysses, get_context_parallel_group_for_hybrid_ring
 
 from mindspeed_mm.data.data_utils.constants import INPUT_MASK, MASKED_VIDEO
 from mindspeed_mm.models.common import MultiModalModule
@@ -73,9 +72,6 @@ class VideoDitSparse(MultiModalModule):
     ):
         super().__init__(config=None)
         args = get_args()
-        self.ulysses_degree_in_cp = args.ulysses_degree_in_cp
-        self.context_parallel_size = args.context_parallel_size
-        self.context_parallel_algo = args.context_parallel_algo if args.context_parallel_algo is not None else 'ulysses_cp_algo'
         self.sequence_parallel = args.sequence_parallel
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
@@ -205,29 +201,11 @@ class VideoDitSparse(MultiModalModule):
         
         batch_size, c, frames, h, w = latents.shape
         prompt_mask = prompt_mask.view(batch_size, -1, prompt_mask.shape[-1])
-        if self.context_parallel_algo == 'ulysses_cp_algo':
+        if mpu.get_context_parallel_world_size() > 1:
             frames //= mpu.get_context_parallel_world_size()
             latents = split_forward_gather_backward(latents, mpu.get_context_parallel_group(), dim=2,
                                                     grad_scale='down')
             prompt = split_forward_gather_backward(prompt, mpu.get_context_parallel_group(),
-                                                   dim=2, grad_scale='down')
-
-        if self.context_parallel_algo == 'megatron_cp_algo':
-            frames //= mpu.get_context_parallel_world_size()
-            latents = split_forward_gather_backward(latents, mpu.get_context_parallel_group(), dim=2,
-                                                    grad_scale='down')
-            prompt = split_forward_gather_backward(prompt, mpu.get_context_parallel_group(),
-                                                   dim=2, grad_scale='down')
-            
-        if self.context_parallel_algo == 'hybrid_cp_algo':
-            frames //= self.context_parallel_size
-            latents = split_forward_gather_backward(latents, get_context_parallel_group_for_hybrid_ring(), dim=2,
-                                                    grad_scale='down')
-            prompt = split_forward_gather_backward(prompt, get_context_parallel_group_for_hybrid_ring(),
-                                                   dim=2, grad_scale='down')
-            latents = split_forward_gather_backward(latents, get_context_parallel_group_for_hybrid_ulysses(), dim=2,
-                                                    grad_scale='down')
-            prompt = split_forward_gather_backward(prompt, get_context_parallel_group_for_hybrid_ulysses(),
                                                    dim=2, grad_scale='down')
 
         if video_mask is not None and video_mask.ndim == 4:
@@ -316,18 +294,8 @@ class VideoDitSparse(MultiModalModule):
             width=width,
         )  # b c t h w
 
-        if self.context_parallel_algo == 'ulysses_cp_algo':
+        if mpu.get_context_parallel_world_size() > 1:
             output = gather_forward_split_backward(output, mpu.get_context_parallel_group(), dim=2,
-                                                        grad_scale='up')
-            
-        if self.context_parallel_algo == 'megatron_cp_algo':
-            output = gather_forward_split_backward(output, mpu.get_context_parallel_group(), dim=2,
-                                                        grad_scale='up')
-
-        if self.context_parallel_algo == 'hybrid_cp_algo':
-            output = gather_forward_split_backward(output, get_context_parallel_group_for_hybrid_ulysses(), dim=2,
-                                                        grad_scale='up')
-            output = gather_forward_split_backward(output, get_context_parallel_group_for_hybrid_ring(), dim=2,
                                                         grad_scale='up')
 
         return output
@@ -687,17 +655,11 @@ class VideoDitSparseI2V(VideoDitSparse):
         input_hidden_states = hidden_states
         input_masked_hidden_states = kwargs.get(MASKED_VIDEO, None)
         input_mask = kwargs.get(INPUT_MASK, None)
-        if self.context_parallel_algo == 'ulysses_cp_algo':
+        if mpu.get_context_parallel_world_size() > 1:
             input_masked_hidden_states = split_forward_gather_backward(input_masked_hidden_states,
                                                                        mpu.get_context_parallel_group(),
                                                                        dim=2, grad_scale='down')
             input_mask = split_forward_gather_backward(input_mask, mpu.get_context_parallel_group(),
-                                                       dim=2, grad_scale='down')
-        if self.context_parallel_algo == 'hybrid_cp_algo':
-            input_masked_hidden_states = split_forward_gather_backward(input_masked_hidden_states,
-                                                                       get_context_parallel_group_for_hybrid_ulysses(),
-                                                                       dim=2, grad_scale='down')
-            input_mask = split_forward_gather_backward(input_mask, get_context_parallel_group_for_hybrid_ulysses(),
                                                        dim=2, grad_scale='down')
         input_hidden_states = self.pos_embed(input_hidden_states.to(self.dtype))
 

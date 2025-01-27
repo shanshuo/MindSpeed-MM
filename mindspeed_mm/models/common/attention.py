@@ -10,17 +10,6 @@ from megatron import core
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
-from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
-from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid_ulysses,
-                                             get_context_parallel_group_for_hybrid_ring,
-                                             get_context_parallel_for_hybrid_ring_world_size,
-                                             get_context_parallel_for_hybrid_ring_rank,
-                                             get_context_parallel_for_hybrid_ring_global_ranks,
-                                             get_ring_ranks_for_intra_window,
-                                             get_ring_ranks_for_inter_window_kv,
-                                             get_ring_ranks_for_inter_window_dkv,
-                                             get_ring_group_for_intra_window,
-                                             get_ring_group_for_intra_window_send_recv_overlap)
 
 from mindspeed_mm.utils.utils import video_to_image
 from mindspeed_mm.models.common.normalize import normalize
@@ -81,57 +70,14 @@ class MultiHeadSparseAttentionSBH(nn.Module):
 
         args = get_args()
         config = core_transformer_config_from_args(args)
-        self.cp_attention_mask_type = args.attention_mask_type
-        self.context_parallel_algo = args.context_parallel_algo if args.context_parallel_algo is not None else 'ulysses_cp_algo'
-        self.ulysses_degree_in_cp = args.ulysses_degree_in_cp
         self.sp_size = mpu.get_context_parallel_world_size()
         self.tp_size = mpu.get_tensor_model_parallel_world_size()
-        self.use_cp_send_recv_overlap = args.use_cp_send_recv_overlap
 
         self.num_attention_heads_per_partition = core.utils.divide(num_heads, self.tp_size)
-        if self.context_parallel_algo == 'ulysses_cp_algo':
-            self.num_attention_heads_per_partition_per_cp = core.utils.divide(self.num_attention_heads_per_partition, self.sp_size)
-        elif self.context_parallel_algo == 'hybrid_cp_algo':
-            self.num_attention_heads_per_partition_per_cp = core.utils.divide(self.num_attention_heads_per_partition, self.ulysses_degree_in_cp)
-        else:
-            self.num_attention_heads_per_partition_per_cp = self.num_attention_heads_per_partition
+        self.num_attention_heads_per_partition_per_cp = core.utils.divide(self.num_attention_heads_per_partition,
+                                                                          self.sp_size)
 
         key_dim = key_dim if key_dim is not None else query_dim
-
-        if self.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
-            in_hybrid_mode = False
-            if get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None:
-                in_hybrid_mode = True
-            
-            if not in_hybrid_mode:
-                cp_group = mpu.get_context_parallel_group()
-                cp_size = mpu.get_context_parallel_world_size()
-                rank = mpu.get_context_parallel_rank()
-                cp_global_ranks = mpu.get_context_parallel_global_ranks()
-            else:
-                cp_group = get_context_parallel_group_for_hybrid_ring()
-                cp_size = get_context_parallel_for_hybrid_ring_world_size()
-                rank = get_context_parallel_for_hybrid_ring_rank()
-                cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
-
-            self.pse = None
-            self.pse_type = 1
-
-            self.cp_para = dict()
-            self.cp_para['causal'] = self.cp_attention_mask_type == 'causal'
-            self.cp_para['cp_group'] = cp_group
-            self.cp_para['cp_size'] = cp_size
-            self.cp_para['rank'] = rank
-            self.cp_para['cp_global_ranks'] = cp_global_ranks
-            self.cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
-                    if self.use_cp_send_recv_overlap else None
-            self.cp_para['pse'] = self.pse
-            self.cp_para['pse_type'] = self.pse_type
-            self.cp_para['cp_inner_ranks'] = get_ring_ranks_for_intra_window()
-            self.cp_para['cp_outer_ranks'] = get_ring_ranks_for_inter_window_kv()
-            self.cp_para['cp_dkv_outer_ranks'] = get_ring_ranks_for_inter_window_dkv()
-            self.cp_para['cp_group_for_intra_window'] = get_ring_group_for_intra_window()
-            self.cp_para['cp_group_for_intra_window_send_recv_overlap'] = get_ring_group_for_intra_window_send_recv_overlap()
 
         self.proj_q = tensor_parallel.ColumnParallelLinear(
             self.inner_dim,
@@ -240,20 +186,13 @@ class MultiHeadSparseAttentionSBH(nn.Module):
             q = q.view(-1, self.num_attention_heads_per_partition, self.head_dim)
             k = k.view(-1, self.num_attention_heads_per_partition, self.head_dim)
             v = v.view(-1, self.num_attention_heads_per_partition, self.head_dim)
-            if self.context_parallel_algo == 'ulysses_cp_algo':
-                sp_group = mpu.get_context_parallel_group()
-                total_frames = frames * self.sp_size
-                # apply all_to_all to gather sequence and split attention heads [s // sp * b, h, d] -> [s * b, h // sp, d]
-                q = all_to_all_SBH(q, sp_group, scatter_dim=1, gather_dim=0)
-                k = all_to_all_SBH(k, sp_group, scatter_dim=1, gather_dim=0)
-                v = all_to_all_SBH(v, sp_group, scatter_dim=1, gather_dim=0)
-            if self.context_parallel_algo == 'hybrid_cp_algo':
-                sp_group = get_context_parallel_group_for_hybrid_ulysses()
-                total_frames = frames * self.ulysses_degree_in_cp
-                # apply all_to_all to gather sequence and split attention heads [s // sp * b, h, d] -> [s * b, h // sp, d]
-                q = all_to_all_SBH(q, sp_group, scatter_dim=1, gather_dim=0)
-                k = all_to_all_SBH(k, sp_group, scatter_dim=1, gather_dim=0)
-                v = all_to_all_SBH(v, sp_group, scatter_dim=1, gather_dim=0)
+            total_frames = frames * self.sp_size
+            sp_group = mpu.get_context_parallel_group()
+
+            # apply all_to_all to gather sequence and split attention heads [s // sp * b, h, d] -> [s * b, h // sp, d]
+            q = all_to_all_SBH(q, sp_group, scatter_dim=1, gather_dim=0)
+            k = all_to_all_SBH(k, sp_group, scatter_dim=1, gather_dim=0)
+            v = all_to_all_SBH(v, sp_group, scatter_dim=1, gather_dim=0)
 
         if not self.is_cross_attn:
             # require the shape of (ntokens x batch_size x nheads x dim)
@@ -275,40 +214,27 @@ class MultiHeadSparseAttentionSBH(nn.Module):
             else:
                 k, pad_len = self._sparse_1d(k, total_frames, height, width)
                 v, pad_len = self._sparse_1d(v, total_frames, height, width)
-    
-        if self.sp_size > 1 and self.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
-            scale = 1.0 / math.sqrt(self.head_dim)
-            head_num = self.num_attention_heads_per_partition_per_cp
-            cp_para = self.cp_para
-            out = ringattn_context_parallel(q, k, v, head_num, cp_para, scale, mask)
-            if self.sparse1d:
-                out = self._reverse_sparse_1d(out, total_frames, height, width, pad_len)
-        else:
-            out = torch_npu.npu_fusion_attention(
-                q,
-                k,
-                v,
-                head_num=self.num_attention_heads_per_partition_per_cp,
-                atten_mask=mask,
-                input_layout="SBH",
-                scale=1 / math.sqrt(self.head_dim)
-            )[0]
-            if self.sparse1d:
-                out = self._reverse_sparse_1d(out, total_frames, height, width, pad_len)
-            
+
+        out = torch_npu.npu_fusion_attention(
+            q,
+            k,
+            v,
+            head_num=self.num_attention_heads_per_partition_per_cp,
+            atten_mask=mask,
+            input_layout="SBH",
+            scale=1 / math.sqrt(self.head_dim)
+        )[0]
+
+        if self.sparse1d:
+            out = self._reverse_sparse_1d(out, total_frames, height, width, pad_len)
+
+        # [s, b, h // sp * d] -> [s // sp * b, h, d] -> [s // sp, b, h * d]
         if self.sp_size > 1:
-            if self.context_parallel_algo == 'ulysses_cp_algo':
-                sp_group = mpu.get_context_parallel_group()
-                out = all_to_all_SBH(
+            sp_group = mpu.get_context_parallel_group()
+            out = all_to_all_SBH(
                 out.reshape(-1, self.num_attention_heads_per_partition_per_cp, self.head_dim),
                 sp_group, scatter_dim=0, gather_dim=1)
-                out = out.view(sequence_length, batch_size, -1)   
-            elif self.context_parallel_algo == 'hybrid_cp_algo':
-                sp_group = get_context_parallel_group_for_hybrid_ulysses()
-                out = all_to_all_SBH(
-                out.reshape(-1, self.num_attention_heads_per_partition_per_cp, self.head_dim),
-                sp_group, scatter_dim=0, gather_dim=1)
-                out = out.view(sequence_length, batch_size, -1)
+            out = out.view(sequence_length, batch_size, -1)
 
         out = out.to(query.dtype)
 

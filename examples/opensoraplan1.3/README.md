@@ -256,18 +256,6 @@ MindSpeeed-MM修改了部分原始网络的结构名称，因此需要使用`con
     WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 ```
 
-【长序列并行】
-
-```shell
-    # 开启Ulysses长序列并行
-    设置--context-parallel-algo ulysses_cp_algo
-    # 开启Ring Attention长序列并行
-    设置--context-parallel-algo megatron_cp_algo
-    # 开启混合长序列并行
-    设置--context-parallel-algo hybrid_cp_algo
-    手动增添--ulysses-degree-in-cp，需要确保CP数可以被该参数整除且大于1
-```
-
 <a id="jump4.3"></a>
 
 #### 3. 启动预训练
