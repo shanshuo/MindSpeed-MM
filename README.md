@@ -19,7 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
-* [Jan. 22, 2025]: 🚀 MindSpeed-MM支持Qwen2VL视频模态
+* [Jan. 22, 2025]: 🎉 MindSpeed-MM支持Qwen2VL视频模态
 * [Dec. 30, 2024]: 🔥 MindSpeed-MM版本1.0.0发布
 * [Dec. 19, 2024]: 🎉 MindSpeed-MM生成类模型支持分布式推理
 * [Dec. 16, 2024]: 🚀 MindSpeed-MM支持Qihoo-T2X模型
@@ -71,9 +71,10 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 * 【新模型】 MiniCPM-V 2.6: [8B](https://huggingface.co/openbmb/MiniCPM-V-2_6)
 * 【新模型】 WF-VAE: [WF-VAE](https://arxiv.org/abs/2411.17459) training
-* 【模型特性】 CogVideoX: PP, TP+SP
+* 【新模型】 [Qwen2.5VL](https://github.com/QwenLM/Qwen2.5-VL)
+* 【模型特性】 CogVideoX: PP
 * 【模型特性】 OpensoraPlan1.3: PP, CP (Ring Attention)
-* 【模型特性】 Qwen2VL: TP, VPP, CP (Ulysses & Ring Attention)
+* 【模型特性】 Qwen2VL: VPP, CP (Ulysses & Ring Attention)
 * 【模型特性】 InternVL2: TP, CP (Ulysses & Ring Attention)
 * 【基础特性】 10M超长序列Demo
 * 【基础特性】 分布式推理
