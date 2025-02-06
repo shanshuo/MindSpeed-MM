@@ -268,6 +268,7 @@ class LengthGroupedSampler(DistributedSampler):
         group_resolution=False,
         group_data=False,
         generator=None,
+        consumed_samples: int = 0,
     ):
         super().__init__(dataset=lengths, num_replicas=num_replicas, rank=rank)
 
@@ -284,6 +285,7 @@ class LengthGroupedSampler(DistributedSampler):
         self.group_resolution = group_resolution
         self.group_data = group_data
         self.generator = generator
+        self.consumed_samples = consumed_samples
 
     def __len__(self):
         if self.group_data:
@@ -310,7 +312,14 @@ class LengthGroupedSampler(DistributedSampler):
                 group_data=self.group_data,
                 generator=self.generator,
             )
+
+        # start sampling from the consumed samples point to continue training from where it left off
+        start_index = self.consumed_samples % len(indices)
+        indices = indices[start_index:]
+        actual_indices_len = len(indices)
+
         indices = indices[self.rank:self.total_size:self.num_replicas]
+        self.consumed_samples += actual_indices_len
         return iter(indices)
 
 
@@ -321,11 +330,13 @@ class StatefulDistributedSampler(DistributedSampler):
         num_replicas: Optional[int] = None,
         rank: Optional[int] = None,
         shuffle: bool = True,
+        consumed_samples: int = 0,
         seed: int = 0,
         drop_last: bool = False,
     ) -> None:
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
         self.start_index: int = 0
+        self.start_index = consumed_samples
 
     def __iter__(self) -> Iterator:
         iterator = super().__iter__()
@@ -457,6 +468,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         drop_last: bool = False,
         verbose: bool = False,
         num_bucket_build_workers: int = 1,
+        consumed_samples: int = 0,
     ) -> None:
         super().__init__(
             dataset=dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last
@@ -471,6 +483,7 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         self._get_num_batch_cached_bucket_sample_dict = None
         self.num_bucket_build_workers = num_bucket_build_workers
+        self.last_micro_batch_access_index += consumed_samples
 
     def __iter__(self) -> Iterator[List[int]]:
         if self._get_num_batch_cached_bucket_sample_dict is not None:

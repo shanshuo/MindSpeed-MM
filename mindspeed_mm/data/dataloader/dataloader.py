@@ -141,6 +141,7 @@ def prepare_sampler_dataloader(
             num_replicas=process_group.size(),
             rank=process_group.rank(),
             shuffle=shuffle,
+            consumed_samples=consumed_samples,
         )
         return DataLoader(
             dataset,
@@ -173,6 +174,7 @@ def prepare_sampler_dataloader(
                 group_frame=group_frame,
                 group_resolution=group_resolution,
                 group_data=group_data,
+                consumed_samples=consumed_samples,
             )
             if (group_frame or group_resolution or group_data)
             else None
@@ -183,6 +185,7 @@ def prepare_sampler_dataloader(
                 num_replicas=process_group.size(),
                 rank=process_group.rank(),
                 shuffle=shuffle,
+                consumed_samples=consumed_samples,
             )
 
         if collate_param is None or "model_name" not in collate_param:
@@ -246,7 +249,8 @@ def prepare_sampler_dataloader(
                                                       num_workers,
                                                       shuffle,
                                                       prefetch_factor,
-                                                      persistent_workers))
+                                                      persistent_workers,
+                                                      consumed_samples))
     elif sampler_type == "AESampler":
         sampler = AESampler(
             dataset,
@@ -273,7 +277,7 @@ class DistributedBatchSampler(BatchSampler):
     batch sampler level, instead of just the sampler level. This allows wrapping of arbitrary
     data samplers (sequential, random, WeightedRandomSampler, etc.) with this batch sampler.
     """
-    def __init__(self, sampler, batch_size, drop_last, rank=-1, world_size=2, wrap_last=False, gradient_accumulation_steps=None):
+    def __init__(self, sampler, batch_size, drop_last, rank=-1, world_size=2, wrap_last=False, gradient_accumulation_steps=None, consumed_samples=0):
         super(DistributedBatchSampler, self).__init__(sampler, batch_size, drop_last)
         if rank == -1:
             raise ValueError('please select rank')
@@ -284,6 +288,7 @@ class DistributedBatchSampler(BatchSampler):
         self.wrap_last = wrap_last
         self.start_iter = 0
         self.effective_batch_size = batch_size if gradient_accumulation_steps is None else batch_size * gradient_accumulation_steps
+        self.start_iter += consumed_samples // self.effective_batch_size
 
     def __iter__(self):
         batch = []
@@ -338,6 +343,7 @@ class DataLoaderArgs:
     shuffle: bool
     prefetch_factor: Optional[int]
     persistent_workers: int
+    consumed_samples: int
 
 
 def build_sequential_loader(args: DataLoaderArgs):
@@ -347,16 +353,16 @@ def build_sequential_loader(args: DataLoaderArgs):
     rank = args.process_group.rank()
     distributed = world_size > 1
     batch_size = args.batch_size * world_size
+    consumed_samples = args.consumed_samples
 
-    if distributed:
-        batch_sampler = DistributedBatchSampler(sampler,
-                                                batch_size,
-                                                args.drop_last,
-                                                rank,
-                                                world_size,
-                                                gradient_accumulation_steps=1)
-    else:
-        batch_sampler = torch.utils.data.BatchSampler(sampler, batch_size, args.drop_last)
+
+    batch_sampler = DistributedBatchSampler(sampler,
+                                            batch_size,
+                                            args.drop_last,
+                                            rank,
+                                            world_size,
+                                            gradient_accumulation_steps=1,
+                                            consumed_samples=consumed_samples)
 
     data_loader = torch.utils.data.DataLoader(args.dataset,
                                               batch_sampler=batch_sampler,
@@ -381,6 +387,7 @@ def prepare_variable_dataloader(
         bucket_config=None,
         num_bucket_build_workers=1,
         sampler_type="variable_video_batch_sampler",
+        consumed_samples=0,
         **kwargs,
     ):
     if persistent_workers is None:
@@ -396,6 +403,7 @@ def prepare_variable_dataloader(
             drop_last=drop_last,
             verbose=True,
             num_bucket_build_workers=num_bucket_build_workers,
+            consumed_samples=consumed_samples,
         )
 
         return DataLoader(
