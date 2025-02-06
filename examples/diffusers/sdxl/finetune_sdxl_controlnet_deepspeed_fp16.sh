@@ -33,6 +33,8 @@ export TASK_QUEUE_ENABLE=2
 export HCCL_CONNECT_TIMEOUT=1200
 export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+export OMP_NUM_THREADS=1
+export CPU_AFFINITY_CONF=1
 
 cur_path=$(pwd)
 cur_path_last_dirname=${cur_path##*/}

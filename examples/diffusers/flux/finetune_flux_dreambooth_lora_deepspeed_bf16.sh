@@ -39,6 +39,8 @@ export HCCL_WHITELIST_DISABLE=1
 export HCCL_CONNECT_TIMEOUT=1200
 export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+export OMP_NUM_THREADS=1
+export CPU_AFFINITY_CONF=1
 
 # cd到与test文件夹同层级目录下执行脚本，提高兼容性；test_path_dir为包含test文件夹的路径
 cur_path=$(pwd)
@@ -64,7 +66,7 @@ start_time=$(date +%s)
 echo "start_time: ${start_time}"
 
 accelerate launch --config_file ${config_file} \
-  train_dreambooth_lora_flux_advanced.py \
+  ../advanced_diffusion_training/train_dreambooth_lora_flux_advanced.py \
   --pretrained_model_name_or_path=$model_name  \
   --dataset_name=$dataset_name \
   --output_dir=$output_path \
@@ -74,6 +76,7 @@ accelerate launch --config_file ${config_file} \
   --gradient_checkpointing \
   --mixed_precision=$mixed_precision \
   --gradient_accumulation_steps=$gradient_accumulation_steps \
+  --dataloader_num_workers=8 \
   --learning_rate=1e-06 \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \

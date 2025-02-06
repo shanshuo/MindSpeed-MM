@@ -44,6 +44,8 @@ export HCCL_WHITELIST_DISABLE=1
 export HCCL_CONNECT_TIMEOUT=1200
 export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+export OMP_NUM_THREADS=1
+export CPU_AFFINITY_CONF=1
 
 cur_path=$(pwd)
 
@@ -69,6 +71,7 @@ accelerate launch --config_file ${config_file} \
   --max_train_steps=$max_train_steps \
   --learning_rate=1e-05 --lr_scheduler="constant_with_warmup" --lr_warmup_steps=0 \
   --max_grad_norm=1 \
+  --dataloader_num_workers=8 \
   --validation_prompt="A photo of sks dog in a bucket" \
   --validation_epochs=25 \
   --mixed_precision=$mixed_precision \
