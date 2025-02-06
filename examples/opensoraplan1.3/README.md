@@ -278,6 +278,24 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
     "pipeline_num_layers": [8, 8, 8, 8],
   ```
 
++ VP: 虚拟流水线并行
+
+  目前支持将predictor模型切分虚拟流水线并行。将pretrain_xxx_model.json文件中的"pipeline_num_layers"一维数组改造为两维，其中第一维表示虚拟并行的数量，二维表示流水线并行的数量，例如[[4, 4, 4, 4], [4, 4, 4, 4]]其中第一维两个数组表示vp为2, 第二维的stage个数为4表示流水线数量pp为4。
+
+  - 使用场景：对流水线并行进行进一步切分，通过虚拟化流水线，降低空泡
+
+  - 使能方式:如果想要使用虚拟流水线并行，需要在pretrain.t2v.sh或者prerain_i2v.sh当中修改如下变量，需要注意的是，VP仅在PP大于1的情况下生效:
+
+  ```shell
+  PP=4
+  VP=4
+
+  GPT_ARGS="
+    --pipeline-model-parallel-size ${PP} \
+    --virtual-pipeline-model-parallel-size ${VP} \
+  ...
+  ```
+
 【动态/固定分辨率】
 - 支持使用动态分辨率或固定分辨率进行训练，默认为动态分辨率训练，如切换需修改启动脚本pretrain_xxx.sh
 ```shell

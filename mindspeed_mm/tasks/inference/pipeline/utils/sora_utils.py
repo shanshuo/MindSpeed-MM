@@ -177,12 +177,12 @@ def get_resize_transform(
         max_hxw=236544,  # 480 x 480
 ):
     if crop_for_hw:
-        transform = CenterCropResizeVideo((height, width))
+        transform = CenterCropResizeVideo(transform_size=dict(max_height=height, max_width=width))
     else:
         new_height, new_width = maxhwresize(ori_height, ori_width, max_hxw)
         transform = Compose(
             [
-                CenterCropResizeVideo((new_height, new_width)),
+                CenterCropResizeVideo(transform_size=dict(max_height=new_height, max_width=new_width)),
                 # We use CenterCropResizeVideo to share the same height and width, ensuring that the shape of the crop remains consistent when multiple images are captured
                 SpatialStrideCropVideo(stride=hw_stride),
             ]

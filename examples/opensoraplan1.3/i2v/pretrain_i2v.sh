@@ -17,6 +17,7 @@ WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
 TP=1
 PP=1
+VP=1
 CP=1
 MBS=1
 ACC=1
@@ -39,6 +40,7 @@ DISTRIBUTED_ARGS="
 GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
+    --virtual-pipeline-model-parallel-size ${VP} \
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \

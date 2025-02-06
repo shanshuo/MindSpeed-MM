@@ -52,18 +52,13 @@ class SoRAModel(nn.Module):
         self.config = core_transformer_config_from_args(get_args())
         self.task = config.task if hasattr(config, "task") else "t2v"
 
-        if mpu.get_virtual_pipeline_model_parallel_world_size() is not None:
-            raise NotImplementedError("Not support virtual_pipeline_model_parallel now. ")
-        else:
-            self.pp_rank = mpu.get_pipeline_model_parallel_rank()
-
         self.pre_process = mpu.is_pipeline_first_stage()
         self.post_process = mpu.is_pipeline_last_stage()
         self.input_tensor = None
         # to avoid grad all-reduce and reduce-scatter in megatron, since SoRAModel has no embedding layer.
         self.share_embeddings_and_output_weights = False
 
-        if self.pp_rank == 0:
+        if mpu.get_pipeline_model_parallel_rank() == 0:
             self.load_video_features = config.load_video_features
             self.load_text_features = config.load_text_features
             if not self.load_video_features:
@@ -162,14 +157,14 @@ class SoRAModel(nn.Module):
             **kwargs
         )
         return loss_dict
-    
+
     def train(self, mode=True):
         self.predictor.train()
 
     def state_dict_for_save_checkpoint(self, prefix="", keep_vars=False):
         """Customized state_dict"""
         return self.predictor.state_dict(prefix=prefix, keep_vars=keep_vars)
-    
+
     def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True):
         """Customized load."""
         if not isinstance(state_dict, Mapping):

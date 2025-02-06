@@ -19,10 +19,11 @@ WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
 TP=1
 PP=1
+VP=1
 CP=1
 MBS=1
 ACC=1
-GBS=$(($WORLD_SIZE*$MBS/$CP/$TP/$PP*$ACC))
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP*$ACC))
 
 MM_DATA="./examples/opensoraplan1.3/t2v/data_dynamic_resolution.json"
 MM_MODEL="./examples/opensoraplan1.3/t2v/pretrain_t2v_model.json"
@@ -41,6 +42,7 @@ DISTRIBUTED_ARGS="
 GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
+    --virtual-pipeline-model-parallel-size ${VP} \
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \

@@ -90,19 +90,26 @@ def split_by_tp(state_dicts, tp_size):
     return return_dicts
 
 
-def split_by_pp(state_dicts, pp_sizes):
-    return_dict = {}
+def split_by_pp_vpp(state_dicts, pp_sizes):
+    return_dict = []
     if len(pp_sizes) == 0:
-        return_dict = {}
         for tp_rank, state_dict in enumerate(state_dicts):
-            return_dict[(0, tp_rank)] = state_dict
+            return_dict.append((tp_rank, state_dict))
         return return_dict
 
+    enable_vpp = isinstance(pp_sizes[0], list)
+    if enable_vpp:
+        pp_sizes_flat = [layers for vpp_layer in pp_sizes for layers in vpp_layer]
+    else:
+        pp_sizes_flat = pp_sizes
+
+    print(f"pp_sizes_flat: {pp_sizes_flat}")
+
     postprocess_weight_names = ['scale_shift_table', 'proj_out.weight', 'proj_out.bias']
-    for pp_rank, layers in enumerate(pp_sizes):
+    for pp_rank, layers in enumerate(pp_sizes_flat):
         is_first = pp_rank == 0
-        is_last = pp_rank == len(pp_sizes) - 1
-        start_layer, end_layer = sum(pp_sizes[:pp_rank]), sum(pp_sizes[:pp_rank + 1])
+        is_last = pp_rank == len(pp_sizes_flat) - 1
+        start_layer, end_layer = sum(pp_sizes_flat[:pp_rank]), sum(pp_sizes_flat[:pp_rank + 1])
         for tp_rank, state_dict in enumerate(state_dicts):
             pp_tp_param = dict()
             for k in state_dict.keys():
@@ -120,14 +127,13 @@ def split_by_pp(state_dicts, pp_sizes):
                     # for pp rank 0
                     if is_first:
                         pp_tp_param[k] = state_dict[k]
-            return_dict[(pp_rank, tp_rank)] = pp_tp_param
+            return_dict.append((tp_rank, pp_tp_param))
 
     return return_dict
 
 
-def save_by_pp_tp(state_dicts, save_dir, latest_checkpointed_iteration="release", exists_ok=False,
-                  has_pp=True):
-    if os.path.exists(save_dir) and not exists_ok:
+def save_by_pp_vpp_tp(pp_sizes, state_dicts, save_dir, mode="train", latest_checkpointed_iteration="release"):
+    if os.path.exists(save_dir):
         print(f"save dir: {save_dir} exists, please check.")
         return
     else:
@@ -142,12 +148,40 @@ def save_by_pp_tp(state_dicts, save_dir, latest_checkpointed_iteration="release"
     else:
         directory = 'iter_{:07d}'.format(latest_checkpointed_iteration)
 
-    for (pp_rank, tp_rank), state_dict in state_dicts.items():
-        filename = f"mp_rank_{tp_rank:02d}_{pp_rank:03d}" if has_pp else f"mp_rank_{tp_rank:02d}"
-        os.makedirs(os.path.join(save_dir, directory, filename))
-        save_path = os.path.join(save_dir, directory, filename, "model_optim_rng.pt")
+    if len(pp_sizes) > 0:
+        enable_vpp = isinstance(pp_sizes[0], list)
+    else:
+        for tp_rank, state_dict in state_dicts:
+            save_dict = {}
+            filename = f"mp_rank_{tp_rank:02d}"
+            os.makedirs(os.path.join(save_dir, directory, filename))
+            save_path = os.path.join(save_dir, directory, filename, "model_optim_rng.pt")
+            save_dict["model"] = state_dict
+            torch.save(save_dict, save_path)
+        return
+
+    if enable_vpp:
+        vpp_size = len(pp_sizes)
+        pp_size = len(pp_sizes[0])
+    else:
+        pp_size = len(pp_sizes)
+
+    for pp_rank in range(pp_size):
+        tp_rank, state_dict = state_dicts[pp_rank]
+        os.makedirs(os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}_{pp_rank:03d}"))
+        save_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}_{pp_rank:03d}", "model_optim_rng.pt")
+
         save_dict = {}
-        save_dict["model"] = state_dict
+        if mode == "train":
+            if enable_vpp:
+                save_dict = {f"model{vpp_rank}": state_dicts[vpp_rank * pp_size + pp_rank][1] for vpp_rank in range(vpp_size)}
+                save_dict['checkpoint_version'] = 3.0
+            else:
+                save_dict["model"] = state_dict
+        elif mode == "inference":
+            save_dict = state_dict
+        else:
+            raise ValueError(f"unsupported mode: {mode}")
         torch.save(save_dict, save_path)
 
 
@@ -191,6 +225,7 @@ if __name__ == "__main__":
     TP_SIZE = 1
     # The layers of each pp_rank. For example, [32] means disable pp (pp_size is 1),
     # [8, 8, 8, 8] means pp_size is 4 and allocate 8 layers for each pp stage.
+    # [[4, 4, 4, 4], [4, 4, 4, 4]] means vp_size is 2, pp_size is 4 and allocatte 4 layers in each vp stage.
     PP_SIZE = [32]
 
     dit_hg_weight_path = "local downloaded open sora plan weight path"
@@ -203,14 +238,14 @@ if __name__ == "__main__":
     dit_state_dict = load_from_hf(dit_hg_weight_path)
     dit_state_dict = convert_hg_to_mm(dit_state_dict)
     dit_state_dicts = split_by_tp(dit_state_dict, TP_SIZE)
-    dit_state_dicts = split_by_pp(dit_state_dicts, PP_SIZE)
+    dit_state_dicts = split_by_pp_vpp(dit_state_dicts, PP_SIZE)
 
-    for k in dit_state_dicts.keys():
-        print(f"\n\npp_{k[0]} tp_{k[1]}")
-        for param_k in dit_state_dicts[k]:
-            print(f"{param_k}: {dit_state_dicts[k][param_k].shape}")
+    for pp_rank, (tp_rank, state_dict) in enumerate(dit_state_dicts):
+        print(f"\n\npp_{pp_rank} tp_{tp_rank}")
+        for param_k in state_dict:
+            print(f"{param_k}: {state_dict[param_k].shape}")
 
-    save_by_pp_tp(dit_state_dicts, dit_mm_save_dir, exists_ok=False, has_pp=(len(PP_SIZE) > 1))
+    save_by_pp_vpp_tp(PP_SIZE, dit_state_dicts, dit_mm_save_dir)
 
     # 转换VAE权重
     vae_state_dict = load_from_hf(vae_hg_weight_path)

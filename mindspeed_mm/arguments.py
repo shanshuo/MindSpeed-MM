@@ -75,6 +75,8 @@ def _add_training_args(parser):
                        action='store_true',
                        default=False,
                        help='Use internal format to train')
+    group.add_argument('--virtual-pipeline-model-parallel-size', type=int, default=None,
+                       help='vpp size')
 
     return parser
 

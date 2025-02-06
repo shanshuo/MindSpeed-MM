@@ -346,10 +346,12 @@ class VideoDitSparse(MultiModalModule):
         dtype = args.params_dtype
 
         model_cfg = args.mm.model
+        data_cfg = args.mm.data.dataset_param.preprocess_parameters
         hidden_size = model_cfg.predictor.num_heads * model_cfg.predictor.head_dim
-        frames, height, width = model_cfg.frames, model_cfg.resolution[0], model_cfg.resolution[1]
-        latent_size = ((frames + 3) // 4, height // 8, width // 8)
-        divisor = model_cfg.predictor.patch_size_t * (model_cfg.predictor.patch_size ** 2)
+        height = data_cfg.max_height if hasattr(data_cfg, "max_height") else 352
+        width = data_cfg.max_width if hasattr(data_cfg, "max_width") else 640
+        latent_size = ((data_cfg.num_frames + 3) // 4, height // 8, width // 8)
+        divisor = model_cfg.predictor.patch_size_thw[0] * (model_cfg.predictor.patch_size_thw[1] ** 2)
         seq_len = latent_size[0] * latent_size[1] * latent_size[2] // divisor
         max_prompt_len = model_cfg.model_max_length if hasattr(model_cfg, "model_max_length") else 512
         channels = model_cfg.predictor.in_channels
