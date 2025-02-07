@@ -21,8 +21,6 @@ from mindspeed_mm.data.data_utils.constants import (
     PROMPT_MASK,
     VIDEO,
     VIDEO_MASK,
-    PROMPT_IDS_2,
-    PROMPT_MASK_2,
     MASKED_VIDEO,
     INPUT_MASK
 )
@@ -217,66 +215,62 @@ class DataCollatorForOpenSoraPlan:
 
     def package(self, batch):
         batch_tubes = [i.get(VIDEO, None) for i in batch]  # b [c t h w]
-        input_ids = [i.get(PROMPT_IDS, None) for i in batch]  # b [1 l]
-        cond_mask = [i.get(PROMPT_MASK, None) for i in batch]  # b [1 l]
-        input_ids_2 = [i.get(PROMPT_IDS_2, None) for i in batch]  # b [1 l]
-        cond_mask_2 = [i.get(PROMPT_MASK_2, None) for i in batch]  # b [1 l]
+        if not isinstance(batch[0].get(PROMPT_IDS, None), list):
+            input_ids = [i.get(PROMPT_IDS, None) for i in batch]  # b [1 l]
+            cond_mask = [i.get(PROMPT_MASK, None) for i in batch]  # b [1 l]
+        else:
+            input_ids = list(map(list, zip(*[i[PROMPT_IDS] for i in batch])))
+            cond_mask = list(map(list, zip(*[i[PROMPT_MASK] for i in batch])))
+        return batch_tubes, input_ids, cond_mask
 
-        if all([i is None or not any(i) for i in input_ids_2]):
-            input_ids_2 = None
-        if all([i is None or not any(i) for i in cond_mask_2]):
-            cond_mask_2 = None
-        return batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2
+    def check_prompt_ids_shape(self, prompt_ids, is_list):
+        if not is_list:
+            if prompt_ids.dim() != 2 and prompt_ids.dim() != 3:
+                raise ValueError(
+                    f"prompt shape must have dim 2 for non featured data or 3 for featured data, but got {prompt_ids.dim()}")
+        else:
+            if prompt_ids[0].dim() != 2 and prompt_ids[0].dim() != 3:
+                raise ValueError(
+                    f"prompt shape must have dim 2 for non featured data or 3 for featured data, but got {prompt_ids.dim()}")
 
     def package_feature(self, batch):
-        batch_tubes = []
-        input_ids = []
-        cond_mask = []
-        input_ids_2 = []
-        cond_mask_2 = []
-        for i in batch:
-            if i.get(VIDEO).dim() == 4:
-                batch_tubes.append(i.get(VIDEO, None))  # b [c t h w]
-            else:
-                raise ValueError(f"video shape must have dim 4, but got {i.get(VIDEO).dim()}")
+        is_list = isinstance(batch[0].get(PROMPT_IDS, None), list)
+        for item in batch:
+            if item.get(VIDEO).dim() != 4:
+                raise ValueError(f"video shape must have dim 4, but got {item.get(VIDEO).dim()}")
 
-            if i.get(PROMPT_IDS).dim() == 2 or i.get(PROMPT_IDS).dim() == 3:
-                input_ids.append(i.get(PROMPT_IDS, None))  # b [1 l]
-            else:
+            if item.get(PROMPT_MASK, None) and item.get(PROMPT_MASK).dim() != 2:
                 raise ValueError(
-                    f"prompt shape must have dim 2 for non featured data or 3 for featured data, but got {i.get(PROMPT_IDS).dim()}")
+                    f"prompt mask must be None or have dim 2 for non featured and featured data, but got {item.get(PROMPT_MASK).dim()}")
 
-            if i.get(PROMPT_MASK, None) is None or i.get(PROMPT_MASK).dim() == 2:
-                cond_mask.append(i.get(PROMPT_MASK, None))  # b [1 l]
-            else:
-                raise ValueError(
-                    f"prompt mask must be None or have dim 2 for non featured and featured data, but got {i.get(PROMPT_MASK).dim()}")
+            if item.get(VIDEO_MASK, None) and item.get(VIDEO_MASK).dim() != 3:
+                raise ValueError(f"video_mask shape must be None or have dim 3, but got {item.get(VIDEO_MASK).dim()}")
 
-        if not self.use_text_feature:
-            input_ids_2 = [i.get(PROMPT_IDS_2, None) for i in batch]  # b [1 l]
-            cond_mask_2 = [i.get(PROMPT_MASK_2, None) for i in batch]  # b [1 l]
-        else:
-            input_ids_2 = [None]
-            cond_mask_2 = [None]
+            prompt_ids = item.get(PROMPT_IDS)
+            self.check_prompt_ids_shape(prompt_ids, is_list)
+
+        batch_tubes = [item.get(VIDEO, None) for item in batch]
+        video_mask = [item.get(VIDEO_MASK, None) for item in batch]
+        if all([i is None or not any(i) for i in video_mask]):
+            video_mask = None
+
+        if not is_list:
+            input_ids = [item.get(PROMPT_IDS, None) for item in batch]  # b [1 l]
+            cond_mask = [item.get(PROMPT_MASK, None) for item in batch]  # b [1 l]
+        elif self.use_text_feature:
+            input_ids = [item.get(PROMPT_IDS, None)[0] for item in batch]  # b [1 l]
+            cond_mask = [item.get(PROMPT_MASK, None)[0] for item in batch]  # b [1 
             warnings.warn("input_ids_2 and cond_mask_2 features are not supported yet and will be None for now",
                           FutureWarning)
-
-        if all([i is None or not any(i) for i in input_ids_2]):
-            input_ids_2 = None
-        if all([i is None or not any(i) for i in cond_mask_2]):
-            cond_mask_2 = None
-
-        if i.get(VIDEO_MASK, None) is None or i.get(VIDEO_MASK).dim() == 3:
-            video_mask = [i.get(VIDEO_MASK, None) for i in batch]
-            if all([i is None or not any(i) for i in video_mask]):
-                video_mask = None
         else:
-            raise ValueError(f"video_mask shape must be None or have dim 3, but got {i.get(VIDEO_MASK).dim()}")
-        return batch_tubes, video_mask, input_ids, cond_mask, input_ids_2, cond_mask_2
+            input_ids = list(map(list, zip(*[item[PROMPT_IDS] for item in batch])))
+            cond_mask = list(map(list, zip(*[item[PROMPT_MASK] for item in batch])))
+
+        return batch_tubes, video_mask, input_ids, cond_mask
 
     def __call__(self, batch):
         if not self.use_video_feature:
-            batch_tubes, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.package(batch)
+            batch_tubes, input_ids, cond_mask = self.package(batch)
 
             ds_stride = self.ae_stride * self.patch_size
             t_ds_stride = self.ae_stride_t * self.patch_size_t
@@ -285,8 +279,6 @@ class DataCollatorForOpenSoraPlan:
                 batch_tubes,
                 input_ids,
                 cond_mask,
-                input_ids_2,
-                cond_mask_2,
                 t_ds_stride,
                 ds_stride,
                 self.max_thw,
@@ -299,35 +291,41 @@ class DataCollatorForOpenSoraPlan:
                 PROMPT_IDS: processed_res.input_ids,
                 VIDEO_MASK: processed_res.attention_mask,
                 PROMPT_MASK: processed_res.cond_mask,
-                PROMPT_IDS_2: processed_res.input_ids_2,
-                PROMPT_MASK_2: processed_res.cond_mask_2,
                 MASKED_VIDEO: processed_res.masked_video,
                 INPUT_MASK: processed_res.input_mask,
             }
         else:
-            batch_tubes, video_mask, input_ids, cond_mask, input_ids_2, cond_mask_2 = self.package_feature(batch)
+            batch_tubes, video_mask, input_ids, cond_mask = self.package_feature(batch)
+            if not isinstance(input_ids[0], list):
+                input_ids = torch.stack(input_ids)  # b 1 l
+                cond_mask = torch.stack(cond_mask)  # b 1 l
+            else:
+                input_ids = [
+                    torch.stack(_input_ids)  # b 1 l
+                    for _input_ids in input_ids
+                ]
+                cond_mask = [
+                    torch.stack(_cond_mask)  # b 1 l
+                    for _cond_mask in cond_mask
+                ]
             return {
                 VIDEO: torch.stack(batch_tubes),
-                PROMPT_IDS: torch.stack(input_ids),
+                PROMPT_IDS: input_ids,
                 VIDEO_MASK: torch.stack(video_mask) if video_mask else None,
-                PROMPT_MASK: torch.stack(cond_mask) if cond_mask else None,
-                PROMPT_IDS_2: torch.stack(input_ids_2) if input_ids_2 else None,
-                PROMPT_MASK_2: torch.stack(cond_mask_2) if cond_mask_2 else None,
+                PROMPT_MASK: cond_mask,
                 MASKED_VIDEO: None,
                 INPUT_MASK: None,
             }
 
     def process(
-            self,
-            batch_tubes,
-            input_ids,
-            cond_mask,
-            input_ids_2,
-            cond_mask_2,
-            t_ds_stride,
-            ds_stride,
-            max_thw,
-            ae_stride_thw,
+        self,
+        batch_tubes,
+        input_ids,
+        cond_mask,
+        t_ds_stride,
+        ds_stride,
+        max_thw,
+        ae_stride_thw,
     ):
         # pad to max multiple of ds_stride
         batch_input_size = [i.shape for i in batch_tubes]  # [(c t h w), (c t h w)]
@@ -366,12 +364,18 @@ class DataCollatorForOpenSoraPlan:
                 batch_input_size = [
                     i.shape for i in batch_tubes
                 ]  # [(c t h w), (c t h w)]
-                input_ids = [input_ids[i] for i in pick_idx]  # b [1, l]
-                cond_mask = [cond_mask[i] for i in pick_idx]  # b [1, l]
-                if input_ids_2 is not None:
-                    input_ids_2 = [input_ids_2[i] for i in pick_idx]  # b [1, l]
-                if cond_mask_2 is not None:
-                    cond_mask_2 = [cond_mask_2[i] for i in pick_idx]  # b [1, l]
+                if not isinstance(input_ids[0], list):
+                    input_ids = [input_ids[i] for i in pick_idx]  # b [1, l]
+                    cond_mask = [cond_mask[i] for i in pick_idx]  # b [1, l]
+                else:
+                    input_ids = [
+                        [_input_ids[i] for i in pick_idx]  # b [1, l]
+                        for _input_ids in input_ids
+                    ]
+                    cond_mask = [
+                        [_cond_mask[i] for i in pick_idx]  # b [1, l]
+                        for _cond_mask in cond_mask
+                    ]
 
             for i in range(1, self.batch_size):
                 if batch_input_size[0] != batch_input_size[i]:
@@ -433,10 +437,18 @@ class DataCollatorForOpenSoraPlan:
             if not torch.all(attention_mask.bool()):
                 raise AssertionError("All elements of attention_mask are zero")
 
-        input_ids = torch.stack(input_ids)  # b 1 l
-        cond_mask = torch.stack(cond_mask)  # b 1 l
-        input_ids_2 = torch.stack(input_ids_2) if input_ids_2 is not None else input_ids_2  # b 1 l
-        cond_mask_2 = torch.stack(cond_mask_2) if cond_mask_2 is not None else cond_mask_2  # b 1 l
+        if not isinstance(input_ids[0], list):
+            input_ids = torch.stack(input_ids)  # b 1 l
+            cond_mask = torch.stack(cond_mask)  # b 1 l
+        else:
+            input_ids = [
+                torch.stack(_input_ids)  # b 1 l
+                for _input_ids in input_ids
+            ]
+            cond_mask = [
+                torch.stack(_cond_mask)  # b 1 l
+                for _cond_mask in cond_mask
+            ]
 
         # if opensoraplan i2v dataset, batch_tube has masked_video and mask
         if pad_batch_tubes.shape[1] == 7:
@@ -446,7 +458,7 @@ class DataCollatorForOpenSoraPlan:
             masked_video = None
             input_mask = None
 
-        processed_res = ProcessedData(pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2,
+        processed_res = ProcessedData(pad_batch_tubes, attention_mask, input_ids, cond_mask,
                                       masked_video, input_mask)
         return processed_res
 
@@ -461,14 +473,12 @@ class DataCollatorForOpenSoraPlan:
 
 
 class ProcessedData:
-    def __init__(self, pad_batch_tubes, attention_mask, input_ids, cond_mask, input_ids_2, cond_mask_2, masked_video,
+    def __init__(self, pad_batch_tubes, attention_mask, input_ids, cond_mask, masked_video,
                  input_mask):
         self.pad_batch_tubes = pad_batch_tubes
         self.attention_mask = attention_mask
         self.input_ids = input_ids
         self.cond_mask = cond_mask
-        self.input_ids_2 = input_ids_2
-        self.cond_mask_2 = cond_mask_2
         self.masked_video = masked_video
         self.input_mask = input_mask
 
