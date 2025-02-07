@@ -192,6 +192,9 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     mixed_precision="bf16" # 混精
     resolution=1024
     config_file="${scripts_path}/${mixed_precision}_accelerate_config.yaml"
+
+    # accelerate launch --config_file ${config_file} \ 目录下
+    --dataloader_num_workers=8 \ # 根据系统配置选择num workers数量
     ```
 
     数据集选择：如果选择默认[原仓数据集](https://huggingface.co/datasets/diffusers/dog-example),需修改两处`dataset_name`为`input_dir`：

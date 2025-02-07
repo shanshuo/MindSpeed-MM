@@ -200,6 +200,9 @@
     mixed_precision="bf16" # 混精
     resolution=1024
     config_file="${scripts_path}/pretrain_${mixed_precision}_accelerate_config.yaml"
+
+    # accelerate launch *** \ 目录下
+    --dataloader_num_workers=8 \ # 根据系统配置选择num workers数量
     ```
 
     修改bash文件中`accelerate`配置下`train_text_to_image_sdxl_pretrain.py`的路径（默认路径在diffusers/sdxl/）

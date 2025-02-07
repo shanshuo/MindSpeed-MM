@@ -28,6 +28,7 @@ export HCCL_WHITELIST_DISABLE=1
 export HCCL_CONNECT_TIMEOUT=1200
 export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=1
 export CPU_AFFINITY_CONF=1
 
@@ -50,7 +51,7 @@ accelerate launch ./examples/dreambooth/train_dreambooth_lora_sd3.py \
   --train_batch_size=$batch_size \
   --mixed_precision=$mixed_precision \
   --gradient_accumulation_steps=$gradient_accumulation_steps \
-  --dataloader_num_workers=8 \
+  --dataloader_num_workers=0 \
   --learning_rate=1e-6 \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \

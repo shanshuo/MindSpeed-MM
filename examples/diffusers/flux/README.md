@@ -195,6 +195,9 @@
     mixed_precision="bf16" # 混精
     resolution=256
     config_file="pretrain_${mixed_precision}_accelerate_config.yaml"
+
+    # accelerate launch --config_file ${config_file} \ 目录下
+    --dataloader_num_workers=8 \ # 根据系统配置选择num workers数量
     ```
 
 3. 【修改代码文件】
@@ -211,12 +214,13 @@
         # freqs_dtype = torch.float32 if is_mps else torch.float64 # 原代码
         ```
 
-    2. 打开`train_dreambooth_flux.py`或`train_dreambooth_lora_flux.py`文件
+    2. 打开`train_dreambooth_flux.py`或`train_dreambooth_lora_flux_advanced.py`文件
 
         ```shell
         cd examples/dreambooth/ # 从diffusers目录进入dreambooth目录
         vim train_dreambooth_flux.py # 进入Python文件
-        vim train_dreambooth_lora_flux.py # 进入Python文件
+        # 如是flux lora，需先进入advanced_diffusion_training目录
+        vim ../advanced_diffusion_training/train_dreambooth_lora_flux_advanced.py # 进入Python文件
         ```
 
         - 在import栏/`if is_wandb_available():`上方（62行附近添加代码）
@@ -231,7 +235,7 @@
           import wandb
         ```
 
-        - 在log_validation里修改`pipeline = pipeline.to(accelerator.device)`，`train_dreambooth_flux.py`在171行附近`train_dreambooth_lora_flux.py`在180行附近
+        - 在log_validation里修改`pipeline = pipeline.to(accelerator.device)`，`train_dreambooth_flux.py`在171行附近
 
         ```python
         # 修改pipeline为：
@@ -258,12 +262,12 @@
         【如需保存checkpointing请修改代码】
 
         ```shell
-        vim examples/dreambooth/train_dreambooth_flux.py #（1669行附近）
-        vim examples/dreambooth/train_dreambooth_lora_flux.py #（1788行附近）
+        vim train_dreambooth_flux.py #（1669行附近）
+        vim ../advanced_diffusion_training/train_dreambooth_lora_flux_advanced.py #（2322行附近）
         ```
 
         - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
-        - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED` (1669/1788行附近)，并在`if args.checkpoints_total_limit is not None`后增加`and accelerator.is_main_process`
+        - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED` (1669/2322行附近)，并在`if args.checkpoints_total_limit is not None`后增加`and accelerator.is_main_process`
 
         ```python
         from accelerate import Accelerator, DistributedType
@@ -276,7 +280,7 @@
         ```
 
         Lora任务需调用patch任务进行权重保存：
-        在`train_dreambooth_lora_flux.py`文件中找到代码`accelerator.register_save_state_pre_hook(save_model_hook)`进行修改(1308行附近)，复制粘贴以下代码：
+        在`train_dreambooth_lora_flux_advanced.py`文件中找到代码`accelerator.register_save_state_pre_hook(save_model_hook)`进行修改(1712行附近)，复制粘贴以下代码：
 
         ```python
         # 添加

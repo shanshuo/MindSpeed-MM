@@ -8,7 +8,7 @@ max_train_steps=5000
 mixed_precision="bf16"
 resolution=512
 gradient_accumulation_steps=1
-config_file="pretrain_${mixed_precision}_accelerate_config.yaml"
+config_file="${mixed_precision}_accelerate_config.yaml"
 
 for para in $*; do
   if [[ $para == --model_name* ]]; then
@@ -39,6 +39,7 @@ export HCCL_WHITELIST_DISABLE=1
 export HCCL_CONNECT_TIMEOUT=1200
 export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
+export TOKENIZERS_PARALLELISM=false
 export OMP_NUM_THREADS=1
 export CPU_AFFINITY_CONF=1
 
