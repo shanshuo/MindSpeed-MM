@@ -10,7 +10,7 @@ from mindspeed_mm.data.dataloader.dataloader import (
     prepare_sampler_dataloader,
     prepare_variable_dataloader,
 )
-from mindspeed_mm.data.datasets.image_dataset import ImageDataset
+from mindspeed_mm.data.datasets.image_dataset import MultiModalChatDataset
 from mindspeed_mm.data.datasets.t2i_dataset import T2IDataset
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset, DynamicVideoTextDataset
 from mindspeed_mm.data.datasets.i2v_dataset import I2VDataset
@@ -59,7 +59,7 @@ def build_mm_dataset(dataset_param):
         for single_param in basic_param:
             dataset_param["repeat_time"] = single_param.get("repeat_time", 1)
             dataset_param_copy = copy.deepcopy(dataset_param)
-            dataset = ImageDataset(single_param, preprocess_param, **dataset_param_copy)
+            dataset = MultiModalChatDataset(single_param, preprocess_param, **dataset_param_copy)
             datasets.append(dataset)
         return ConcatDataset(datasets)
     elif dataset_type == "audio":

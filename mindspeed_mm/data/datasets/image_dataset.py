@@ -1,3 +1,10 @@
+# --------------------------------------------------------
+# InternVL
+# Copyright (c) 2024 OpenGVLab
+# Licensed under The MIT License [see LICENSE for details]
+# --------------------------------------------------------
+
+
 import os
 import copy
 from typing import Union
@@ -5,13 +12,14 @@ import torch
 
 from mindspeed_mm.data.data_utils.utils import (
     ImageProcesser,
-    preprocess
+    preprocess,
+    read_frames_decord
 )
 from mindspeed_mm.data.datasets.mm_base_dataset import MMBaseDataset
 from mindspeed_mm.models import Tokenizer
 
 
-class ImageDataset(MMBaseDataset):
+class MultiModalChatDataset(MMBaseDataset):
     """
     A multimodal dataset for supervised fine-tuning based on MMBaseDataset.
 
@@ -52,6 +60,9 @@ class ImageDataset(MMBaseDataset):
             use_thumbnail: bool = False,
             min_dynamic_patch: int = 1,
             max_dynamic_patch: int = 6,
+            min_num_frame: int = 4, # for video data
+            max_num_frame: int = 12, # for video data
+            sampling_method: str = "rand", # for video data
             repeat_time: int = 1,
             **kwargs,
     ):
@@ -64,6 +75,9 @@ class ImageDataset(MMBaseDataset):
         self.use_thumbnail = use_thumbnail
         self.min_dynamic_patch = min_dynamic_patch
         self.max_dynamic_patch = max_dynamic_patch
+        self.min_num_frame = min_num_frame
+        self.max_num_frame = max_num_frame
+        self.sampling_method = sampling_method
         self.patch_size = patch_size
         self.down_sample_ratio = down_sample_ratio
         self.num_image_token = int((self.image_size // self.patch_size) ** 2 * (self.down_sample_ratio ** 2))
@@ -127,14 +141,69 @@ class ImageDataset(MMBaseDataset):
     def pure_text_get_item(self, data_item):
         pass
 
+    def video_get_item(self, data_item):
+        # Build transformation function
+        transform = self.image_processer.image_transforms
+
+        # Ensure the first conversation contains a video placeholder
+        if "<video>" not in data_item["conversations"][0]["value"]:
+            data_item["conversations"][0]["value"] = "<video>\n" + data_item["conversations"][0]["value"]
+
+        # Get the video file path
+        video_file = data_item["video"]
+        video_path = os.path.join(self.data_folder, video_file)
+
+        # Load videos without using tcsloader.
+        image_list = read_frames_decord(
+            video_path=video_path,
+            num_frames=self.max_num_frame,
+            min_num_frames=self.min_num_frame,
+            sample=self.sampling_method,
+            clip=data_item.get("clip", None)
+        )
+
+        # Generate special tokens for each video frame
+        special_tokens = "\n".join(["Frame-{}: <image>".format(i + 1) for i in range(len(image_list))])
+        data_item["conversations"][0]["value"] = data_item["conversations"][0]["value"].replace(
+            "<video>\n", special_tokens + "\n")
+
+        # Transform each frame image and stack them into a tensor
+        pixel_values = [transform(image) for image in image_list]
+        pixel_values = torch.stack(pixel_values)
+        num_patches = pixel_values.size(0)
+
+        # Preprocess the conversations and generate the return dictionary
+        num_image_tokens = [self.num_image_token] * num_patches
+        ret = preprocess(
+            self.template_name, 
+            sources=[copy.deepcopy(data_item["conversations"])],
+            tokenizer=self.tokenizer, 
+            num_image_token_list=num_image_tokens, 
+            group_by_length=self.group_by_length,
+            is_multimodal=self.is_multimodal,
+            mm_use_im_start_end=self.mm_use_im_start_end, 
+            num_image=num_patches
+        )
+        # Create the final return dictionary
+        ret = dict(
+            input_ids=ret['input_ids'],
+            labels=ret['labels'],
+            attention_mask=ret['attention_mask'],
+            pixel_values=pixel_values,
+            image_flags=torch.tensor([1] * num_patches, dtype=torch.long)
+        )
+        return ret
+
     def getitem(self, index):
         index = index % len(self.data_samples)
-        data_item = self.data_samples[index]
+        data_item = copy.deepcopy(self.data_samples[index])
         if "image" in data_item and len(data_item["image"]) != 0:
             if isinstance(data_item["image"], list):
-                ret = None
+                raise AssertionError(f"Dose not support multi picture inference.")
             else:
                 ret = self.multi_modal_get_item(data_item)
+        elif "video" in data_item and data_item["video"] is not None and data_item["video"] != "":
+            ret = self.video_get_item(data_item)
         else:
-            ret = None
+            raise AssertionError(f"Inference data type must be image or video.")
         return ret

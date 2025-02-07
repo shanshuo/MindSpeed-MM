@@ -170,6 +170,8 @@ LOAD_PATH="pretrained/InternVL2-8B"
 
 #### 1. 数据集下载
 
+【图片数据】
+
 用户需自行获取并解压[InternVL-Finetune](https://huggingface.co/datasets/OpenGVLab/InternVL-Chat-V1-2-SFT-Data)数据集到`dataset/playground`目录下，以数据集ai2d为例，解压后的数据结构如下：
 
    ```
@@ -181,6 +183,10 @@ LOAD_PATH="pretrained/InternVL2-8B"
    ├── opensource
        ├── ai2d_train_12k.jsonl
    ```
+
+【视频数据】
+
+若要使用视频进行训练，用户可参考[视频数据集构造](https://internvl.readthedocs.io/en/latest/get_started/chat_data_format.html#video-data)自行构造视频数据集。
 
 ---
 
@@ -310,13 +316,41 @@ $save_dir
 
 【参数配置】
 
-修改inference_xx.json文件，包括`image_path`、`prompt`、`from_pretrained`以及tokenizer的`from_pretrained`等字段。
-以InternVL2-8B为例，按实际情况修改inference_8B.json，注意tokenizer_config的权重路径为转换前的权重路径。
+修改inference_xx.json文件，包括`infer_data_type`、`file_path`、`prompts`、`from_pretrained`以及tokenizer的`from_pretrained`等字段。
+
+【单图推理】
+
+以InternVL2-8B为例，按实际情况修改inference_8B.json对应参数，注意tokenizer_config的权重路径为转换前的权重路径。
 
 ```json
 {
-    "image_path": "./examples/internvl2/view.jpg",    # 按实际情况输入图片
+    "infer_data_type": "image",
+    "file_path": "./examples/internvl2/view.jpg",    # 按实际情况输入图片路径
     "prompts": "Please describe the image shortly.", # 按实际情况输入提示词
+    "model_id": "InternVLPipeline",
+    "from_pretrained": "./pretrained/InternVL2-8B/release/mp_rank_00/model_optim_rng.pt", # 注意路径要到.pt文件
+    ...
+    "tokenizer":{
+        ...
+        "autotokenizer_name": "AutoTokenizer",
+        "from_pretrained": "raw_ckpt/InternVL2-8B",
+        ...
+    },
+    ...
+}
+```
+
+【视频推理】
+
+以InternVL2-8B为例，按实际情况修改inference_8B.json对应参数，注意tokenizer_config的权重路径为转换前的权重路径。
+
+推理demo视频下载[red-panda](https://huggingface.co/OpenGVLab/InternVL2-8B/blob/main/examples/red-panda.mp4)
+
+```json
+{
+    "infer_data_type": "video",
+    "file_path": "examples/internvl2/red-panda.mp4",    # 按实际情况输入视频路径
+    "prompts": "Please describe the video shortly.", # 按实际情况输入提示词
     "model_id": "InternVLPipeline",
     "from_pretrained": "./pretrained/InternVL2-8B/release/mp_rank_00/model_optim_rng.pt", # 注意路径要到.pt文件
     ...

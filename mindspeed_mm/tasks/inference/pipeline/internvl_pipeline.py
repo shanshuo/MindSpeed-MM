@@ -1,6 +1,9 @@
+# Copyright 2022-2023 XProbe Inc.
+
 from typing import Any, Dict
 from PIL import Image
 
+import numpy as np
 import torch
 import torchvision.transforms as T
 from torchvision.transforms.functional import InterpolationMode
@@ -12,7 +15,7 @@ from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MM
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.generation_mixin import GenerationMixin
 from mindspeed_mm.data.data_utils.conversation import get_conv_template
-from mindspeed_mm.data.data_utils.utils import dynamic_preprocess
+from mindspeed_mm.data.data_utils.utils import VideoReader, dynamic_preprocess, read_frames_decord
 
 
 def build_infer_transform(input_size):
@@ -28,6 +31,21 @@ def build_infer_transform(input_size):
     return transform
 
 
+def get_index(bound, fps, max_frame, first_idx=0, num_segments=32):
+    if bound:
+        start, end = bound[0], bound[1]
+        start_idx = max(first_idx, round(start * fps))
+        end_idx = min(round(end * fps), max_frame)
+    else:
+        start_idx, end_idx = first_idx, max_frame
+    seg_size = float(end_idx - start_idx) / num_segments
+    frame_indices = np.array([
+        int(start_idx + (seg_size / 2) + np.round(seg_size * idx))
+        for idx in range(num_segments)
+    ])
+    return frame_indices
+
+
 class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
     def __init__(self, infer_config) -> None:
         self.infer_config = infer_config
@@ -38,15 +56,19 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         # prepare for generate
         self.device = infer_config.device
         self.dtype = infer_config.dtype
+        self.infer_data_type = infer_config.infer_data_type
         self.model_config = infer_config.text_decoder
         self.template = infer_config.template
         self.text_decoder_model_id = getattr(infer_config.text_decoder, "model_id", None)
         self.generation_config = infer_config.generation_config
+
         self.main_input_name = "input_ids"
         self.image_size = self.infer_config.image_encoder.vision_encoder.image_size
         self.patch_size = self.infer_config.image_encoder.vision_encoder.patch_size
         self.downsample_ratio = self.infer_config.image_encoder.vision_encoder.downsample_ratio
         self.num_image_token = int((self.image_size // self.patch_size) ** 2 * (self.downsample_ratio ** 2))
+        self.num_segments = infer_config.num_segments
+
         self.model = self.infer_model.text_decoder.eval()
         self.vit_embeds = None
 
@@ -66,28 +88,64 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         pixel_values = [transform(image) for image in images]
         pixel_values = torch.stack(pixel_values)
         return pixel_values
+    
+    def _prepare_video(self, video_path, bound=None, input_size=448, max_num=1, num_segments=32):
+        video_reader, _, _ = VideoReader(video_reader_type="decoder", num_threads=1)(video_path)
+        max_frame = len(video_reader) - 1
+        fps = float(video_reader.get_avg_fps())
 
-    def _prepare_prompts(self, question):
-        question = "<image>\n" + question
+        pixel_values_list, num_patches_list = [], []
+        transform = build_infer_transform(input_size=input_size)
+        frame_indices = get_index(bound, fps, max_frame, first_idx=0, num_segments=num_segments)
+        for frame_index in frame_indices:
+            img = Image.fromarray(video_reader[frame_index].asnumpy()).convert('RGB')
+            img = dynamic_preprocess(img, image_size=input_size, use_thumbnail=True, max_num=max_num)
+            pixel_values = [transform(tile) for tile in img]
+            pixel_values = torch.stack(pixel_values)
+            num_patches_list.append(pixel_values.shape[0])
+            pixel_values_list.append(pixel_values)
+        pixel_values = torch.cat(pixel_values_list)
+        return pixel_values, num_patches_list
+
+    def _prepare_prompts(self, question, num_patches_list=None):
+        if self.infer_data_type == "video":
+            video_prefix = ''.join([f'Frame{i+1}: <image>\n' for i in range(len(num_patches_list))])
+            question = video_prefix + question
+        else:
+            question = "<image>\n" + question
         return question
 
-    def prepare_inputs(self, prompt, images):
-        if images:
-            if isinstance(images, list):
-                image = images[0]
+    def prepare_inputs(self, prompt, input_path):
+        if input_path:
+            if isinstance(input_path, list):
+                input_path = input_path[0]
             else:
-                image = images
+                input_path = input_path
         else:
-            image = self.infer_config.image_path
+            input_path = self.infer_config.file_path
 
         if not prompt:
             prompt = self.infer_config.prompts
+        if self.infer_data_type == "image":
+            pixel_values = self._prepare_images(
+                image_path=input_path, 
+                input_size=self.image_size
+            )
+            num_patches_list = [pixel_values.shape[0]] if pixel_values is not None else []
+            question = self._prepare_prompts(prompt)
+        elif self.infer_data_type == "video":
+            pixel_values, num_patches_list = self._prepare_video(
+                video_path=input_path,
+                input_size=self.image_size,
+                num_segments=self.num_segments
+            )
+            question = self._prepare_prompts(prompt, num_patches_list)
+        else:
+            raise AssertionError(f"Inference data type must be image or video.")
 
-        pixel_values = self._prepare_images(image, input_size=self.image_size)
         pixel_values = pixel_values.to(self.device).to(self.dtype)
 
-        question = self._prepare_prompts(prompt)
-        return pixel_values, question
+        return pixel_values, question, num_patches_list
 
     def prepare_inputs_for_generation(
             self, input_ids, attention_mask=None, **kwargs
@@ -162,13 +220,12 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
             streamer=streamer)
         return outputs
 
-    def __call__(self, prompt=None, images=None, return_ids=False):
+    def __call__(self, prompt=None, input_path=None, return_ids=False):
         IMG_CONTEXT_TOKEN = "<IMG_CONTEXT>"
         IMG_START_TOKEN = "<img>"
         IMG_END_TOKEN = "</img>"
 
-        pixel_values, question = self.prepare_inputs(prompt=prompt, images=images)
-        num_patches_list = [pixel_values.shape[0]] if pixel_values is not None else []
+        pixel_values, question, num_patches_list = self.prepare_inputs(prompt=prompt, input_path=input_path)
 
         self.img_context_token_id = self.tokenizer.convert_tokens_to_ids(IMG_CONTEXT_TOKEN)
 

@@ -1,5 +1,6 @@
 {   
-    "image_path": "./examples/internvl2/view.jpg",
+    "infer_data_type": "image",
+    "file_path": "./examples/internvl2/view.jpg",
     "prompts": "Please describe the image shortly.",
     "pipeline_class": "InternVLPipeline",
     "from_pretrained": "./ckpt/model_optim_rng.pt",
@@ -15,6 +16,7 @@
     "ps_version": "v2",
     "add_rmsnorm_offset": false,
     "img_context_token_id": 92546,
+    "num_segments": 8,
     "text_decoder": {
         "num_layers": 32,
         "hidden_size": 4096,
