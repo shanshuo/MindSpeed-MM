@@ -365,13 +365,13 @@ mm-convert  Qwen2VLConverter mm_to_hf \
 ```
 
 
-## 训练后重新切分权重（pp切分）
+## 训练后重新切分权重
 
-权重下载及转换部分会把权重进行pp切分，在微调后，如果需要对权重重新进行pp切分，可使用`mm-convert`权重转换工具对微调后的权重进行切分。
+权重下载及转换部分会把权重进行pp切分和tp切分，在微调后，如果需要对权重重新进行切分，可使用`mm-convert`权重转换工具对微调后的权重进行切分。
 
 
 ```bash
-mm-convert  Qwen2VLConverter resplit_pp \
+mm-convert  Qwen2VLConverter resplit \
   --cfg.source_dir "ckpt/mm_path/Qwen2-VL-7B-Instruct" \
   --cfg.target_dir "ckpt/mm_resplit_pp/Qwen2-VL-7B-Instruct" \
   --cfg.source_parallel_config.llm_pp_layers [1,10,10,7] \
@@ -388,7 +388,7 @@ mm-convert  Qwen2VLConverter resplit_pp \
 # source_parallel_config.tp_size: 微调时tp并行配置
 # target_parallel_config.llm_pp_layers: 期望的重切分llm模块切分层数
 # target_parallel_config.vit_pp_layers: 期望的重切分vit模块切分层数
-# target_parallel_config.tp_size: 微调时tp并行配置（注意当前仅支持pp重切分，不支持tp重切分，因此target tp size要和source tp size一致）
+# target_parallel_config.tp_size: 期望的tp并行配置（tp_size不能超过原仓config.json中的num_key_value_heads）
 ```
 
 

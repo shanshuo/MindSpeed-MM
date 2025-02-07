@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 """
-Copyright:   Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 @File    : utils.py
 @Time    : 2025/01/14
 @Desc    :
@@ -79,7 +78,7 @@ class ConvertHFConfig(ConvertMMConfig):
     """mm转回hf格式时保存的路径"""
 
 
-class ConvertPPConfig(BaseModel):
+class ConvertResplitConfig(BaseModel):
     """mindspeed-mm训练出来的权重pp重切分的配置，pp重切分一般用在推理时等设备变化的场景"""
     source_dir: DirectoryPath
     """原始训练出来的权重路径"""
@@ -94,11 +93,9 @@ class ConvertPPConfig(BaseModel):
     """重切分后的权重的并行配置"""
 
     @model_validator(mode='after')
-    def validate_hf_dir(self) -> "ConvertPPConfig":
+    def validate_hf_dir(self) -> "ConvertResplitConfig":
         if sum(self.source_parallel_config.vit_pp_layers) != sum(self.target_parallel_config.vit_pp_layers):
             raise ValueError("vit pp layers not equal!")
         if sum(self.source_parallel_config.llm_pp_layers) != sum(self.target_parallel_config.llm_pp_layers):
             raise ValueError("llm pp layers not equal!")
-        if self.source_parallel_config.tp_size != self.target_parallel_config.tp_size:
-            raise ValueError("当前仅支持pp重切分，不支持tp重切分，因此target tp size要和source tp size一致！")
         return self

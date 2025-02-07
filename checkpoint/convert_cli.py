@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 """
-Copyright:   Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 @File    : convert_cli.py
 @Time    : 2025/01/12
 @Desc    : 权重转换命令行入口
@@ -11,8 +10,8 @@ from abc import ABC, abstractmethod
 
 import jsonargparse
 
-from checkpoint import qwen2vl_hf_to_mm, qwen2vl_mm_to_hf, qwen2vl_resplit_pp
-from checkpoint.utils import ConvertHFConfig, ConvertPPConfig, ConvertMMConfig
+from checkpoint import qwen2vl_hf_to_mm
+from checkpoint.utils import ConvertHFConfig, ConvertResplitConfig, ConvertMMConfig
 
 # 安全权限，当前用户读写权限，用户组内可读权限，其他用户无权限
 SAFE_MODE = 0o640
@@ -38,7 +37,7 @@ class Converter(ABC):
 
     @staticmethod
     @abstractmethod
-    def resplit_pp(cfg: ConvertPPConfig):
+    def resplit(cfg: ConvertResplitConfig):
         pass
 
 
@@ -55,14 +54,18 @@ class Qwen2VLConverter(Converter):
     @staticmethod
     def mm_to_hf(cfg: ConvertHFConfig):
         """mindspeed-mm模型转换huggingface模型权重"""
+        # qwen2vl_mm_to_hf会用到mindspeed.megatron_adaptor模块，提前import会引入问题，故在此import
+        from checkpoint import qwen2vl_mm_to_hf
         qwen2vl_mm_to_hf.main(cfg)
         # 安全管控权限
         os.chmod(cfg.save_hf_dir, SAFE_MODE)
 
     @staticmethod
-    def resplit_pp(cfg: ConvertPPConfig):
-        """mindspeed-mm模型pp权重重新切分"""
-        qwen2vl_resplit_pp.main(cfg)
+    def resplit(cfg: ConvertResplitConfig):
+        """mindspeed-mm模型权重重新切分"""
+        # qwen2vl_resplit会用到mindspeed.megatron_adaptor模块，提前import会引入问题，故在此import
+        from checkpoint import qwen2vl_resplit
+        qwen2vl_resplit.main(cfg)
         # 安全管控权限
         os.chmod(cfg.target_dir, SAFE_MODE)
 
@@ -81,8 +84,8 @@ class InternVLConverter(Converter):
         pass
 
     @staticmethod
-    def resplit_pp(cfg: ConvertPPConfig):
-        """mindspeed-mm模型pp权重重新切分"""
+    def resplit(cfg: ConvertResplitConfig):
+        """mindspeed-mm模型权重重新切分"""
         pass
 
 

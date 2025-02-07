@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 """
-Copyright:   Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 @File    : qwen2vl_mm_to_hf.py
 @Time    : 2025/01/14
 @Desc    : qwen2vl mindspeed-mm模型转换成huggingface模型

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: UTF-8 -*-
 """
-Copyright:   Huawei Technologies Co., Ltd. 2025-2025. All rights reserved.
 @File    : qwen2vl_hf_to_mm.py
 @Time    : 2025/01/14
 @Desc    : qwen2vl huggingface模型转换成mindspeed-mm模型
@@ -363,6 +362,9 @@ def main(convert_config: ConvertMMConfig):
     # qwen2vl获取到的config类型是Qwen2VLConfig
     config = cast(Qwen2VLConfig, convert_config.hf_config.config)
     parallel_config = convert_config.parallel_config
+    # 校验tp切分数
+    if parallel_config.tp_size > config.num_key_value_heads:
+        raise ValueError("TP size is larger than number of key-value heads")
     # 加载权重字典
     state_dict = load_from_hf(convert_config.hf_config.hf_dir)
     # hf转换成mm格式，包含重命名、qkv合并、mlp合并等操作
