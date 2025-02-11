@@ -72,7 +72,8 @@ class BaseEvalImpl:
                 if item['type'] not in self.supported_types:
                     raise ValueError(
                         f'The instruct type is {item["type"]},only support {", ".join(self.supported_types)}')
-
+            # To wait for all processes to finish processing the data
+            dist.barrier()
             if hasattr(self.inference_pipeline, "evaluate"):
                 response = self.inference_pipeline.evaluate(instruct)
             else:

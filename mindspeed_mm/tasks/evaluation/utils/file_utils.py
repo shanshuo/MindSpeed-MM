@@ -4,8 +4,10 @@ import io
 import mimetypes
 import os
 import pickle
-
+from multiprocessing import Lock
 from PIL import Image
+
+lock = Lock()
 
 
 def load_pkl(pkl_path):
@@ -45,8 +47,9 @@ def parse_file(s):
 
 
 def decode_base64_to_image_file(base64_string, image_path, target_size=-1):
-    image = decode_base64_to_image(base64_string, target_size=target_size)
-    image.save(image_path)
+    with lock:
+        image = decode_base64_to_image(base64_string, target_size=target_size)
+        image.save(image_path)
 
 
 def decode_base64_to_image(base64_string, target_size=-1):
