@@ -4,7 +4,7 @@
 
 这里是 [Qihoo-T2X](https://360cvgroup.github.io/Qihoo-T2X/) 官方开源代码仓库
 
-**[QIHOO-T2X: AN EFFICIENT PROXY-TOKENIZED DIFFUSION TRANSFORMER FOR TEXT-TO-ANY-TASK](https://arxiv.org/pdf/2409.04005)**  Jing Wang*, Ao Ma*, Jiasong Feng*, Dawei Leng†‡, Yuhui Yin, Xiaodan Liang‡(*Equal Contribution, †Project Lead, ‡Corresponding Authors)
+**[QIHOO-T2X: AN EFFICIENT PROXY-TOKENIZED DIFFUSION TRANSFORMER FOR TEXT-TO-ANY-TASK](https://arxiv.org/pdf/2409.04005)**  Jing Wang*, Ao Ma*†, Jiasong Feng*, Dawei Leng‡, Yuhui Yin, Xiaodan Liang‡(*Equal Contribution, †Project Lead, ‡Corresponding Authors)
 
 ## 目录
 
@@ -85,7 +85,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 从Huggingface库下载对应的模型权重:
 
-- 模型地址: [Qihoo-t2i-1B](https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct/tree/main)；
+- 模型地址: [Qihoo-t2i-1B](https://huggingface.co/qihoo360/Qihoo-T2X/tree/main)；
 
  将下载的模型权重保存到本地的`pretrain_models/qihoo_t2i/XXX.pt`目录下。(XXX表示对应的名字)
 
