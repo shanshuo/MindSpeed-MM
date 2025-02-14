@@ -288,7 +288,7 @@ class DistributedBatchSampler(BatchSampler):
         self.wrap_last = wrap_last
         self.start_iter = 0
         self.effective_batch_size = batch_size if gradient_accumulation_steps is None else batch_size * gradient_accumulation_steps
-        self.start_iter += consumed_samples // self.effective_batch_size
+        self.start_iter += (consumed_samples % len(self.sampler)) // self.effective_batch_size
 
     def __iter__(self):
         batch = []

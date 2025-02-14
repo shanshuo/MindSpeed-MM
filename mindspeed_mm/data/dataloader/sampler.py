@@ -336,12 +336,15 @@ class StatefulDistributedSampler(DistributedSampler):
     ) -> None:
         super().__init__(dataset, num_replicas, rank, shuffle, seed, drop_last)
         self.start_index: int = 0
-        self.start_index = consumed_samples
+        self.consumed_samples = consumed_samples // num_replicas
 
     def __iter__(self) -> Iterator:
         iterator = super().__iter__()
         indices = list(iterator)
-        indices = indices[self.start_index :]
+        self.start_index = self.consumed_samples % self.num_samples
+        indices = indices[self.start_index:]
+        actual_indices_len = len(indices)
+        self.consumed_samples += actual_indices_len
         return iter(indices)
 
     def __len__(self) -> int:
@@ -547,7 +550,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         # prepare each batch from its bucket
         # according to the predefined bucket access order
         num_iters = len(bucket_id_access_order) // self.num_replicas
-        start_iter_idx = self.last_micro_batch_access_index // self.num_replicas
+        start_iter_idx = (self.last_micro_batch_access_index // self.num_replicas) % num_iters
 
         # re-compute the micro-batch consumption
         # this is useful when resuming from a state dict with a different number of GPUs
