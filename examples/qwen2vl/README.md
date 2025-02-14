@@ -409,6 +409,21 @@ mm-convert  Qwen2VLConverter resplit \
 ```
 "img_context_token_id": 151656
 ```
+## Qwen2vl支持视频推理
+配置修改
+以7b模型推理为例，修改inference_qwen2vl_7b.json
+```
+"img_context_token_id": 151656
+```
+修改prompts内容中添加对视频的描述
+```
+"prompts": "Describe this video and keep it within 100 words."
+```
+支持视频的推理将image_path修改为video_path，原来加载的图片的路径改为视频路径
+视频数据样例：
+https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
+
+暂不支持image_path与video_path同时存在，不支持img和video混合推理
 
 ## 评测
 

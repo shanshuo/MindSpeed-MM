@@ -29,19 +29,27 @@ class Qwen2VlPipeline(GenerationMixin):
         self.min_pixels = infer_config.min_pixels if hasattr(infer_config, "min_pixels") else None
         self.max_pixels = infer_config.max_pixels if hasattr(infer_config, "max_pixels") else None
 
-    def __call__(self, prompt=None, images=None, return_ids=False):
+    def __call__(self, prompt=None, images=None, videos=None, return_ids=False):
         if images:
             if isinstance(images, list):
                 image = images[0]
             else:
                 image = images
         else:
-            image = self.infer_config.image_path
+            image = self.infer_config.image_path if hasattr(self.infer_config, "image_path") else None
+
+        if videos:
+            if isinstance(videos, list):
+                video = videos[0]
+            else:
+                video = videos
+        else:
+            video = self.infer_config.video_path if hasattr(self.infer_config, "video_path") else None
 
         if not prompt:
             prompt = self.infer_config.prompts
 
-        inputs = self.prepare_inputs(prompt=prompt, images=image)
+        inputs = self.prepare_inputs(prompt=prompt, images=image, videos=video)
 
         # Use the model as a language model if no valid inputs are generated  
         if inputs is None:
@@ -68,21 +76,21 @@ class Qwen2VlPipeline(GenerationMixin):
         else:
             return None
 
-    def prepare_inputs(self, prompt=None, images=None, messages=None):
-        if not images and not messages:
+    def prepare_inputs(self, prompt=None, images=None, videos=None, messages=None):
+        if not images and not messages and not videos:
             return None
 
         if not messages:
+            content = [{"type": "text", "text": prompt}]
+            if images:
+                content.extend({"type": "image", "image": images})
+            if videos:
+                content.extend({"type": "video", "video": videos})
+
             messages = [[
                 {
                     "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "image": images,
-                        },
-                        {"type": "text", "text": prompt},
-                    ],
+                    "content": content,
                 }
             ]]
 
@@ -98,7 +106,11 @@ class Qwen2VlPipeline(GenerationMixin):
             return_tensors="pt",
         )
         inputs = inputs.to(self.infer_config.device)
-        inputs['pixel_values'] = inputs['pixel_values'].unsqueeze(0)
+        if image_inputs:
+            inputs['pixel_values'] = inputs['pixel_values'].unsqueeze(0)
+        if video_inputs:
+            inputs['pixel_values'] = inputs['pixel_values_videos'].unsqueeze(0)
+            inputs['image_grid_thw'] = inputs['video_grid_thw']
         return inputs
     
     def get_rope_index(
