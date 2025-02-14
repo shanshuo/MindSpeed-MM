@@ -17,7 +17,6 @@ CONVERT_MAPPING = {
     "mixins.patch_embed.text_proj.weight": "caption_projection.weight",
     "mixins.pos_embed.freqs_cos": "pos_embed.freqs_cos",
     "mixins.pos_embed.freqs_sin": "pos_embed.freqs_sin",
-    # "mixins.pos_embed.pos_embedding": "pos_embed.pos_embedding" # only for i2v task
     "transformer.final_layernorm.weight": "norm_final.weight",
     "transformer.final_layernorm.bias": "norm_final.bias",
     "mixins.final_layer.norm_final.weight": "norm_out.weight",
@@ -48,6 +47,8 @@ def update_state_dict_inplace(
         new_key = convert_mapping[old_key]
         if prefix + old_key in state_dict:
             state_dict[new_key] = state_dict.pop(prefix + old_key)
+        else:
+            print(f"Warning: missing update key {prefix + old_key}")
 
 
 def get_layer_mapping(i: int) -> Dict:
@@ -78,7 +79,10 @@ def remove_layers(
     remove_keys: List
 ):
     for remove_key in remove_keys:
-        state_dict.pop(remove_key)
+        if remove_key in state_dict:
+            state_dict.pop(remove_key)
+        else:
+            print(f"Warning: missing remove key {remove_key}")
 
 
 def split_by_tp(state_dict: Dict[str, Any], tp_size: int = 2, num_layers: int = 42) -> List[Dict]:
@@ -152,14 +156,23 @@ def split_by_pp(state_dicts: List[Dict[str, Any]], pp_sizes: List, remove_pos_em
                 pp_layer_names = get_layer_mapping(i - start_layer_index).values()
 
                 for pp_layer_name, layer_name in zip(pp_layer_names, layer_names):
-                    pp_tp_param[pp_layer_name] = state_dict[layer_name]
+                    if layer_name in state_dict:
+                        pp_tp_param[pp_layer_name] = state_dict[layer_name]
+                    else:
+                        print(f"Warning: missing param key {layer_name}")
                 
             if is_pipeline_first_stage:
                 for layer_name in first_pipeline_stage_keys:
-                    pp_tp_param[layer_name] = state_dict[layer_name]
+                    if layer_name in state_dict:
+                        pp_tp_param[layer_name] = state_dict[layer_name]
+                    else:
+                        print(f"Warning: missing pp first stage key {layer_name}")
             if is_pipeline_last_stage:
                 for layer_name in last_pipeline_stage_keys:
-                    pp_tp_param[layer_name] = state_dict[layer_name]
+                    if layer_name in state_dict:
+                        pp_tp_param[layer_name] = state_dict[layer_name]
+                    else:
+                        print(f"Warning: missing pp last stage key {layer_name}")
             new_state_dicts[(pp_rank, tp_rank)] = pp_tp_param
 
     return new_state_dicts
@@ -248,15 +261,24 @@ def merge_by_pp(state_dicts: Dict[str, Any], pp_sizes: list):
 
     merged_state_dict = {}
     for key in first_pipeline_stage_keys:
-        merged_state_dict[key] = state_dicts[0][key]
+        if key in state_dicts[0]:
+            merged_state_dict[key] = state_dicts[0][key]
+        else:
+            print(f"Warning: missing pp first stage key {key}")
     for i, pp_size in enumerate(pp_sizes):
         for layer_index in range(pp_size):
             pp_layer_names = get_layer_mapping(layer_index).values()
             layer_names = get_layer_mapping(layer_index + sum(pp_sizes[:i])).values()
             for pp_layer_name, layer_name in zip(pp_layer_names, layer_names):
-                merged_state_dict[layer_name] = state_dicts[i][pp_layer_name]
+                if pp_layer_name in state_dicts[i]:
+                    merged_state_dict[layer_name] = state_dicts[i][pp_layer_name]
+                else:
+                    print(f"Warning: missing pp layer key {pp_layer_name}")
     for key in last_pipeline_stage_keys:
-        merged_state_dict[key] = state_dicts[-1][key]
+        if key in state_dicts[-1]:
+            merged_state_dict[key] = state_dicts[-1][key]
+        else:
+            print(f"Warning: missing pp last stage key {key}")
     return merged_state_dict
 
 
