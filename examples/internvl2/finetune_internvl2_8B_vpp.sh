@@ -20,7 +20,6 @@ MBS=1
 GRAD_ACC_STEP=64
 TP=1
 PP=4
-export VP_SIZE=3
 CP=1
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
@@ -48,15 +47,11 @@ DISTRIBUTED_ARGS="
 GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
-    --num-layers-per-virtual-pipeline-stage 2 \
+    --virtual-pipeline-model-parallel-size 3 \
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 32 \
-    --hidden-size 4096 \
-    --num-attention-heads 16 \
     --seq-length 4096 \
-    --max-position-embeddings 4096 \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --tokenizer-type NullTokenizer \

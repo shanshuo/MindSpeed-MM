@@ -11,6 +11,7 @@
         "gated_linear_unit": true,
         "apply_query_key_layer_scaling":false,
         "layernorm_zero_centered_gamma": false,
+        "max_position_embeddings": 4096,
         "bias_dropout_fusion":false,
         "apply_rope_fusion": false,
         "attention_softmax_in_fp32": true,

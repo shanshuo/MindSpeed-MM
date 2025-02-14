@@ -5,9 +5,35 @@ import torch
 from mindspeed.patch_utils import MindSpeedPatchesManager as pm
 from mindspeed.arguments import validate_args_wrapper
 from megatron.training.arguments import load_retro_args, _check_arg_is_not_none, _print_args
+from megatron.training import print_rank_0
+
+from mindspeed_mm.configs.config import merge_mm_args
+from mindspeed_mm.utils.utils import ensure_valid
 
 
-def validate_args(args, defaults={}):
+def safe_getattr(mm_object, mm_name, mm_default_value):
+    # 如果 mm_object.mm_name 不等于 mm_default_value， 则打印日志， 提示用户真实使用的值已被覆盖
+    mm_value = getattr(mm_object, mm_name, mm_default_value)
+    if mm_value != mm_default_value:
+        print_rank_0(f'[INFO] the original value of {mm_name} is {mm_default_value}, now changed as {mm_value} which comes from model.json')
+    return mm_value
+
+
+def validate_args(args, defaults=None):
+    if defaults is None:
+        defaults = {}
+
+    #merge mm config to args
+    merge_mm_args(args)
+
+    #use model.json to fill args
+    if hasattr(args.mm.model, 'text_decoder'):
+        args.num_layers = safe_getattr(args.mm.model.text_decoder, 'num_layers', args.num_layers)
+        args.hidden_size = safe_getattr(args.mm.model.text_decoder, 'hidden_size', args.hidden_size)
+        args.num_attention_heads = safe_getattr(args.mm.model.text_decoder, 'num_attention_heads', args.num_attention_heads)
+        args.max_position_embeddings = safe_getattr(args.mm.model.text_decoder, 'max_position_embeddings', args.max_position_embeddings)
+        args.ffn_hidden_size = safe_getattr(args.mm.model.text_decoder, 'ffn_hidden_size', args.ffn_hidden_size)
+
 
     # Load saved args from Retro (if applicable).
     load_retro_args(args)
@@ -15,9 +41,9 @@ def validate_args(args, defaults={}):
     # Tensor model parallel size.
     args.tensor_model_parallel_size = min(
         args.tensor_model_parallel_size, args.world_size)
-    assert args.world_size % args.tensor_model_parallel_size == 0, 'world size'\
+    ensure_valid(args.world_size % args.tensor_model_parallel_size == 0, 'world size'\
         ' ({}) is not divisible by tensor model parallel size ({})'.format(
-            args.world_size, args.tensor_model_parallel_size)
+            args.world_size, args.tensor_model_parallel_size))
 
     # Pipeline model parallel size.
     args.pipeline_model_parallel_size = min(
@@ -32,11 +58,11 @@ def validate_args(args, defaults={}):
     # Checks.
     model_parallel_size = args.pipeline_model_parallel_size * \
                           args.tensor_model_parallel_size
-    assert args.world_size % (model_parallel_size * args.context_parallel_size) == 0, \
+    ensure_valid(args.world_size % (model_parallel_size * args.context_parallel_size) == 0, \
         'world size ({}) is not divisible by tensor parallel size ({}) times ' \
         'pipeline parallel size ({}) times context parallel size ({})'.format(
         args.world_size, args.tensor_model_parallel_size,
-        args.pipeline_model_parallel_size, args.context_parallel_size)
+        args.pipeline_model_parallel_size, args.context_parallel_size))
     args.data_parallel_size = args.world_size // (model_parallel_size * args.context_parallel_size)
     if args.rank == 0:
         print('using world size: {}, data-parallel size: {}, '
@@ -49,23 +75,23 @@ def validate_args(args, defaults={}):
                   args.pipeline_model_parallel_size), flush=True)
     if args.pipeline_model_parallel_size > 1:
         if args.pipeline_model_parallel_split_rank is not None:
-            assert args.pipeline_model_parallel_split_rank < \
+            ensure_valid(args.pipeline_model_parallel_split_rank < \
                     args.pipeline_model_parallel_size, 'split rank needs'\
                     ' to be less than pipeline model parallel size ({})'.format(
-                            args.pipeline_model_parallel_size)
+                            args.pipeline_model_parallel_size))
 
     if args.tp_comm_overlap:
-        assert args.sequence_parallel == True, 'Tensor parallel communication/GEMM overlap can happen only when sequence parallelism is enabled'
+        ensure_valid(args.sequence_parallel == True, 'Tensor parallel communication/GEMM overlap can happen only when sequence parallelism is enabled')
 
     # Deprecated arguments
-    assert args.batch_size is None, '--batch-size argument is no longer ' \
-        'valid, use --micro-batch-size instead'
+    ensure_valid(args.batch_size is None, '--batch-size argument is no longer ' \
+        'valid, use --micro-batch-size instead')
     del args.batch_size
-    assert args.warmup is None, '--warmup argument is no longer valid, use ' \
-        '--lr-warmup-fraction instead'
+    ensure_valid(args.warmup is None, '--warmup argument is no longer valid, use ' \
+        '--lr-warmup-fraction instead')
     del args.warmup
-    assert args.model_parallel_size is None, '--model-parallel-size is no ' \
-        'longer valid, use --tensor-model-parallel-size instead'
+    ensure_valid(args.model_parallel_size is None, '--model-parallel-size is no ' \
+        'longer valid, use --tensor-model-parallel-size instead')
     del args.model_parallel_size
 
     if args.checkpoint_activations:
@@ -94,16 +120,30 @@ def validate_args(args, defaults={}):
             setattr(args, key, defaults[key])
 
     # Batch size.
-    assert args.micro_batch_size is not None
-    assert args.micro_batch_size > 0
+    ensure_valid(args.micro_batch_size is not None, 'args.micro_batch_size can not be None')
+    ensure_valid(args.micro_batch_size > 0, 'args.micro_batch_size must be greater than 0')
     if args.global_batch_size is None:
         args.global_batch_size = args.micro_batch_size * args.data_parallel_size
         if args.rank == 0:
             print('setting global batch size to {}'.format(
                 args.global_batch_size), flush=True)
-    assert args.global_batch_size > 0
+    ensure_valid(args.global_batch_size > 0, 'args.global_batch_size must be greater than 0')
     if args.num_layers_per_virtual_pipeline_stage is not None:
-        args.virtual_pipeline_model_parallel_size = int(os.environ.get('VP_SIZE'))
+        raise AssertionError('MindSpeed-MM Error: --num-layers-per-virtual-pipeline-stage is deprecated, please use --virtual-pipeline-model-parallel-size instead')
+    if hasattr(args, 'virtual_pipeline_model_parallel_size') and args.virtual_pipeline_model_parallel_size is not None and args.virtual_pipeline_model_parallel_size > 1:
+        ensure_valid(args.pipeline_model_parallel_size > 2, 'pipeline-model-parallel size should be greater than 2 with interleaved schedule')
+        if hasattr(args.mm.model, 'text_decoder'):
+            _pipeline_num_layers = getattr(args.mm.model.text_decoder, 'pipeline_num_layers', None)
+            if _pipeline_num_layers is None or len(_pipeline_num_layers) != args.virtual_pipeline_model_parallel_size:
+                raise AssertionError('MindSpeed-MM Error: vpp must enabled by --virtual-pipeline-model-parallel-size in shell and pipeline_num_layers in model.json, \
+                    and virtual-pipeline-model-parallel-size must equal the length of pipeline_num_layers')
+        elif hasattr(args.mm.model, 'predictor'):
+            _pipeline_num_layers = getattr(args.mm.model.predictor, 'pipeline_num_layers', None)
+            if _pipeline_num_layers is None or len(_pipeline_num_layers) != args.virtual_pipeline_model_parallel_size:
+                raise AssertionError('MindSpeed-MM Error: vpp must enabled by --virtual-pipeline-model-parallel-size in shell and pipeline_num_layers in model.json, \
+                    and virtual-pipeline-model-parallel-size must equal the length of pipeline_num_layers')
+        else:
+            raise AssertionError('MindSpeed-MM Error: vpp must enabled by --virtual-pipeline-model-parallel-size in shell and pipeline_num_layers in model.json')
     else:
         args.virtual_pipeline_model_parallel_size = None
         # Overlap P2P communication is disabled if not using the interleaved schedule.
@@ -113,17 +153,17 @@ def validate_args(args, defaults={}):
                   'schedule does not support overlapping p2p communication')
 
     if args.overlap_param_gather:
-        assert args.use_distributed_optimizer, \
-            '--overlap-param-gather only supported with distributed optimizer'
-        assert args.overlap_grad_reduce, \
-            '--overlap-grad-reduce should be turned on when using --overlap-param-gather'
-        assert args.use_mcore_models, \
-            '--overlap-param-gather only supported with MCore models'
+        ensure_valid(args.use_distributed_optimizer, \
+            '--overlap-param-gather only supported with distributed optimizer')
+        ensure_valid(args.overlap_grad_reduce, \
+            '--overlap-grad-reduce should be turned on when using --overlap-param-gather')
+        ensure_valid(args.use_mcore_models, \
+            '--overlap-param-gather only supported with MCore models')
 
     # Parameters dtype.
     args.params_dtype = torch.float
     if args.fp16:
-        assert not args.bf16
+        ensure_valid(not args.bf16, 'args.bf16 must be false when args.fp16 is true')
         args.params_dtype = torch.half
         # Turn off checking for NaNs in loss and grads if using dynamic loss scaling,
         # where NaNs in grads / loss are signal to the loss scaler.
@@ -133,7 +173,7 @@ def validate_args(args, defaults={}):
                 print('WARNING: Setting args.check_for_nan_in_loss_and_grad to False since '
                       'dynamic loss scaling is being used')
     if args.bf16:
-        assert not args.fp16
+        ensure_valid(not args.fp16, 'args.fp16 must be false when args.bf16 is true')
         args.params_dtype = torch.bfloat16
         # bfloat16 requires gradient accumulation and all-reduce to
         # be done in fp32.
@@ -165,40 +205,40 @@ def validate_args(args, defaults={}):
     if args.train_iters:
         # If we use iteration-based training, make sure the
         # sample-based options are off.
-        assert args.train_samples is None, \
-            'expected iteration-based training'
-        assert args.lr_decay_samples is None, \
-            'expected iteration-based learning rate decay'
-        assert args.lr_warmup_samples == 0, \
-            'expected iteration-based learning rate warmup'
-        assert args.rampup_batch_size is None, \
-            'expected no batch-size rampup for iteration-based training'
+        ensure_valid(args.train_samples is None, \
+            'expected iteration-based training')
+        ensure_valid(args.lr_decay_samples is None, \
+            'expected iteration-based learning rate decay')
+        ensure_valid(args.lr_warmup_samples == 0, \
+            'expected iteration-based learning rate warmup')
+        ensure_valid(args.rampup_batch_size is None, \
+            'expected no batch-size rampup for iteration-based training')
         if args.lr_warmup_fraction is not None:
-            assert args.lr_warmup_iters == 0, \
-                'can only specify one of lr-warmup-fraction and lr-warmup-iters'
+            ensure_valid(args.lr_warmup_iters == 0, \
+                'can only specify one of lr-warmup-fraction and lr-warmup-iters')
 
     # Sample-based training.
     if args.train_samples:
         # If we use sample-based training, make sure the
         # iteration-based options are off.
-        assert args.train_iters is None, \
-            'expected sample-based training'
-        assert args.lr_decay_iters is None, \
-            'expected sample-based learning rate decay'
-        assert args.lr_warmup_iters == 0, \
-            'expected sample-based learnig rate warmup'
+        ensure_valid(args.train_iters is None, \
+            'expected sample-based training')
+        ensure_valid(args.lr_decay_iters is None, \
+            'expected sample-based learning rate decay')
+        ensure_valid(args.lr_warmup_iters == 0, \
+            'expected sample-based learnig rate warmup')
         if args.lr_warmup_fraction is not None:
-            assert args.lr_warmup_samples == 0, \
+            ensure_valid(args.lr_warmup_samples == 0, \
                 'can only specify one of lr-warmup-fraction ' \
-                'and lr-warmup-samples'
+                'and lr-warmup-samples')
 
     if args.num_layers is not None:
-        assert args.encoder_num_layers is None, \
-            'cannot have both num-layers and encoder-num-layers specified'
+        ensure_valid(args.encoder_num_layers is None, \
+            'cannot have both num-layers and encoder-num-layers specified')
         args.encoder_num_layers = args.num_layers
     else:
-        assert args.encoder_num_layers is not None, \
-            'either num-layers or encoder-num-layers should be specified'
+        ensure_valid(args.encoder_num_layers is not None, \
+            'either num-layers or encoder-num-layers should be specified')
         args.num_layers = args.encoder_num_layers
 
     # Check required arguments.
@@ -220,44 +260,44 @@ def validate_args(args, defaults={}):
             args.ffn_hidden_size = 4 * args.hidden_size
 
     if args.kv_channels is None:
-        assert args.hidden_size % args.num_attention_heads == 0
+        ensure_valid(args.hidden_size % args.num_attention_heads == 0, 'args.hidden_size % args.num_attention_heads != 0 is not allowed')
         args.kv_channels = args.hidden_size // args.num_attention_heads
 
     if args.seq_length is not None:
-        assert args.encoder_seq_length is None
+        ensure_valid(args.encoder_seq_length is None, 'args.encoder_seq_length must be None if args.seq_length is not None')
         args.encoder_seq_length = args.seq_length
     else:
-        assert args.encoder_seq_length is not None
+        ensure_valid(args.encoder_seq_length is not None, 'args.encoder_seq_length must be not None when args.seq_length is None')
         args.seq_length = args.encoder_seq_length
 
     if args.seq_length is not None:
-        assert args.max_position_embeddings >= args.seq_length
+        ensure_valid(args.max_position_embeddings >= args.seq_length, 'args.max_position_embeddings should >= args.seq_length')
     if args.decoder_seq_length is not None:
-        assert args.max_position_embeddings >= args.decoder_seq_length
+        ensure_valid(args.max_position_embeddings >= args.decoder_seq_length, 'args.max_position_embeddings should >= args.decoder_seq_length')
     if args.lr is not None:
-        assert args.min_lr <= args.lr
+        ensure_valid(args.min_lr <= args.lr, 'args.min_lr should <= args.lr')
     if args.save is not None:
-        assert args.save_interval is not None
+        ensure_valid(args.save_interval is not None, 'args.save_interval must is not None, when args.save is not None')
     # Mixed precision checks.
     if args.fp16_lm_cross_entropy:
-        assert args.fp16, 'lm cross entropy in fp16 only support in fp16 mode.'
+        ensure_valid(args.fp16, 'lm cross entropy in fp16 only support in fp16 mode.')
     if args.fp32_residual_connection:
-        assert args.fp16 or args.bf16, \
-            'residual connection in fp32 only supported when using fp16 or bf16.'
+        ensure_valid(args.fp16 or args.bf16, \
+            'residual connection in fp32 only supported when using fp16 or bf16.')
 
     if args.moe_grouped_gemm:
-        assert args.bf16, 'Currently GroupedGEMM for MoE only supports bf16 dtype.'
+        ensure_valid(args.bf16, 'Currently GroupedGEMM for MoE only supports bf16 dtype.')
         dc = torch.cuda.get_device_capability()
-        assert dc[0] >= 8, "Unsupported compute capability for GroupedGEMM kernels."
+        ensure_valid(dc[0] >= 8, "Unsupported compute capability for GroupedGEMM kernels.")
 
     if args.weight_decay_incr_style == 'constant':
-        assert args.start_weight_decay is None
-        assert args.end_weight_decay is None
+        ensure_valid(args.start_weight_decay is None, 'args.start_weight_decay should is None when args.weight_decay_incr_style == constant')
+        ensure_valid(args.end_weight_decay is None, 'args.end_weight_decay should is None when args.weight_decay_incr_style == constant')
         args.start_weight_decay = args.weight_decay
         args.end_weight_decay = args.weight_decay
     else:
-        assert args.start_weight_decay is not None
-        assert args.end_weight_decay is not None
+        ensure_valid(args.start_weight_decay is not None, 'args.start_weight_decay should is not None, when args.weight_decay_incr_style != constant')
+        ensure_valid(args.end_weight_decay is not None, 'args.end_weight_decay should is not None, when args.weight_decay_incr_style != constant')
 
     TORCH_MAJOR = int(torch.__version__.split('.')[0])
     TORCH_MINOR = int(torch.__version__.split('.')[1])
@@ -271,24 +311,24 @@ def validate_args(args, defaults={}):
 
     # Activation recomputing.
     if args.distribute_saved_activations:
-        assert args.tensor_model_parallel_size > 1, 'can distribute ' \
+        ensure_valid(args.tensor_model_parallel_size > 1, 'can distribute ' \
             'recomputed activations only across tensor model ' \
-            'parallel groups'
-        assert args.recompute_granularity == 'full', \
+            'parallel groups')
+        ensure_valid(args.recompute_granularity == 'full', \
             'distributed recompute activations is only '\
-            'application to full recompute granularity'
-        assert args.recompute_method is not None, \
+            'application to full recompute granularity')
+        ensure_valid(args.recompute_method is not None, \
             'for distributed recompute activations to work you '\
-            'need to use a recompute method '
-        assert (TORCH_MAJOR, TORCH_MINOR) >= (1, 10), \
+            'need to use a recompute method ')
+        ensure_valid((TORCH_MAJOR, TORCH_MINOR) >= (1, 10), \
             'distributed recompute activations are supported for pytorch ' \
             'v1.10 and above (Nvidia Pytorch container >= 21.07). Current ' \
-            'pytorch version is v%s.%s.' % (TORCH_MAJOR, TORCH_MINOR)
+            'pytorch version is v%s.%s.' % (TORCH_MAJOR, TORCH_MINOR))
 
     if args.recompute_granularity == 'selective':
-        assert args.recompute_method is None, \
+        ensure_valid(args.recompute_method is None, \
             'recompute method is not yet supported for ' \
-            'selective recomputing granularity'
+            'selective recomputing granularity')
 
     # disable sequence parallelism when tp=1
     # to avoid change in numerics when
@@ -319,20 +359,20 @@ def validate_args(args, defaults={}):
     if args.retro_add_retriever:
 
         # Train samples should be auto-loaded.
-        assert args.train_samples is not None, \
-            "args.train_samples should be auto-loaded from the retro config."
+        ensure_valid(args.train_samples is not None, \
+            "args.train_samples should be auto-loaded from the retro config.")
 
         # Sequence parallelism unsupported.
-        assert not args.sequence_parallel, \
-            "retro currently does not support sequence parallelism."
+        ensure_valid(not args.sequence_parallel, \
+            "retro currently does not support sequence parallelism.")
 
         # Pipeline parallelism unsupported.
-        assert args.pipeline_model_parallel_size == 1, \
-            "retro currently does not support pipeline parallelism."
+        ensure_valid(args.pipeline_model_parallel_size == 1, \
+            "retro currently does not support pipeline parallelism.")
 
     if args.decoupled_lr is not None or args.decoupled_min_lr is not None:
-        assert args.use_mcore_models, \
-            '--decoupled-lr and --decoupled-min-lr only supported by Megatron Core, please add --use-mcore-models.'
+        ensure_valid(args.use_mcore_models, \
+            '--decoupled-lr and --decoupled-min-lr only supported by Megatron Core, please add --use-mcore-models.')
 
     # Legacy RoPE arguments
     if args.use_rotary_position_embeddings:
@@ -349,18 +389,18 @@ def validate_args(args, defaults={}):
 
     # MoE Spec check
     if args.num_experts is not None:
-        assert args.spec is None, "Model Spec must be None when using MoEs"
+        ensure_valid(args.spec is None, "Model Spec must be None when using MoEs")
         if args.tensor_model_parallel_size > 1:
-            assert args.sequence_parallel, \
-                "When using MoE and tensor parallelism, sequence parallelism must be used."
+            ensure_valid(args.sequence_parallel, \
+                "When using MoE and tensor parallelism, sequence parallelism must be used.")
 
     # Expert parallelism check
-    if args.expert_model_parallel_size  > 1:
-        assert args.num_experts is not None, "num_experts must be non None to use expert model parallelism"
-        assert args.num_experts % args.expert_model_parallel_size == 0, \
-            "Number of experts should be a multiple of expert model parallel_size."
-        assert not args.fp16, \
-            "Expert parallelism is not supported with fp16 training."
+    if args.expert_model_parallel_size > 1:
+        ensure_valid(args.num_experts is not None, "num_experts must be non None to use expert model parallelism")
+        ensure_valid(args.num_experts % args.expert_model_parallel_size == 0, \
+            "Number of experts should be a multiple of expert model parallel_size.")
+        ensure_valid(not args.fp16, \
+            "Expert parallelism is not supported with fp16 training.")
 
     # Distributed checkpointing checks
     if args.use_dist_ckpt and not args.use_mcore_models:
@@ -373,5 +413,5 @@ def validate_args(args, defaults={}):
 
 
 pm.register_patch("megatron.training.arguments.validate_args", validate_args, force_patch=True)
-pm.register_patch("mindspeed_mm.patchs.vpp_patches.validate_args", validate_args_wrapper)
+pm.register_patch("mindspeed_mm.patchs.validate_args_patch.validate_args", validate_args_wrapper)
 pm.apply_patches()
