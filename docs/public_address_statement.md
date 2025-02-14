@@ -35,3 +35,5 @@
 | 	开源引入	 | https://github.com/hiyouga/LLaMA-Factory/blob/main/src/llamafactory/data/collator.py | mindspeed_mm/data/data_utils/func_utils/collator.py |	https://github.com/OpenAccess-AI-Collective/axolotl/blob/main/src/axolotl/monkeypatch/utils.py | 开源代码参考指引 |
 |  开源引入  | https://github.com/open-compass/VLMEvalKit/blob/main/vlmeval/dataset/utils/vqa_eval.py | mindspeed_mm/tasks/evaluation/utils/string_utils.py |	 https://github.com/GT-Vision-Lab/VQA | 开源代码参考指引 |
 |  开源引入  | https://github.com/OpenGVLab/InternVL/blob/main/internvl_chat/internvl/conversation.py | mindspeed_mm/data/data_utils/conversation.py |  https://github.com/OpenGVLab/InternVL | 开源代码参考指引 |
+|  开源引入  | https://github.com/huggingface/diffusers/blob/main/examples/dreambooth/train_dreambooth_lora_sana.py | MindSpeed-MM/sana/MindSpeed-MM/examples/diffusers/sana/patch_sana.py |  https://github.com/huggingface/diffusers | 开源代码参考指引 |
+|  开源引入  | https://github.com/huggingface/diffusers/pull/6514#discussion_r1449796804 | MindSpeed-MM/sana/MindSpeed-MM/examples/diffusers/sana/patch_sana.py |  https://github.com/huggingface/diffusers | 开源代码参考指引 |

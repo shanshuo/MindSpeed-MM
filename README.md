@@ -137,7 +137,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="17"> 多模态生成 </td>
+      <td rowspan="18"> 多模态生成 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensora1.0">OpenSora 1.0</a></td>
       <td><a href="https://huggingface.co/hpcai-tech/Open-Sora/tree/main">5.5B</a></td>
       <td> 预训练 </td>
@@ -294,6 +294,16 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 55.23 (FPS) </td>
       <td> 53.65 (FPS) </td>
       <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sana">Sana</a></td>
+      <td><a href="https://github.com/huggingface/diffusers/blob/main/examples/dreambooth">1.6B</a></td>
+      <td>Lora微调</td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 28.7 (FPS) </td>
+      <td> 32.8 (FPS) </td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
