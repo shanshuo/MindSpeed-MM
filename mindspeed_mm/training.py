@@ -98,6 +98,8 @@ def pretrain(
 
     args = get_args()
     merge_mm_args(args)
+    if not hasattr(args, "dist_train"):
+        args.dist_train = False
 
     # add deterministic computing function
     if args.use_deter_comp:

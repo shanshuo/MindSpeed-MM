@@ -1,4 +1,5 @@
 {
+    "infer_data_type": "image",
     "model_id": "InternVLPipeline",
     "from_pretrained": "./internvl8b_mm/release/mp_rank_00/model_optim_rng.pt",
     "dataset_path": "./AI2D_TEST.tsv",
@@ -17,6 +18,7 @@
     "ps_version": "v2",
     "add_rmsnorm_offset": false,
     "img_context_token_id": 92546,
+    "num_segments": 8,
     "text_decoder": {
         "num_layers": 32,
         "hidden_size": 4096,

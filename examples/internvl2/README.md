@@ -107,7 +107,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
     # checkout commit from MindSpeed core_r0.6.0
-    git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
+    git checkout 04ceafb684802d428eb0395a4d364251689d8bc5
     pip install -r requirements.txt
     pip3 install -e .
     cd ..

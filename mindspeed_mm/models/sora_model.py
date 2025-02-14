@@ -52,7 +52,10 @@ class SoRAModel(nn.Module):
         self.config = core_transformer_config_from_args(get_args())
         self.task = config.task if hasattr(config, "task") else "t2v"
 
-        self.pre_process = mpu.is_pipeline_first_stage()
+        args = get_args()
+        if args.dist_train:
+            from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld
+        self.pre_process = mpu.is_pipeline_first_stage() if not args.dist_train else is_in_subworld('vae') # vae subworld
         self.post_process = mpu.is_pipeline_last_stage()
         self.input_tensor = None
         # to avoid grad all-reduce and reduce-scatter in megatron, since SoRAModel has no embedding layer.
@@ -61,6 +64,8 @@ class SoRAModel(nn.Module):
         if mpu.get_pipeline_model_parallel_rank() == 0:
             self.load_video_features = config.load_video_features
             self.load_text_features = config.load_text_features
+            if args.dist_train and not is_in_subworld('vae'):
+                self.load_video_features = self.load_text_features = False
             if not self.load_video_features:
                 print_rank_0(f"init AEModel....")
                 self.ae = AEModel(config.ae).eval()
@@ -71,11 +76,19 @@ class SoRAModel(nn.Module):
                 self.text_encoder.requires_grad_(False)
 
         self.diffusion = DiffusionModel(config.diffusion).get_model()
-        self.predictor = PredictModel(config.predictor).get_model()
+        if args.dist_train:
+            from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld
+            if is_in_subworld('dit'):
+                self.predictor = PredictModel(config.predictor).get_model()
+        else:
+            self.predictor = PredictModel(config.predictor).get_model()
 
     def set_input_tensor(self, input_tensor):
         self.input_tensor = input_tensor
-        self.predictor.set_input_tensor(input_tensor)
+        if get_args().dist_train and mpu.is_pipeline_first_stage(is_global=False):  # 开启dist_train后会应用Patch
+            self.input_tensor = input_tensor
+        else:
+            self.predictor.set_input_tensor(input_tensor)
 
     def forward(self, video, prompt_ids, video_mask=None, prompt_mask=None, **kwargs):
         """
@@ -84,7 +97,7 @@ class SoRAModel(nn.Module):
         video_mask: mask for video/image
         prompt_mask: mask for prompt(text)
         """
-
+        args = get_args()
         if self.pre_process:
             with torch.no_grad():
                 # Visual Encode
@@ -108,14 +121,22 @@ class SoRAModel(nn.Module):
             noised_latents, noise, timesteps = self.diffusion.q_sample(latents, model_kwargs=kwargs, mask=video_mask)
             predictor_input_latent, predictor_timesteps, predictor_prompt = noised_latents, timesteps, prompt
             predictor_video_mask, predictor_prompt_mask = video_mask, prompt_mask
+            if args.dist_train:
+                return [predictor_input_latent, predictor_timesteps, predictor_prompt, predictor_video_mask,
+                        predictor_prompt_mask,
+                        latents, noised_latents, timesteps, noise, video_mask]
         else:
-            if not hasattr(self.predictor, "pipeline_set_prev_stage_tensor"):
-                raise ValueError(f"PP has not been implemented for {self.predictor_cls} yet. ")
-            predictor_input_list, training_loss_input_list = self.predictor.pipeline_set_prev_stage_tensor(
-                self.input_tensor, extra_kwargs=kwargs)
-            predictor_input_latent, predictor_timesteps, predictor_prompt, predictor_video_mask, predictor_prompt_mask \
-                = predictor_input_list
-            latents, noised_latents, timesteps, noise, video_mask = training_loss_input_list
+            if args.dist_train and mpu.is_pipeline_first_stage(is_global=False):
+                [predictor_input_latent, predictor_timesteps, predictor_prompt, predictor_video_mask, predictor_prompt_mask,
+                 latents, noised_latents, timesteps, noise, video_mask] = self.input_tensor
+            else:
+                if not hasattr(self.predictor, "pipeline_set_prev_stage_tensor"):
+                    raise ValueError(f"PP has not been implemented for {self.predictor_cls} yet. ")
+                predictor_input_list, training_loss_input_list = self.predictor.pipeline_set_prev_stage_tensor(
+                    self.input_tensor, extra_kwargs=kwargs)
+                predictor_input_latent, predictor_timesteps, predictor_prompt, predictor_video_mask, predictor_prompt_mask \
+                    = predictor_input_list
+                latents, noised_latents, timesteps, noise, video_mask = training_loss_input_list
 
         output = self.predictor(
             predictor_input_latent,
@@ -159,14 +180,24 @@ class SoRAModel(nn.Module):
         return loss_dict
 
     def train(self, mode=True):
-        self.predictor.train()
+        if hasattr(self, "predictor"):
+            self.predictor.train()
 
     def state_dict_for_save_checkpoint(self, prefix="", keep_vars=False):
         """Customized state_dict"""
-        return self.predictor.state_dict(prefix=prefix, keep_vars=keep_vars)
+        if not get_args().dist_train:
+            return self.predictor.state_dict(prefix=prefix, keep_vars=keep_vars)
+        from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld
+        if is_in_subworld('dit'):
+            return self.predictor.state_dict(prefix=prefix, keep_vars=keep_vars)
+        return None
 
     def load_state_dict(self, state_dict: Mapping[str, Any], strict: bool = True):
         """Customized load."""
+        if get_args().dist_train:
+            from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld
+            if is_in_subworld('vae'):
+                return None
         if not isinstance(state_dict, Mapping):
             raise TypeError(f"Expected state_dict to be dict-like, got {type(state_dict)}.")
 
@@ -176,3 +207,4 @@ class SoRAModel(nn.Module):
             logger.info(f"Missing keys in state_dict: {missing_keys}.")
         if unexpected_keys is not None:
             logger.info(f"Unexpected key(s) in state_dict: {unexpected_keys}.")
+        return None

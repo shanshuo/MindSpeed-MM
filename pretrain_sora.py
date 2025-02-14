@@ -24,6 +24,7 @@ from mindspeed_mm.data.data_utils.constants import (
 )
 from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.models.sora_model import SoRAModel
+from mindspeed_mm.patchs import dummy_optimizer_patch
 
 
 def model_provider(pre_process=True, post_process=True):

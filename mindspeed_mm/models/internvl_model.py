@@ -69,6 +69,16 @@ class InternVLModel(MultiModalModule):
             self.vp_size = mpu.get_virtual_pipeline_model_parallel_world_size()
         self.pp_rank = mpu.get_pipeline_model_parallel_rank()
 
+        args = get_args()
+        if args.dist_train:
+            from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld
+            if is_in_subworld("gpt"):
+                self.add_image_encoder = False
+                self.add_video_encoder = False
+            elif is_in_subworld("vit"):
+                self.add_text_decoder = False
+                self.add_text_encoder = False
+
         if self.add_text_encoder:
             self.text_encoder = TextEncoder(config.text_encoder).get_model()
         if self.add_image_encoder:
@@ -434,9 +444,19 @@ class InternVLModel(MultiModalModule):
         if self.add_image_encoder:
             vit_embeds = self.image_encoder(image)
             if self.image_encoder.post_process:
+                if get_args().dist_train:
+                    from mindspeed.multi_modal.dist_train.inner_data_parallel.mappings import gather_from_inner_dp_region
+                    from mindspeed.multi_modal.dist_train.inner_data_parallel.utils import need_inner_data_parallel
+                    if need_inner_data_parallel():
+                        vit_embeds = gather_from_inner_dp_region(
+                            vit_embeds,
+                            inner_dp_parallel_output_grad=False
+                        )
+                    vit_embeds = vit_embeds[:image_flags.shape[0]]
                 image_flags = image_flags.squeeze(-1)
                 vit_embeds = vit_embeds[image_flags == 1].reshape(1, -1, vit_embeds.shape[-1]).clone()
             output = vit_embeds
+            output = output.contiguous()
         else:
             vit_embeds = self.input_tensor
 

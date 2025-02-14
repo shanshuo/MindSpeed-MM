@@ -5,6 +5,7 @@ from pathlib import Path
 from dataclasses import dataclass
 
 import torch
+import mindspeed.megatron_adaptor  # noqa
 from safetensors.torch import save_file
 
 

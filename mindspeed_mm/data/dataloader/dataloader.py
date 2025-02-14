@@ -19,6 +19,7 @@ from dataclasses import dataclass
 import torch
 from torch.distributed import ProcessGroup
 from torch.utils.data import DataLoader, BatchSampler, SequentialSampler
+from megatron.training import get_args
 
 from mindspeed_mm.data.data_utils.utils import (
     get_seed_worker,
@@ -213,11 +214,23 @@ def prepare_sampler_dataloader(
         )
 
     elif sampler_type == "BaseRandomBatchSampler":
+        need_split = False
+        if get_args().dist_train:
+            from mindspeed.multi_modal.dist_train.inner_data_parallel.utils import need_inner_data_parallel, get_global_data_parallel_size
+            from mindspeed.multi_modal.dist_train.inner_data_parallel.inner_data_parallel import get_inner_data_parallel_world_size
+            need_split = need_inner_data_parallel()
+        if need_split:
+            num_replicas = get_global_data_parallel_size()
+            rank = process_group.rank() // get_inner_data_parallel_world_size()
+        else:
+            num_replicas = process_group.size()
+            rank = process_group.rank()
+
         batch_sampler = BaseRandomBatchSampler(
             dataset,
             batch_size=batch_size,
-            num_replicas=process_group.size(),
-            rank=process_group.rank(),
+            num_replicas=num_replicas,
+            rank=rank,
             shuffle=shuffle,
             drop_last=drop_last,
             consumed_samples=consumed_samples,
