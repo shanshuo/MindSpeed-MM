@@ -56,6 +56,15 @@ class IndividualTokenRefinerBlock(nn.Module):
         self.head_dim = head_dim
         mlp_hidden_dim = int(hidden_size * mlp_width_ratio)
 
+        act_layer = get_activation_layer(act_type)
+        self.adaLN_modulation = nn.Sequential(
+            act_layer(),
+            nn.Linear(hidden_size, 2 * hidden_size, bias=True,),
+        )
+        # Zero-initialize the modulation
+        nn.init.zeros_(self.adaLN_modulation[1].weight)
+        nn.init.zeros_(self.adaLN_modulation[1].bias)
+
         self.norm1 = nn.LayerNorm(
             hidden_size, elementwise_affine=True, eps=1e-6, 
         )
@@ -83,7 +92,6 @@ class IndividualTokenRefinerBlock(nn.Module):
         self.norm2 = nn.LayerNorm(
             hidden_size, elementwise_affine=True, eps=1e-6,
         )
-        act_layer = get_activation_layer(act_type)
 
         self.mlp = MLP(
             in_channels=hidden_size,
@@ -91,14 +99,6 @@ class IndividualTokenRefinerBlock(nn.Module):
             act_layer=act_layer,
             drop=mlp_drop_rate
         )
-
-        self.adaLN_modulation = nn.Sequential(
-            act_layer(),
-            nn.Linear(hidden_size, 2 * hidden_size, bias=True,),
-        )
-        # Zero-initialize the modulation
-        nn.init.zeros_(self.adaLN_modulation[1].weight)
-        nn.init.zeros_(self.adaLN_modulation[1].bias)
 
     def forward(
         self,

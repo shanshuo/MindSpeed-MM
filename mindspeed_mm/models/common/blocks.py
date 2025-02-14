@@ -19,6 +19,9 @@ import torch
 import torch.nn as nn
 
 from diffusers.models.activations import GELU, GEGLU, ApproximateGELU
+from megatron.core import mpu, tensor_parallel
+from megatron.training import get_args
+from megatron.training.arguments import core_transformer_config_from_args
 from mindspeed_mm.models.common.linear import MatmulAddLinear
 
 
@@ -162,18 +165,46 @@ class ModulateDiT(nn.Module):
         hidden_size: int,
         factor: int,
         act_layer: Callable,
+        enable_tensor_parallel: bool = False,
+        gather_tensor_parallel_output: bool = True
     ):
         super().__init__()
+        self.enable_tensor_parallel = enable_tensor_parallel
+        self.gather_tensor_parallel_output = gather_tensor_parallel_output and enable_tensor_parallel
         self.act = act_layer()
-        self.linear = nn.Linear(
-            hidden_size, factor * hidden_size, bias=True
-        )
+
+        if self.enable_tensor_parallel:
+            args = get_args()
+            config = core_transformer_config_from_args(args)
+            config.sequence_parallel = False
+            self.linear = tensor_parallel.ColumnParallelLinear(
+                hidden_size,
+                factor * hidden_size,
+                bias=True,
+                config=config,
+                init_method=config.init_method,
+                gather_output=False
+            )
+            self.sequence_parallel = args.sequence_parallel
+        else:
+            self.linear = nn.Linear(
+                hidden_size, factor * hidden_size, bias=True
+            )
         # Zero-initialize the modulation
         nn.init.zeros_(self.linear.weight)
         nn.init.zeros_(self.linear.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.linear(self.act(x))
+        if self.enable_tensor_parallel:
+            output = self.linear(self.act(x))[0]
+            if self.gather_tensor_parallel_output:
+                if self.sequence_parallel:
+                    output = tensor_parallel.mappings.all_gather_last_dim_from_tensor_parallel_region(output)
+                else:
+                    output = tensor_parallel.mappings.gather_from_tensor_model_parallel_region(output)
+            return output
+        else:
+            return self.linear(self.act(x))
     
 
 class MLP(nn.Module):
@@ -189,6 +220,8 @@ class MLP(nn.Module):
         bias=True,
         drop=0.0,
         use_conv=False,
+        enable_tensor_parallel=False,
+        enable_tp_sp=True
     ):
         super().__init__()
         out_features = out_features or in_channels
@@ -198,9 +231,24 @@ class MLP(nn.Module):
         drop_probs = drop if isinstance(drop, tuple) else tuple(repeat(drop, 2))
         linear_layer = partial(nn.Conv2d, kernel_size=1) if use_conv else nn.Linear
 
-        self.fc1 = linear_layer(
-            in_channels, hidden_channels, bias=bias[0]
-        )
+        self.enable_tensor_parallel = not use_conv and enable_tensor_parallel
+
+        if self.enable_tensor_parallel:
+            args = get_args()
+            config = core_transformer_config_from_args(args)
+            config.sequence_parallel = enable_tp_sp and args.sequence_parallel
+            self.fc1 = tensor_parallel.ColumnParallelLinear(
+                in_channels,
+                hidden_channels,
+                config=config,
+                init_method=config.init_method,
+                bias=bias[0],
+                gather_output=False
+            )
+        else:
+            self.fc1 = linear_layer(
+                in_channels, hidden_channels, bias=bias[0]
+            )
         self.act = act_layer()
         self.drop1 = nn.Dropout(drop_probs[0])
         self.norm = (
@@ -208,16 +256,39 @@ class MLP(nn.Module):
             if norm_layer is not None
             else nn.Identity()
         )
-        self.fc2 = linear_layer(
-            hidden_channels, out_features, bias=bias[1]
-        )
+
+        if norm_layer is not None:
+            for param in self.norm.parameters():
+                setattr(param, "sequence_parallel", enable_tp_sp and args.sequence_parallel)
+        
+        if self.enable_tensor_parallel:
+            config.sequence_parallel = enable_tp_sp and args.sequence_parallel
+            self.fc2 = tensor_parallel.RowParallelLinear(
+                hidden_channels,
+                out_features,
+                config=config,
+                init_method=config.init_method,
+                bias=bias[1],
+                input_is_parallel=True,
+                skip_bias_add=False
+            )
+        else:
+            self.fc2 = linear_layer(
+                hidden_channels, out_features, bias=bias[1]
+            )
         self.drop2 = nn.Dropout(drop_probs[1])
 
     def forward(self, x):
-        x = self.fc1(x)
+        if self.enable_tensor_parallel:
+            x = self.fc1(x)[0]
+        else:
+            x = self.fc1(x)
         x = self.act(x)
         x = self.drop1(x)
         x = self.norm(x)
-        x = self.fc2(x)
+        if self.enable_tensor_parallel:
+            x = self.fc2(x)[0]
+        else:
+            x = self.fc2(x)
         x = self.drop2(x)
         return x

@@ -1,5 +1,6 @@
 import math
 from typing import List, Optional, Union, Tuple
+from contextlib import nullcontext
 from einops import rearrange
 import torch
 from torch import nn
@@ -7,6 +8,7 @@ import torch_npu
 
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
+from megatron.training.arguments import core_transformer_config_from_args
 from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
 
 from mindspeed_mm.models.common import MultiModalModule
@@ -94,6 +96,7 @@ class HunyuanVideoDiT(MultiModalModule):
         self.embeded_guidance_scale = embeded_guidance_scale
 
         args = get_args()
+        config = core_transformer_config_from_args(args)
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
@@ -103,6 +106,8 @@ class HunyuanVideoDiT(MultiModalModule):
             raise ValueError("recompute_granularity does not support selective mode in HunyuanvideoDiT")
         if self.distribute_saved_activations:
             raise NotImplementedError("distribute_saved_activations is currently not supported")
+        self.enable_tensor_parallel = mpu.get_tensor_model_parallel_world_size() > 1
+        self.sequence_parallel = args.sequence_parallel and self.enable_tensor_parallel
         
         # context parallel setting
         self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
@@ -113,9 +118,29 @@ class HunyuanVideoDiT(MultiModalModule):
             raise ValueError(
                 f"Got {rope_dim_list} but expected positional dim {head_dim}"
             )
+
+        # time modulation
+        self.time_in = TimeStepEmbedding(timestep_hidden_dim, time_embed_dim=self.hidden_size)
+
+        # txt modulation
+        self.vector_in = MLP(
+            in_channels=self.text_states_dim[1],
+            hidden_channels=self.hidden_size,
+            out_features=self.hidden_size,
+            act_layer=get_activation_layer("silu"),
+            enable_tensor_parallel=self.enable_tensor_parallel,
+            enable_tp_sp=False
+        )
         
         self.img_in = PatchEmbed3D(
             self.patch_size, self.in_channels, self.hidden_size
+        )
+
+        # guidance modulation
+        self.guidance_in = (
+            TimeStepEmbedding(timestep_hidden_dim, self.hidden_size)
+            if guidance_embed
+            else None
         )
 
         # text projection
@@ -137,24 +162,6 @@ class HunyuanVideoDiT(MultiModalModule):
             raise NotImplementedError(
                 f"Unsupported text_projection: {self.text_projection}"
             )
-        
-        # time modulation
-        self.time_in = TimeStepEmbedding(timestep_hidden_dim, time_embed_dim=self.hidden_size)
-
-        # txt modulation
-        self.vector_in = MLP(
-            in_channels=self.text_states_dim[1],
-            hidden_channels=self.hidden_size,
-            out_features=self.hidden_size,
-            act_layer=get_activation_layer("silu")
-        )
-
-        # guidance modulation
-        self.guidance_in = (
-            TimeStepEmbedding(timestep_hidden_dim, self.hidden_size)
-            if guidance_embed
-            else None
-        )
 
         # double blocks
         self.double_blocks = nn.ModuleList([
@@ -183,14 +190,45 @@ class HunyuanVideoDiT(MultiModalModule):
             for _ in range(mm_single_blocks_depth)
         ])
 
-        self.norm_final = nn.LayerNorm(self.hidden_size, elementwise_affine=False, eps=1e-6)
-        self.proj_out = nn.Linear(self.hidden_size, math.prod(patch_size) * out_channels, bias=True)
-        nn.init.zeros_(self.proj_out.weight)
-        nn.init.zeros_(self.proj_out.bias)
-        self.adaLN_modulation = nn.Sequential(
+        if self.enable_tensor_parallel:
+            config.sequence_parallel = False
+            self.adaLN_modulation = nn.Sequential(
+                get_activation_layer("silu")(),
+                tensor_parallel.ColumnParallelLinear(
+                    self.hidden_size,
+                    2 * self.hidden_size,
+                    bias=True,
+                    config=config,
+                    init_method=config.init_method,
+                    gather_output=False
+                )
+            )
+            config.sequence_parallel = self.sequence_parallel
+        else:
+            self.adaLN_modulation = nn.Sequential(
             get_activation_layer("silu")(),
             nn.Linear(self.hidden_size, 2 * self.hidden_size, bias=True)
         )
+
+        self.norm_final = nn.LayerNorm(self.hidden_size, elementwise_affine=False, eps=1e-6)
+        for param in self.norm_final.parameters():
+            setattr(param, "sequence_parallel", self.sequence_parallel)
+        
+        if self.enable_tensor_parallel:
+            self.proj_out = tensor_parallel.ColumnParallelLinear(
+                self.hidden_size,
+                math.prod(patch_size) * out_channels,
+                bias=True,
+                config=config,
+                init_method=config.init_method,
+                gather_output=False
+            )
+        else:
+            self.proj_out = nn.Linear(self.hidden_size, math.prod(patch_size) * out_channels, bias=True)
+
+        nn.init.zeros_(self.proj_out.weight)
+        nn.init.zeros_(self.proj_out.bias)
+        
         nn.init.zeros_(self.adaLN_modulation[1].weight)
         nn.init.zeros_(self.adaLN_modulation[1].bias)
 
@@ -310,7 +348,7 @@ class HunyuanVideoDiT(MultiModalModule):
             prompt_mask = prompt_mask[0]
         prompt_mask = prompt_mask.to(x.device)
         prompt[0] = prompt[0].view(-1, prompt[0].shape[-2], prompt[0].shape[-1]).to(self.dtype) # B*N, seq_len, Dim
-        prompt[1] = prompt[1].view(-1, prompt[1].shape[-1]).to(self.dtype) # B*N, Dim
+        prompt[1] = prompt[1].to(self.dtype) # B, N, Dim
         prompt_mask = prompt_mask.view(-1, prompt_mask.shape[-1]) # B*N, seqlen
 
         # Prepare modulation vectors
@@ -363,6 +401,12 @@ class HunyuanVideoDiT(MultiModalModule):
             txt = txt[:, :prompt_mask.sum()]
             txt_seq_len = txt.shape[1]
 
+        # RNG context
+        if self.sequence_parallel:
+            rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
+        else:
+            rng_context = nullcontext()
+
         # cp split
         if self.context_parallel_algo is not None:
             from mindspeed.core.context_parallel.unaligned_cp.mapping import (
@@ -393,77 +437,121 @@ class HunyuanVideoDiT(MultiModalModule):
         max_seqlen_q = torch.tensor(max_seqlen_q)
         max_seqlen_kv = torch.tensor(max_seqlen_kv)
 
-        # --------------------------- Pass through DiT blocks --------------------------
-        if self.recompute_granularity == "full":
-            # double_stream
-            img, txt = self._checkpointed_forward(
-                "double_stream",
-                (img, txt),
-                vec,
-                cu_seqlens_q,
-                cu_seqlens_kv,
-                max_seqlen_q,
-                max_seqlen_kv,
-                freqs_cos,
-                freqs_sin
-            )
-            x = torch.cat([img, txt], dim=1)
+        if self.sequence_parallel:
+            # b s h -> s b h
+            img = img.transpose(0, 1).contiguous()
+            # split img_seq for tp-sp
+            img = tensor_parallel.scatter_to_sequence_parallel_region(img)
 
-            # single_stream
-            x = self._checkpointed_forward(
-                "single_stream",
-                (x, ),
-                vec,
-                img_seq_len,
-                cu_seqlens_q,
-                cu_seqlens_kv,
-                max_seqlen_q,
-                max_seqlen_kv,
-                freqs_cos,
-                freqs_sin
-            )[0]
-            img = x[:, :img_seq_len]
-        
-        else:
-            for _, block in enumerate(self.double_blocks):
-                img, txt = block(
-                    img=img, 
-                    txt=txt,
-                    vec=vec,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_kv=cu_seqlens_kv,
-                    max_seqlen_q=max_seqlen_q,
-                    max_seqlen_kv=max_seqlen_kv,
-                    freqs_cos=freqs_cos,
-                    freqs_sin=freqs_sin
+        # --------------------------- Pass through DiT blocks --------------------------
+        with rng_context:
+            if self.recompute_granularity == "full":
+                # double_stream
+                img, txt = self._checkpointed_forward(
+                    "double_stream",
+                    (img, txt),
+                    vec,
+                    cu_seqlens_q,
+                    cu_seqlens_kv,
+                    max_seqlen_q,
+                    max_seqlen_kv,
+                    freqs_cos,
+                    freqs_sin
                 )
-            x = torch.cat([img, txt], dim=1)
-            for _, block in enumerate(self.single_blocks):
-                x = block(
-                    x=x,
-                    vec=vec,
-                    img_len=img_seq_len,
-                    cu_seqlens_q=cu_seqlens_q,
-                    cu_seqlens_kv=cu_seqlens_kv,
-                    max_seqlen_q=max_seqlen_q,
-                    max_seqlen_kv=max_seqlen_kv,
-                    freqs_cos=freqs_cos,
-                    freqs_sin=freqs_sin
+
+                if self.sequence_parallel:
+                    txt = txt.transpose(0, 1).contiguous()
+                    x = torch.cat([img, txt], dim=0)
+                else:
+                    x = torch.cat([img, txt], dim=1)
+
+                # single_stream
+                x = self._checkpointed_forward(
+                    "single_stream",
+                    (x, ),
+                    vec,
+                    img_seq_len,
+                    cu_seqlens_q,
+                    cu_seqlens_kv,
+                    max_seqlen_q,
+                    max_seqlen_kv,
+                    freqs_cos,
+                    freqs_sin
                 )[0]
+            
+            else:
+                for _, block in enumerate(self.double_blocks):
+                    img, txt = block(
+                        img=img, 
+                        txt=txt,
+                        vec=vec,
+                        cu_seqlens_q=cu_seqlens_q,
+                        cu_seqlens_kv=cu_seqlens_kv,
+                        max_seqlen_q=max_seqlen_q,
+                        max_seqlen_kv=max_seqlen_kv,
+                        freqs_cos=freqs_cos,
+                        freqs_sin=freqs_sin
+                    )
+                if self.sequence_parallel:
+                    txt = txt.transpose(0, 1).contiguous()
+                    x = torch.cat([img, txt], dim=0)
+                else:
+                    x = torch.cat([img, txt], dim=1)
+
+                for _, block in enumerate(self.single_blocks):
+                    x = block(
+                        x=x,
+                        vec=vec,
+                        img_len=img_seq_len,
+                        cu_seqlens_q=cu_seqlens_q,
+                        cu_seqlens_kv=cu_seqlens_kv,
+                        max_seqlen_q=max_seqlen_q,
+                        max_seqlen_kv=max_seqlen_kv,
+                        freqs_cos=freqs_cos,
+                        freqs_sin=freqs_sin
+                    )[0]
+        
+        if self.sequence_parallel:
+            img = x[:img_seq_len // mpu.get_tensor_model_parallel_world_size()]
+        else:
             img = x[:, :img_seq_len]
+
+        # --------------------- Final layer ------------
+        if self.enable_tensor_parallel:
+            shift_scale = self.adaLN_modulation(vec)[0]
+            if self.sequence_parallel:
+                shift_scale = tensor_parallel.mappings.all_gather_last_dim_from_tensor_parallel_region(
+                    shift_scale
+                )
+            else:
+                shift_scale = tensor_parallel.mappings.gather_from_tensor_model_parallel_region(
+                    shift_scale
+                )
+            shift, scale = shift_scale.chunk(2, dim=-1)
+        else:
+            shift, scale = self.adaLN_modulation(vec).chunk(2, dim=-1)
+
+        x = self.norm_final(img) * (1 + scale) + shift
+
+        if self.enable_tensor_parallel:
+            x = self.proj_out(x)[0]
+            if self.sequence_parallel:
+                x = tensor_parallel.mappings.all_gather_last_dim_from_tensor_parallel_region(x)
+            else:
+                x = tensor_parallel.mappings.gather_from_tensor_model_parallel_region(x)
+        else:
+            x = self.proj_out(x)
+
+        if self.sequence_parallel:
+            x.transpose(0, 1).contiguous() # s b h -> b s h
 
         if self.context_parallel_algo is not None:
-            img = gather_forward_split_backward(
-                img, 
+            x = gather_forward_split_backward(
+                x, 
                 mpu.get_context_parallel_group(),
                 dim=1,
                 grad_scale="up"
             )
-        # --------------------- Final layer ------------
-        shift, scale = self.adaLN_modulation(vec).unsqueeze(1).chunk(2, dim=-1)
-        x = self.norm_final(img) * (1 + scale) + shift
-        x = self.proj_out(x)
-
         output = self.unpatchify(x, tt, th, tw)
         return output
     
@@ -491,19 +579,45 @@ class MMDoubleStreamBlock(nn.Module):
 
         # context parallel setting
         args = get_args()
+        config = core_transformer_config_from_args(args)
         self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
         if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
             raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
+        self.enable_tensor_parallel = mpu.get_tensor_model_parallel_world_size() > 1
+        self.sequence_parallel = args.sequence_parallel and self.enable_tensor_parallel
+        self.num_attention_heads_per_partition = self.heads_num // mpu.get_tensor_model_parallel_world_size()
 
         self.img_mod = ModulateDiT(
             hidden_size,
             factor=6,
-            act_layer=get_activation_layer("silu")
+            act_layer=get_activation_layer("silu"),
+            enable_tensor_parallel=self.enable_tensor_parallel,
+            gather_tensor_parallel_output=True
+        )
+
+        self.txt_mod = ModulateDiT(
+            hidden_size,
+            factor=6,
+            act_layer=get_activation_layer("silu"),
+            enable_tensor_parallel=self.enable_tensor_parallel,
+            gather_tensor_parallel_output=True
         )
 
         self.img_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        for param in self.img_norm1.parameters():
+            setattr(param, "sequence_parallel", self.sequence_parallel)
 
-        self.img_attn_qkv = nn.Linear(hidden_size, hidden_size * 3, bias=qkv_bias)
+        if self.enable_tensor_parallel:
+            self.img_attn_qkv = tensor_parallel.ColumnParallelLinear(
+                hidden_size,
+                hidden_size * 3,
+                bias=qkv_bias,
+                config=config,
+                init_method=config.init_method,
+                gather_output=False
+            )
+        else:
+            self.img_attn_qkv = nn.Linear(hidden_size, hidden_size * 3, bias=qkv_bias)
 
         self.img_attn_q_norm = (
             normalize(head_dim, affine=True, eps=1e-6, norm_type=qk_norm_type)
@@ -517,26 +631,29 @@ class MMDoubleStreamBlock(nn.Module):
             else nn.Identity()
         )
 
-        self.img_attn_proj = nn.Linear(hidden_size, hidden_size, bias=qkv_bias)
+        if qk_norm:
+            for param in self.img_attn_q_norm.parameters():
+                setattr(param, "sequence_parallel", self.sequence_parallel)
+            for param in self.img_attn_k_norm.parameters():
+                setattr(param, "sequence_parallel", self.sequence_parallel)
         
-        self.img_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-
-        self.img_mlp = MLP(
-            hidden_size,
-            mlp_hidden_dim,
-            act_layer=get_activation_layer(mlp_act_type),
-            bias=True
-        )
-
-        self.txt_mod = ModulateDiT(
-            hidden_size,
-            factor=6,
-            act_layer=get_activation_layer("silu")
-        )
-
         self.txt_norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        for param in self.txt_norm1.parameters():
+            setattr(param, "sequence_parallel", self.sequence_parallel)
 
-        self.txt_attn_qkv = nn.Linear(hidden_size, hidden_size * 3, bias=qkv_bias)
+        if self.enable_tensor_parallel:
+            config.sequence_parallel = False # disable txt_seq sp
+            self.txt_attn_qkv = tensor_parallel.ColumnParallelLinear(
+                hidden_size,
+                hidden_size * 3,
+                bias=qkv_bias,
+                config=config,
+                init_method=config.init_method,
+                gather_output=False
+            )
+            config.sequence_parallel = self.sequence_parallel
+        else:
+            self.txt_attn_qkv = nn.Linear(hidden_size, hidden_size * 3, bias=qkv_bias)
 
         self.txt_attn_q_norm = (
             normalize(head_dim, affine=True, eps=1e-6, norm_type=qk_norm_type)
@@ -550,14 +667,64 @@ class MMDoubleStreamBlock(nn.Module):
             else nn.Identity()
         )
 
-        self.txt_attn_proj = nn.Linear(hidden_size, hidden_size, bias=qkv_bias)        
+        # disable txt_seq sp
+        for param in self.txt_attn_q_norm.parameters():
+            setattr(param, "sequence_parallel", False)
+        for param in self.txt_attn_k_norm.parameters():
+            setattr(param, "sequence_parallel", False)
+        
+        if self.enable_tensor_parallel:
+            self.img_attn_proj = tensor_parallel.RowParallelLinear(
+                hidden_size,
+                hidden_size,
+                bias=qkv_bias,
+                config=config,
+                init_method=config.init_method,
+                input_is_parallel=True,
+                skip_bias_add=False
+            )
+        else:
+            self.img_attn_proj = nn.Linear(hidden_size, hidden_size, bias=qkv_bias)
+        
+        self.img_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        for param in self.img_norm2.parameters():
+            setattr(param, "sequence_parallel", True)
+
+        self.img_mlp = MLP(
+            hidden_size,
+            mlp_hidden_dim,
+            act_layer=get_activation_layer(mlp_act_type),
+            bias=True,
+            enable_tensor_parallel=self.enable_tensor_parallel,
+            enable_tp_sp=True
+        )
+
+        if self.enable_tensor_parallel:
+            config.sequence_parallel = False # disable txt_seq sp
+            self.txt_attn_proj = tensor_parallel.RowParallelLinear(
+                hidden_size,
+                hidden_size,
+                bias=qkv_bias,
+                config=config,
+                init_method=config.init_method,
+                input_is_parallel=True,
+                skip_bias_add=False
+            )
+            config.sequence_parallel = self.sequence_parallel
+        else:
+            self.txt_attn_proj = nn.Linear(hidden_size, hidden_size, bias=qkv_bias)        
+        
         self.txt_norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        for param in self.txt_norm2.parameters():
+            setattr(param, "sequence_parallel", False)
 
         self.txt_mlp = MLP(
             hidden_size,
             mlp_hidden_dim,
             act_layer=get_activation_layer(mlp_act_type),
-            bias=True
+            bias=True,
+            enable_tensor_parallel=self.enable_tensor_parallel,
+            enable_tp_sp=False
         )
 
     def forward(
@@ -579,7 +746,7 @@ class MMDoubleStreamBlock(nn.Module):
             img_mod2_shift,
             img_mod2_scale,
             img_mod2_gate
-        ) = self.img_mod(vec).unsqueeze(1).chunk(6, dim=-1)
+        ) = self.img_mod(vec).chunk(6, dim=-1)
         (
             txt_mod1_shift,
             txt_mod1_scale,
@@ -587,15 +754,22 @@ class MMDoubleStreamBlock(nn.Module):
             txt_mod2_shift,
             txt_mod2_scale,
             txt_mod2_gate
-        ) = self.txt_mod(vec).unsqueeze(1).chunk(6, dim=-1)
+        ) = self.txt_mod(vec).chunk(6, dim=-1)
 
         # Prepare image for attention,
         img_modulated = self.img_norm1(img)
         img_modulated = img_modulated * (1 + img_mod1_scale) + img_mod1_shift
-        img_qkv = self.img_attn_qkv(img_modulated)
+
+        if self.enable_tensor_parallel:
+            img_qkv = self.img_attn_qkv(img_modulated)[0]
+            if self.sequence_parallel:
+                img_qkv = img_qkv.transpose(0, 1).contiguous() # s b h -> b s h
+        else:
+            img_qkv = self.img_attn_qkv(img_modulated)
 
         # b s h
-        img_q, img_k, img_v = rearrange(img_qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
+        img_q, img_k, img_v = rearrange(img_qkv, "B L (K H D) -> K B L H D", K=3, H=self.num_attention_heads_per_partition)
+        img_seq_len = img_q.shape[1]
 
         # Apply QK-Norm if needed
         img_q = self.img_attn_q_norm(img_q)
@@ -610,7 +784,11 @@ class MMDoubleStreamBlock(nn.Module):
         txt_modulated = self.txt_norm1(txt)
         txt_modulated = txt_modulated * (1 + txt_mod1_scale) + txt_mod1_shift
 
-        txt_qkv = self.txt_attn_qkv(txt_modulated)
+        if self.enable_tensor_parallel:
+            txt_qkv = self.txt_attn_qkv(txt_modulated)[0]
+        else:
+            txt_qkv = self.txt_attn_qkv(txt_modulated)
+
         txt_q, txt_k, txt_v = rearrange(txt_qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
 
         txt_q = self.txt_attn_q_norm(txt_q)
@@ -621,7 +799,7 @@ class MMDoubleStreamBlock(nn.Module):
             (img_q, txt_q),
             (img_k, txt_k),
             (img_v, txt_v),
-            heads_num=self.heads_num,
+            heads_num=self.num_attention_heads_per_partition,
             head_dim=self.head_dim,
             attn_mask=None,
             actual_seq_qlen=cu_seqlens_q,
@@ -629,10 +807,15 @@ class MMDoubleStreamBlock(nn.Module):
             context_parallel_algo=self.context_parallel_algo,
         )
 
-        img_attn, txt_attn = attn[:, :img.shape[1]], attn[:, img.shape[1]:]
+        img_attn, txt_attn = attn[:, :img_seq_len], attn[:, img_seq_len:]
 
         # Calculate the img blocks
-        img = img + self.img_attn_proj(img_attn) * img_mod1_gate
+        if self.enable_tensor_parallel:
+            if self.sequence_parallel:
+                img_attn = img_attn.transpose(0, 1).contiguous() # b s h -> s b h
+            img = img + self.img_attn_proj(img_attn)[0] * img_mod1_gate
+        else:
+            img = img + self.img_attn_proj(img_attn) * img_mod1_gate
 
         img = img + \
             self.img_mlp(
@@ -640,7 +823,11 @@ class MMDoubleStreamBlock(nn.Module):
             ) * img_mod2_gate
         
         # Calculate the txt blocks
-        txt = txt + self.txt_attn_proj(txt_attn) * txt_mod1_gate
+
+        if self.enable_tensor_parallel:
+            txt = txt + self.txt_attn_proj(txt_attn)[0] * txt_mod1_gate
+        else:
+            txt = txt + self.txt_attn_proj(txt_attn) * txt_mod1_gate
         txt = txt + \
             self.txt_mlp(
                 self.txt_norm2(txt) * (1 + txt_mod2_scale) + txt_mod2_shift
@@ -675,13 +862,37 @@ class MMSingleStreamBlock(nn.Module):
 
         # context parallel setting
         args = get_args()
+        config = core_transformer_config_from_args(args)
         self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
         if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
             raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
+        self.enable_tensor_parallel = mpu.get_tensor_model_parallel_world_size() > 1
+        self.tp_size = mpu.get_tensor_model_parallel_world_size()
+        self.sequence_parallel = args.sequence_parallel and self.enable_tensor_parallel
+        self.num_attention_heads_per_partition = self.heads_num // mpu.get_tensor_model_parallel_world_size()
 
-        self.linear1 = nn.Linear(hidden_size, hidden_size * 3 + mlp_hidden_dim)
-        self.linear2 = nn.Linear(hidden_size + mlp_hidden_dim, hidden_size)
+        self.modulation = ModulateDiT(
+            hidden_size,
+            factor=3,
+            act_layer=get_activation_layer("silu"),
+            enable_tensor_parallel=self.enable_tensor_parallel,
+            gather_tensor_parallel_output=True
+        )
 
+        self.pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        
+        if self.enable_tensor_parallel:
+            self.linear1 = tensor_parallel.ColumnParallelLinear(
+                hidden_size,
+                hidden_size * 3 + mlp_hidden_dim,
+                config=config,
+                init_method=config.init_method,
+                gather_output=False,
+                bias=True
+            )
+        else:
+            self.linear1 = nn.Linear(hidden_size, hidden_size * 3 + mlp_hidden_dim)
+        
         self.q_norm = (
             normalize(head_dim, affine=True, eps=1e-6, norm_type=qk_norm_type)
             if qk_norm
@@ -694,14 +905,27 @@ class MMSingleStreamBlock(nn.Module):
             else nn.Identity()
         )
 
-        self.pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
-        self.mlp_act = get_activation_layer(mlp_act_type)()
+        if self.enable_tensor_parallel:
+            self.linear2 = tensor_parallel.RowParallelLinear(
+                hidden_size + mlp_hidden_dim,
+                hidden_size,
+                config=config,
+                init_method=config.init_method,
+                input_is_parallel=True,
+                skip_bias_add=False,
+                bias=True
+            )
+        else:
+            self.linear2 = nn.Linear(hidden_size + mlp_hidden_dim, hidden_size)
 
-        self.modulation = ModulateDiT(
-            hidden_size,
-            factor=3,
-            act_layer=get_activation_layer("silu")
-        )
+        for param in self.q_norm.parameters():
+            setattr(param, "sequence_parallel", self.sequence_parallel)
+        for param in self.k_norm.parameters():
+            setattr(param, "sequence_parallel", self.sequence_parallel)
+        for param in self.pre_norm.parameters():
+            setattr(param, "sequence_parallel", self.sequence_parallel)
+
+        self.mlp_act = get_activation_layer(mlp_act_type)()
 
     def forward(
             self,
@@ -715,13 +939,44 @@ class MMSingleStreamBlock(nn.Module):
             freqs_cos: Optional[torch.Tensor] = None,
             freqs_sin: Optional[torch.Tensor] = None
     ):
-        mod_shift, mod_scale, mod_gate = self.modulation(vec).unsqueeze(1).chunk(3, dim=-1)
+        mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
         x_mod = self.pre_norm(x) * (1 + mod_scale) + mod_shift
-        qkv, mlp = torch.split(
-            self.linear1(x_mod), [3 * self.hidden_size, self.mlp_hidden_dim], dim=-1
-        )
 
-        q, k, v = rearrange(qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
+        if self.enable_tensor_parallel:
+            if self.sequence_parallel:
+                img_qkv, img_mlp = torch.split(
+                    self.linear1(x_mod[:img_len // self.tp_size])[0],
+                    [3 * self.hidden_size // self.tp_size, self.mlp_hidden_dim // self.tp_size],
+                    dim=-1
+                )
+                # disable txt_seq sp
+                self.linear1.sequence_parallel = False
+                txt_qkv, txt_mlp = torch.split(
+                    self.linear1(x_mod[img_len // self.tp_size:])[0],
+                    [3 * self.hidden_size // self.tp_size, self.mlp_hidden_dim // self.tp_size],
+                    dim=-1
+                )
+                self.linear1.sequence_parallel = self.sequence_parallel
+                qkv = torch.cat([img_qkv, txt_qkv], dim=0)
+                qkv = qkv.transpose(0, 1) # s b h -> b s h
+            else:
+                qkv, mlp = torch.split(
+                    self.linear1(x_mod)[0],
+                    [3 * self.hidden_size // self.tp_size, self.mlp_hidden_dim // self.tp_size],
+                    dim=-1
+                )
+        else:
+            qkv, mlp = torch.split(
+                self.linear1(x_mod), 
+                [3 * self.hidden_size, self.mlp_hidden_dim], 
+                dim=-1
+            )
+
+        q, k, v = rearrange(qkv, "B L (K H D) -> K B L H D", K=3, H=self.num_attention_heads_per_partition)
+
+        q = q.contiguous()
+        k = k.contiguous()
+        v = v.contiguous()
 
         # Apply QK-Norm if needed
         q = self.q_norm(q)
@@ -735,16 +990,13 @@ class MMSingleStreamBlock(nn.Module):
             img_q = npu_rotary_position_embedding(img_q, freqs_cos, freqs_sin, mode=1)
             img_k = npu_rotary_position_embedding(img_k, freqs_cos, freqs_sin, mode=1)
         
-        if cu_seqlens_q.shape[0] != 2 * x.shape[0] + 1:
-            raise ValueError(f"cu_seqlens_q.shape: {cu_seqlens_q.shape}, x.shape[0]: {x.shape[0]}")
-        
         img_v = v[:, :img_len, :, :]
         txt_v = v[:, img_len:, :, :]
         attn = parallel_attention(
             (img_q, txt_q),
             (img_k, txt_k),
             (img_v, txt_v),
-            heads_num=self.heads_num,
+            heads_num=self.num_attention_heads_per_partition,
             head_dim=self.head_dim,
             attn_mask=None,
             actual_seq_qlen=cu_seqlens_q,
@@ -752,7 +1004,23 @@ class MMSingleStreamBlock(nn.Module):
             context_parallel_algo=self.context_parallel_algo
         )
 
-        output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
+        if self.enable_tensor_parallel:
+            if self.sequence_parallel:
+                attn = attn.transpose(0, 1).contiguous() # b s h -> s b h
+                img_attn = attn[:img_len]
+                txt_attn = attn[img_len:]
+                img_output = self.linear2(torch.cat((img_attn, self.mlp_act(img_mlp)), 2))[0]
+
+                # disable txt_seq sequence_parallel
+                self.linear2.sequence_parallel = False
+                txt_output = self.linear2(torch.cat((txt_attn, self.mlp_act(txt_mlp)), 2))[0]
+                self.linear2.sequence_parallel = True
+
+                output = torch.cat([img_output, txt_output], 0)
+            else:
+                output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))[0]
+        else:
+            output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
         return (x + output * mod_gate, )
     
 
