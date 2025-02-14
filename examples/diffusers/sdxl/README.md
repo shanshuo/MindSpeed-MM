@@ -234,7 +234,7 @@
     2. 在文件59行添加代码
 
         ```python
-        from patch_sdxl import TorchPatcher, compute_vae_encode, config_gc
+        from patch_sdxl import TorchPatcher, config_gc
         TorchPatcher.apply_patch()
         config_gc()
         ```

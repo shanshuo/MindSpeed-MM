@@ -70,7 +70,6 @@ accelerate launch --config_file ${config_file} \
   ../advanced_diffusion_training/train_dreambooth_lora_flux_advanced.py \
   --pretrained_model_name_or_path=$model_name  \
   --dataset_name=$dataset_name \
-  --output_dir=$output_path \
   --instance_prompt="a photo of pokemon" \
   --resolution=$resolution \
   --train_batch_size=$batch_size \
@@ -98,10 +97,10 @@ e2e_time=$(($end_time - $start_time))
 echo "------------------ Final result ------------------"
 
 #输出性能FPS，需要模型审视修改
-AverageIts=$(grep -o "[0-9.]*s/it" ${output_path}/train_${mixed_precision}_flux_dreambooth_lora.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+AverageIts=$(grep -o "[0-9.]*s/it, " ${output_path}/train_${mixed_precision}_flux_dreambooth_lora.log | sed -n '100,299p' | awk '{a+=$1}END{print a/NR}')
 
 if [ -z "$AverageIts" ] || [ "$(echo "$AverageIts == 0" | bc)" -eq 1 ]; then
-  AverageIts=$(grep -o "[0-9.]*it/s" ${output_path}/train_${mixed_precision}_flux_dreambooth_lora.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+  AverageIts=$(grep -o "[0-9.]*it/s, " ${output_path}/train_${mixed_precision}_flux_dreambooth_lora.log | sed -n '100,299p' | awk '{a+=$1}END{print a/NR}')
   echo "Average it/s: ${AverageIts}"
   FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'*'${AverageIts}'}')
 else

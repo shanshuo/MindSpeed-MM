@@ -26,7 +26,7 @@
 
   ```shell
   url=https://github.com/huggingface/diffusers
-  commit_id=94643fac8a27345f695500085d78cc8fa01f5fa9
+  commit_id=5f724735437d91ed05304da478f3b2022fe3f6fb
   ```
 
 ## 微调
@@ -101,7 +101,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     3.1 【下载 SD3/SD3.5 [GitHub参考实现](https://github.com/huggingface/diffusers) 或 [适配昇腾AI处理器的实现](https://gitee.com/ascend/ModelZoo-PyTorch.git) 或 在模型根目录下执行以下命令，安装模型对应PyTorch版本需要的依赖】
 
     ```shell
-    git clone https://github.com/huggingface/diffusers.git -b v0.30.0
+    git clone https://github.com/huggingface/diffusers.git
     cd diffusers
     git checkout 5f724735437d91ed05304da478f3b2022fe3f6fb
     cp -r ../MindSpeed-MM/examples/diffusers/sd3 ./sd3
@@ -290,14 +290,14 @@ SD3 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 
 | 芯片 | 卡数 |     任务     |  FPS  | batch_size | AMP_Type | Resolution | Torch_Version | deepspeed |
 |:---:|:---:|:----------:|:-----:|:----------:|:---:|:---:|:---:|:---:|
-| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调  |   17.08 |     4      | bf16 | 1024 | 2.1 | ✔ |
-| 竞品A | 8p | Dreambooth-全参微调  |  17.51 |     4      | bf16 | 1024 | 2.1 | ✔ |
-| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调 |  16.57 |     4      | fp16 | 1024 | 2.1 | ✔ |
-| 竞品A | 8p | Dreambooth-全参微调 |   16.36 |     4      | fp16 | 1024 | 2.1 | ✔ |
-| Atlas 900 A2 PODc |8p | Dreambooth-全参微调 | 11.91  | 1 | fp16 | 1024 | 2.1 | ✘ |
-| 竞品A | 8p | Dreambooth-全参微调 | 12.08 | 1 | fp16 | 1024 | 2.1 | ✘ |
-| Atlas 900 A2 PODc |8p | DreamBooth-LoRA | 122.47 | 8 | fp16 | 1024 | 2.1 | ✘ |
-| 竞品A | 8p | DreamBooth-LoRA | 120.32 | 8 | fp16 | 1024 | 2.1 | ✘ |
+| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调  |   16.09 |     4      | bf16 | 1024 | 2.1 | ✔ |
+| 竞品A | 8p | Dreambooth-全参微调  |  16.01 |     4      | bf16 | 1024 | 2.1 | ✔ |
+| Atlas 900 A2 PODc | 8p | Dreambooth-全参微调 |  15.16 |     4      | fp16 | 1024 | 2.1 | ✔ |
+| 竞品A | 8p | Dreambooth-全参微调 |   15.53 |     4      | fp16 | 1024 | 2.1 | ✔ |
+| Atlas 900 A2 PODc |8p | Dreambooth-全参微调 | 3.11  | 1 | fp16 | 1024 | 2.1 | ✘ |
+| 竞品A | 8p | Dreambooth-全参微调 | 3.71 | 1 | fp16 | 1024 | 2.1 | ✘ |
+| Atlas 900 A2 PODc |8p | DreamBooth-LoRA | 108.8 | 8 | fp16 | 1024 | 2.1 | ✘ |
+| 竞品A | 8p | DreamBooth-LoRA | 110.69 | 8 | fp16 | 1024 | 2.1 | ✘ |
 
 SD3.5 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 

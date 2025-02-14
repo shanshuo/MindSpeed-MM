@@ -8,6 +8,7 @@ max_train_steps=5000
 mixed_precision="fp16"
 resolution=512
 gradient_accumulation_steps=1
+config_file="./sd3/accelerate_config.yaml"
 
 cur_path=$(pwd)
 cur_path_last_dirname=${cur_path##*/}
@@ -42,7 +43,8 @@ start_time=$(date +%s)
 echo "start_time: ${start_time}"
 
 
-accelerate launch ./examples/dreambooth/train_dreambooth_lora_sd3.py \
+accelerate launch --config_file ${config_file} \
+  ./examples/dreambooth/train_dreambooth_lora_sd3.py \
   --pretrained_model_name_or_path=$model_name  \
   --instance_data_dir=$input_dir \
   --output_dir=$output_path \
@@ -69,10 +71,10 @@ e2e_time=$(($end_time - $start_time))
 echo "------------------ Final result ------------------"
 
 #输出性能FPS，需要模型审视修改
-AverageIts=$(grep -o "[0-9.]*s/it" ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+AverageIts=$(grep -o "[0-9.]*s/it, " ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log | sed -n '100,299p' | awk '{a+=$1}END{print a/NR}')
 
 if [ -z "$AverageIts" ] || [ "$(echo "$AverageIts == 0" | bc)" -eq 1 ]; then
-  AverageIts=$(grep -o "[0-9.]*it/s" ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log | sed -n '100,199p' | awk '{a+=$1}END{print a/NR}')
+  AverageIts=$(grep -o "[0-9.]*it/s, " ${output_path}/train_${mixed_precision}_sd3_dreambooth_lora.log | sed -n '100,299p' | awk '{a+=$1}END{print a/NR}')
   echo "Average it/s: ${AverageIts}"
   FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'*'${AverageIts}'}')
 else
