@@ -76,7 +76,7 @@
     git clone https://gitee.com/ascend/MindSpeed-MM.git 
     git clone https://github.com/NVIDIA/Megatron-LM.git
     cd Megatron-LM
-    git checkout core_r0.6.0
+    git checkout core_r0.8.0
     cp -r megatron ../MindSpeed-MM/
     cd ..
     cd MindSpeed-MM
@@ -104,8 +104,8 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
-    # checkout commit from MindSpeed core_r0.6.0
-    git checkout ab39de78be23e88e2c8b0d25edf6135940990c02
+    # checkout commit from MindSpeed core_r0.8.0
+    git checkout 3f09d6736571cf1e30f8ac97de77982d0ab32cc5
     pip install -r requirements.txt 
     pip3 install -e .
     cd ..
