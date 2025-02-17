@@ -57,7 +57,7 @@ def get_batch(data_iterator):
 def loss_func(output_tensor):
     """Loss function."""
     averaged_loss = average_losses_across_data_parallel_group([output_tensor])
-    loss = output_tensor.unsqueeze(0)
+    loss = output_tensor.unsqueeze(0).clone()
     return loss, {"loss": averaged_loss[0]}
 
 

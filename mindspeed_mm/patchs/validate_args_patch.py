@@ -119,6 +119,13 @@ def validate_args(args, defaults=None):
         else:
             setattr(args, key, defaults[key])
 
+    if args.data_path is not None and args.split is None:
+        legacy_default_split_value = '969, 30, 1'
+        if args.rank == 0:
+            print('WARNING: Please specify --split when using --data-path. Using legacy default value '
+                  f'of "{legacy_default_split_value}"')
+        args.split = legacy_default_split_value
+
     # Batch size.
     ensure_valid(args.micro_batch_size is not None, 'args.micro_batch_size can not be None')
     ensure_valid(args.micro_batch_size > 0, 'args.micro_batch_size must be greater than 0')
@@ -131,7 +138,15 @@ def validate_args(args, defaults=None):
     if args.num_layers_per_virtual_pipeline_stage is not None:
         raise AssertionError('MindSpeed-MM Error: --num-layers-per-virtual-pipeline-stage is deprecated, please use --virtual-pipeline-model-parallel-size instead')
     if hasattr(args, 'virtual_pipeline_model_parallel_size') and args.virtual_pipeline_model_parallel_size is not None and args.virtual_pipeline_model_parallel_size > 1:
-        ensure_valid(args.pipeline_model_parallel_size > 2, 'pipeline-model-parallel size should be greater than 2 with interleaved schedule')
+        if args.overlap_p2p_comm:
+            ensure_valid(args.pipeline_model_parallel_size > 1, \
+                'when interleaved schedule is used, pipeline-model-parallel size '\
+                'should be greater than 1')
+        else:
+            ensure_valid(args.pipeline_model_parallel_size > 2, \
+                'when interleaved schedule is used and p2p communication overlap is disabled, '\
+                'pipeline-model-parallel size should be greater than 2 to avoid having multiple '\
+                'p2p sends and recvs between same 2 ranks per communication batch')
         if hasattr(args.mm.model, 'text_decoder'):
             _pipeline_num_layers = getattr(args.mm.model.text_decoder, 'pipeline_num_layers', None)
             if _pipeline_num_layers is None or len(_pipeline_num_layers) != args.virtual_pipeline_model_parallel_size:
@@ -157,7 +172,7 @@ def validate_args(args, defaults=None):
             '--overlap-param-gather only supported with distributed optimizer')
         ensure_valid(args.overlap_grad_reduce, \
             '--overlap-grad-reduce should be turned on when using --overlap-param-gather')
-        ensure_valid(args.use_mcore_models, \
+        ensure_valid(not args.use_legacy_models, \
             '--overlap-param-gather only supported with MCore models')
 
     # Parameters dtype.
@@ -189,6 +204,9 @@ def validate_args(args, defaults=None):
 
     if args.dataloader_type is None:
         args.dataloader_type = 'single'
+
+    # data
+    ensure_valid(args.num_dataset_builder_threads > 0, 'args.num_dataset_builder_threads should > 0')
 
     # Consumed tokens.
     args.consumed_train_samples = 0
@@ -371,16 +389,17 @@ def validate_args(args, defaults=None):
             "retro currently does not support pipeline parallelism.")
 
     if args.decoupled_lr is not None or args.decoupled_min_lr is not None:
-        ensure_valid(args.use_mcore_models, \
-            '--decoupled-lr and --decoupled-min-lr only supported by Megatron Core, please add --use-mcore-models.')
+        ensure_valid(not args.use_legacy_models, \
+            '--decoupled-lr and --decoupled-min-lr is not supported in legacy models.')
+        ensure_valid(not args.use_dist_ckpt, "Distributed checkpointing does not work with decoupled LR yet.")
 
     # Legacy RoPE arguments
     if args.use_rotary_position_embeddings:
         args.position_embedding_type = 'rope'
     if args.rotary_interleaved and args.apply_rope_fusion:
         raise RuntimeError('--rotary-interleaved does not work with rope_fusion.')
-    if args.rotary_interleaved and not args.use_mcore_models:
-        raise RuntimeError('--rotary-interleaved only support Megatron Core, please add --use-mcore-models.')
+    if args.rotary_interleaved and args.use_legacy_models:
+        raise RuntimeError('--rotary-interleaved is not supported in legacy models.')
 
     # Would just need to add 'NoPE' as a position_embedding_type to support this, but for now
     # don't allow it to keep things simple
@@ -388,11 +407,14 @@ def validate_args(args, defaults=None):
         raise RuntimeError('--no-position-embedding is deprecated, use --position-embedding-type')
 
     # MoE Spec check
+    if args.num_experts == 0:
+        args.num_experts = None
     if args.num_experts is not None:
         ensure_valid(args.spec is None, "Model Spec must be None when using MoEs")
-        if args.tensor_model_parallel_size > 1:
-            ensure_valid(args.sequence_parallel, \
-                "When using MoE and tensor parallelism, sequence parallelism must be used.")
+
+    # Context parallel
+    if args.context_parallel_size > 1:
+        ensure_valid(not args.use_legacy_models, "Context parallelism is not supported in legacy models.")
 
     # Expert parallelism check
     if args.expert_model_parallel_size > 1:
@@ -403,8 +425,44 @@ def validate_args(args, defaults=None):
             "Expert parallelism is not supported with fp16 training.")
 
     # Distributed checkpointing checks
-    if args.use_dist_ckpt and not args.use_mcore_models:
-        raise RuntimeError('--use-dist-ckpt only support Megatron Core, please add --use-mcore-models.')
+    if args.use_dist_ckpt and args.use_legacy_models:
+        raise RuntimeError('--use-dist-ckpt is not supported in legacy models.')
+    
+    # Data blend checks
+    ensure_valid(args.mock_data + \
+           bool(args.data_path) + \
+           any([args.train_data_path, args.valid_data_path, args.test_data_path]) \
+           <= 1, "A single data source must be provided in training mode, else None")
+
+    if args.use_tp_pp_dp_mapping:
+        ensure_valid(args.context_parallel_size * args.expert_model_parallel_size <= 1, \
+            "context_parallel and expert_model_parallel can't be used with tp-pp-dp mapping.")
+
+    # Deterministic mode
+    if args.deterministic_mode:
+        ensure_valid(not args.use_flash_attn, 'Flash attention can not be used in deterministic mode.')
+
+        all_reduce_choices = ["Tree", "Ring", "CollnetDirect", "CollnetChain", "^NVLS"]
+        ensure_valid(os.getenv("NCCL_ALGO", -1) != -1 and os.getenv("NCCL_ALGO") in all_reduce_choices, \
+            f"NCCL_ALGO must be one of {all_reduce_choices}.")
+
+    # Update the printed args to reflect that `apply_query_key_layer_scaling` also controls `attention_softmax_in_fp32`
+    if args.apply_query_key_layer_scaling:
+        args.attention_softmax_in_fp32 = True
+
+    # Checkpointing
+    if args.ckpt_fully_parallel_save_deprecated and args.rank == 0:
+        print('--ckpt-fully-parallel-save flag is deprecated and has no effect.'
+              ' Use --no-ckpt-fully-parallel-save to disable parallel save.')
+    if (
+        args.use_dist_ckpt
+        and not args.ckpt_fully_parallel_save
+        and args.use_distributed_optimizer
+        and args.rank == 0
+    ):
+        print('Warning: With non-parallel ckpt save and DistributedOptimizer,'
+              ' it will be impossible to resume training with different parallelism.'
+              ' Consider removing flag --no-ckpt-fully-parallel-save.')
 
     # Print arguments.
     _print_args("arguments", args)

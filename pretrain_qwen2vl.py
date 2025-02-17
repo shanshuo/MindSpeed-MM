@@ -88,7 +88,7 @@ def loss_func(output_tensor):
         loss_dir["tokens per sample"] = tokens_per_sample
     averaged_loss = average_losses_across_data_parallel_group([loss])
     loss_dir["loss"] = averaged_loss[0]
-    loss = loss.unsqueeze(0)
+    loss = loss.unsqueeze(0).clone()
     return loss, loss_dir
 
 

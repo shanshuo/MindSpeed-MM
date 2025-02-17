@@ -317,6 +317,8 @@ class InternVitTransformerBlock(TransformerBlock):
 
         if self.post_process and self.post_layer_norm:
             self.final_layernorm = InternRMSNorm(self.config.hidden_size, eps=self.config.layernorm_epsilon)
+        else:
+            self.final_layernorm = None
 
 
 class InternViT(MultiModalModule):
