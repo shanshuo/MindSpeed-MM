@@ -18,6 +18,8 @@ def main():
     )
     args = get_args()
     merge_mm_args(args)
+    if not hasattr(args, "dist_train"):
+        args.dist_train = False
     inference_config = args.mm.model
     vlm_pipeline_dict[inference_config.pipeline_class](inference_config)()
 

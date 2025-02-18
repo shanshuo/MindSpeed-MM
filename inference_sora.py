@@ -52,6 +52,8 @@ def main():
     initialize_megatron(extra_args_provider=mm_extra_args_provider, args_defaults={})
     args = get_args()
     merge_mm_args(args)
+    if not hasattr(args, "dist_train"):
+        args.dist_train = False
     args = args.mm.model
     # prepare arguments
     torch.set_grad_enabled(False)
