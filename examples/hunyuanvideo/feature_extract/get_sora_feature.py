@@ -90,13 +90,22 @@ def extract_feature():
         train_dataset,
         args.mm.data.dataloader_param,
         process_group=mpu.get_data_parallel_group(),
+        dataset_param=args.mm.data.dataset_param,
     )
 
     # master rank, write data info jsonl
     if torch.distributed.get_rank() == 0:
         with open(os.path.join(save_path, 'data.jsonl'), 'w', encoding="utf-8") as json_file:
             for data_sample in train_dataset.data_samples:
-                file_name = data_sample[FILE_INFO]
+                source_data_storage_mode = args.mm.data.dataset_param.basic_parameters.data_storage_mode
+                if source_data_storage_mode == "combine":
+                    source_file_key = "path"
+                elif source_data_storage_mode == "standard":
+                    source_file_key = FILE_INFO
+                else: 
+                    raise NotImplementedError(f"Extract features from data storage mode {source_data_storage_mode} is not implemented")
+                
+                file_name = data_sample[source_file_key]
                 pt_name = get_pt_name(file_name)
                 data_info = copy.deepcopy(data_sample)
                 if data_storage_mode == "standard":
@@ -109,7 +118,7 @@ def extract_feature():
                     data_info.update({
                         'path': f"features/{pt_name}"
                     })
-            json_file.write(json.dumps(data_info) + '\n')
+                json_file.write(json.dumps(data_info) + '\n')
     
     vae, text_encoder = prepare_model(args, extract_video_feature, extract_text_feature, device)
     
@@ -168,15 +177,15 @@ def extract_feature():
                 for i in range(bs):
                     latent_i = latents[i].cpu()
                     if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
-                        prompt_ids_i = [prompt_id[i].cpu() for prompt_id in prompt_ids]
+                        prompts_i = [_prompt[i].cpu() for _prompt in prompt]
                         prompt_masks_i = [_prompt_mask[i].cpu() for _prompt_mask in prompt_mask]
                     else:
-                        prompt_ids_i = prompt_ids[i]
+                        prompts_i = prompt[i].cpu()
                         prompt_masks_i = prompt_mask[i]
                     
                     data_to_save = {
                         "latents": latent_i,
-                        "prompt": prompt_ids_i,
+                        "prompt": prompts_i,
                         "prompt_mask": prompt_masks_i
                     }
                     pt_name = get_pt_name(file_names[i])

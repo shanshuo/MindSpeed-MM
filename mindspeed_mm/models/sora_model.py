@@ -115,6 +115,8 @@ class SoRAModel(nn.Module):
                 # Text Encode
                 if self.load_text_features:
                     prompt = prompt_ids
+                    if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
+                        prompt = [p.npu() for p in prompt]
                 else:
                     prompt = self.text_encoder.encode(prompt_ids, prompt_mask)
                     

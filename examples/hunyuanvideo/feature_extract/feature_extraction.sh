@@ -10,12 +10,12 @@ export HCCL_CONNECT_TIMEOUT=1200
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
-GPUS_PER_NODE=1
+NPUS_PER_NODE=1
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
 NODE_RANK=0
-WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
+WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 TP=1
 PP=1
@@ -28,7 +28,7 @@ MM_MODEL="./examples/hunyuanvideo/feature_extract/model_hunyuanvideo.json"
 MM_TOOL="./examples/hunyuanvideo/feature_extract/tools.json"
 
 DISTRIBUTED_ARGS="
-    --nproc_per_node $GPUS_PER_NODE \
+    --nproc_per_node $NPUS_PER_NODE \
     --nnodes $NNODES \
     --node_rank $NODE_RANK \
     --master_addr $MASTER_ADDR \
@@ -42,6 +42,7 @@ GPT_ARGS="
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
     --num-layers 1 \
+    --num-workers 8 \
     --hidden-size 3072 \
     --num-attention-heads 48 \
     --seq-length 24 \
@@ -62,19 +63,11 @@ MM_ARGS="
     --mm-tool $MM_TOOL
 "
 
-OUTPUT_ARGS="
-    --log-interval 1 \
-    --save-interval 10000 \
-    --eval-interval 10000 \
-    --eval-iters 10 \
-"
-
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)
 mkdir -p logs
 torchrun $DISTRIBUTED_ARGS ./examples/hunyuanvideo/feature_extract/get_sora_feature.py \
     $GPT_ARGS \
     $MM_ARGS \
-    $OUTPUT_ARGS \
     --distributed-backend nccl | tee logs/train_${logfile}.log 2>&1
 
 chmod 440 logs/train_${logfile}.log

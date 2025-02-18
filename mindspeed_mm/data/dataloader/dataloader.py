@@ -188,18 +188,21 @@ def prepare_sampler_dataloader(
                 shuffle=shuffle,
                 consumed_samples=consumed_samples,
             )
-
-        if collate_param is None or "model_name" not in collate_param:
+            
+        if collate_param is None:
+            collate_fn = None
+        elif "model_name" not in collate_param:
             raise ValueError("collate_param with model_name must be provided.")
 
-        # Inject params to collate params to avoid duplicate configs
-        collate_param.update(dataset_param.preprocess_parameters.to_dict())
-        group_param = dict(group_data=group_data, group_resolution=group_resolution, group_frame=group_frame,
-                           batch_size=batch_size)
-        collate_param.update(group_param)
+        if collate_param:
+            # Inject params to collate params to avoid duplicate configs
+            collate_param.update(dataset_param.preprocess_parameters.to_dict())
+            group_param = dict(group_data=group_data, group_resolution=group_resolution, group_frame=group_frame,
+                            batch_size=batch_size)
+            collate_param.update(group_param)
 
-        data_collate_type = collate_param.pop("model_name")
-        collate_fn = DATA_COLLATOR[data_collate_type](**collate_param)
+            data_collate_type = collate_param.pop("model_name")
+            collate_fn = DATA_COLLATOR[data_collate_type](**collate_param)
 
         return DataLoader(
             dataset,

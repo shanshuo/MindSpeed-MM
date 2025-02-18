@@ -1,5 +1,4 @@
 # HunyuanVideo使用指南
-
 - [HunyuanVideo使用指南](#hunyuanvideo使用指南)
   - [环境安装](#环境安装)
     - [仓库拉取](#仓库拉取)
@@ -10,9 +9,19 @@
     - [HunyuanVideoDiT与VAE下载](#hunyuanvideodit与vae下载)
     - [权重转换](#权重转换)
   - [预训练](#预训练)
+    - [数据预处理](#数据预处理)
+    - [特征提取](#特征提取)
+      - [准备工作](#准备工作)
+      - [参数配置](#参数配置)
+      - [启动特征提取](#启动特征提取)
+    - [训练](#训练)
+      - [准备工作](#准备工作-1)
+      - [参数配置](#参数配置-1)
+      - [启动训练](#启动训练)
+      - [权重后处理](#权重后处理)
   - [推理](#推理)
-    - [准备工作](#准备工作)
-    - [参数配置](#参数配置)
+    - [准备工作](#准备工作-2)
+    - [参数配置](#参数配置-2)
     - [启动推理](#启动推理)
 
 
@@ -146,7 +155,7 @@ python examples/convert_ckpt_to_mm.py --module text_encoder --source_path <llava
 
 需要对hunyuanvideo的transformer部分进行权重转换，运行权重转换脚本：
 ```shell
-python examples/convert_ckpt_to_mm.py --source_path <hunyuan-video-t2v-720p/transformers/mp_rank_00/model_states.pt> --target_path <./ckpt/hunyuanvideo>
+python examples/convert_ckpt_to_mm.py --source_path <hunyuan-video-t2v-720p/transformers/mp_rank_00/model_states.pt> --target_path <./ckpt/hunyuanvideo> --tp_size <tp_size>
 ```
 
 权重转换脚本的参数说明如下：
@@ -155,11 +164,143 @@ python examples/convert_ckpt_to_mm.py --source_path <hunyuan-video-t2v-720p/tran
 | --module |  转换text encoder部分或transformer部分 | "dit" （转换transformer权重） |
 | --source_path | 原始权重路径 | ./transformers/mp_rank_00/model_states.pt |
 | --target_path | 转换后的权重保存路径 | ./ckpt/hunyuanvideo |
+| --tp_size | tp size | 2 |
+| --mode | split表示按tp size对权重进行切分， merge表示按tp size对权重进行合并 | split |
 
 ---
 
 ## 预训练
-Comming soon
+### 数据预处理
+
+将数据处理成如下格式
+
+```bash
+</data/hunyuanvideo/dataset>
+  ├──data.json
+  ├──videos
+  │  ├──video0001.mp4
+  │  ├──video0002.mp4
+```
+
+其中，`videos/`下存放视频，data.json中包含该数据集中所有的视频-文本对信息，具体示例如下：
+
+```json
+[
+    {
+        "path": "videos/video0001.mp4",
+        "cap": "Video discrimination1.",
+        "num_frames": 93,
+        "fps": 24,
+        "resolution": {
+            "height": 480,
+            "width": 848
+        }
+    },
+    {
+        "path": "videos/video0002.mp4",
+        "cap": "Video discrimination2.",
+        "num_frames": 93,
+        "fps": 24,
+        "resolution": {
+            "height": 480,
+            "width": 848
+        }
+    },
+    ......
+]
+```
+
+修改`examples/hunyuanvideo/feature_extract/data.txt`文件，其中每一行表示个数据集，第一个参数表示数据文件夹的路径，第二个参数表示`data.json`文件的路径，用`,`分隔
+
+### 特征提取
+
+#### 准备工作
+
+在开始之前，请确认环境准备、模型权重和数据集预处理已经完成
+
+#### 参数配置
+
+检查模型权重路径、数据集路径、提取后的特征保存路径等配置是否完成
+
+| 配置文件                                                    |       修改字段        | 修改说明                                            |
+| ----------------------------------------------------------- | :-------------------: | :-------------------------------------------------- |
+| examples/hunyuanvideo/feature_extract/data.json             |      num_frames       | 最大的帧数，超过则随机选取其中的num_frames帧        |
+| examples/hunyuanvideo/feature_extract/data.json             | max_height, max_width | 最大的长宽，超过则centercrop到最大分辨率            |
+| examples/hunyuanvideo/feature_extract/feature_extraction.sh |     NPUS_PER_NODE     | 卡数                                                |
+| examples/hunyuanvideo/feature_extract/model_hunyuanvideo.sh |    from_pretrained    | 修改为下载的权重所对应路径（包括VAE、Text Encoder） |
+| examples/hunyuanvideo/feature_extract/tools.json            |       save_path       | 提取后的特征保存路径                                |
+
+#### 启动特征提取
+
+```bash
+bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
+```
+
+### 训练
+
+#### 准备工作
+
+在开始之前，请确认环境准备、模型权重下载、特征提取已完成。
+
+#### 参数配置
+
+检查模型权重路径、并行参数配置等是否完成
+
+| 配置文件                                       |      修改字段       | 修改说明                                            |
+| ---------------------------------------------- | :-----------------: | :-------------------------------------------------- |
+| examples/hunyuanvideo/data.txt                 |      文件内容       | 提取后的特征保存路径                                |
+| examples/hunyuanvideo/feature_data.json        |   from_pretrained   | 修改为下载的权重所对应路径（包括VAE、Text Encoder） |
+| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |    NPUS_PER_NODE    | 每个节点的卡数                                      |
+| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |       NNODES        | 节点数量                                            |
+| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |      LOAD_PATH      | 权重转换后的预训练权重路径                          |
+| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |      SAVE_PATH      | 训练过程中保存的权重路径                            |
+| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |         TP          | 训练时的TP size（建议根据训练时设定的分辨率调整）   |
+| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |         CP          | 训练时的CP size（建议根据训练时设定的分辨率调整）   |
+| examples/hunyuanvideo/pretrain_hunyuanvideo.sh | --sequence-parallel | 使能TP-SP，默认开启                                 |
+
+【并行化配置参数说明】：
+
+当调整模型参数或者视频序列长度时，需要根据实际情况启用以下并行策略，并通过调试确定最优并行策略。
+
++ CP: 序列并行，当前支持Ulysess序列并行。
+
+  - 使用场景：在视频序列（分辨率X帧数）较大时，可以开启来降低内存占用。
+  
+  - 使能方式：在启动脚本中设置 CP > 1，如：CP=2；
+  
+  - 限制条件：head 数量需要能够被TP*CP整除（在`exmaples/hunyuanvideo/model_hunyuanvideo.json`中配置，默认为24）
+
+
++ TP: 张量模型并行
+
+  - 使用场景：模型参数规模较大时，单卡上无法承载完整的模型，通过开启TP可以降低静态内存和运行时内存。
+
+  - 使能方式：在启动脚本中设置 TP > 1，如：TP=8
+
+  - 限制条件：head 数量需要能够被TP*CP整除（在`exmaples/hunyuanvideo/model_hunyuanvideo.json`中配置，默认为24）
+
+
++ TP-SP
+  
+  - 使用场景：在张量模型并行的基础上，进一步对 LayerNorm 和 Dropout 模块的序列维度进行切分，以降低动态内存。 
+
+  - 使能方式：在 GPT_ARGS 设置 --sequence-parallel
+  
+  - 使用建议：建议在开启TP时同步开启该设置
+
+#### 启动训练
+
+```bash
+bash examples/hunyuanvideo/pretrain_hunyuanvideo.sh
+```
+
+#### 权重后处理
+
+如果训练时`TP>1`，需要对训练得到的权重进行合并，合并后的权重才能用于推理，运行命令
+
+```bash
+python examples/convert_ckpt_to_mm.py --source_path <./save_ckpt/hunyuanvideo> --target_path <./save_ckpt_merged/hunyuanvideo> --tp_size <tp_size>
+```
 
 ## 推理
 
@@ -178,8 +319,6 @@ Comming soon
 | examples/hunyuanvideo/inference_model.json    |  input_size |  生成视频的分辨率，格式为 [t, h, w] |
 | examples/hunyuanvideo/inference_model.json    |  save_path |  生成视频的保存路径 |
 | examples/hunyuanvideo/inference_hunyuanvideo.sh   |   LOAD_PATH | 转换之后的transform部分权重路径 |
-
-
 
 ### 启动推理
 

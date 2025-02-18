@@ -1,10 +1,12 @@
 {
     "dataset_param": {
         "dataset_type": "t2v",
-        "use_feature_data": false,
+        "use_feature_data": true,
         "basic_parameters": {
-            "data_path": "./examples/hunyuanvideo/feature_extract/data.txt",
-            "data_storage_mode": "combine"
+            "data_path": "./examples/hunyuanvideo/data.txt",
+            "data_storage_mode": "sorafeatured",
+            "use_text_feature": true,
+            "use_video_feature": true
         },
         "preprocess_parameters": {
             "video_reader_type": "decoder",

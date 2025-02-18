@@ -73,6 +73,7 @@ from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
 
 logger = getLogger(__name__)
 VID_EXTENSIONS = (".mp4", ".avi", ".mov", ".mkv")
+TENSOR_EXTENSIONS = (".pt", ".pth")
 IS_TOKENIZER_GREATER_THAN_0_14 = version.parse(tokenizers.__version__) >= version.parse("0.14")
 IGNORE_TOKEN_ID = LabelSmoother.ignore_index
 
@@ -108,7 +109,7 @@ class DataFileReader:
             data_out = pd.read_parquat(data_path)
             return data_out.to_dict("records")
         else:
-            raise NotImplementedError(f"Unsupported file format: {self.data_path}")
+            raise NotImplementedError(f"Unsupported file format: {data_path}")
 
     def get_cap_list(self, data_path):
         cap_lists = []
@@ -722,6 +723,8 @@ class VideoProcesser:
 
                 i["sample_frame_index"] = [0]
                 i["sample_num_frames"] = 1
+                new_cap_list.append(i)
+            elif ext.lower() in TENSOR_EXTENSIONS: # tensor
                 new_cap_list.append(i)
             else:
                 raise NameError(
