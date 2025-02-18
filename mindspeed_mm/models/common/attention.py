@@ -1,4 +1,5 @@
 from typing import Tuple, Optional
+from dataclasses import dataclass
 import math
 
 import torch
@@ -1258,6 +1259,16 @@ class CausalConv3dAttnBlock(nn.Module):
         return x + y
 
 
+@dataclass
+class AttentionParams:
+    query: torch.Tensor
+    key: torch.Tensor
+    value: torch.Tensor
+    input_layout: str
+    head_num: int = None
+    atten_mask: torch.Tensor = None
+
+
 class WfCausalConv3dAttnBlock(nn.Module):
     def __init__(
         self,
@@ -1297,20 +1308,79 @@ class WfCausalConv3dAttnBlock(nn.Module):
         k = k.permute(0, 2, 3, 4, 1).reshape(b * t, h * w, c).contiguous()
         v = v.permute(0, 2, 3, 4, 1).reshape(b * t, h * w, c).contiguous()
 
-        attn_output = torch_npu.npu_fusion_attention(
-            q,
-            k,
-            v,
-            head_num=1,
-            atten_mask=None,
+        params = AttentionParams(
+            query=q,
+            key=k,
+            value=v,
             input_layout="BSH",
-            scale=1 / math.sqrt(c)
-        )[0]
+            head_num=1,
+        )
+
+        attn_output = self.run_attention(params, head_dim=c, enable_FA=c <= 512)
 
         attn_output = attn_output.reshape(b, t, h, w, c).permute(0, 4, 1, 2, 3)
         h_ = self.proj_out(attn_output)
 
         return x + h_
+
+    def run_attention(self, params: AttentionParams, head_dim, enable_FA=True):
+        return torch_npu.npu_fusion_attention(params.query, params.key, params.value,
+                                                           head_num=params.head_num,
+                                                           atten_mask=None,
+                                                           input_layout=params.input_layout,
+                                                           scale=1 / math.sqrt(head_dim))[0]
+
+
+class WfCausalConv3dAttnBlockForOpenSoraPlan(WfCausalConv3dAttnBlock):
+    def run_attention(self, params: AttentionParams, head_dim, enable_FA=True):
+        if enable_FA:
+            hidden_states = torch_npu.npu_fusion_attention(params.query, params.key, params.value,
+                                                           head_num=params.head_num,
+                                                           atten_mask=None,
+                                                           input_layout=params.input_layout,
+                                                           scale=1 / math.sqrt(head_dim))[0]
+        else:
+            hidden_states = self.scaled_dot_product_attention(params,
+                                                              scale=1 / math.sqrt(head_dim))
+        return hidden_states
+
+    def scaled_dot_product_attention(self, params: AttentionParams, scale=None, dropout_p=0.0, is_causal=False) -> torch.Tensor:
+        def trans_tensor_shape(x, layout, head_num):
+            if layout == "BSH":
+                batch = x.shape[0]
+                x = x.view(batch, -1, head_num, x.shape[-1] // head_num).transpose(1, 2).contiguous()
+            elif layout == "SBH":
+                batch = x.shape[1]
+                x = x.view(-1, batch * head_num, x.shape[-1] // head_num).transpose(0, 1).contiguous()
+                x = x.view(batch, head_num, -1, x.shape[-1])
+            return x
+
+        query = trans_tensor_shape(params.query, params.input_layout, params.head_num)
+        key = trans_tensor_shape(params.key, params.input_layout, params.head_num)
+        value = trans_tensor_shape(params.value, params. input_layout, params.head_num)
+
+        attn_weight = query @ key.transpose(-2, -1) * scale
+        attn_bias = torch.zeros_like(attn_weight, dtype=query.dtype, device=query.device)
+        if is_causal:
+            if params.atten_mask is not None:
+                raise ValueError("atten_mask should be None when is_causal is True")
+            temp_mask = torch.zeros_like(attn_weight, dtype=torch.bool, device=query.device).tril(diagonal=0)
+            attn_bias.masked_fill_(temp_mask.logical_not(), -10000.0)
+            attn_bias.to(query.dtype)
+
+        if params.atten_mask is not None and self.enable_FA and params.atten_mask.dtype == torch.bool:
+            raise ValueError("attention_mask must not be bool type when use this function")
+
+        attn_weight += attn_bias
+        attn_weight = torch.softmax(attn_weight, dim=-1)
+        attn_weight = torch.dropout(attn_weight, dropout_p, train=True)
+        output = attn_weight @ value
+        if params.input_layout == "BSH":
+            output = output.transpose(1, 2).contiguous().view(output.shape[0], -1, params.head_num * output.shape[-1])
+        else:
+            output = output.view(output.shape[0] * params.head_num, -1, output.shape[-1]).transpose(0, 1).contiguous()
+            output = output.view(output.shape[0], -1, params.head_num * output.shape[-1])
+        return output
 
 
 class WhisperAttention(nn.Module):
