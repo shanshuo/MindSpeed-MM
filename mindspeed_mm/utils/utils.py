@@ -20,6 +20,7 @@ from einops import rearrange
 
 import torch
 import torch.distributed
+import numpy as np
 
 
 @lru_cache
@@ -223,3 +224,109 @@ class IsNotValidError(Exception):
 def ensure_valid(expression, error_message=None):
     if not expression:
         raise IsNotValidError(error_message)
+
+
+def dist_sort(image_num_list):
+    # calculate the average
+    world_size = len(image_num_list)
+    total_images = sum(image_num_list)
+    avg = total_images // world_size
+    remainder = total_images % world_size
+    more_rank = avg + 1
+    target = [avg] * world_size
+    index_list = [[] for _ in range(world_size)]
+    index = 0
+    # when the number of images is greater than the average, as many as possible are taken as avg+1, and the rest are sent.
+    for i in range(world_size):
+        index_list[i].extend([j for j in range(index, index + image_num_list[i])])
+        index += image_num_list[i]
+    for index, image in enumerate(image_num_list):
+        if remainder and image > avg:
+            target[index] = more_rank
+            remainder -= 1
+    index = image_num_list.argsort()
+    for i in range(remainder):
+        target[index[i]] = more_rank
+    # transfer matrix    
+    transfer = np.zeros((world_size, world_size), dtype=int)
+    # greedy strategy allocation
+    surplus = []
+    deficit = []
+    for i in range(world_size):
+        if image_num_list[i] > target[i]:
+            surplus.append(i)
+        elif image_num_list[i] < target[i]:
+            deficit.append(i)
+    while surplus and deficit:
+        s = surplus[-1]
+        d = deficit[-1]
+        give = min(image_num_list[s] - target[s], target[d] - image_num_list[d])
+        image_num_list[s] -= give
+        image_num_list[d] += give
+        transfer[s][d] += give
+        if image_num_list[s] == target[s]:
+            surplus.pop()
+        if image_num_list[d] == target[d]:
+            deficit.pop()
+    return transfer, target
+ 
+ 
+class EncoderBalanceComm(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, input_tensor, group, transfer=None, nopadding=False, skip=False):
+        ctx.no_bk = transfer is None
+        rank = torch.distributed.get_rank(group=group)
+        ctx.shape = list(input_tensor.shape)
+        if transfer is not None:
+            transfer, target = transfer
+            input_tensor = input_tensor[:target[rank]].contiguous() if not nopadding else input_tensor
+        image_shape = input_tensor.shape
+        ctx.shape[1] -= input_tensor.shape[1]
+        image_num = image_shape[0]
+        ishape = image_shape[1:]
+        world_size = torch.distributed.get_world_size(group)
+        ctx.group = group
+        ctx.rank = rank
+        ctx.world_size = world_size
+        if transfer is None:
+            shape_input = torch.tensor([image_num], dtype=torch.int8).cuda()
+            shape_output = torch.empty([world_size, *shape_input.shape], dtype=shape_input.dtype).cuda()
+            # gather image num
+            torch.distributed._all_gather_base(shape_output, shape_input, group=group)
+            image_num_list = shape_output.cpu().numpy().reshape(-1)
+            transfer, target = dist_sort(image_num_list)
+        ctx.transfer = [transfer.T, target]
+        if skip:
+            return input_tensor, [transfer.T, target]
+        if np.sum(transfer) == 0:
+            # do not need to balance
+            if ctx.no_bk:
+                return input_tensor, [transfer.T, target]
+            else:
+                return input_tensor
+        send_img_num = sum(transfer[rank])
+        # get images to comm
+        send_img = list(
+            torch.split(
+                input_tensor[image_num - send_img_num:].contiguous(),
+                transfer[rank].tolist(),
+                dim=0)
+            )
+
+        output = input_tensor[:image_num - send_img_num]
+        transfer = transfer.T
+        recv = torch.empty_like(input_tensor).resize_([sum(transfer[rank]), *ishape])
+        recv = list(torch.split(recv, transfer[rank].tolist(), dim=0))
+        torch.distributed.all_to_all(recv, send_img, group=group)
+        recv = torch.cat([output] + recv, dim=0)
+        if not ctx.no_bk:
+            return recv
+        return recv, [transfer, target]
+ 
+    @staticmethod
+    def backward(ctx, grad_output):
+        if ctx.no_bk or np.sum(ctx.transfer[0]) == 0:
+            return grad_output, None, None, None, None
+        else:
+            data = EncoderBalanceComm.apply(grad_output, ctx.group, ctx.transfer, True)
+            return data, None, None, None, None

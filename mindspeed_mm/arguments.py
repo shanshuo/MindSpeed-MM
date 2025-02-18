@@ -77,6 +77,10 @@ def _add_training_args(parser):
                        help='Use internal format to train')
     group.add_argument('--virtual-pipeline-model-parallel-size', type=int, default=None,
                        help='vpp size')
+    group.add_argument('--encoder-dp-balance',
+                       action='store_true',
+                       default=False,
+                       help='Balance for encoder')
 
     return parser
 

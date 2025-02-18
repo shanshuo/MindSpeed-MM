@@ -17,6 +17,7 @@ from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
 from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.models.internvl_model import InternVLModel
 from mindspeed_mm.utils.transformer_model_config import get_model_config
+from mindspeed_mm.utils.utils import EncoderBalanceComm
 from mindspeed_mm.patchs import dummy_optimizer_patch  # noqa
 
 
@@ -77,7 +78,7 @@ def get_batch_on_this_tp_rank(data_iterator):
     return batch
 
 
-def get_batch(data_iterator):
+def get_batch(data_iterator, is_vit_last_stage=False):
     """Generate a batch."""
     need_split = False
     if get_args().dist_train:
@@ -114,12 +115,21 @@ def get_batch(data_iterator):
         "image": image,
         "image_flags": image_flags,
     }
+
+    if (mpu.is_pipeline_first_stage() or is_vit_last_stage) and get_args().encoder_dp_balance:
+        batch["image"], batch["transfer"] = EncoderBalanceComm.apply(
+            batch["image"],
+            mpu.get_data_parallel_group())
+    else:
+        batch["transfer"] = None
+
     return (
         batch["input_ids"],
         batch["labels"],
         batch["attention_mask"],
         batch["image"],
         batch["image_flags"],
+        batch["transfer"],
     )
 
 
@@ -143,7 +153,10 @@ def loss_func(output_tensor):
 def forward_step(data_iterator, model):
     """Forward step."""
     args = get_args()
-    input_ids, labels, attention_mask, image, image_flags = get_batch(data_iterator)
+    is_vit_last_stage = False
+    if model.module.module.add_image_encoder:
+        is_vit_last_stage = model.module.module.image_encoder.post_process
+    input_ids, labels, attention_mask, image, image_flags, transfer = get_batch(data_iterator, is_vit_last_stage)
     if image is not None:
         image = image.to(args.params_dtype)
     output = model(
@@ -152,6 +165,7 @@ def forward_step(data_iterator, model):
         attention_mask=attention_mask,
         labels=labels,
         image_flags=image_flags,
+        transfer=transfer,
     )
     return output, loss_func
 

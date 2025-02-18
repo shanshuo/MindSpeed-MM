@@ -1,4 +1,5 @@
 from typing import List, Optional
+import numpy
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
@@ -14,6 +15,7 @@ from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.module_spec.internvl_layer_spec import get_language_layer_spec, get_vit_layer_spec
 from mindspeed_mm.models.common.module_spec.qwen2vl_layer_spec import get_qwen2vlllm_layer_local_spec
 from mindspeed_mm.models.common.mm_gpt_model import MMGPTModel
+from mindspeed_mm.utils.utils import EncoderBalanceComm
 
 
 class InternVLModel(MultiModalModule):
@@ -434,6 +436,7 @@ class InternVLModel(MultiModalModule):
         labels: torch.Tensor = None,
         inference_params: InferenceParams = None,
         image_flags: Optional[torch.LongTensor] = None,
+        transfer: Optional[numpy.ndarray] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -444,6 +447,12 @@ class InternVLModel(MultiModalModule):
         if self.add_image_encoder:
             vit_embeds = self.image_encoder(image)
             if self.image_encoder.post_process:
+                if get_args().encoder_dp_balance:
+                    vit_embeds = EncoderBalanceComm.apply(
+                            vit_embeds,
+                            mpu.get_data_parallel_group(),
+                            transfer
+                        )
                 if get_args().dist_train:
                     from mindspeed.multi_modal.dist_train.inner_data_parallel.mappings import gather_from_inner_dp_region
                     from mindspeed.multi_modal.dist_train.inner_data_parallel.utils import need_inner_data_parallel
