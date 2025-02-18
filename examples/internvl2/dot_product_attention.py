@@ -31,9 +31,9 @@ from mindspeed.core.parallel_state import (get_context_parallel_group_for_hybrid
                                            get_ring_group_for_intra_window_send_recv_overlap)
 from mindspeed.core.tensor_parallel_y_union_cp import TensorParallelYUnionCP
 from mindspeed.model.transformer import get_attention_mask
+from mindspeed.utils import get_actual_seq_len
 from mindspeed.core.context_parallel.adaptive_context_parallel import adaptive_attn_context_parallel
 from mindspeed.core.context_parallel.utils import get_scheduling_info
-from mindspeed.utils import get_actual_seq_len
 
 try:
     from einops import rearrange
@@ -98,13 +98,12 @@ def dot_product_attention_init(
     config.context_parallel_size = cp_size
 
     # add pse
-    args = get_args()
     self.pse = None
     self.pse_type = args.alibi_fusion_attn_type
 
     if args.multi_head_latent_attention:
         self.scale_mask_softmax.scale = True
-        self.hidden_size_per_partition = args.num_attention_heads * args.v_head_dim
+        self.hidden_size_per_partition = config.num_attention_heads * args.v_head_dim
         self.q_head_dim = args.qk_nope_head_dim + args.qk_rope_head_dim
         self.softmax_scale = self.q_head_dim ** (-0.5)
 
@@ -119,26 +118,25 @@ def dot_product_attention_init(
         self.norm_factor = 1.0 / self.softmax_scale
 
     if self.pse_type is None:
-        self.pse_type = 1  # not use pse
+        self.pse_type = 1 # not use pse
     elif self.pse_type == 0:
         alibi = AlibiForFusionAttnSingleton.get_alibi_tensor_for_fusion_attn(args.seq_length,
-                                                                             args.num_attention_heads,
-                                                                             args.params_dtype,
-                                                                             args.alibi_diagonal_opposite,
-                                                                             1024)
+                                                config.num_attention_heads,
+                                                config.params_dtype,
+                                                args.alibi_diagonal_opposite,
+                                                1024)
         self.pse = alibi
     elif self.pse_type == 2 or self.pse_type == 3:
-        self.pse = AlibiForFusionAttnSingleton.get_alibi_slopes_for_fusion_attn(args.num_attention_heads)
+        self.pse = AlibiForFusionAttnSingleton.get_alibi_slopes_for_fusion_attn(config.num_attention_heads)
 
 
 def dot_product_attention_forward_wrapper(fn):
     @wraps(fn)
     def wrapper(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params):
-        if attention_mask is None:
+        if attention_mask is None and self.attn_mask_type == AttnMaskType.causal:
             attention_mask = get_attention_mask()
         if get_args().use_flash_attn:
-            return dot_product_attention_forward(self, query, key, value, attention_mask, attn_mask_type,
-                                                 packed_seq_params)
+            return dot_product_attention_forward(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
         return fn(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
 
     return wrapper

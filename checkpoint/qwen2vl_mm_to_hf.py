@@ -5,18 +5,15 @@
 @Time    : 2025/01/14
 @Desc    : qwen2vl mindspeed-mm模型转换成huggingface模型
 """
-import json
-import shutil
 from pathlib import Path
 from typing import cast
 
 import torch
-from safetensors.torch import save_file
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 # 注意mindspeed-mm训练后保存的checkpoint中存储了patch相关信息，在load时需要加下面这行以支持反序列化
 import mindspeed.megatron_adaptor # noqa
 
-from checkpoint.utils import LATEST_TXT, ConvertHFConfig
+from checkpoint.utils import LATEST_TXT, ConvertHFConfig, copy_files_except_suffix, save_by_index_json, split_by_index_json
 
 
 def rename_pp_parameter(param_name: str,
@@ -213,39 +210,6 @@ def convert_mm_to_hf(_state_dict: dict[str, torch.Tensor], cfg: Qwen2VLConfig) -
                 new_params[new_key] = value
 
     return new_params
-
-
-def copy_files_except_suffix(source_path: Path, target_path: Path, except_suffix: str = '.safetensors'):
-    """拷贝源路径下除了以except_suffix为后缀的其他所有文件到目标路径，包含子目录"""
-    target_path.mkdir(parents=True, exist_ok=True)
-    for item in source_path.rglob('*'):
-        if item.is_file() and item.suffix != except_suffix:
-            relative_path = item.relative_to(source_path)
-            destination = target_path / relative_path
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(item, destination)
-            print(f"Copied: {item} -> {destination}")
-
-
-def split_by_index_json(state_dict: dict[str, torch.Tensor], hf_dir: Path) -> list[dict[str, torch.Tensor]]:
-    index_json_path = hf_dir.joinpath('model.safetensors.index.json')
-    return_dicts = []
-    weight_map = json.loads(index_json_path.read_text()).get('weight_map', {})
-    for key, value in weight_map.items():
-        index = int(value.split('-')[1])
-        while index > len(return_dicts):
-            return_dicts.append({})
-        return_dicts[index - 1][key] = state_dict[key]
-    return return_dicts
-
-
-def save_by_index_json(state_dicts: list[dict], save_dir: Path) -> None:
-    metadata = {
-        'format': 'pt'
-    }
-    for index, state_dict in enumerate(state_dicts, start=1):
-        name = f'model-{index:05}-of-{len(state_dicts):05}.safetensors'
-        save_file(state_dict, Path(save_dir).joinpath(name), metadata=metadata)
 
 
 def main(convert_config: ConvertHFConfig):

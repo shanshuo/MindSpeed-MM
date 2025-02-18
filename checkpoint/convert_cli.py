@@ -10,8 +10,8 @@ from abc import ABC, abstractmethod
 
 import jsonargparse
 
-from checkpoint import qwen2vl_hf_to_mm
-from checkpoint.utils import ConvertHFConfig, ConvertResplitConfig, ConvertMMConfig
+from checkpoint import qwen2vl_hf_to_mm, internvl2_hf_to_mm
+from checkpoint.utils import ConvertHFConfig, ConvertResplitConfig, ConvertMMConfig, ConvertVppMMConfig, ConvertVppHFConfig
 
 # 安全权限，当前用户读写权限，用户组内可读权限，其他用户无权限
 SAFE_MODE = 0o640
@@ -74,14 +74,19 @@ class InternVLConverter(Converter):
     """InternVL模型转换工具（仅做样例，当前尚未支持）"""
 
     @staticmethod
-    def hf_to_mm(cfg: ConvertMMConfig):
+    def hf_to_mm(cfg: ConvertVppMMConfig):
         """huggingface模型转换mindspeed-mm模型权重"""
-        pass
+        internvl2_hf_to_mm.main(cfg)
+        # 安全管控权限
+        os.chmod(cfg.mm_dir, SAFE_MODE)
 
     @staticmethod
-    def mm_to_hf(cfg: ConvertHFConfig):
+    def mm_to_hf(cfg: ConvertVppHFConfig):
         """mindspeed-mm模型转换huggingface模型权重"""
-        pass
+        from checkpoint import internvl2_mm_to_hf
+        internvl2_mm_to_hf.main(cfg)
+        # 安全管控权限
+        os.chmod(cfg.save_hf_dir, SAFE_MODE)
 
     @staticmethod
     def resplit(cfg: ConvertResplitConfig):

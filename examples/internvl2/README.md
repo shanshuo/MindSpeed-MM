@@ -73,16 +73,16 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git
-    git clone https://github.com/NVIDIA/Megatron-LM.git
-    cd Megatron-LM
-    git checkout core_r0.8.0
-    cp -r megatron ../MindSpeed-MM/
-    cd ..
-    cd MindSpeed-MM
-    mkdir logs
-    mkdir dataset
-    mkdir ckpt
+git clone https://gitee.com/ascend/MindSpeed-MM.git
+git clone https://github.com/NVIDIA/Megatron-LM.git
+cd Megatron-LM
+git checkout core_r0.8.0
+cp -r megatron ../MindSpeed-MM/
+cd ..
+cd MindSpeed-MM
+mkdir logs
+mkdir dataset
+mkdir ckpt
 ```
 
 <a id="jump1.2"></a>
@@ -92,30 +92,30 @@
 torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
 ```bash
-    # python3.10
-    conda create -n test python=3.10
-    conda activate test
+# python3.10
+conda create -n test python=3.10
+conda activate test
 
-    # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
-    pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl
-    pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
+# 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
+pip install torch-2.1.0-cp310-cp310m-manylinux2014_aarch64.whl
+pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 
-    # apex for Ascend 参考 https://gitee.com/ascend/apex
-    # 建议从原仓编译安装
+# apex for Ascend 参考 https://gitee.com/ascend/apex
+# 建议从原仓编译安装
 
-    # 安装加速库
-    git clone https://gitee.com/ascend/MindSpeed.git
-    cd MindSpeed
-    # checkout commit from MindSpeed core_r0.8.0
-    git checkout 3f09d6736571cf1e30f8ac97de77982d0ab32cc5
-    pip install -r requirements.txt
-    pip3 install -e .
-    cd ..
-    # 替换MindSpeed中的文件
-    cp examples/internvl2/dot_product_attention.py MindSpeed/mindspeed/core/transformer/dot_product_attention.py
+# 安装加速库
+git clone https://gitee.com/ascend/MindSpeed.git
+cd MindSpeed
+# checkout commit from MindSpeed core_r0.8.0
+git checkout 3f09d6736571cf1e30f8ac97de77982d0ab32cc5
+pip install -r requirements.txt
+pip3 install -e .
+cd ..
+# 替换MindSpeed中的文件
+cp examples/internvl2/dot_product_attention.py MindSpeed/mindspeed/core/transformer/dot_product_attention.py
 
-    # 安装其余依赖库
-    pip install -e .
+# 安装其余依赖库
+pip install -e .
 ```
 
 ## 权重下载及转换
@@ -128,6 +128,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 - [InternVL2-2B](https://huggingface.co/OpenGVLab/InternVL2-2B/tree/main)；
 - [InternVL2-8B](https://huggingface.co/OpenGVLab/InternVL2-8B/tree/main)；
+- [InternVL2-26B](https://huggingface.co/OpenGVLab/InternVL2-26B/tree/main)；
 - [InternVL2-Llama3-76B](https://huggingface.co/OpenGVLab/InternVL2-Llama3-76B/tree/main)；
 
 将模型权重保存在`raw_ckpt`目录下，例如`raw_ckpt/InternVL2-8B`。
@@ -136,26 +137,59 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 #### 2. 权重转换
 
-MindSpeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2/internvl2_convert_to_mm_ckpt.py`脚本对原始预训练权重进行转换。该脚本实现了从huggingface权重到MindSpeed-MM权重的转换以及PP（Pipeline Parallel）权重的切分。
+MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工具对原始预训练权重进行转换。该工具实现了huggingface权重和MindSpeed-MM权重的转换以及PP（Pipeline Parallel）和VPP（Virtual Pipeline Parallel）的权重切分(详细VPP配置参考[vpp特性说明](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/virtual_pipeline_parallel.md))。
 
-以InternVL2-8B为例，`internvl2_convert_to_mm_ckpt.py`的入参`model-size`、`load-dir`、`save-dir`、`trust-remote-code`等如下：
+`mm-convert`工具详细用法参考[权重转换工具](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/权重转换工具.md)
 
-启动脚本
+以InternVL2-8B为例，使用命令如下
 
-```shell
-  # 根据实际情况修改 ascend-toolkit 路径
-  source /usr/local/Ascend/ascend-toolkit/set_env.sh
-  python examples/internvl2/internvl2_convert_to_mm_ckpt.py \
-    --model-size 8B \
-    --load-dir raw_ckpt/InternVL2-8B \    # huggingface权重目录
-    --save-dir pretrained/InternVL2-8B \  # 转换后的权重保存目录
-    --trust-remote-code True    # 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
+
+```bash
+# 根据实际情况修改 ascend-toolkit 路径
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+# 2B
+mm-convert  InternVLConverter hf_to_mm \
+  --cfg.mm_dir "raw_ckpt/InternVL2-2B" \
+  --cfg.hf_config.hf_dir "pretrained/InternVL2-2B" \
+  --cfg.parallel_config.llm_pp_layers [[24]] \
+  --cfg.parallel_config.vit_pp_layers [[24]] \
+  --cfg.trust_remote_code True
+
+# 8B
+mm-convert  InternVLConverter hf_to_mm \
+  --cfg.mm_dir "raw_ckpt/InternVL2-8B" \
+  --cfg.hf_config.hf_dir "pretrained/InternVL2-8B" \
+  --cfg.parallel_config.llm_pp_layers [[6,9,9,8]] \
+  --cfg.parallel_config.vit_pp_layers [[24,0,0,0]] \
+  --cfg.trust_remote_code True
+
+# 8B VPP
+mm-convert  InternVLConverter hf_to_mm \
+  --cfg.mm_dir "raw_ckpt/InternVL2-8B" \
+  --cfg.hf_config.hf_dir "pretrained/InternVL2-8B-vpp" \
+  --cfg.parallel_config.llm_pp_layers [[0,0,0,1],[4,4,4,4],[4,4,4,3]] \
+  --cfg.parallel_config.vit_pp_layers [[6,7,7,4],[0,0,0,0],[0,0,0,0]] \
+  --cfg.trust_remote_code True
+
+# 76B
+mm-convert  InternVLConverter hf_to_mm \
+  --cfg.mm_dir "raw_ckpt/InternVL2-Llama3-76B" \
+  --cfg.hf_config.hf_dir "pretrained/InternVL2-Llama3-76B" \
+  --cfg.parallel_config.llm_pp_layers [[0,0,0,1,5,6,7,7,7,7,7,7,7,7,6,6]] \
+  --cfg.parallel_config.vit_pp_layers [[11,12,12,10,0,0,0,0,0,0,0,0,0,0,0,0]] \
+  --cfg.trust_remote_code True
+
+# 其中：
+# mm_dir: 转换后保存目录
+# hf_dir: huggingface权重目录
+# llm_pp_layers: llm在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
+# vit_pp_layers: vit在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
+# trust_remote_code: 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
 ```
 
-注：8B/26B/76B默认开启Pipeline并行，如需修改并行配置可在脚本的get_model_config函数中修改对应配置。
+同步修改`examples/internvl2/finetune_internvl2_*b.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重`raw_ckpt/InternVL2-*B`进行区分。
 
-同步修改`examples/internvl2/finetune_internvl2_8b.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重`raw_ckpt/InternVL2-8B`进行区分。
-
+以`InternVL2-8B`为例
 ```shell
 LOAD_PATH="pretrained/InternVL2-8B"
 ```
@@ -271,14 +305,14 @@ $save_dir
 配置`examples/internvl2/finetune_internvl2_xx.sh`参数如下
 
 ```shell
-    # 根据实际情况修改 ascend-toolkit 路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh
-    NPUS_PER_NODE=8
-    MASTER_ADDR=locahost
-    MASTER_PORT=6000
-    NNODES=1
-    NODE_RANK=0
-    WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
+  # 根据实际情况修改 ascend-toolkit 路径
+  source /usr/local/Ascend/ascend-toolkit/set_env.sh
+  NPUS_PER_NODE=8
+  MASTER_ADDR=locahost
+  MASTER_PORT=6000
+  NNODES=1
+  NODE_RANK=0
+  WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 ```
 
 <a id="jump4.3"></a>
@@ -288,7 +322,7 @@ $save_dir
 以InternVL2-8B为例，启动微调训练任务。
 
 ```shell
-    bash examples/internvl2/finetune_internvl2_8B.sh
+bash examples/internvl2/finetune_internvl2_8B.sh
 ```
 
 <a id="jump5"></a>
@@ -297,19 +331,20 @@ $save_dir
 
 #### 1. 准备工作
 
-配置脚本前需要完成前置准备工作，包括：环境安装、权重下载及转换，详情可查看对应章节。（当前仅支持2B和8B推理功能）
+配置脚本前需要完成前置准备工作，包括：环境安装、权重下载及转换，详情可查看对应章节。（当前仅支持2B和8B单卡推理）
 
 推理权重转换命令如下：
 
 ```shell
-  # 根据实际情况修改 ascend-toolkit 路径
-  source /usr/local/Ascend/ascend-toolkit/set_env.sh
-  python examples/internvl2/internvl2_convert_to_mm_ckpt.py \
-    --model-size 8B \
-    --load-dir raw_ckpt/InternVL2-8B \    # huggingface权重目录
-    --save-dir pretrained/InternVL2-8B \  # 转换后的权重保存目录
-    --trust-remote-code True \    # 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
-    --is-inference           # 推理模式下，pp size会被设置为1
+# 根据实际情况修改 ascend-toolkit 路径
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+
+mm-convert  InternVLConverter hf_to_mm \
+  --cfg.mm_dir "raw_ckpt/InternVL2-8B" \
+  --cfg.hf_config.hf_dir "pretrained/InternVL2-8B" \
+  --cfg.parallel_config.llm_pp_layers [[32]] \
+  --cfg.parallel_config.vit_pp_layers [[24]] \
+  --cfg.trust_remote_code True
 ```
 
 #### 2. 配置参数
@@ -368,19 +403,40 @@ $save_dir
 按实际情况修改inference_internvl.sh脚本，
 
 ```shell
-    # 根据实际情况修改 ascend-toolkit 路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh
-    ...
-    MM_MODEL="./examples/internvl2/inference_8B.json"
+# 根据实际情况修改 ascend-toolkit 路径
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+...
+MM_MODEL="./examples/internvl2/inference_8B.json"
 ```
 
 #### 3. 启动推理
 
 ```shell
-  bash examples/internvl2/inference_internvl.sh
+bash examples/internvl2/inference_internvl.sh
 ```
 
 <a id="jump6"></a>
+
+## 训练后权重转回huggingface格式
+MindSpeed-MM修改了部分原始网络的结构名称，在微调后，如果需要将权重转回huggingface格式，可使用`mm-convert`权重转换工具对微调后的权重进行转换，将权重名称修改为与原始网络一致。
+
+```bash
+mm-convert  InternVLConverter mm_to_hf \
+  --cfg.save_hf_dir "ckpt/mm_to_hf/InternVL2-8B" \
+  --cfg.mm_dir "ckpt/mm_path/InternVL2-8B" \
+  --cfg.hf_config.hf_dir "raw_ckpt/InternVL2-8B" \
+  --cfg.parallel_config.llm_pp_layers [[6,9,9,8]] \
+  --cfg.parallel_config.vit_pp_layers [[24,0,0,0]] \
+  --cfg.trust_remote_code True
+
+# 其中：
+# save_hf_dir: mm微调后转换回hf模型格式的目录
+# mm_dir: 微调后保存的权重目录
+# hf_dir: huggingface权重目录
+# llm_pp_layers: llm在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
+# vit_pp_layers: vit在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
+# trust_remote_code: 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
+```
 
 ## 评测
 
