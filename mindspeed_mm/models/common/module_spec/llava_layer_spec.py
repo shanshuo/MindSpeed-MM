@@ -20,7 +20,7 @@ from megatron.core.transformer.transformer_layer import (
 )
 
 
-def get_layer_spec(is_vit) -> ModuleSpec:
+def get_layer_spec(config=None, is_vit=False, *args, **kwargs) -> ModuleSpec:
     attn_mask_type = AttnMaskType.no_mask if is_vit else AttnMaskType.causal
 
     mlp = get_mlp_module_spec(use_te=False)
@@ -49,7 +49,7 @@ def get_layer_spec(is_vit) -> ModuleSpec:
     )
 
 
-def get_mlp_module_spec(use_te: bool = True,) -> ModuleSpec:
+def get_mlp_module_spec(config=None, use_te=False, *args, **kwargs) -> ModuleSpec:
     return ModuleSpec(
         module=MLP,
         submodules=MLPSubmodules(

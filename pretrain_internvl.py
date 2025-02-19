@@ -32,7 +32,7 @@ def model_provider(pre_process=True, post_process=True):
     model_config.text_decoder = get_model_config(model_config.text_decoder)
 
     model = InternVLModel(model_config)
-    if model_config.image_encoder.vision_encoder.is_freeze:
+    if model_config.image_encoder.vision_encoder.freeze:
         model.freeze(freeze_image_encoder=True)
 
     return model

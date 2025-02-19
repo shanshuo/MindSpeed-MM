@@ -402,6 +402,8 @@ class InternViT(MultiModalModule):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         pixel_embeds: Optional[torch.FloatTensor] = None,
+        *args,
+        **kwargs
     ):
         if self.pre_process:
             if pixel_values is None and pixel_embeds is None:

@@ -10,7 +10,7 @@ from megatron.core.transformer.transformer_layer import TransformerLayer, Transf
 from mindspeed_mm.models.vision.vision_encoders.internvit_model import InternRMSNorm, InternVitSelfAttention, InternVitTransformerLayer
 
 
-def get_language_layer_spec() -> ModuleSpec:
+def get_language_layer_spec(config=None, *args, **kwargs) -> ModuleSpec:
     mlp = get_mlp_layer_spec()
     return ModuleSpec(
         module=TransformerLayer,
@@ -40,7 +40,7 @@ def get_language_layer_spec() -> ModuleSpec:
     )
 
 
-def get_vit_layer_spec(config) -> ModuleSpec:
+def get_vit_layer_spec(config=None, *args, **kwargs) -> ModuleSpec:
     mlp = get_mlp_layer_spec()
     return ModuleSpec(
         module=InternVitTransformerLayer,
@@ -65,7 +65,7 @@ def get_vit_layer_spec(config) -> ModuleSpec:
     )
 
 
-def get_mlp_layer_spec():
+def get_mlp_layer_spec(config=None, *args, **kwargs):
     return ModuleSpec(
         module=MLP,
         submodules=MLPSubmodules(

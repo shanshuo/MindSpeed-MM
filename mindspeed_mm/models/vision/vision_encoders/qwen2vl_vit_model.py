@@ -406,17 +406,17 @@ class Qwen2VLViT(MultiModalModule):
         """
         self.blocks.set_input_tensor(input_tensor)
 
-    def forward(self, images: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         """
         Forward function of the Qwen2VL ViT Model. This function passes the input tensors
         through the embedding layer and then the transformer.
 
         """
         if self.pre_process:
-            if images is None or grid_thw is None:
+            if pixel_values is None or grid_thw is None:
                 raise ValueError('You have to specify pixel_values and grid_thw')
             else:
-                hidden_states = self.patch_embed(images)
+                hidden_states = self.patch_embed(pixel_values)
                 hidden_states = hidden_states.unsqueeze(1)
         else:
             hidden_states = None
@@ -428,9 +428,9 @@ class Qwen2VLViT(MultiModalModule):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-        seq_len = images.shape[0]
+        seq_len = pixel_values.shape[0]
         attention_mask = torch.full(
-            [1, seq_len, seq_len], torch.finfo(images.dtype).min, device=images.device,
+            [1, seq_len, seq_len], torch.finfo(pixel_values.dtype).min, device=pixel_values.device,
             dtype=torch.bool
         )
         for i in range(1, len(cu_seqlens)):

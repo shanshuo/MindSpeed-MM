@@ -20,11 +20,10 @@ from mindspeed_mm.models.common.module_spec.llava_layer_spec import get_mlp_modu
 from mindspeed_mm.models.vision.vision_encoders.qwen2vl_vit_model import Qwen2vlVitSelfAttention, Qwen2vlSelfAttention
 
 
-def get_qwen2vlllm_layer_local_spec(
-    num_experts: int = None, moe_grouped_gemm: bool = False, qk_layernorm: bool = False) -> ModuleSpec:
+def get_qwen2vlllm_layer_local_spec(config=None, *args, **kwargs) -> ModuleSpec:
+    qk_layernorm = False
 
-    mlp = _get_mlp_module_spec(
-        use_te=False, num_experts=num_experts, moe_grouped_gemm=moe_grouped_gemm)
+    mlp = _get_mlp_module_spec(use_te=False)
     return ModuleSpec(
         module=TransformerLayer,
         submodules=TransformerLayerSubmodules(
@@ -52,7 +51,7 @@ def get_qwen2vlllm_layer_local_spec(
     )
 
 
-def get_qwen2vl_layer_spec(is_vit) -> ModuleSpec:
+def get_qwen2vl_layer_spec(config=None, is_vit=True, *args, **kwargs) -> ModuleSpec:
     attn_mask_type = AttnMaskType.no_mask if is_vit else AttnMaskType.causal
 
     mlp = get_mlp_module_spec(use_te=False)

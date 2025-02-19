@@ -20,6 +20,7 @@
     "img_context_token_id": 92546,
     "num_segments": 8,
     "text_decoder": {
+        "model_id": "internllm",
         "num_layers": 32,
         "hidden_size": 4096,
         "num_attention_heads": 32,
@@ -88,7 +89,7 @@
             "attention_softmax_in_fp32": false,
             "select_layer": -1,
             "ps_version": "v2",
-            "is_freeze": true
+            "freeze": true
         },
         "vision_projector": {
             "model_id": "InternVLMLP",

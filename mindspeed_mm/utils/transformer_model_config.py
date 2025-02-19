@@ -14,6 +14,12 @@ def get_class_variables(cls):
 
 def get_model_config(config):
     config_dict = config.to_dict()
+    if 'model_id' in config_dict and config_dict['model_id'] == 'InternVLMLP':
+        config_dict['params_dtype'] = "bf16"
+        config_dict['hidden_size'] = 4096
+        config_dict['num_attention_heads'] = 1
+        config_dict['num_layers'] = 1
+
     t_config = dict()
     tfc_variables = get_class_variables(TransformerConfig)
     for key in tfc_variables:

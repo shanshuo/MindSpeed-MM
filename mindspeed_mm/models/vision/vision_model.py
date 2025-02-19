@@ -45,6 +45,8 @@ class VisionModel(MultiModalModule):
         projector_layer_spec: ModuleSpec = None,
         pre_process: bool = True,
         post_process: bool = True,
+        *args,
+        **kwargs
     ) -> None:
         super().__init__(config=config)
         self.pre_process = pre_process
@@ -94,9 +96,9 @@ class VisionModel(MultiModalModule):
             for param in module.parameters():
                 param.requires_grad = False
 
-    def forward(self, images: torch.Tensor) -> torch.Tensor:
+    def forward(self, images: torch.Tensor, image_grid_thw: torch.Tensor = None, *args, **kwargs) -> torch.Tensor:
         if self.add_encoder:
-            image_embeddings = self.encoder(images)
+            image_embeddings = self.encoder(pixel_values=images, grid_thw=image_grid_thw)
         if self.add_projector:
             image_embeddings = self.projector(image_embeddings)
         return image_embeddings

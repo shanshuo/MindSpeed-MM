@@ -10,6 +10,7 @@
     "add_rmsnorm_offset": false,
     "img_context_token_id": 92546,
     "text_decoder": {
+        "model_id": "internllm",
         "num_layers": 48,
         "pipeline_num_layers": [0, 2, 8, 8, 8, 8, 8, 6],
         "hidden_size": 6144,
@@ -87,7 +88,7 @@
             "recompute_granularity": "full",
             "recompute_method": "uniform",
             "recompute_num_layers": 1,
-            "is_freeze": true
+            "freeze": true
         },
         "vision_projector": {
             "model_id": "InternVLMLP",

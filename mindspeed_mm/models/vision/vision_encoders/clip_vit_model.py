@@ -102,21 +102,23 @@ class CLIPViT(MultiModalModule):
 
     def forward(
             self,
-            x: torch.Tensor,
-            attention_mask: Optional[torch.Tensor] = None
+            pixel_values: torch.Tensor,
+            attention_mask: Optional[torch.Tensor] = None,
+            *args,
+            **kwargs
     ) -> torch.Tensor:
         """
         Forward function of the CLIP ViT Model. This function passes the input tensors
         through the embedding layer and then the transformer.
 
         Args:
-            x (torch.Tensor): Input data of shape [batch, img_h, img_w]
+            pixel_values (torch.Tensor): Input data of shape [batch, img_h, img_w]
             attention_mask (torch.Tensor with dtype=bool): Attention mask to use. If none, all ones.
 
         Returns:
             x (torch.Tensor): output after final transformer block of shape [b, s, h].
         """
-        x = self.conv1(x)  # [batch, hidden_size, grid, grid]
+        x = self.conv1(pixel_values)  # [batch, hidden_size, grid, grid]
         x = x.reshape(x.shape[0], x.shape[1], -1)  # [batch, hidden_size, grid ** 2]
         x = x.permute(0, 2, 1)  # [batch, grid ** 2, hidden_size]
 
