@@ -19,8 +19,11 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
+* [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型 【Prototype】
 * [Feb. 17, 2025]: 🔥 MindSpeed-MM支持Mindspeed-Core & Megatron 0.8.0版本
+* [Feb. 06, 2025]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.3模型PP与VPP 【Prototype】
 * [Jan. 22, 2025]: 🎉 MindSpeed-MM支持Qwen2VL视频模态
+* [Jan. 16, 2025]: 🎉 MindSpeed-MM支持wfvae训练
 * [Dec. 30, 2024]: 🔥 MindSpeed-MM版本1.0.0发布
 * [Dec. 19, 2024]: 🎉 MindSpeed-MM生成类模型支持分布式推理
 * [Dec. 16, 2024]: 🚀 MindSpeed-MM支持Qihoo-T2X模型
@@ -34,20 +37,23 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 * [Oct. 21, 2024]: 🚀 MindSpeed-MM支持InternVL2-8B、以及Qwen2VL-7B模型
 * [Oct. 16, 2024]: 🌱 MindSpeed-MM首版本1.0.RC3发布
 
+> 注： Prototype特性未经过充分验证，可能存在不稳定和bug问题，beta表示非商用特性
+
 ---
 
 ## 已支持特性概览
 
 |       模型 \ 特性       | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
 |:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
+|    HunyuanVideo     | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 |   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 |   CogVideoX系列-I2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 |     Opensora1.2     |  |  |  |                                                                                         | DSP | ✔ | ✔ |  |
-| OpensoraPlan1.3-T2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
-| OpensoraPlan1.3-I2V | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
+| OpensoraPlan1.3-T2V | ✔ | ✔ | Prototype |        Prototype                                                                                 | CP (Ulysses) | ✔ | ✔ |  |
+| OpensoraPlan1.3-I2V | ✔ | ✔ | Prototype |          Prototype                                                                               | CP (Ulysses) | ✔ | ✔ |  |
 |    InternVL2-2B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
 |    InternVL2-8B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-|    InternVL2-26B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
+|    InternVL2-26B    |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
 |    InternVL2-76B    |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
 |     Qwen2VL-2B      | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
 |     Qwen2VL-7B      | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
@@ -70,15 +76,11 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 研发中的特性与模型
 
-* 【新模型】 MiniCPM-V 2.6: [8B](https://huggingface.co/openbmb/MiniCPM-V-2_6)
-* 【新模型】 WF-VAE: [WF-VAE](https://arxiv.org/abs/2411.17459) training
 * 【新模型】 [Qwen2.5VL](https://github.com/QwenLM/Qwen2.5-VL)
 * 【模型特性】 CogVideoX: PP
-* 【模型特性】 OpensoraPlan1.3: PP, CP (Ring Attention)
+* 【模型特性】 OpensoraPlan1.3: CP (Ring Attention)
 * 【模型特性】 Qwen2VL: VPP, CP (Ulysses & Ring Attention)
 * 【模型特性】 InternVL2: TP, CP (Ulysses & Ring Attention)
-* 【基础特性】 10M超长序列Demo
-* 【基础特性】 分布式推理
 * 【基础特性】 Distrain
 
 ---
@@ -137,8 +139,18 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
   </thead>
   <tbody>
+    <tr> 
+      <td rowspan="19"> 多模态生成 </td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/hunyuanvideo">HunyuanVideo</a></td>
+      <td><a href="https://huggingface.co/tencent/HunyuanVideo">13B</a></td>
+      <td> 预训练 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.171 (SPS) </td>
+      <td> 0.181 (SPS) </td>
+      <td>【Test】</td>
+    </tr>
     <tr>
-      <td rowspan="18"> 多模态生成 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensora1.0">OpenSora 1.0</a></td>
       <td><a href="https://huggingface.co/hpcai-tech/Open-Sora/tree/main">5.5B</a></td>
       <td> 预训练 </td>
