@@ -10,7 +10,7 @@
         "encoder_num_resblocks": 2,
         "latent_dim": 4,
         "use_attention": true,
-        "norm_type": "layernorm",
+        "norm_type": "aelayernorm",
         "t_interpolation": "trilinear",
         "use_tiling": false,
         "connect_res_layer_num": 1

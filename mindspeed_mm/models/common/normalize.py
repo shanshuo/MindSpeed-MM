@@ -10,9 +10,9 @@ from mindspeed_mm.utils.utils import (get_context_parallel_rank, get_context_par
 
 
 class LayerNorm(nn.Module):
-    def __init__(self, num_channels, eps=1e-6, *args, **kwargs) -> None:
+    def __init__(self, num_channels, eps=1e-6, elementsize_affine=True, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        self.norm = torch.nn.LayerNorm(num_channels, eps=eps, elementwise_affine=True)
+        self.norm = torch.nn.LayerNorm(num_channels, eps=eps, elementwise_affine=elementsize_affine)
 
     def forward(self, x):
         if x.dim() == 5:
@@ -32,8 +32,10 @@ def normalize(in_channels, num_groups=32, eps=1e-6, affine=True, norm_type="grou
             return torch.nn.GroupNorm(
                 num_groups=num_groups, num_channels=in_channels, eps=eps, affine=affine
             )
-        elif norm_type == "layernorm":
+        elif norm_type == "aelayernorm":
             return LayerNorm(num_channels=in_channels, eps=eps)
+        elif norm_type == "layernorm":
+            return nn.LayerNorm(in_channels, eps=eps, elementwise_affine=affine)
         elif norm_type == "rmsnorm":
             return RMSNorm(dim=in_channels, eps=eps, **kwargs)
         else:

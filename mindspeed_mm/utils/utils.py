@@ -330,3 +330,46 @@ class EncoderBalanceComm(torch.autograd.Function):
         else:
             data = EncoderBalanceComm.apply(grad_output, ctx.group, ctx.transfer, True)
             return data, None, None, None, None
+    
+
+def change_tensor_layout(tensor, src_layout, dst_layout, batch_size=None):
+    """
+    Transforms the input tensor from the source layout (src_layout) to the target layout (dst_layout).
+
+    Args:
+        tensor (torch.Tensor): The input tensor.
+        src_layout (str): The source layout, e.g., "sbh" or "bsh".
+        dst_layout (str): The target layout, e.g., "sbnd" or "tnd".
+    
+    Returns:
+        torch.Tensor: The tensor with the transformed layout.
+    """
+    src_layout = src_layout.lower()
+    dst_layout = src_layout.lower()
+    
+    if src_layout == dst_layout:
+        return tensor
+    key = (src_layout, dst_layout)
+    layout_mappings = {
+        # input layout change to `sbh`
+        ("bsh", "sbh"): lambda x: rearrange(x, "b s h -> s b h"),
+        # flash attention input layout change
+        ("sbnd", "sbh"): lambda x: rearrange(x, "s b n d -> s b (n d)"),
+        ("sbnd", "bsnd"): lambda x: rearrange(x, "s b n d -> b s n d"),
+        ("sbnd", "bnsd"): lambda x: rearrange(x, "s b n d -> b n s d"),
+        ("sbnd", "tnd"): lambda x: rearrange(x, "s b n d -> (s b) n d"),
+        # output layout change to `sbh`
+        ("bsnd", "sbh"): lambda x: rearrange(x, "b s n d -> s b (n d)"),
+        ("bnsd", "sbh"): lambda x: rearrange(x, "b n s d -> s b (n d)"),
+        ("tnd", "sbh"): lambda x: rearrange(x, "(s b) n d -> s b (n d)", b=batch_size),
+        # output layout change to `bsh`
+        ("sbh", "bsh"): lambda x: rearrange(x, "s b h -> b s h"),
+        ("bsnd", "bsh"): lambda x: rearrange(x, "b s n d -> b s (n d)"),
+        ("bnsd", "bsh"): lambda x: rearrange(x, "b n s d -> b s (n d)"),
+        ("tnd", "bsh"): lambda x: rearrange(x, "(s b) n d -> b s (n d)", b=batch_size),
+    }
+
+    if key in layout_mappings:
+        return layout_mappings[key](tensor)
+    else:
+        raise ValueError(f"Unsupported layout conversion from {src_layout} to {dst_layout}!")

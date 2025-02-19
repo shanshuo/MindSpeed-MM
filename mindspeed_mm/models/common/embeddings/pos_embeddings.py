@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from torch import nn, einsum, broadcast_tensors, Tensor
 from torch.cuda.amp import autocast
+import torch.nn.functional as F
 
 from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
 
@@ -675,3 +676,88 @@ class Rotary3DPositionEmbedding(nn.Module):
         # input shape: bnsd
         x[:, :, self.text_length:] = self.rotary(x[:, :, self.text_length:], **kwargs)
         return x
+
+
+class RoPE3DSORA(nn.Module):
+    def __init__(self, head_dim, freq=10000.0, interpolation_scale=(1, 1, 1)):
+        super().__init__()
+        if head_dim % 3 != 0:
+            raise ValueError("number of head dimensions should be a multiple of three")
+        self.dim = head_dim // 3
+        self.base = freq
+        self.interpolation_scale_t, self.interpolation_scale_h, self.interpolation_scale_w = interpolation_scale
+        self.cache = {}
+        self.cache_positions = {}
+
+    def check_type(self, param):
+        if isinstance(param, torch.Tensor):
+            param = param.item()
+        return param
+
+    def get_position(self, b, t, h, w, device):
+        b = self.check_type(b)
+        t = self.check_type(t)
+        h = self.check_type(h)
+        w = self.check_type(w)
+
+        if not (b, t, h, w) in self.cache_positions:
+            x = torch.arange(w, device=device)
+            y = torch.arange(h, device=device)
+            z = torch.arange(t, device=device)
+            pos = torch.cartesian_prod(z, y, x)
+            # SBH
+            pos = pos.reshape(t * h * w, 3).transpose(0, 1).reshape(3, -1, 1).contiguous().expand(3, -1, b).clone()
+
+            poses = (pos[0].contiguous(), pos[1].contiguous(), pos[2].contiguous())
+            max_poses = (int(poses[0].max()), int(poses[1].max()), int(poses[2].max()))
+
+            self.cache_positions[b, t, h, w] = (poses, max_poses)
+        pos = self.cache_positions[b, t, h, w]
+        return pos
+    
+    def get_freq(self, seq_len, pos1d, device, interpolation_scale=1):
+        freqs = None
+        if (self.dim, seq_len, device) not in self.cache:
+            inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+            t = torch.arange(seq_len, device=device, dtype=inv_freq.dtype) / interpolation_scale
+            freqs = torch.einsum("i,j->ij", t, inv_freq)
+            freqs = torch.cat((freqs, freqs), dim=-1) # (Seq, Dim)
+            self.cache[self.dim, seq_len, device] = freqs
+        freqs = self.cache[self.dim, seq_len, device]
+        return F.embedding(pos1d, freqs)[:, :, None, :] # s, b, 1, d
+    
+    @staticmethod
+    def rotate_half(x):
+        x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def apply_rope1d(self, tokens, freq):
+        cos = freq.cos()
+        sin = freq.sin()
+
+        return (tokens * cos) + (self.rotate_half(tokens) * sin)
+    
+    def apply_rotary_pos_emb(self, tokens, freq):
+        if tokens.size(3) % 3 != 0:
+            raise AssertionError("number of dimensions should be a multiple of three")
+
+        freq = freq.to(tokens.dtype)
+        # split features into three along the feature dimension, and apply rope1d on each half
+        t, y, x = tokens.chunk(3, dim=-1)
+        freq_t, freq_y, freq_x = freq.chunk(3, dim=-1)
+        t = self.apply_rope1d(t, freq_t)
+        y = self.apply_rope1d(y, freq_y)
+        x = self.apply_rope1d(x, freq_x)
+        tokens = torch.cat((t, y, x), dim=-1)
+
+        return tokens
+    
+    def forward(self, b, t, h, w, device):
+        poses, max_poses = self.get_position(b, t, h, w, device) # [3, seq, batch]
+        freq_t = self.get_freq(max_poses[0] + 1, poses[0], device, self.interpolation_scale_t)
+        freq_y = self.get_freq(max_poses[1] + 1, poses[1], device, self.interpolation_scale_h)
+        freq_x = self.get_freq(max_poses[2] + 1, poses[2], device, self.interpolation_scale_w)
+
+        freq = torch.cat((freq_t, freq_y, freq_x), dim=-1)
+
+        return freq # s, b, 1, d

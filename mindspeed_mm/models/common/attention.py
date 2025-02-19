@@ -11,8 +11,19 @@ from megatron import core
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
+from megatron.legacy.model.enums import AttnType
+from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
+from mindspeed.core.parallel_state import get_context_parallel_group_for_hybrid_ulysses
+from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
+from mindspeed.core.parallel_state import (
+    get_context_parallel_group_for_hybrid_ulysses,
+    get_context_parallel_group_for_hybrid_ring,
+    get_context_parallel_for_hybrid_ring_world_size,
+    get_context_parallel_for_hybrid_ring_rank,
+    get_context_parallel_for_hybrid_ring_global_ranks
+)
 
-from mindspeed_mm.utils.utils import video_to_image
+from mindspeed_mm.utils.utils import video_to_image, change_tensor_layout
 from mindspeed_mm.models.common.normalize import normalize
 from mindspeed_mm.models.common.embeddings.rope import RoPE3D, PositionGetter3D
 from mindspeed_mm.models.common.embeddings.pos_embeddings import Rotary3DPositionEmbedding
@@ -25,6 +36,396 @@ from .communications import (
     all_to_all_SBH,
     split_forward_gather_backward,
 )
+
+
+def do_ring_context_parallel(q, k, v, head_num, softmax_scale, attn_mask, dropout_p=0., pse=None, pse_type=None):
+    args = get_args()
+    in_hybrid_mode = get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None
+    if in_hybrid_mode:
+        cp_group = get_context_parallel_group_for_hybrid_ring()
+        cp_size = get_context_parallel_for_hybrid_ring_world_size()
+        rank = get_context_parallel_for_hybrid_ring_rank()
+        cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
+    else:
+        cp_group = mpu.get_context_parallel_group()
+        cp_size = mpu.get_context_parallel_world_size()
+        rank = mpu.get_context_parallel_rank()
+        cp_global_ranks = mpu.get_context_parallel_global_ranks()
+
+    cp_para = dict()
+
+    cp_para['causal'] = args.cp_attention_mask_type == 'causal'
+    cp_para['cp_group'] = cp_group
+    cp_para['cp_size'] = cp_size
+    cp_para['rank'] = rank
+
+    cp_para['cp_global_ranks'] = cp_global_ranks
+    cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
+        if args.use_cp_send_recv_overlap else None
+    cp_para['pse'] = pse
+    cp_para['pse_type'] = pse_type
+
+    output = ringattn_context_parallel(q, k, v, head_num, cp_para, softmax_scale, attn_mask, dropout_p)
+
+    return output
+
+
+class FlashAttention(nn.Module):
+    """Implement the multihead softmax attention.
+    Arguments
+    ---------
+        softmax_scale: The temperature to use for the softmax attention.
+                      (default: 1/sqrt(d_keys) where d_keys is computed at
+                      runtime)
+        attention_dropout: The dropout rate to apply to the attention
+                           (default: 0.0)
+        fa_layout: The input layout in Flash attention.
+    """
+    def __init__(
+        self,
+        softmax_scale=None,
+        attention_dropout=0.0,
+        fa_layout="sbh"
+    ):
+        super().__init__()
+        self.softmax_scale = softmax_scale
+        self.attention_dropout = attention_dropout
+        self.fa_layout = fa_layout
+        self.pse = None
+        self.pse_type = 1
+
+    def forward(self, query, key, value, attention_mask):
+        """Implements the multihead softmax attention.
+        Arguments
+        ---------
+            q, k, v: The tensor containing the query, key, and value. (B, S, H, D)
+        """
+        args = get_args()
+        seq_length, batch_size, n_head, head_dim = query.shape[1], query.shape[0], query.shape[2], query.shape[3]
+
+        if args.context_parallel_size > 1 and args.context_parallel_algo in ["megatron_cp_algo", "hybrid_cp_algo"]:
+            if self.fa_layout.lower() != "sbh":
+                raise ValueError(f"Flash attention layout mulst be `sbh` when using Ring Attention, but got {self.fa_layout}!")
+            query, key, value = [rearrange(x, "s b n d -> s b (n d)") for x in [query, key, value]]
+            output = do_ring_context_parallel(
+                query,
+                key,
+                value,
+                head_num=n_head,
+                softmax_scale=self.softmax_scale,
+                attn_mask=attention_mask,
+                pse=self.pse,
+                pse_type=self.pse_type
+            )
+        else:
+            if args.context_parallel_algo != "ulysses_cp_algo":
+                raise ValueError(f"context_parallel_algo should be one of the [megatron_cp_algo, hybrid_cp_size, ulysses_cp_algo], but got {args.ulysses_cp_algo}")
+            
+            query, key, value = [change_tensor_layout(x, "sbnd", self.fa_layout, batch_size=batch_size) for x in [query, key, value]]
+
+            actual_seq_qlen = []
+            actual_seq_kvlen = []
+            if self.fa_layout == "tnd":
+                if attention_mask is not None:
+                    ans = 0
+                    for _ in range(batch_size):
+                        ans += seq_length
+                        actual_seq_qlen.append(ans)
+                    ans = 0
+                    for m in attention_mask:
+                        ans += m
+                        actual_seq_kvlen.append(ans)
+            else:
+                if attention_mask is not None:
+                    attention_mask.view(batch_size, 1, -1, attention_mask.shape[-1])
+            
+            output = torch_npu.npu_fusion_attention(
+                query, key, value, n_head, self.fa_layout,
+                pse=self.pse,
+                padding_mask=None,
+                atten_mask=attention_mask,
+                actual_seq_qlen=actual_seq_qlen,
+                actual_seq_kvlen=actual_seq_kvlen,
+                scale=self.softmax_scale,
+                keep_drop=1 - self.attention_dropout,
+                inner_precise=0,
+                sparse_mode=args.sparse_mode
+            )[0]
+
+        output = change_tensor_layout(output, self.fa_layout, "sbh", batch_size=batch_size)
+        return output
+    
+
+class ParallelAttention(nn.Module):
+    """
+    A multi-head attention layer for both self-atten and cross-atten".
+
+    Args:
+        query_dim: The number of channels in the query.
+        key_dim: The number of channels in the key, defaults to `query_dim`.
+        num_attention_heads: The number of heads to use for multi-head attention.
+        hidden_size: The hidden layer size.
+        proj_q_bias: Whether to use bias in query projection.
+        proj_k_bias: Whether to use bias in key projection.
+        proj_v_bias: Whether to use bias in value projection.
+        proj_out_bias: Whether to use bias in out projection.
+        dropout: The dropout probability to use.
+        use_qk_norm: Whether to use normalization for q and k.
+        norm_type: The type of normalization layer.
+        norm_elementwise_affine: A boolean value that when set to ``True``, this module
+            has learnable per-element affine parameters initialized to ones (for weights)
+            and zeros (for biases). Default: ``True``.
+        norm_eps: A value added to the denominator for numerical stability. Default: 1e-5
+        is_qkv_concat: Whether to concatenate qkv in projection.
+        attention_type: Self attention or cross attention.
+        is_kv_concat: Whether to concatenate kv in projection.
+        fa_layout: The input layout of Flash Attention.
+        rope: The Rotary Position Embedding object, default to `None`.
+    """
+    def __init__(
+        self,
+        query_dim: int,
+        key_dim: Optional[int],
+        num_attention_heads: int,
+        hidden_size: int,
+        proj_q_bias: bool = False,
+        proj_k_bias: bool = False,
+        proj_v_bias: bool = False,
+        proj_out_bias: bool = False,
+        dropout: float = 0.0,
+        use_qk_norm: bool = False,
+        norm_type: str = None,
+        norm_elementwise_affine: bool = True,
+        norm_eps: float = 1e-5,
+        is_qkv_concat: bool = False,
+        attention_type: int = AttnType.self_attn,
+        is_kv_concat: bool = False,
+        fa_layout: str = "sbh",
+        rope=None,
+        **kwargs
+    ):
+        super().__init__()
+
+        args = get_args()
+        config = core_transformer_config_from_args(args)
+        key_dim = key_dim if key_dim is not None else query_dim
+        self.sequence_parallel = args.sequence_parallel
+        self.is_qkv_concat = is_qkv_concat
+        self.is_kv_concat = is_kv_concat
+        self.use_qk_norm = use_qk_norm
+        self.attention_type = attention_type
+        self.fa_layout = fa_layout
+        self.rope = rope
+
+        # Per attention head and per partition values.
+        self.cp_size = mpu.get_context_parallel_world_size()
+        self.tp_size = mpu.get_tensor_model_parallel_world_size()
+        self.head_dim = core.utils.divide(hidden_size, num_attention_heads)
+        self.num_attention_heads_per_partition = core.utils.divide(num_attention_heads, self.tp_size)
+        self.num_attention_heads_per_partition_cp = core.utils.divide(self.num_attention_heads_per_partition, 
+                                                                      self.cp_size)
+        
+        # Strided linear layer.
+        if self.attention_type == AttnType.self_attn and self.is_qkv_concat:
+            self.proj_qkv = tensor_parallel.ColumnParallelLinear(
+                query_dim,
+                hidden_size * 3,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_q_bias,
+                gather_output=False)
+        elif self.attention_type == AttnType.cross_attn and self.is_kv_concat:
+            self.proj_q = tensor_parallel.ColumnParallelLinear(
+                query_dim,
+                hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_q_bias,
+                gather_output=False)
+            
+            self.proj_kv = tensor_parallel.ColumnParallelLinear(
+                key_dim,
+                hidden_size * 2,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_k_bias,
+                gather_output=False)
+        else:
+            self.proj_q = tensor_parallel.ColumnParallelLinear(
+                query_dim,
+                hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_q_bias,
+                gather_output=False
+            )
+            self.proj_k = tensor_parallel.ColumnParallelLinear(
+                key_dim,
+                hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_k_bias,
+                gather_output=False
+            )
+            self.proj_v = tensor_parallel.ColumnParallelLinear(
+                key_dim,
+                hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_v_bias,
+                gather_output=False
+            )
+        
+        # Normalize
+        if self.use_qk_norm:
+            self.q_norm = normalize(
+                norm_type=norm_type,
+                in_channels=self.head_dim,
+                eps=norm_eps,
+                affine=norm_elementwise_affine,
+                **kwargs
+            )
+            self.k_norm = normalize(
+                norm_type=norm_type,
+                in_channels=self.head_dim,
+                eps=norm_eps,
+                affine=norm_elementwise_affine,
+                **kwargs
+            )
+            if isinstance(self.q_norm, nn.LayerNorm):
+                for param in self.q_norm.parameters():
+                    setattr(param, "sequence_parallel", self.sequence_parallel)
+            if isinstance(self.k_norm, nn.LayerNorm):
+                for param in self.k_norm.parameters():
+                    setattr(param, "sequence_parallel", self.sequence_parallel)
+        
+        # Flash Attention
+        self.core_attention_flash = FlashAttention(
+            attention_dropout=dropout,
+            fa_layout=self.fa_layout,
+            softmax_scale=1 / math.sqrt(self.head_dim)
+        )
+        if self.cp_size > 1 and args.context_parallel_algo in ["megatron_cp_algo", "hybrid_cp_algo"]:
+            ulysses_group = mpu.get_context_parallel_group()
+            if args.context_parallel_algo == "hybrid_cp_algo":
+                ulysses_group = mpu.get_context_parallel_group_hybrid_ulysses()
+            self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, ulysses_group)
+
+        # Output
+        self.proj_out = tensor_parallel.RowParallelLinear(
+            hidden_size,
+            query_dim,
+            config=config,
+            init_method=config.init_method,
+            bias=proj_out_bias,
+            input_is_parallel=True,
+            skip_bias_add=False
+        )
+
+        # Dropout
+        self.dropout = nn.Dropout(dropout)
+
+    def get_query_key_value_tensors(self, hidden_states, key_value_states):
+        """
+        Derives `query` tensor from `hidden_states`, and `key`/`value` tensor
+        from `hidden_states` or `key_value_states`.
+        """
+        if self.attention_type == AttnType.self_attn and self.is_qkv_concat:
+            # Attention heads [s, b, h] --> [s, b, 3*h]
+            mixed_qkv = self.proj_qkv(hidden_states)[0]
+            # [s, b, 3*h] --> [s, b, h], [s, b, h], [s, b, h]
+            (query, key, value) = tensor_parallel.split_tensor_along_last_dim(mixed_qkv, 3)
+        elif self.attention_type == AttnType.cross_attn and self.is_kv_concat:
+            # Attention heads [s, b, h] --> [s, b, h]
+            query = self.proj_q(hidden_states)[0]
+            # Attention heads [s, b, h] --> [s, b, 2*h]
+            mixed_kv = self.proj_kv(key_value_states)[0]
+            # [s, b, 2*h] --> [s, b, h], [s, b, h]
+            (key, value) = tensor_parallel.split_tensor_along_last_dim(mixed_kv, 2)
+        else:
+            # Attention heads [s, b, h] --> [s, b, h]
+            query = self.proj_q(hidden_states)[0]
+            key = self.proj_k(key_value_states)[0]
+            value = self.proj_v(key_value_states)[0]
+        
+        # [s, b, h] --> [s, b, n, d]
+        batch_size = query.shape[1]
+        query = query.view(-1, batch_size, self.num_attention_heads_per_partition, self.head_dim)
+        key = key.view(-1, batch_size, self.num_attention_heads_per_partition, self.head_dim)
+        key = value.view(-1, batch_size, self.num_attention_heads_per_partition, self.head_dim)
+
+        if self.use_qk_norm:
+            query = self.q_norm(query)
+            key = self.k_norm(key)
+        
+        return query, key, value
+    
+    def function_before_core_attention(
+        self,
+        query: torch.Tensor,
+        key: Optional[torch.Tensor] = None,
+        input_layout: str = "sbh",
+        rotary_pos_emb: Optional[torch.Tensor] = None
+    ):
+        # For self attention we just duplicate the rotary_pos_emb if it isn't already
+        if rotary_pos_emb is not None and not isinstance(rotary_pos_emb, tuple):
+            rotary_pos_emb = (rotary_pos_emb,) * 2
+        
+        # Reshape inputs into `sbh`
+        query = change_tensor_layout(query, input_layout, "sbh")
+        key = query if key is None else change_tensor_layout(key, input_layout, "sbh")
+
+        # Get the query, key and value tensors based on the type of attention -
+        # self or cross attn.
+        query, key, value = self.get_query_key_value_tensors(query, key)
+
+        # ================================================
+        # relative positional embedding (rotary embedding)
+        # ================================================
+        if self.rope is not None and rotary_pos_emb is not None:
+            q_pos_emb, k_pos_emb = rotary_pos_emb
+            query = self.rope.apply_rotary_pos_emb(query, q_pos_emb)
+            key = self.rope.apply_rotary_pos_emb(key, k_pos_emb)
+        
+        return query, key, value
+    
+    def function_after_core_attention(
+        self,
+        core_attn_out,
+        output_layout: str = "sbh"
+    ):
+        output, bias = self.proj_out(core_attn_out)
+        # reshape
+        output = change_tensor_layout(output, "sbh", output_layout)
+
+        output = self.dropout(output)
+
+        return output
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None,
+        input_layout: str = "sbh",
+        rotary_pos_emb: Optional[torch.Tensor] = None
+    ):
+        # ==================================
+        # Query, Key, and Value
+        # ==================================
+        query, key, value = self.function_before_core_attention(query, key, input_layout, rotary_pos_emb)
+
+        # ==================================
+        # core attention computation
+        # ==================================
+        core_attn_out = self.core_attention_flash(query, key, value, mask)
+
+        # ==================================
+        # output
+        # ==================================
+        out = self.function_after_core_attention(core_attn_out, input_layout)
+
+        return out
 
 
 class MultiHeadSparseAttentionSBH(nn.Module):

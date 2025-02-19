@@ -32,7 +32,7 @@
         "encoder_num_resblocks": 2,
         "latent_dim": 8,
         "use_attention": true,
-        "norm_type": "layernorm",
+        "norm_type": "aelayernorm",
         "t_interpolation": "trilinear",
         "vae_scale_factor": [4, 8, 8]
     },
