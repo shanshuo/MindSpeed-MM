@@ -18,6 +18,7 @@ from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 
 from mindspeed_mm.models.vision.vision_encoders.qwen2vl_vit_model import Qwen2VLRotaryEmbedding_llm
+from mindspeed_mm.utils.utils import ensure_valid
 
 
 class MMGPTModel(LanguageModule):
@@ -241,8 +242,8 @@ class MMGPTModel(LanguageModule):
         # Old GPT checkpoints only stored the output layer weight key. So we remove the _extra_state key
         # but check that it doesn't contain any data anyway
         output_extra_state = sharded_state_dict.pop(output_layer_extra_state_key, None)
-        assert not (
+        ensure_valid(not (
             output_extra_state and output_extra_state.data
-        ), f'Expected output layer extra state to be empty, got: {output_extra_state}'
+        ), f'Expected output layer extra state to be empty, got: {output_extra_state}')
 
         return sharded_state_dict
