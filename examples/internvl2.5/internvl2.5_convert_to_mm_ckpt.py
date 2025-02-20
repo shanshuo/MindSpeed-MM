@@ -67,12 +67,12 @@ model_config_dict = {
                               llm_num_layers=64,
                               llm_pipeline_num_layers=[64, ]),
     '78B': InternVLModelConfig(model_size='78B',
-                              pp_size=1,
+                              pp_size=16,
                               vpp_size=1,
                               vit_num_layers=45,
-                              vit_pipeline_num_layers=[45, ],
+                              vit_pipeline_num_layers=[11, 12, 12, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                               llm_num_layers=80,
-                              llm_pipeline_num_layers=[80, ])
+                              llm_pipeline_num_layers=[0, 0, 0, 1, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6])
 }
 
 
@@ -90,8 +90,6 @@ def load_from_hf(load_dir, trust_remote_code):
 def get_model_config(model_size, enable_vpp) -> InternVLModelConfig:
     if model_size not in model_config_dict:
         raise KeyError(f" {model_size} not exist in model config dict.")
-    if model_size != '4B':
-        raise ValueError(f'Unsupported model size: {model_size}')
     if enable_vpp:
         raise ValueError("InternVL2.5 does not support vpp right now.")
     return model_config_dict.get(model_size)
@@ -100,8 +98,6 @@ def get_model_config(model_size, enable_vpp) -> InternVLModelConfig:
 def merge_pp_index(model_config):
     pp_size = model_config.pp_size
     vp_size = model_config.vpp_size
-    if pp_size > 1 or vp_size > 1:
-        raise ValueError("InternVL2.5 only support pp_size=1 and vp_size=1.")
     vit_num_layers = model_config.vit_num_layers
     vit_pipeline_num_layers = model_config.vit_pipeline_num_layers
     llm_num_layers = model_config.llm_num_layers
