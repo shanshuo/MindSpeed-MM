@@ -17,7 +17,7 @@
   - [准备工作](#jump4.1)
   - [配置参数](#jump4.2)
   - [启动预训练](#jump4.3)
-
+- [模型推理与权重转换](#jump5)
 ---
 
 <a id="jump1"></a>
@@ -242,3 +242,32 @@ torch.save(new_checkpoint, "whisper.pth")
 
 - 多机训练需在多个终端同时启动预训练脚本(每个终端的预训练脚本只有NODE_RANK参数不同，其他参数均相同)
 - 如果使用多机训练，需要在每个节点准备训练数据
+
+<a id="jump5"></a>
+#### 4. 模型推理与权重转换
+
+当前MindSpeed-MM未提供whisper模型的推理代码，需要将训练后模型转回huggingface格式自行推理
+转回脚本代码示例如下：
+```python
+import torch
+import mindspeed.megatron_adaptor
+
+pretrained_checkpoint = torch.load("your trained ckpt path/model_optim_rng.pt", map_location="cpu")
+pretrained_checkpoint = pretrained_checkpoint['model']
+
+new_checkpoint = {}
+for key in pretrained_checkpoint.keys():
+    if key == "proj_out.weight":
+        model_key = key
+    else:
+        model_key = key.replace("proj_q", "q_proj")
+        model_key = model_key.replace("proj_k", "k_proj")
+        model_key = model_key.replace("proj_v", "v_proj")
+        model_key = model_key.replace("proj_out", "out_proj")
+    new_checkpoint[model_key] = pretrained_checkpoint[key]
+
+torch.save(new_checkpoint, "whisper_hf.bin")
+```
+**注意**：
+
+- 该转回脚本需在MindSpeed-MM根目录下执行
