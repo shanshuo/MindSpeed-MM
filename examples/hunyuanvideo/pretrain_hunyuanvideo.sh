@@ -27,6 +27,7 @@ MM_MODEL="./examples/hunyuanvideo/model_hunyuanvideo.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="./ckpt/hunyuanvideo"
 SAVE_PATH="./save_ckpt/hunyuanvideo"
+layerzero_config="examples/hunyuanvideo/zero_config.yaml"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \

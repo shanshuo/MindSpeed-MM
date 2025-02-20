@@ -100,7 +100,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 # checkout commit from MindSpeed core_r0.8.0
-git checkout 3f09d6736571cf1e30f8ac97de77982d0ab32cc5
+git checkout ca2b98ac11e059d114ad3a49c0d170cdae24dee7
 pip install -r requirements.txt 
 pip install -e .
 cd ..
@@ -287,6 +287,14 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
   - 使能方式：在 GPT_ARGS 设置 --sequence-parallel
   
   - 使用建议：建议在开启TP时同步开启该设置
+
++ layer_zero
+
+  - 使用场景：在模型参数规模较大时，单卡上无法承载完整的模型，可以通过开启layerzero降低静态内存。
+  
+  - 使能方式：`examples/hunyuanvideo/pretrain_hunyuanvideo.sh`的`GPT_ARGS`中加入`--layerzero`和`--layerzero-config ${layerzero_config}`
+
+  - 使用建议: 该特性和TP可以二选一，使能该特性时，TP推荐设置为1，配置文件`examples/hunyuanvideo/zero_config.yaml`中的`zero3_size`推荐设置为单机的卡数
 
 #### 启动训练
 
