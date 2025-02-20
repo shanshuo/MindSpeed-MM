@@ -362,3 +362,35 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 Copyright Notice included in the software: 
 Copyright (c) 2022, the respective contributors, as shown by the AUTHORS file. All rights reserved.
+
+Software Notice
+Software InternVL
+License: MIT License
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2024 OpenGVLab
+
+Software Notice
+Software tortoise-tts
+License: Apache License 2.0
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2024 neonbjb/tortoise-tts
+
+Software Notice
+Software CogVideo
+License: Apache License 2.0
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2024 CogVideo Model Team @ Zhipu AI
+
+Software Notice
+Software Qwen2.5-VL
+License: Apache License 2.0
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2024 QwenLM/Qwen2.5-VL
