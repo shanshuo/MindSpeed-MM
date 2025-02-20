@@ -100,8 +100,8 @@ class HunyuanVideoDiT(MultiModalModule):
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
-        self.double_stream_recompute_layers = double_stream_recompute_layers if double_stream_recompute_layers else mm_double_blocks_depth
-        self.single_stream_recompute_layers = single_stream_recompute_layers if single_stream_recompute_layers else mm_single_blocks_depth
+        self.double_stream_recompute_layers = double_stream_recompute_layers if double_stream_recompute_layers is not None else mm_double_blocks_depth
+        self.single_stream_recompute_layers = single_stream_recompute_layers if single_stream_recompute_layers is not None else mm_single_blocks_depth
         if self.recompute_granularity == "selective":
             raise ValueError("recompute_granularity does not support selective mode in HunyuanvideoDiT")
         if self.distribute_saved_activations:
@@ -543,7 +543,7 @@ class HunyuanVideoDiT(MultiModalModule):
             x = self.proj_out(x)
 
         if self.sequence_parallel:
-            x.transpose(0, 1).contiguous() # s b h -> b s h
+            x = x.transpose(0, 1).contiguous() # s b h -> b s h
 
         if self.context_parallel_algo is not None:
             x = gather_forward_split_backward(
@@ -789,7 +789,7 @@ class MMDoubleStreamBlock(nn.Module):
         else:
             txt_qkv = self.txt_attn_qkv(txt_modulated)
 
-        txt_q, txt_k, txt_v = rearrange(txt_qkv, "B L (K H D) -> K B L H D", K=3, H=self.heads_num)
+        txt_q, txt_k, txt_v = rearrange(txt_qkv, "B L (K H D) -> K B L H D", K=3, H=self.num_attention_heads_per_partition)
 
         txt_q = self.txt_attn_q_norm(txt_q)
         txt_k = self.txt_attn_k_norm(txt_k)
