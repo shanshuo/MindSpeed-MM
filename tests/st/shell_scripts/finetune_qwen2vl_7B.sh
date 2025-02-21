@@ -22,7 +22,7 @@ BASEPATH=$(cd `dirname $0`; cd ../../../; pwd)
 MM_DATA="$BASEPATH/tests/st/run_configs/finetune_qwen2vl_7B/data_7B.json"
 MM_MODEL="$BASEPATH/tests/st/run_configs/finetune_qwen2vl_7B/model_7B.json"
 MM_TOOL="$BASEPATH/mindspeed_mm/tools/tools.json"
-# LOAD_PATH="/mnt/disk0/ci_resource/models/qwen2vl_7b/qwen2vl_7b_ckpt"
+# LOAD_PATH="/home/ci_resource/models/qwen2vl_7b/qwen2vl_7b_ckpt"
 
 TP=1
 PP=4
