@@ -149,32 +149,32 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工�
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 # 2B
 mm-convert  InternVLConverter hf_to_mm \
-  --cfg.mm_dir "raw_ckpt/InternVL2-2B" \
-  --cfg.hf_config.hf_dir "pretrained/InternVL2-2B" \
+  --cfg.mm_dir "pretrained/InternVL2-2B" \
+  --cfg.hf_config.hf_dir "raw_ckpt/InternVL2-2B" \
   --cfg.parallel_config.llm_pp_layers [[24]] \
   --cfg.parallel_config.vit_pp_layers [[24]] \
   --cfg.trust_remote_code True
 
 # 8B
 mm-convert  InternVLConverter hf_to_mm \
-  --cfg.mm_dir "raw_ckpt/InternVL2-8B" \
-  --cfg.hf_config.hf_dir "pretrained/InternVL2-8B" \
+  --cfg.mm_dir "pretrained/InternVL2-8B" \
+  --cfg.hf_config.hf_dir "raw_ckpt/InternVL2-8B" \
   --cfg.parallel_config.llm_pp_layers [[6,9,9,8]] \
   --cfg.parallel_config.vit_pp_layers [[24,0,0,0]] \
   --cfg.trust_remote_code True
 
 # 8B VPP
 mm-convert  InternVLConverter hf_to_mm \
-  --cfg.mm_dir "raw_ckpt/InternVL2-8B" \
-  --cfg.hf_config.hf_dir "pretrained/InternVL2-8B-vpp" \
+  --cfg.mm_dir "pretrained/InternVL2-8B-vpp" \
+  --cfg.hf_config.hf_dir "raw_ckpt/InternVL2-8B" \
   --cfg.parallel_config.llm_pp_layers [[0,0,0,1],[4,4,4,4],[4,4,4,3]] \
   --cfg.parallel_config.vit_pp_layers [[6,7,7,4],[0,0,0,0],[0,0,0,0]] \
   --cfg.trust_remote_code True
 
 # 76B
 mm-convert  InternVLConverter hf_to_mm \
-  --cfg.mm_dir "raw_ckpt/InternVL2-Llama3-76B" \
-  --cfg.hf_config.hf_dir "pretrained/InternVL2-Llama3-76B" \
+  --cfg.mm_dir "pretrained/InternVL2-Llama3-76B" \
+  --cfg.hf_config.hf_dir "raw_ckpt/InternVL2-Llama3-76B" \
   --cfg.parallel_config.llm_pp_layers [[0,0,0,1,5,6,7,7,7,7,7,7,7,7,6,6]] \
   --cfg.parallel_config.vit_pp_layers [[11,12,12,10,0,0,0,0,0,0,0,0,0,0,0,0]] \
   --cfg.trust_remote_code True

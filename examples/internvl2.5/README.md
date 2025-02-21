@@ -135,7 +135,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用`examples/internv
 # 根据实际情况修改 ascend-toolkit 路径
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 
-# 76B
+# 78B
 python examples/internvl2.5/internvl2.5_convert_to_mm_ckpt.py \
   --model-size 78B \
   --load-dir raw_ckpt/InternVL2_5-78B \
