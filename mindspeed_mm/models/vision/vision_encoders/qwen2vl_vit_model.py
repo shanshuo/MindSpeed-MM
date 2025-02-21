@@ -1,5 +1,3 @@
-# Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
-# Copyright 2024 The Qwen team; Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 from typing import Optional
 
 import torch
@@ -8,6 +6,7 @@ import torch.nn.functional as F
 
 from transformers.models.qwen2_vl.modeling_qwen2_vl import Qwen2VLRotaryEmbedding
 
+from megatron.core import mpu
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.spec_utils import ModuleSpec
@@ -15,6 +14,8 @@ from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.training import get_args
 
+from mindspeed.core.context_parallel.unaligned_cp.mapping import cal_split_sizes, split_forward_gather_backward,\
+    gather_forward_split_backward
 from mindspeed_mm.models.common.module import MultiModalModule
 
 try:
@@ -117,6 +118,15 @@ class Qwen2vlSelfAttention(SelfAttention):
             packed_seq_params=None,
     ):
         query, key, value = self.get_query_key_value_tensors(hidden_states, key_value_states)  # s b h d
+        
+        if self.config.context_parallel_size > key.shape[2]:
+            key = key.repeat_interleave(
+                query.shape[2] // key.shape[2], dim=2
+            )
+            value = value.repeat_interleave(
+                query.shape[2] // value.shape[2], dim=2
+            )
+            
         query = query.permute(1, 2, 0, 3).contiguous()  # b h s d
         key = key.permute(1, 2, 0, 3).contiguous()  # b h s d
 
@@ -219,6 +229,14 @@ class Qwen2vlVitSelfAttention(SelfAttention):
             rotary_pos_emb = (rotary_pos_emb,) * 2
 
         query, key, value = self.get_query_key_value_tensors(hidden_states, key_value_states)
+        
+        if self.config.context_parallel_size > key.shape[2]:
+            key = key.repeat_interleave(
+                query.shape[2] // key.shape[2], dim=2
+            )
+            value = value.repeat_interleave(
+                query.shape[2] // value.shape[2], dim=2
+            )
         # ===================================================
         # Adjust key, value, and rotary_pos_emb for inference
         # ===================================================
@@ -439,11 +457,39 @@ class Qwen2VLViT(MultiModalModule):
             if set_actual_seq_len is None:
                 raise AssertionError("Please check the commit id of your MindSpeed")
             set_actual_seq_len(tuple(cu_seqlens[1:].cpu().numpy().tolist()))
+            
+        if mpu.get_context_parallel_world_size() > 1:
+            split_gather_sizes = cal_split_sizes(hidden_states.shape[0], mpu.get_context_parallel_world_size())
+            rotary_pos_emb = split_forward_gather_backward(
+                rotary_pos_emb,
+                mpu.get_context_parallel_group(),
+                0,
+                split_gather_sizes,
+                "down"
+            )
+            hidden_states = split_forward_gather_backward(
+                hidden_states, 
+                mpu.get_context_parallel_group(), 
+                0, 
+                split_gather_sizes,
+                "down"
+            )
+            
         hidden_states = self.blocks(
             hidden_states=hidden_states,
             rotary_pos_emb=rotary_pos_emb,
             attention_mask=attention_mask,
         )
+        
+        if mpu.get_context_parallel_world_size() > 1:
+            hidden_states = gather_forward_split_backward(
+                hidden_states,
+                mpu.get_context_parallel_group(),
+                0,
+                split_gather_sizes,
+                "up"
+            )
+            
         if get_args().use_flash_attn:
             set_actual_seq_len(None)
         return hidden_states

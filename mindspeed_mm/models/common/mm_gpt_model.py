@@ -1,12 +1,11 @@
 # Copyright (c) 2023, NVIDIA CORPORATION. All rights reserved.
-
 import logging
 from typing import Dict, Literal, Optional, Tuple, Union
 
 import torch
 from torch import Tensor
 
-from megatron.core import InferenceParams, parallel_state, tensor_parallel
+from megatron.core import InferenceParams, parallel_state, tensor_parallel, mpu
 from megatron.core.dist_checkpointing.mapping import ShardedStateDict
 from megatron.core.models.common.embeddings.language_model_embedding import LanguageModelEmbedding
 from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
@@ -17,8 +16,10 @@ from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 
+from mindspeed.core.context_parallel.unaligned_cp.mapping import cal_split_sizes, split_forward_gather_backward, gather_forward_split_backward
 from mindspeed_mm.models.vision.vision_encoders.qwen2vl_vit_model import Qwen2VLRotaryEmbedding_llm
 from mindspeed_mm.utils.utils import ensure_valid
+
 
 
 class MMGPTModel(LanguageModule):
@@ -182,6 +183,15 @@ class MMGPTModel(LanguageModule):
             # intermediate stage of pipeline
             # decoder will get hidden_states from encoder.input_tensor
             decoder_input = None
+            
+        if mpu.get_context_parallel_world_size() > 1:
+            split_gather_sizes = cal_split_sizes(decoder_input.shape[0], mpu.get_context_parallel_world_size())
+            decoder_input = split_forward_gather_backward(decoder_input, mpu.get_context_parallel_group(), 0, 
+                                                        split_gather_sizes, "down")
+            input_ids = split_forward_gather_backward(input_ids, mpu.get_context_parallel_group(), 1, 
+                                                        split_gather_sizes, "down")
+            position_ids = split_forward_gather_backward(position_ids, mpu.get_context_parallel_group(), 2, 
+                                                        split_gather_sizes, "down")
 
         # Rotary positional embeddings (embedding is None for PP intermediate devices)
         rotary_pos_emb = None
@@ -205,6 +215,10 @@ class MMGPTModel(LanguageModule):
             packed_seq_params=packed_seq_params,
             **(extra_block_kwargs or {}),
         )
+        
+        if mpu.get_context_parallel_world_size() > 1:
+            hidden_states = gather_forward_split_backward(hidden_states, mpu.get_context_parallel_group(), 0, 
+                                                        split_gather_sizes, "up")
 
         if not self.post_process:
             return hidden_states
