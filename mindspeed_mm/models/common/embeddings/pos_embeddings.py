@@ -642,9 +642,7 @@ class Rotary3DPositionEmbedding(nn.Module):
 
         freqs = broad_cat((freqs_t[:, None, None, :], freqs_h[None, :, None, :], freqs_w[None, None, :, :]), dim=-1)
 
-        freqs = freqs.contiguous()
-        self.freqs_sin = freqs.sin().npu()
-        self.freqs_cos = freqs.cos().npu()
+        self.freqs = freqs.contiguous().npu()
 
         self.text_length = text_length
         if learnable_pos_embed:
@@ -672,10 +670,23 @@ class Rotary3DPositionEmbedding(nn.Module):
         else:
             return None
 
-    def forward(self, x, **kwargs):
-        # input shape: bnsd
-        x[:, :, self.text_length:] = self.rotary(x[:, :, self.text_length:], **kwargs)
+    def apply_rotary_pos_emb(self, x, freqs):
+        freqs_cos = freqs.cos().to(x.dtype)
+        freqs_sin = freqs.sin().to(x.dtype)
+
+        x = npu_rotary_position_embedding(x, freqs_cos, freqs_sin, mode=1)
         return x
+
+    def forward(self, rope_T, rope_H, rope_W):
+        freqs = self.freqs[: rope_T, : rope_H, : rope_W].contiguous()
+        freqs = rearrange(freqs, "t h w d -> (t h w) d")
+        freqs = freqs[:, None, None, :]# s 1 1 d
+        # padding zero to freqs
+        freqs_text_padding = torch.zeros([self.text_length, 1, 1, freqs.shape[-1]], device=freqs.device,
+                                         dtype=freqs.dtype)
+        freqs = torch.cat((freqs_text_padding, freqs), dim=0)
+  
+        return freqs
 
 
 class RoPE3DSORA(nn.Module):

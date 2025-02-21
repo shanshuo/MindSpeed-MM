@@ -98,10 +98,10 @@ class FlashAttention(nn.Module):
         """Implements the multihead softmax attention.
         Arguments
         ---------
-            q, k, v: The tensor containing the query, key, and value. (B, S, H, D)
+            q, k, v: The tensor containing the query, key, and value. (S, B, N, D)
         """
         args = get_args()
-        seq_length, batch_size, n_head, head_dim = query.shape[1], query.shape[0], query.shape[2], query.shape[3]
+        seq_length, batch_size, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
 
         if args.context_parallel_size > 1 and args.context_parallel_algo in ["megatron_cp_algo", "hybrid_cp_algo"]:
             if self.fa_layout.lower() != "sbh":
@@ -147,7 +147,7 @@ class FlashAttention(nn.Module):
                 actual_seq_qlen=actual_seq_qlen,
                 actual_seq_kvlen=actual_seq_kvlen,
                 scale=self.softmax_scale,
-                keep_drop=1 - self.attention_dropout,
+                keep_prob=1 - self.attention_dropout,
                 inner_precise=0,
                 sparse_mode=args.sparse_mode
             )[0]
@@ -222,7 +222,7 @@ class ParallelAttention(nn.Module):
         self.tp_size = mpu.get_tensor_model_parallel_world_size()
         self.head_dim = core.utils.divide(hidden_size, num_attention_heads)
         self.num_attention_heads_per_partition = core.utils.divide(num_attention_heads, self.tp_size)
-        self.num_attention_heads_per_partition_cp = core.utils.divide(self.num_attention_heads_per_partition, 
+        self.num_attention_heads_per_partition_per_cp = core.utils.divide(self.num_attention_heads_per_partition,
                                                                       self.cp_size)
         
         # Strided linear layer.
@@ -305,7 +305,7 @@ class ParallelAttention(nn.Module):
             fa_layout=self.fa_layout,
             softmax_scale=1 / math.sqrt(self.head_dim)
         )
-        if self.cp_size > 1 and args.context_parallel_algo in ["megatron_cp_algo", "hybrid_cp_algo"]:
+        if self.cp_size > 1 and args.context_parallel_algo in ["ulysses_cp_algo", "hybrid_cp_algo"]:
             ulysses_group = mpu.get_context_parallel_group()
             if args.context_parallel_algo == "hybrid_cp_algo":
                 ulysses_group = mpu.get_context_parallel_group_hybrid_ulysses()
@@ -352,7 +352,7 @@ class ParallelAttention(nn.Module):
         batch_size = query.shape[1]
         query = query.view(-1, batch_size, self.num_attention_heads_per_partition, self.head_dim)
         key = key.view(-1, batch_size, self.num_attention_heads_per_partition, self.head_dim)
-        key = value.view(-1, batch_size, self.num_attention_heads_per_partition, self.head_dim)
+        value = value.view(-1, batch_size, self.num_attention_heads_per_partition, self.head_dim)
 
         if self.use_qk_norm:
             query = self.q_norm(query)

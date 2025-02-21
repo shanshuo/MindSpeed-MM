@@ -9,6 +9,7 @@ from megatron.training.initialize import initialize_megatron
 from megatron.training import get_args
 
 from mindspeed_mm.configs.config import merge_mm_args, mm_extra_args_provider
+from mindspeed_mm.arguments import extra_args_provider_decorator
 from mindspeed_mm.tasks.inference.pipeline import sora_pipeline_dict
 from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import (
     save_videos,
@@ -49,7 +50,7 @@ def prepare_pipeline(args, device):
 
 
 def main():
-    initialize_megatron(extra_args_provider=mm_extra_args_provider, args_defaults={})
+    initialize_megatron(extra_args_provider=extra_args_provider_decorator(mm_extra_args_provider), args_defaults={})
     args = get_args()
     merge_mm_args(args)
     if not hasattr(args, "dist_train"):

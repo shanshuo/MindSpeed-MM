@@ -81,6 +81,10 @@ def _add_training_args(parser):
                        action='store_true',
                        default=False,
                        help='Balance for encoder')
+    group.add_argument('--recompute-skip-core-attention',
+                       action='store_true',
+                       default=False,
+                       help='Recomputing will skip the Flash attention if True')
 
     return parser
 

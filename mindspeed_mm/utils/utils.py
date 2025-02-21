@@ -345,7 +345,7 @@ def change_tensor_layout(tensor, src_layout, dst_layout, batch_size=None):
         torch.Tensor: The tensor with the transformed layout.
     """
     src_layout = src_layout.lower()
-    dst_layout = src_layout.lower()
+    dst_layout = dst_layout.lower()
     
     if src_layout == dst_layout:
         return tensor

@@ -17,7 +17,7 @@ from mindspeed_mm.models.common.embeddings.pos_embeddings import Rotary3DPositio
 from mindspeed_mm.models.common.embeddings.time_embeddings import TimeStepEmbedding, timestep_embedding
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.embeddings.patch_embeddings import VideoPatchEmbed2D, VideoPatch2D, VideoPatch3D
-from mindspeed_mm.models.common.attention import SelfAttentionBNSD, ParallelSelfAttentionSBH
+from mindspeed_mm.models.common.attention import ParallelAttention
 
 
 class SatDiT(MultiModalModule):
@@ -121,6 +121,7 @@ class SatDiT(MultiModalModule):
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
         self.recompute_num_layers = args.recompute_num_layers
+        self.checkpoint_skip_core_attention = args.recompute_skip_core_attention
         if self.recompute_granularity == "selective":
             raise ValueError("recompute_granularity does not support selective mode in VideoDiT")
         if self.distribute_saved_activations:
@@ -154,7 +155,7 @@ class SatDiT(MultiModalModule):
         
         self.global_layer_idx = global_layer_idx if global_layer_idx is not None else tuple(range(num_layers))
 
-        self.pos_embed = Rotary3DPositionEmbedding(
+        self.rope = Rotary3DPositionEmbedding(
             hidden_size_head=head_dim,
             text_length=text_length,
             height=input_size[1] // self.patch_size_h,
@@ -179,7 +180,7 @@ class SatDiT(MultiModalModule):
                     norm_elementwise_affine=norm_elementwise_affine,
                     norm_eps=norm_eps,
                     use_rope=use_rope,
-                    pos_embed=self.pos_embed,
+                    rope=self.rope,
                     interpolation_scale=interpolation_scale,
                     enable_sequence_parallelism=self.enable_sequence_parallelism,
                     time_embed_dim=self.time_embed_dim,
@@ -296,6 +297,16 @@ class SatDiT(MultiModalModule):
         height = torch.tensor(height)
         width = torch.tensor(width)
 
+        # Rotary positional embeddings
+        rotary_pos_emb = self.rope(
+            rope_T=torch.tensor(t / self.patch_size[0], dtype=torch.int),
+            rope_H=torch.tensor(h / self.patch_size[1], dtype=torch.int),
+            rope_W=torch.tensor(w / self.patch_size[2], dtype=torch.int)
+        )
+        if mpu.get_context_parallel_world_size() > 1:
+            rotary_pos_emb = rotary_pos_emb.chunk(mpu.get_context_parallel_world_size(), dim=0)[
+                mpu.get_context_parallel_rank()]
+
         with rng_context:
             if self.recompute_granularity == "full":
                 if latents_vid is not None:
@@ -309,9 +320,7 @@ class SatDiT(MultiModalModule):
                         frames=frames,
                         height=height,
                         width=width,
-                        rope_T=t,
-                        rope_H=h,
-                        rope_W=w
+                        rotary_pos_emb=rotary_pos_emb
                     )
             else:
                 for block in self.videodit_blocks:
@@ -326,9 +335,8 @@ class SatDiT(MultiModalModule):
                             frames=frames,
                             height=height,
                             width=width,
-                            rope_T=torch.tensor(t / self.patch_size[0], dtype=torch.int),
-                            rope_H=torch.tensor(h / self.patch_size[1], dtype=torch.int),
-                            rope_W=torch.tensor(w / self.patch_size[2], dtype=torch.int)
+                            rotary_pos_emb=rotary_pos_emb,
+                            checkpoint_skip_core_attention=self.checkpoint_skip_core_attention
                         )
 
 
@@ -367,6 +375,7 @@ class SatDiT(MultiModalModule):
         frames,
         height,
         width,
+        rotary_pos_emb,
         **kwargs
     ):
         """Forward method with activation checkpointing."""
@@ -398,9 +407,7 @@ class SatDiT(MultiModalModule):
                     frames,
                     height,
                     width,
-                    torch.tensor(kwargs["rope_T"] / self.patch_size[0], dtype=torch.int),
-                    torch.tensor(kwargs["rope_H"] / self.patch_size[1], dtype=torch.int),
-                    torch.tensor(kwargs["rope_W"] / self.patch_size[2], dtype=torch.int)
+                    rotary_pos_emb,
                 )
                 layer_num += self.recompute_num_layers
         elif self.recompute_method == "block":
@@ -418,9 +425,7 @@ class SatDiT(MultiModalModule):
                         frames,
                         height,
                         width,
-                        torch.tensor(kwargs["rope_T"] / self.patch_size[0], dtype=torch.int),
-                        torch.tensor(kwargs["rope_H"] / self.patch_size[1], dtype=torch.int),
-                        torch.tensor(kwargs["rope_W"] / self.patch_size[2], dtype=torch.int)
+                        rotary_pos_emb,
                     )
                 else:
                     block = self._get_block(layer_num)
@@ -434,9 +439,8 @@ class SatDiT(MultiModalModule):
                         frames=frames,
                         height=height,
                         width=width,
-                        rope_T=kwargs["rope_T"],
-                        rope_H=kwargs["rope_H"],
-                        rope_W=kwargs["rope_W"]
+                        rotary_pos_emb=rotary_pos_emb,
+                        checkpoint_skip_core_attention=self.checkpoint_skip_core_attention
                     )
         else:
             raise ValueError("Invalid activation recompute method.")
@@ -454,14 +458,14 @@ class SatDiT(MultiModalModule):
 
     def _operate_on_patched_inputs(self, latents, prompt, timestep, frames):
         b, _, t, h, w = latents.shape
-        if self.pos_embed is not None:
+        if self.rope is not None:
             latents_vid, latents_img = self.patch_embed(latents.to(self.dtype), prompt,
                                                         rope_T=t // self.patch_size[0],
                                                         rope_H=h // self.patch_size[1],
                                                         rope_W=w // self.patch_size[2])
             _, seq_len, _ = latents_vid.shape
-            pos_emb = self.pos_embed.position_embedding_forward(latents.to(self.dtype),
-                                                                seq_length=seq_len - self.pos_embed.text_length)
+            pos_emb = self.rope.position_embedding_forward(latents.to(self.dtype),
+                                                           seq_length=seq_len - self.rope.text_length)
             if pos_emb is not None:
                 latents_vid = latents_vid + pos_emb
         else:
@@ -513,7 +517,7 @@ class SatDiT(MultiModalModule):
             x = x.transpose(0, 1).contiguous()
         if self.enable_sequence_parallelism:
             x = gather_forward_split_backward(x, mpu.get_context_parallel_group(), dim=1, grad_scale="up")
-        x = x[:, self.pos_embed.text_length:, :]
+        x = x[:, self.rope.text_length:, :]
         x = self.proj_out(x)
         latents = x
 
@@ -633,7 +637,7 @@ class VideoDiTBlock(nn.Module):
         enable_sequence_parallelism: bool = False,
         time_embed_dim=None,
         text_length=None,
-        pos_embed=None,
+        rope=None,
         patch_size=None
     ):
         super().__init__()
@@ -654,9 +658,9 @@ class VideoDiTBlock(nn.Module):
         if positional_embeddings and (num_positional_embeddings is None):
             raise ValueError("If `positional_embedding` type is defined, `num_positition_embeddings` must also be defined.")
         if positional_embeddings == "sinusoidal":
-            self.pos_embed = SinusoidalPositionalEmbedding(dim, max_seq_length=num_positional_embeddings)
+            self.rope = SinusoidalPositionalEmbedding(dim, max_seq_length=num_positional_embeddings)
         else:
-            self.pos_embed = pos_embed
+            self.rope = rope
 
         # Define three blocks. Each block has its own normalization layer.
         # 1. Self-Attn
@@ -664,24 +668,42 @@ class VideoDiTBlock(nn.Module):
 
         self.enable_sequence_parallelism = enable_sequence_parallelism
         if self.enable_sequence_parallelism or self.sequence_parallel:
-            attention = ParallelSelfAttentionSBH
+            self.self_atten = ParallelAttention(
+                query_dim=dim,
+                key_dim=None,
+                num_attention_heads=num_heads,
+                hidden_size=num_heads * head_dim,
+                proj_q_bias=attention_bias,
+                proj_k_bias=attention_bias,
+                proj_v_bias=attention_bias,
+                proj_out_bias=attention_out_bias,
+                dropout=dropout,
+                use_qk_norm=(norm_type == "qk_ln"),
+                norm_type="layernorm",
+                norm_eps=1e-6,
+                rope=self.rope,  # Here is an object
+                is_qkv_concat=True
+            )
         else:
-            attention = SelfAttentionBNSD
-
-        self.self_atten = attention(
-            query_dim=dim,
-            key_dim=None,
-            num_heads=num_heads,
-            head_dim=head_dim,
-            dropout=dropout,
-            proj_qkv_bias=attention_bias,
-            proj_out_bias=attention_out_bias,
-            qk_ln=(norm_type == "qk_ln"),
-            use_rope=use_rope,
-            rope=pos_embed,
-            interpolation_scale=interpolation_scale
-        )
-
+            self.self_atten = ParallelAttention(
+                query_dim=dim,
+                key_dim=None,
+                num_attention_heads=num_heads,
+                hidden_size=head_dim * num_heads,
+                dropout=dropout,
+                proj_q_bias=attention_bias,
+                proj_k_bias=attention_bias,
+                proj_v_bias=attention_bias,
+                proj_out_bias=attention_out_bias,
+                norm_type="layernorm",
+                norm_elementwise_affine=norm_elementwise_affine,
+                norm_eps=1e-6,
+                use_qk_norm=(norm_type == "qk_ln"),
+                rope=self.rope,
+                interpolation_scale=interpolation_scale,
+                is_qkv_concat=True,
+                fa_layout="bnsd"
+            )
 
         # 2. Feed-forward
         self.norm2 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
@@ -728,15 +750,87 @@ class VideoDiTBlock(nn.Module):
         frames: torch.int64 = None,
         height: torch.int64 = None,
         width: torch.int64 = None,
-        rope_T: torch.int64 = None,
-        rope_H: torch.int64 = None,
-        rope_W: torch.int64 = None,
+        rotary_pos_emb=None,
+        checkpoint_skip_core_attention: bool = False,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
     ) -> torch.FloatTensor:
+        # before_self_attention
+        if checkpoint_skip_core_attention:
+            q, k, v, [gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp] = tensor_parallel.checkpoint(
+                self.before_attention,
+                False,
+                latents,
+                timestep,
+                frames,
+                height,
+                width,
+                rotary_pos_emb
+            )
+        else:
+            q, k, v, [gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp] = self.before_attention(
+                latents, timestep, frames, height, width, rotary_pos_emb)
+
+        # self_attention
+        attn_output = self.attention(
+            q=q,
+            k=k,
+            v=v,
+            mask=None
+        )
+
+        # after_attention
+        if checkpoint_skip_core_attention:
+            latents = tensor_parallel.checkpoint(
+                self.after_attetion,
+                False,
+                latents,
+                attn_output,
+                gate_msa,
+                text_gate_msa,
+                scale_mlp,
+                shift_mlp,
+                text_scale_mlp,
+                text_shift_mlp,
+                gate_mlp,
+                text_gate_mlp
+            )
+        else:
+            latents = self.after_attetion(
+                latents,
+                attn_output,
+                gate_msa,
+                text_gate_msa,
+                scale_mlp,
+                shift_mlp,
+                text_scale_mlp,
+                text_shift_mlp,
+                gate_mlp,
+                text_gate_mlp
+            )
+
+        return latents
+
+    def set_chunk_feed_forward(self, chunk_size: Optional[int], dim: int = 0):
+        self._chunk_size = chunk_size
+        self._chunk_dim = dim
+
+    def before_attention(
+        self,
+        latents: torch.Tensor,
+        timestep: Dict[str, torch.Tensor] = None,
+        frames: torch.int64 = None,
+        height: torch.int64 = None,
+        width: torch.int64 = None,
+        rotary_pos_emb=None,
+        key: Optional[torch.Tensor] = None,
+        mask: Optional[torch.Tensor] = None
+    ):
         # 1. Self-Attention
         frames = frames.item()
         height = height.item()
         width = width.item()
+        input_layout = "sbh" if self.enable_sequence_parallelism or self.sequence_parallel else "bsh"
+
         if self.enable_sequence_parallelism or self.sequence_parallel:
             _scale_shift_table = self.scale_shift_table(timestep)[0]
             if self.sequence_parallel:
@@ -793,20 +887,30 @@ class VideoDiTBlock(nn.Module):
         else:
             norm_latents = torch.cat((latents_text, latents_vid), dim=1)  # (b, s_t + t * h/2 * w/2, n * d)
 
-        if self.pos_embed is not None and self.positional_embeddings is not None:
-            norm_latents = self.pos_embed(norm_latents, rope_T=rope_T, rope_H=rope_H, rope_W=rope_W)
+        q, k, v = self.self_atten.function_before_core_attention(norm_latents, key, input_layout, rotary_pos_emb)
 
-        attn_output = self.self_atten(
-            query=norm_latents,
-            key=None,
-            mask=None,
-            frames=frames,
-            height=height,
-            width=width,
-            rope_T=rope_T,
-            rope_H=rope_H,
-            rope_W=rope_W
-        )
+        return q, k, v, [gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp]
+
+    def attention(self, q, k, v, mask=None):
+        attn_output = self.self_atten.core_attention_flash(q, k, v, mask)
+        return attn_output
+
+    def after_attetion(
+        self,
+        latents,
+        attn_output,
+        gate_msa,
+        text_gate_msa,
+        scale_mlp,
+        shift_mlp,
+        text_scale_mlp,
+        text_shift_mlp,
+        gate_mlp,
+        text_gate_mlp
+    ):
+        output_layout = "sbh" if self.enable_sequence_parallelism or self.sequence_parallel else "bsh"
+        attn_output = self.self_atten.function_after_core_attention(attn_output, output_layout)
+
         if self.enable_sequence_parallelism or self.sequence_parallel:
             attn_vid_output = gate_msa * attn_output[self.text_length:]
             attn_text_output = text_gate_msa * attn_output[:self.text_length]
