@@ -34,11 +34,11 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 28 \
-    --hidden-size 1152 \
-    --num-attention-heads 16 \
-    --seq-length 1024\
-    --max-position-embeddings 1024 \
+    --num-layers 1 \
+    --hidden-size 3072 \
+    --num-attention-heads 48 \
+    --seq-length 24 \
+    --max-position-embeddings 24 \
     --attention-dropout 0.0 \
     --hidden-dropout 0.0 \
     --tokenizer-type NullTokenizer \
