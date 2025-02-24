@@ -756,7 +756,7 @@ class VideoDiTBlock(nn.Module):
     ) -> torch.FloatTensor:
         # before_self_attention
         if checkpoint_skip_core_attention:
-            q, k, v, [gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp] = tensor_parallel.checkpoint(
+            q, k, v, gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp = tensor_parallel.checkpoint(
                 self.before_attention,
                 False,
                 latents,
@@ -767,7 +767,7 @@ class VideoDiTBlock(nn.Module):
                 rotary_pos_emb
             )
         else:
-            q, k, v, [gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp] = self.before_attention(
+            q, k, v, gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp = self.before_attention(
                 latents, timestep, frames, height, width, rotary_pos_emb)
 
         # self_attention
@@ -889,7 +889,7 @@ class VideoDiTBlock(nn.Module):
 
         q, k, v = self.self_atten.function_before_core_attention(norm_latents, key, input_layout, rotary_pos_emb)
 
-        return q, k, v, [gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp]
+        return q, k, v, gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp
 
     def attention(self, q, k, v, mask=None):
         attn_output = self.self_atten.core_attention_flash(q, k, v, mask)

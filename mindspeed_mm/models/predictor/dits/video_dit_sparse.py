@@ -9,6 +9,7 @@ from diffusers.models.embeddings import PixArtAlphaTextProjection
 from diffusers.models.normalization import AdaLayerNormSingle
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
+from megatron.legacy.model.enums import AttnType
 
 from mindspeed_mm.data.data_utils.constants import INPUT_MASK, MASKED_VIDEO
 from mindspeed_mm.models.common import MultiModalModule
@@ -16,6 +17,7 @@ from mindspeed_mm.models.common.embeddings import PatchEmbed2D
 from mindspeed_mm.models.common.ffn import FeedForward
 from mindspeed_mm.models.common.attention import MultiHeadSparseAttentionSBH
 from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
+from mindspeed_mm.models.common.embeddings.pos_embeddings import RoPE3DSORA
 
 
 def zero_module(module):
@@ -38,7 +40,10 @@ class VideoDitSparse(MultiModalModule):
         out_channels: The number of channels in the output.
         dropout: The dropout probability to use.
         cross_attention_dim: The number of prompt dimensions to use.
-        attention_bias: Whether to use bias in VideoDiTBlock's attention.
+        attention_q_bias: Whether to use bias for Query in VideoDiTBlock's attention.
+        attention_k_bias: Whether to use bias for Key in VideoDiTBlock's attention.
+        attention_v_bias: Whether to use bias for Value in VideoDiTBlock's attention.
+        fa_layout: The inputs's layout in Flash Attention.
         patch_size: The shape of the patchs.
         activation_fn: The name of activation function use in VideoDiTBlock.
         norm_elementwise_affine: Whether to use learnable elementwise affine parameters for normalization.
@@ -55,7 +60,10 @@ class VideoDitSparse(MultiModalModule):
         num_layers: int = 1,
         dropout: float = 0.0,
         cross_attention_dim: Optional[int] = None,
-        attention_bias: bool = False,
+        attention_q_bias: bool = False,
+        attention_k_bias: bool = False,
+        attention_v_bias: bool = False,
+        fa_layout: str = "sbh",
         patch_size_thw: Tuple[int] = None,
         activation_fn: str = "geglu",
         only_cross_attention: bool = False,
@@ -81,7 +89,9 @@ class VideoDitSparse(MultiModalModule):
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
+        self.checkpoint_skip_core_attention = args.recompute_skip_core_attention
         self.recompute_num_layers = args.recompute_num_layers
+        self.recompute_num_layers_skip_core_attention = args.recompute_num_layers_skip_core_attention
         if self.recompute_granularity == "selective":
             raise ValueError("recompute_granularity does not support selective mode in VideoDiT")
         if self.distribute_saved_activations:
@@ -105,6 +115,12 @@ class VideoDitSparse(MultiModalModule):
             # set label "sequence_parallel", for all_reduce the grad
             for param in self.adaln_single.parameters():
                 setattr(param, "sequence_parallel", self.sequence_parallel)
+            
+        # Rotary positional embeddings
+        self.rope = RoPE3DSORA(
+            head_dim=head_dim,
+            interpolation_scale=interpolation_scale
+        )
 
         self.global_layer_idx = global_layer_idx if global_layer_idx is not None else tuple(range(num_layers))
         self.videodit_sparse_blocks = nn.ModuleList(
@@ -116,16 +132,19 @@ class VideoDitSparse(MultiModalModule):
                     dropout=dropout,
                     cross_attention_dim=cross_attention_dim,
                     activation_fn=activation_fn,
-                    attention_bias=attention_bias,
+                    attention_q_bias=attention_q_bias,
+                    attention_k_bias=attention_k_bias,
+                    attention_v_bias=attention_v_bias,
+                    fa_layout=fa_layout,
                     only_cross_attention=only_cross_attention,
                     double_self_attention=double_self_attention,
                     upcast_attention=upcast_attention,
                     norm_elementwise_affine=norm_elementwise_affine,
                     norm_eps=norm_eps,
-                    interpolation_scale=interpolation_scale,
                     sparse1d=sparse1d if 1 < _ < 30 else False,
                     sparse_n=sparse_n,
                     sparse_group=_ % 2 == 1,
+                    rope=self.rope
                 )
                 for _ in self.global_layer_idx
             ]
@@ -235,6 +254,11 @@ class VideoDitSparse(MultiModalModule):
         height, width = h // self.patch_size, w // self.patch_size
         frames, height, width = torch.tensor(frames), torch.tensor(height), torch.tensor(width)
 
+        # Rotary positional embeddings
+        rotary_pos_emb = self.rope(batch_size, frames * mpu.get_context_parallel_world_size(), height, width, latents.device)# s b 1 d
+        if mpu.get_context_parallel_world_size() > 1:
+            rotary_pos_emb = rotary_pos_emb.chunk(mpu.get_context_parallel_world_size(), dim=0)[mpu.get_context_parallel_rank()]
+
         origin_video_mask = video_mask.clone().detach().to(self.dtype)
         origin_prompt_mask = prompt_mask.clone().detach().to(self.dtype)
         if video_mask is not None and video_mask.ndim == 4:
@@ -268,6 +292,7 @@ class VideoDitSparse(MultiModalModule):
                     frames=frames,
                     height=height,
                     width=width,
+                    rotary_pos_emb=rotary_pos_emb,
                 )
             else:
                 for i, block in zip(self.global_layer_idx, self.videodit_sparse_blocks):
@@ -285,6 +310,7 @@ class VideoDitSparse(MultiModalModule):
                                 frames=frames,
                                 height=height,
                                 width=width,
+                                rotary_pos_emb=rotary_pos_emb,
                             )
 
         output = latents
@@ -383,7 +409,8 @@ class VideoDitSparse(MultiModalModule):
             timestep,
             frames,
             height,
-            width):
+            width,
+            rotary_pos_emb):
         """Forward method with activation checkpointing."""
 
         def custom(start, end):
@@ -416,7 +443,8 @@ class VideoDitSparse(MultiModalModule):
                     timestep,
                     frames,
                     height,
-                    width
+                    width,
+                    rotary_pos_emb
                 )
                 layer_num += self.recompute_num_layers
         elif self.recompute_method == "block":
@@ -432,7 +460,27 @@ class VideoDitSparse(MultiModalModule):
                         timestep,
                         frames,
                         height,
-                        width
+                        width,
+                        rotary_pos_emb
+                    )
+                elif layer_num < self.recompute_num_layers + self.recompute_num_layers_skip_core_attention:
+                    block = self._get_block(layer_num)
+                    layer_idx = self.global_layer_idx[layer_num]
+                    if layer_idx > 1 and layer_idx < 30:
+                        video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
+                    else:
+                        video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
+                    latents = block(
+                        latents,
+                        video_mask,
+                        prompt,
+                        prompt_mask,
+                        timestep,
+                        frames,
+                        height,
+                        width,
+                        rotary_pos_emb,
+                        checkpoint_skip_core_attention=self.checkpoint_skip_core_attention
                     )
                 else:
                     block = self._get_block(layer_num)
@@ -449,7 +497,8 @@ class VideoDitSparse(MultiModalModule):
                         timestep,
                         frames,
                         height,
-                        width
+                        width,
+                        rotary_pos_emb
                     )
         else:
             raise ValueError("Invalid activation recompute method.")
@@ -523,8 +572,11 @@ class VideoDiTSparseBlock(nn.Module):
             dropout=0.0,
             cross_attention_dim: Optional[int] = None,
             activation_fn: str = "geglu",
-            attention_bias: bool = False,
+            attention_q_bias: bool = False,
+            attention_k_bias: bool = False,
+            attention_v_bias: bool = False,
             attention_out_bias: bool = True,
+            fa_layout: str = "sbh",
             only_cross_attention: bool = False,
             double_self_attention: bool = False,
             upcast_attention: bool = False,
@@ -533,10 +585,10 @@ class VideoDiTSparseBlock(nn.Module):
             final_dropout: bool = False,
             ff_inner_dim: Optional[int] = None,
             ff_bias: bool = True,
-            interpolation_scale: Tuple[int] = (1, 1, 1),
             sparse1d: bool = False,
             sparse_n: int = 2,
             sparse_group: bool = False,
+            rope=None,
     ):
         super().__init__()
 
@@ -550,16 +602,19 @@ class VideoDiTSparseBlock(nn.Module):
         self.self_atten = MultiHeadSparseAttentionSBH(
             query_dim=dim,
             key_dim=cross_attention_dim if only_cross_attention else None,
-            num_heads=num_heads,
-            head_dim=head_dim,
-            dropout=dropout,
-            proj_qkv_bias=attention_bias,
+            num_attention_heads=num_heads,
+            hidden_size=head_dim * num_heads,
+            proj_q_bias=attention_q_bias,
+            proj_k_bias=attention_k_bias,
+            proj_v_bias=attention_v_bias,
             proj_out_bias=attention_out_bias,
-            interpolation_scale=interpolation_scale,
+            dropout=dropout,
+            attention_type=AttnType.self_attn,
+            fa_layout=fa_layout,
             sparse1d=sparse1d,
             sparse_n=sparse_n,
             sparse_group=sparse_group,
-            is_cross_attn=False,
+            rope=rope
         )
 
         # 2. Cross-Attn
@@ -568,16 +623,18 @@ class VideoDiTSparseBlock(nn.Module):
         self.cross_atten = MultiHeadSparseAttentionSBH(
             query_dim=dim,
             key_dim=cross_attention_dim if not double_self_attention else None,
-            num_heads=num_heads,
-            head_dim=head_dim,
-            dropout=dropout,
-            proj_qkv_bias=attention_bias,
+            num_attention_heads=num_heads,
+            hidden_size=head_dim * num_heads,
+            proj_q_bias=attention_q_bias,
+            proj_k_bias=attention_k_bias,
+            proj_v_bias=attention_v_bias,
             proj_out_bias=attention_out_bias,
-            interpolation_scale=interpolation_scale,
+            dropout=dropout,
+            attention_type=AttnType.cross_attn,
+            fa_layout=fa_layout,
             sparse1d=sparse1d,
             sparse_n=sparse_n,
             sparse_group=sparse_group,
-            is_cross_attn=True,
         )  # is self-attn if encoder_hidden_states is none
 
         # 3. Feed-forward
@@ -594,41 +651,59 @@ class VideoDiTSparseBlock(nn.Module):
         self.scale_shift_table = nn.Parameter(torch.randn(6, dim) / dim ** 0.5)
         # set label "sequence_parallel", for all_reduce the grad
         setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
-
-    def forward(
-            self,
-            latents: torch.FloatTensor,
-            video_mask: Optional[torch.FloatTensor] = None,
-            prompt: Optional[torch.FloatTensor] = None,
-            prompt_mask: Optional[torch.FloatTensor] = None,
-            timestep: Optional[torch.LongTensor] = None,
-            frames: int = None,
-            height: int = None,
-            width: int = None,
-    ) -> torch.FloatTensor:
-        frames = frames.item()
-        height = height.item()
-        width = width.item()
-
-        # 1. Self-Attention
+    
+    def _function_before_self_core_attention(
+            self, 
+            latents, 
+            timestep,
+            frames=None,
+            height=None,
+            width=None,
+            rotary_pos_emb: Optional[torch.FloatTensor] = None
+    ):
         batch_size = latents.shape[1]
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
                 self.scale_shift_table[:, None] + timestep.reshape(6, batch_size, -1)
         ).chunk(6, dim=0)
         norm_latents = self.norm1(latents)
         norm_latents = norm_latents * (1 + scale_msa) + shift_msa
-        attn_output = self.self_atten(
-            query=norm_latents,
-            key=None,
-            mask=video_mask,
+
+        query, key, value = self.self_atten.function_before_core_attention(
+            norm_latents,
+            frames=frames,
+            height=height, 
+            width=width,
+            rotary_pos_emb=rotary_pos_emb
+        )
+
+        return query, key, value, gate_msa, shift_mlp, scale_mlp, gate_mlp
+
+    def _function_after_self_core_attention(
+            self,
+            latents,
+            self_core_attn_output,
+            prompt: Optional[torch.FloatTensor] = None,
+            prompt_mask: Optional[torch.FloatTensor] = None,
+            frames=None,
+            height=None,
+            width=None,
+            gate_msa=None,
+            shift_mlp=None,
+            scale_mlp=None,
+            gate_mlp=None,
+    ):
+        self_attn_output = self.self_atten.function_after_core_attention(
+            self_core_attn_output,
             frames=frames,
             height=height,
             width=width,
+            dtype=next(self.parameters()).dtype
         )
-        attn_output = gate_msa * attn_output
+
+        attn_output = gate_msa * self_attn_output
         latents = attn_output + latents
 
-        # 2. Cross-Attention
+        # Cross-Attention
         norm_latents = latents
         attn_output = self.cross_atten(
             query=norm_latents,
@@ -640,12 +715,84 @@ class VideoDiTSparseBlock(nn.Module):
         )
         latents = attn_output + latents
 
-        # 3. Feed-forward
+        # Feed-forward
         norm_latents = self.norm2(latents)
         norm_latents = norm_latents * (1 + scale_mlp) + shift_mlp
         ff_output = self.ff(norm_latents)
         ff_output = gate_mlp * ff_output
         latents = ff_output + latents
+    
+        return latents
+
+    def forward(
+            self,
+            latents: torch.FloatTensor,
+            video_mask: Optional[torch.FloatTensor] = None,
+            prompt: Optional[torch.FloatTensor] = None,
+            prompt_mask: Optional[torch.FloatTensor] = None,
+            timestep: Optional[torch.LongTensor] = None,
+            frames: int = None,
+            height: int = None,
+            width: int = None,
+            rotary_pos_emb=None,
+            checkpoint_skip_core_attention: bool = False
+    ) -> torch.FloatTensor:
+        # recompute if skip core attention of self_atten
+        if checkpoint_skip_core_attention:
+            query, key, value, gate_msa, shift_mlp, scale_mlp, gate_mlp = tensor_parallel.checkpoint(
+                self._function_before_self_core_attention,
+                False,
+                latents,
+                timestep,
+                frames,
+                height,
+                width,
+                rotary_pos_emb
+            )
+        else:
+            query, key, value, gate_msa, shift_mlp, scale_mlp, gate_mlp = self._function_before_self_core_attention(
+                latents,
+                timestep,
+                frames,
+                height,
+                width,
+                rotary_pos_emb
+            )
+
+        # self core attention
+        self_core_attn_output = self.self_atten.function_core_attention(query, key, value, video_mask)
+
+        if checkpoint_skip_core_attention:
+            latents = tensor_parallel.checkpoint(
+                self._function_after_self_core_attention,
+                False,
+                latents,
+                self_core_attn_output,
+                prompt,
+                prompt_mask,
+                frames,
+                height,
+                width,
+                gate_msa,
+                shift_mlp,
+                scale_mlp,
+                gate_mlp,
+            )
+        else:
+            latents = self._function_after_self_core_attention(
+                latents,
+                self_core_attn_output,
+                prompt,
+                prompt_mask,
+                frames,
+                height,
+                width,
+                gate_msa,
+                shift_mlp,
+                scale_mlp,
+                gate_mlp,
+            )
+        
         return latents
 
 
@@ -659,7 +806,10 @@ class VideoDitSparseI2V(VideoDitSparse):
             num_layers: int = 1,
             dropout: float = 0.0,
             cross_attention_dim: Optional[int] = None,
-            attention_bias: bool = False,
+            attention_q_bias: bool = False,
+            attention_k_bias: bool = False,
+            attention_v_bias: bool = False,
+            fa_layout: str = "sbh",
             patch_size_thw: Tuple[int] = None,
             activation_fn: str = "geglu",
             only_cross_attention: bool = False,
@@ -685,7 +835,10 @@ class VideoDitSparseI2V(VideoDitSparse):
             num_layers=num_layers,
             dropout=dropout,
             cross_attention_dim=cross_attention_dim,
-            attention_bias=attention_bias,
+            attention_q_bias=attention_q_bias,
+            attention_k_bias=attention_k_bias,
+            attention_v_bias=attention_v_bias,
+            fa_layout=fa_layout,
             patch_size_thw=patch_size_thw,
             activation_fn=activation_fn,
             only_cross_attention=only_cross_attention,

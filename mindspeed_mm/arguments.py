@@ -85,6 +85,9 @@ def _add_training_args(parser):
                        action='store_true',
                        default=False,
                        help='Recomputing will skip the Flash attention if True')
+    group.add_argument('--recompute-num-layers-skip-core-attention',
+                       type=int,
+                       default=0)
 
     return parser
 
