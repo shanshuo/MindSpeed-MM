@@ -35,7 +35,7 @@
         "dynamic_image_size": true,
         "use_thumbnail": true,
         "min_dynamic_patch": 1,
-        "max_dynamic_patch": 12,
+        "max_dynamic_patch": 6,
         "min_num_frame": 4,
         "max_num_frame": 12,
         "sampling_method": "rand"

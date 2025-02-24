@@ -47,7 +47,7 @@
         "persist_layer_norm": true,
         "activation_func": "silu",
         "vocab_size": 128265,
-        "rotary_base": 100000,
+        "rotary_base": 500000,
         "recompute_granularity": "full",
         "recompute_method": "uniform",
         "recompute_num_layers": 1
@@ -88,7 +88,7 @@
             "recompute_granularity": "full",
             "recompute_method": "uniform",
             "recompute_num_layers": 1,
-            "freeze": false
+            "freeze": true
         },
         "vision_projector": {
             "model_id": "InternVLMLP",

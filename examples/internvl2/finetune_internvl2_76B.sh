@@ -12,10 +12,10 @@ export ACLNN_CACHE_LIMIT=100000
 NPUS_PER_NODE=16
 MASTER_PORT=6000
 HOSTFILE='./hostfile'
+MASTER_ADDR=$(head -n1 $HOSTFILE | awk '{print $1;}')
 NODEADDR=$(hostname -I | awk -F " " '{print$1}')
 NODE_RANK=$(awk '{ranks[$1]=(FNR-1);}END{print ranks["'$NODEADDR'"];}' $HOSTFILE)
-NNODES=$(wc -l $HOSTFILE)
-MASTER_ADDR=$(head -n 1 $HOSTFILE | awk '{print $1;}')
+NNODES=$(cat $HOSTFILE | wc -l)
 
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
@@ -59,14 +59,14 @@ GPT_ARGS="
     --tokenizer-type NullTokenizer \
     --vocab-size 128258 \
     --position-embedding-type rope \
-    --rotary-base 100000 \
+    --rotary-base 500000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 1e-5 \
+    --lr 2e-5 \
     --min-lr 0.0 \
     --train-iters 5000 \
     --lr-decay-style cosine \
-    --weight-decay 0.01 \
+    --weight-decay 0.05 \
     --clip-grad 1.0 \
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
@@ -80,7 +80,8 @@ GPT_ARGS="
     --no-load-rng \
     --no-save-optim \
     --no-save-rng \
-    --num-workers 8 \
+    --num-workers 4 \
+    --enable-dummy-optimizer \
 "
 
 OUTPUT_ARGS="
