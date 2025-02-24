@@ -65,7 +65,8 @@
         "i2v_processor": {
             "processor_id": "opensoraplan_i2v_processor",
             "vae_scale_factor": [4, 8, 8]
-        }
+        },
+        "vae_cp_size": 1
     }
 }
 

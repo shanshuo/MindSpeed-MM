@@ -58,7 +58,8 @@
         "t_interpolation": "trilinear",
         "vae_scale_factor":[4,8,8],
         "use_tiling": false,
-        "connect_res_layer_num": 2
+        "connect_res_layer_num": 2,
+        "vae_cp_size": 1
     },
     "patch": {
         "ae_float32": true

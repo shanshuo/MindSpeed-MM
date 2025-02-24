@@ -154,7 +154,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 首先修改 examples/opensoraplan1.3/convert_ckpt_to_mm.py 参数
 
     TP_SIZE = 1  # TP（Tensor Parallel）size，需要和训练脚本的TP保持一致
-    PP_SIZE = [32] # PP (Pipeline Parallel) size, 需要和训练脚本保持一致
+    PP_SIZE = [] # PP (Pipeline Parallel) size, 需要和训练脚本保持一致
     dit_hg_weight_path = "raw_ckpt/open-sora-plan/any93x640x640/" #huggingface下载的dit预训练权重路径
     dit_mm_save_dir = "mm_ckpt/open-sora-plan/pretrained-checkpoint-dit" #转换到MindSpeed-MM的dit权重存放路径
 
@@ -295,6 +295,11 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
     --virtual-pipeline-model-parallel-size ${VP} \
   ...
   ```
+
++ VAE-CP：VAE序列并行
+  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成vae的encode计算，需要开启VAE-CP
+  - 使能方式：在xxx_model.json中设置vae_cp_size, vae_cp_size为大于1的整数时生效, 建议设置等于Dit部分cp_size
+  - 限制条件：暂不兼容PP
 
 【动态/固定分辨率】
 - 支持使用动态分辨率或固定分辨率进行训练，默认为动态分辨率训练，如切换需修改启动脚本pretrain_xxx.sh

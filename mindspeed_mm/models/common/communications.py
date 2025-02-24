@@ -373,3 +373,51 @@ def _conv_gather(input_, dim, kernel_size):
     output = torch.cat(tensor_list, dim=dim).contiguous()
 
     return output
+
+
+def collect_tensors_across_ranks(tensor, group=None):
+    if group is None:
+        group = dist.group.WORLD
+
+    world_size = dist.get_world_size(group)
+
+    if world_size == 1:
+        return [tensor]
+
+    def broadcast_shapes(tensor, world_size, group):
+        shape = tensor.shape
+        shape_list = [torch.Size([]) for _ in range(world_size)]
+        dist.all_gather_object(shape_list, [shape], group=group)
+        return shape_list
+
+    shapes = broadcast_shapes(tensor, world_size, group)
+    recv_tensors = [torch.empty(*shape, dtype=tensor.dtype).to(tensor.device) for shape in shapes]
+    dist.all_gather(recv_tensors, tensor, group=group)
+
+    return recv_tensors
+
+
+def split_tensor(tensor, group, rank, dim=2, first_padding=0):
+    world_size = dist.get_world_size(group)
+    if world_size == 1:
+        return tensor
+
+    total = tensor.shape[dim]
+    if not ((total + first_padding) % world_size) == 0:
+        raise ValueError(f"Total frames {total + first_padding} must be divisible by world_size {world_size}.")
+
+    rank_size = (total + first_padding) // world_size
+    first_rank_frames = rank_size - first_padding
+
+    if rank == 0:
+        start = 0
+        end = first_rank_frames
+    else:
+        start = first_rank_frames + (rank - 1) * rank_size
+        end = start + rank_size
+
+    slice_obj = [slice(None)] * tensor.ndim
+    slice_obj[dim] = slice(start, end)
+    split_part = tensor[tuple(slice_obj)].contiguous()
+
+    return split_part

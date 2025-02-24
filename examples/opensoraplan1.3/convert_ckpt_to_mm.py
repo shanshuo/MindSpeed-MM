@@ -223,10 +223,10 @@ def save_vae(_state_dict, save_dir, exists_ok=False):
 if __name__ == "__main__":
     # 参数配置
     TP_SIZE = 1
-    # The layers of each pp_rank. For example, [32] means disable pp (pp_size is 1),
+    # The layers of each pp_rank. For example, [] means disable pp (pp_size is 1),
     # [8, 8, 8, 8] means pp_size is 4 and allocate 8 layers for each pp stage.
     # [[4, 4, 4, 4], [4, 4, 4, 4]] means vp_size is 2, pp_size is 4 and allocatte 4 layers in each vp stage.
-    PP_SIZE = [32]
+    PP_SIZE = []
 
     dit_hg_weight_path = "local downloaded open sora plan weight path"
     dit_mm_save_dir = "dir to save dit weights after transfer to MindSpeed-MM"

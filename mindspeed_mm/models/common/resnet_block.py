@@ -85,15 +85,17 @@ class ResnetBlock3D(nn.Module):
         conv_shortcut=False,
         dropout=0,
         norm_type="groupnorm",
-        conv_type="CausalConv3d"
+        conv_type="CausalConv3d",
+        enable_vae_cp=False
     ):
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = in_channels if out_channels is None else out_channels
         self.use_conv_shortcut = conv_shortcut
         self.norm1 = normalize(in_channels, num_groups, eps, affine, norm_type=norm_type)
+        self.enable_vae_cp = enable_vae_cp
         if conv_type == "WfCausalConv3d":
-            ConvLayer = WfCausalConv3d
+            ConvLayer = ContextParallelCausalConv3d if self.enable_vae_cp else WfCausalConv3d
         elif conv_type == "CausalConv3d":
             ConvLayer = CausalConv3d
         else:

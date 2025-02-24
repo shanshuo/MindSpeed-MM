@@ -3,7 +3,7 @@ from collections import deque
 
 import torch.nn as nn
 import torch
-from einops import rearrange
+from megatron.core import mpu
 
 from mindspeed_mm.models.common.checkpoint import load_checkpoint
 from mindspeed_mm.models.common.module import MultiModalModule
@@ -18,8 +18,15 @@ from mindspeed_mm.models.common.wavelet import (
 )
 from mindspeed_mm.models.common.conv import Conv2d, WfCausalConv3d
 from mindspeed_mm.models.common.resnet_block import ResnetBlock2D, ResnetBlock3D
-from mindspeed_mm.models.common.updownsample import Upsample, Downsample, Spatial2xTime2x3DDownsample, CachedCausal3DUpsample
-
+from mindspeed_mm.models.common.updownsample import Upsample, Downsample, Spatial2xTime2x3DDownsample, \
+    CachedCausal3DUpsample
+from mindspeed_mm.utils.utils import (
+    is_context_parallel_initialized,
+    initialize_context_parallel,
+    get_context_parallel_group,
+    get_context_parallel_rank,
+)
+from mindspeed_mm.models.common.communications import split_tensor, collect_tensors_across_ranks
 
 WFVAE_MODULE_MAPS = {
     "Conv2d": Conv2d,
@@ -34,7 +41,9 @@ WFVAE_MODULE_MAPS = {
     "InverseHaarWaveletTransform3D": InverseHaarWaveletTransform3D,
     "Spatial2xTime2x3DDownsample": Spatial2xTime2x3DDownsample,
     "Upsample": Upsample,
-    "Spatial2xTime2x3DUpsample": CachedCausal3DUpsample
+    "Spatial2xTime2x3DUpsample": CachedCausal3DUpsample,
+    "WfCausalConv3dAttnBlock": WfCausalConv3dAttnBlock,
+    "WfCausalConv3dAttnBlockForOpenSoraPlan": WfCausalConv3dAttnBlockForOpenSoraPlan
 }
 
 
@@ -55,11 +64,13 @@ class Encoder(MultiModalModule):
             energy_flow_hidden_size: int = 64,
             dropout: float = 0.0,
             use_attention: bool = True,
+            atten_block: str = "WfCausalConv3dAttnBlock",
             norm_type: str = "groupnorm",
             l1_dowmsample_block: str = "Downsample",
             l1_downsample_wavelet: str = "HaarWaveletTransform2D",
             l2_dowmsample_block: str = "Spatial2xTime2x3DDownsample",
             l2_downsample_wavelet: str = "HaarWaveletTransform3D",
+            enable_vae_cp: bool = False
     ) -> None:
         super().__init__(config=None)
         self.activation = nn.SiLU()
@@ -92,11 +103,13 @@ class Encoder(MultiModalModule):
                     out_channels=base_channels * 2,
                     dropout=dropout,
                     norm_type=norm_type,
-                    conv_type="WfCausalConv3d"
+                    conv_type="WfCausalConv3d",
+                    enable_vae_cp=enable_vae_cp
                 )
                 for _ in range(num_resblocks)
             ],
-            model_name_to_cls(l2_dowmsample_block)(base_channels * 2, base_channels * 2, conv_type="WfCausalConv3d"),
+            model_name_to_cls(l2_dowmsample_block)(base_channels * 2, base_channels * 2, conv_type="WfCausalConv3d",
+                                                   enable_vae_cp=enable_vae_cp),
         )
         # Connection
         if l1_downsample_wavelet.endswith("2D"):
@@ -116,19 +129,21 @@ class Encoder(MultiModalModule):
                 out_channels=base_channels * 4,
                 dropout=dropout,
                 norm_type=norm_type,
-                conv_type="WfCausalConv3d"
+                conv_type="WfCausalConv3d",
+                enable_vae_cp=enable_vae_cp
             ),
             ResnetBlock3D(
                 in_channels=base_channels * 4,
                 out_channels=base_channels * 4,
                 dropout=dropout,
                 norm_type=norm_type,
-                conv_type="WfCausalConv3d"
+                conv_type="WfCausalConv3d",
+                enable_vae_cp=enable_vae_cp
             ),
         ]
         if use_attention:
             mid_layers.insert(
-                1, WfCausalConv3dAttnBlock(
+                1, model_name_to_cls(atten_block)(
                     in_channels=base_channels * 4,
                     out_channels=base_channels * 4,
                     norm_type=norm_type)
@@ -137,14 +152,16 @@ class Encoder(MultiModalModule):
 
         self.norm_out = normalize(base_channels * 4, norm_type=norm_type)
         self.conv_out = WfCausalConv3d(
-            base_channels * 4, latent_dim * 2, kernel_size=3, stride=1, padding=1
+            base_channels * 4, latent_dim * 2, kernel_size=3, stride=1, padding=1, parallel_input=False
         )
 
+        self.wavelet_tranform_in = model_name_to_cls(l2_downsample_wavelet)()
         self.wavelet_transform_l1 = model_name_to_cls(l1_downsample_wavelet)()
         self.wavelet_transform_l2 = model_name_to_cls(l2_downsample_wavelet)()
 
     def forward(self, coeffs):
-
+        coeffs = split_tensor(coeffs, get_context_parallel_group(), get_context_parallel_rank(), first_padding=3)
+        coeffs = self.wavelet_tranform_in(coeffs)
         l1_coeffs = coeffs[:, :3]
         l1_coeffs = self.wavelet_transform_l1(l1_coeffs)
         l1 = self.connect_l1(l1_coeffs)
@@ -159,25 +176,9 @@ class Encoder(MultiModalModule):
 
         h = self.norm_out(h)
         h = self.activation(h)
+        h = torch.cat(collect_tensors_across_ranks(h, get_context_parallel_group()), dim=2)
         h = self.conv_out(h)
-
         return h
-
-
-class EncoderForOpenSoraPlan(Encoder):
-    def __init__(
-            self, *args, **kwargs
-    ) -> None:
-        super().__init__(*args, **kwargs)
-        use_attention = kwargs.get('use_attention')
-        base_channels = kwargs.get('base_channels')
-        norm_type = kwargs.get('norm_type')
-        if use_attention:
-            self.mid[1] = WfCausalConv3dAttnBlockForOpenSoraPlan(
-                in_channels=base_channels * 4,
-                out_channels=base_channels * 4,
-                norm_type=norm_type
-            )
 
 
 class Decoder(MultiModalModule):
@@ -190,6 +191,7 @@ class Decoder(MultiModalModule):
             dropout: float = 0.0,
             energy_flow_hidden_size: int = 128,
             use_attention: bool = True,
+            atten_block: str = "WfCausalConv3dAttnBlock",
             norm_type: str = "groupnorm",
             t_interpolation: str = "nearest",
             connect_res_layer_num: int = 2,
@@ -197,6 +199,7 @@ class Decoder(MultiModalModule):
             l1_upsample_wavelet: str = "InverseHaarWaveletTransform2D",
             l2_upsample_block: str = "Spatial2xTime2x3DUpsample",
             l2_upsample_wavelet: str = "InverseHaarWaveletTransform3D",
+            enable_vae_cp: bool = False
     ) -> None:
         super().__init__(config=None)
         self.energy_flow_hidden_size = energy_flow_hidden_size
@@ -222,7 +225,7 @@ class Decoder(MultiModalModule):
         ]
         if use_attention:
             mid_layers.insert(
-                1, WfCausalConv3dAttnBlock(
+                1, model_name_to_cls(atten_block)(
                     in_channels=base_channels * 4,
                     out_channels=base_channels * 4,
                     norm_type=norm_type)
@@ -268,7 +271,8 @@ class Decoder(MultiModalModule):
                 out_channels=base_channels * 2,
                 dropout=dropout,
                 norm_type=norm_type,
-                conv_type="WfCausalConv3d"
+                conv_type="WfCausalConv3d",
+                enable_vae_cp=enable_vae_cp
             ),
         )
         self.layer = nn.Sequential(
@@ -287,94 +291,16 @@ class Decoder(MultiModalModule):
         self.connect_l1 = nn.Sequential(
             *[
                 ResnetBlock3D(
-                    in_channels=base_channels,
-                    out_channels=base_channels,
-                    dropout=dropout,
-                    norm_type=norm_type,
-                    conv_type="WfCausalConv3d"
-                )
-                for _ in range(connect_res_layer_num)
-            ],
-            Conv2d(base_channels, 12, kernel_size=3, stride=1, padding=1),
-        )
-        self.connect_l2 = nn.Sequential(
-            *[
-                ResnetBlock3D(
-                    in_channels=base_channels,
-                    out_channels=base_channels,
-                    dropout=dropout,
-                    norm_type=norm_type,
-                    conv_type="WfCausalConv3d"
-                )
-                for _ in range(connect_res_layer_num)
-            ],
-            Conv2d(base_channels, 24, kernel_size=3, stride=1, padding=1),
-        )
-        # Out
-        self.norm_out = normalize(base_channels, norm_type=norm_type)
-        self.conv_out = Conv2d(base_channels, 24, kernel_size=3, stride=1, padding=1)
-
-        self.inverse_wavelet_transform_out = InverseHaarWaveletTransform3D()
-        self.inverse_wavelet_transform_l1 = model_name_to_cls(l1_upsample_wavelet)()
-        self.inverse_wavelet_transform_l2 = model_name_to_cls(l2_upsample_wavelet)()
-
-    def forward(self, z):
-        h = self.conv_in(z)
-        h = self.mid(h)
-        l2_coeffs = self.connect_l2(h[:, -self.energy_flow_hidden_size :])
-        l2 = self.inverse_wavelet_transform_l2(l2_coeffs)
-        h = self.up2(h[:, : -self.energy_flow_hidden_size])
-
-        l1_coeffs = h[:, -self.energy_flow_hidden_size :]
-        l1_coeffs = self.connect_l1(l1_coeffs)
-        l1_coeffs[:, :3] = l1_coeffs[:, :3] + l2
-        l1 = self.inverse_wavelet_transform_l1(l1_coeffs)
-
-        h = self.up1(h[:, : -self.energy_flow_hidden_size])
-        h = self.layer(h)
-        h = self.norm_out(h)
-        h = self.activation(h)
-        h = self.conv_out(h)
-        h[:, :3] = h[:, :3] + l1
-        dec = self.inverse_wavelet_transform_out(h)
-        return dec
-
-
-class DecoderForOpenSoraPlan(Decoder):
-    def __init__(
-            self, *args, **kwargs
-    ) -> None:
-        super().__init__(*args, **kwargs)
-        use_attention = kwargs.get('use_attention')
-        base_channels = kwargs.get('base_channels')
-        norm_type = kwargs.get('norm_type')
-        l1_upsample_wavelet = kwargs.get('l1_upsample_wavelet')
-        energy_flow_hidden_size = kwargs.get('energy_flow_hidden_size')
-        dropout = kwargs.get('dropout')
-        connect_res_layer_num = kwargs.get('connect_res_layer_num')
-        if use_attention:
-            self.mid[1] = WfCausalConv3dAttnBlockForOpenSoraPlan(
-                in_channels=base_channels * 4,
-                out_channels=base_channels * 4,
-                norm_type=norm_type
-            )
-        # Connection
-        if l1_upsample_wavelet.endswith("2D"):
-            l1_channels = 12
-        else:
-            l1_channels = 24
-        self.connect_l1 = nn.Sequential(
-            *[
-                ResnetBlock3D(
                     in_channels=energy_flow_hidden_size,
                     out_channels=energy_flow_hidden_size,
                     dropout=dropout,
                     norm_type=norm_type,
-                    conv_type="WfCausalConv3d"
+                    conv_type="WfCausalConv3d",
+                    enable_vae_cp=enable_vae_cp
                 )
                 for _ in range(connect_res_layer_num)
             ],
-            Conv2d(energy_flow_hidden_size, l1_channels, kernel_size=3, stride=1, padding=1),
+            Conv2d(energy_flow_hidden_size, 12, kernel_size=3, stride=1, padding=1),
         )
         self.connect_l2 = nn.Sequential(
             *[
@@ -389,21 +315,131 @@ class DecoderForOpenSoraPlan(Decoder):
             ],
             Conv2d(energy_flow_hidden_size, 24, kernel_size=3, stride=1, padding=1),
         )
+        # Out
+        self.norm_out = normalize(base_channels, norm_type=norm_type)
+        self.conv_out = Conv2d(base_channels, 24, kernel_size=3, stride=1, padding=1)
+
+        self.inverse_wavelet_transform_out = model_name_to_cls(l2_upsample_wavelet)()
+        self.inverse_wavelet_transform_l1 = model_name_to_cls(l1_upsample_wavelet)()
+        self.inverse_wavelet_transform_l2 = model_name_to_cls(l2_upsample_wavelet)()
+
+    def forward(self, z):
+        h = self.conv_in(z)
+        h = self.mid(h)
+        l2_coeffs = self.connect_l2(h[:, -self.energy_flow_hidden_size:])
+        l2 = self.inverse_wavelet_transform_l2(l2_coeffs)
+        h = self.up2(h[:, : -self.energy_flow_hidden_size])
+
+        l1_coeffs = h[:, -self.energy_flow_hidden_size:]
+        l1_coeffs = self.connect_l1(l1_coeffs)
+        l1_coeffs[:, :3] = l1_coeffs[:, :3] + l2
+        l1 = self.inverse_wavelet_transform_l1(l1_coeffs)
+
+        h = self.up1(h[:, : -self.energy_flow_hidden_size])
+        h = self.layer(h)
+        h = self.norm_out(h)
+        h = self.activation(h)
+        h = self.conv_out(h)
+        h[:, :3] = h[:, :3] + l1
+        dec = self.inverse_wavelet_transform_out(h)
+        return dec
 
 
-class BaseWFVAE(MultiModalModule):
+class WFVAE(MultiModalModule):
 
     def __init__(
             self,
-            dtype: str = "fp32",
+            from_pretrained: str = None,
+            latent_dim: int = 8,
+            base_channels: int = 128,
+            encoder_num_resblocks: int = 2,
+            encoder_energy_flow_hidden_size: int = 64,
+            decoder_num_resblocks: int = 2,
+            decoder_energy_flow_hidden_size: int = 128,
+            use_attention: bool = True,
+            atten_block: str = "WfCausalConv3dAttnBlock",
+            dropout: float = 0.0,
+            norm_type: str = "groupnorm",
+            t_interpolation: str = "nearest",
+            vae_scale_factor: list = None,
+            use_tiling: bool = False,
+            connect_res_layer_num: int = 2,
+            l1_dowmsample_block: str = "Downsample",
+            l1_downsample_wavelet: str = "HaarWaveletTransform2D",
+            l2_dowmsample_block: str = "Spatial2xTime2x3DDownsample",
+            l2_downsample_wavelet: str = "HaarWaveletTransform3D",
+            l1_upsample_block: str = "Upsample",
+            l1_upsample_wavelet: str = "InverseHaarWaveletTransform2D",
+            l2_upsample_block: str = "Spatial2xTime2x3DUpsample",
+            l2_upsample_wavelet: str = "InverseHaarWaveletTransform3D",
             scale: list = None,
             shift: list = None,
-            vae_scale_factor: list = None,
+            dtype: str = "fp32",
+            vae_cp_size: int = 1,
+            t_chunk_enc: int = 8,
+            t_chunk_dec: int = 2,
+            t_upsample_times=2,
+            **kwargs
     ) -> None:
         super().__init__(config=None)
-        self.set_parameters(dtype, scale, shift, vae_scale_factor)
+        # Hardcode for now
+        self.t_chunk_enc = t_chunk_enc
+        self.t_chunk_dec = t_chunk_dec
+        self.t_upsample_times = t_upsample_times
+        self.use_quant_layer = False
+        self.vae_scale_factor = vae_scale_factor
 
-    def set_parameters(self, dtype, scale, shift, vae_scale_factor):
+        self.vae_cp_size = vae_cp_size
+        if self.vae_cp_size > 0:
+            if not is_context_parallel_initialized():
+                initialize_context_parallel(self.vae_cp_size)
+
+        self.enable_vae_cp = self.vae_cp_size > 1
+        if self.enable_vae_cp and mpu.get_pipeline_model_parallel_world_size() > 1:
+            raise ValueError("VAE-CP can not be enabled with PP.")
+
+        self.encoder = Encoder(
+            latent_dim=latent_dim,
+            base_channels=base_channels,
+            num_resblocks=encoder_num_resblocks,
+            energy_flow_hidden_size=encoder_energy_flow_hidden_size,
+            dropout=dropout,
+            use_attention=use_attention,
+            norm_type=norm_type,
+            atten_block=atten_block,
+            l1_dowmsample_block=l1_dowmsample_block,
+            l1_downsample_wavelet=l1_downsample_wavelet,
+            l2_dowmsample_block=l2_dowmsample_block,
+            l2_downsample_wavelet=l2_downsample_wavelet,
+            enable_vae_cp=self.enable_vae_cp
+        )
+        self.decoder = Decoder(
+            latent_dim=latent_dim,
+            base_channels=base_channels,
+            num_resblocks=decoder_num_resblocks,
+            energy_flow_hidden_size=decoder_energy_flow_hidden_size,
+            dropout=dropout,
+            use_attention=use_attention,
+            norm_type=norm_type,
+            t_interpolation=t_interpolation,
+            connect_res_layer_num=connect_res_layer_num,
+            atten_block=atten_block,
+            l1_upsample_block=l1_upsample_block,
+            l1_upsample_wavelet=l1_upsample_wavelet,
+            l2_upsample_block=l2_upsample_block,
+            l2_upsample_wavelet=l2_upsample_wavelet
+        )
+        self.set_parameters(dtype, scale, shift)
+        self.configure_cache_offset(l1_dowmsample_block)
+
+        if from_pretrained is not None:
+            load_checkpoint(self, from_pretrained)
+
+        self.enable_tiling(use_tiling)
+        if self.enable_vae_cp:
+            self.dp_group_nums = torch.distributed.get_world_size() // mpu.get_data_parallel_world_size()
+
+    def set_parameters(self, dtype, scale, shift):
         self.dtype = dtype
         if scale is not None and shift is not None:
             self.register_buffer('shift', torch.tensor(shift, dtype=self.dtype)[None, :, None, None, None])
@@ -412,22 +448,19 @@ class BaseWFVAE(MultiModalModule):
             self.register_buffer("shift", torch.zeros(1, 8, 1, 1, 1))
             self.register_buffer("scale", torch.tensor([0.18215] * 8)[None, :, None, None, None])
 
-        # Hardcode for now
-        self.t_chunk_enc = 16
-        self.t_upsample_times = 4 // 2
-        self.t_chunk_dec = 4
-        self.use_quant_layer = False
-        self.vae_scale_factor = vae_scale_factor
-
     # Set cache offset for trilinear lossless upsample.
     def configure_cache_offset(self, l1_dowmsample_block):
         if l1_dowmsample_block == "Downsample":
             self.temporal_uptimes = 4
-            self._set_cache_offset([self.decoder.up2, self.decoder.connect_l2, self.decoder.conv_in, self.decoder.mid], 1)
-            self._set_cache_offset([self.decoder.up2[-2:], self.decoder.up1, self.decoder.connect_l1, self.decoder.layer], self.t_upsample_times)
+            self._set_cache_offset([self.decoder.up2, self.decoder.connect_l2, self.decoder.conv_in, self.decoder.mid],
+                                   1)
+            self._set_cache_offset(
+                [self.decoder.up2[-2:], self.decoder.up1, self.decoder.connect_l1, self.decoder.layer],
+                self.t_upsample_times)
         else:
             self.temporal_uptimes = 8
-            self._set_cache_offset([self.decoder.up2, self.decoder.connect_l2, self.decoder.conv_in, self.decoder.mid], 1)
+            self._set_cache_offset([self.decoder.up2, self.decoder.connect_l2, self.decoder.conv_in, self.decoder.mid],
+                                   1)
             self._set_cache_offset([self.decoder.up2[-2:], self.decoder.connect_l1, self.decoder.up1], 2)
             self._set_cache_offset([self.decoder.up1[-2:], self.decoder.layer], 4)
 
@@ -475,18 +508,32 @@ class BaseWFVAE(MultiModalModule):
         return start_end
 
     def encode(self, x):
+        if self.enable_vae_cp and self.vae_cp_size % self.dp_group_nums == 0 and self.vae_cp_size > self.dp_group_nums:
+            # loop cp
+            data_list = [torch.empty_like(x) for _ in range(self.vae_cp_size)]
+            data_list[get_context_parallel_rank()] = x
+            torch.distributed.all_gather(data_list, x, group=get_context_parallel_group())
+            data_list = data_list[::self.dp_group_nums]
+            latents = []
+            for data in data_list:
+                latents.append(self._encode(data))
+            return latents[get_context_parallel_rank() // self.dp_group_nums]
+        else:
+            return self._encode(x)
+
+    def _encode(self, x):
         self._empty_causal_cached(self.encoder)
+        self._set_first_chunk(True)
         dtype = x.dtype
-        wt = HaarWaveletTransform3D().to(x.device, dtype=x.dtype)
-        coeffs = wt(x)
 
         if self.use_tiling:
-            h = self.tile_encode(coeffs)
+            h = self.tile_encode(x)
         else:
-            h = self.encoder(coeffs)
+            h = self.encoder(x)
             if self.use_quant_layer:
                 h = self.quant_conv(h)
 
+        self._empty_causal_cached(self.encoder)
         posterior = DiagonalGaussianDistribution(h)
 
         if not self.training:
@@ -499,11 +546,12 @@ class BaseWFVAE(MultiModalModule):
 
         start_end = self.build_chunk_start_end(t)
         result = []
-        for start, end in start_end:
+        for idx, (start, end) in enumerate(start_end):
+            self._set_first_chunk(idx == 0)
             chunk = x[:, :, start:end, :, :]
             chunk = self.encoder(chunk)
             if self.use_quant_layer:
-                chunk = self.encoder(chunk)
+                chunk = self.quant_conv(chunk)
             result.append(chunk)
 
         return torch.cat(result, dim=2)
@@ -524,11 +572,12 @@ class BaseWFVAE(MultiModalModule):
 
     def tile_decode(self, x):
         b, c, t, h, w = x.shape
-
         start_end = self.build_chunk_start_end(t, decoder_mode=True)
 
         result = []
-        for start, end in start_end:
+        for idx, (start, end) in enumerate(start_end):
+            self._set_first_chunk(idx == 0)
+
             if end + 1 < t:
                 chunk = x[:, :, start:end + 1, :, :]
             else:
@@ -539,7 +588,7 @@ class BaseWFVAE(MultiModalModule):
             chunk = self.decoder(chunk)
 
             if end + 1 < t:
-                chunk = chunk[:, :, :-2]
+                chunk = chunk[:, :, :-self.temporal_uptimes]
                 result.append(chunk.clone())
             else:
                 result.append(chunk.clone())
@@ -567,215 +616,3 @@ class BaseWFVAE(MultiModalModule):
 
     def disable_tiling(self):
         self.enable_tiling(False)
-
-    def init_from_ckpt(self, path, ignore_keys=None):
-        if ignore_keys is None:
-            ignore_keys = list()
-        sd = torch.load(path, map_location="cpu")
-        print("init from " + path)
-
-        if (
-                "ema_state_dict" in sd
-                and len(sd["ema_state_dict"]) > 0
-                and os.environ.get("NOT_USE_EMA_MODEL", 0) == 0
-        ):
-            print("Load from ema model!")
-            sd = sd["ema_state_dict"]
-            sd = {key.replace("module.", ""): value for key, value in sd.items()}
-        elif "state_dict" in sd:
-            print("Load from normal model!")
-            if "gen_model" in sd["state_dict"]:
-                sd = sd["state_dict"]["gen_model"]
-            else:
-                sd = sd["state_dict"]
-
-        keys = list(sd.keys())
-
-        for k in keys:
-            for ik in ignore_keys:
-                if k.startswith(ik):
-                    print("Deleting key {} from state_dict.".format(k))
-                    del sd[k]
-
-        missing_keys, unexpected_keys = self.load_state_dict(sd, strict=False)
-        print(missing_keys, unexpected_keys)
-
-
-class WFVAE(BaseWFVAE):
-    def __init__(
-            self,
-            from_pretrained: str = None,
-            latent_dim: int = 8,
-            base_channels: int = 128,
-            encoder_num_resblocks: int = 2,
-            encoder_energy_flow_hidden_size: int = 64,
-            decoder_num_resblocks: int = 2,
-            decoder_energy_flow_hidden_size: int = 128,
-            use_attention: bool = True,
-            dropout: float = 0.0,
-            norm_type: str = "groupnorm",
-            t_interpolation: str = "nearest",
-            vae_scale_factor: list = None,
-            use_tiling: bool = False,
-            connect_res_layer_num: int = 2,
-            l1_dowmsample_block: str = "Downsample",
-            l1_downsample_wavelet: str = "HaarWaveletTransform2D",
-            l2_dowmsample_block: str = "Spatial2xTime2x3DDownsample",
-            l2_downsample_wavelet: str = "HaarWaveletTransform3D",
-            l1_upsample_block: str = "Upsample",
-            l1_upsample_wavelet: str = "InverseHaarWaveletTransform2D",
-            l2_upsample_block: str = "Spatial2xTime2x3DUpsample",
-            l2_upsample_wavelet: str = "InverseHaarWaveletTransform3D",
-            scale: list = None,
-            shift: list = None,
-            dtype: str = "fp32",
-            **kwargs
-        ):
-        super().__init__(dtype, scale, shift, vae_scale_factor)
-        self.encoder = Encoder(
-            latent_dim=latent_dim,
-            base_channels=base_channels,
-            num_resblocks=encoder_num_resblocks,
-            energy_flow_hidden_size=encoder_energy_flow_hidden_size,
-            dropout=dropout,
-            use_attention=use_attention,
-            norm_type=norm_type,
-            l1_dowmsample_block=l1_dowmsample_block,
-            l1_downsample_wavelet=l1_downsample_wavelet,
-            l2_dowmsample_block=l2_dowmsample_block,
-            l2_downsample_wavelet=l2_downsample_wavelet
-        )
-        self.decoder = Decoder(
-            latent_dim=latent_dim,
-            base_channels=base_channels,
-            num_resblocks=decoder_num_resblocks,
-            energy_flow_hidden_size=decoder_energy_flow_hidden_size,
-            dropout=dropout,
-            use_attention=use_attention,
-            norm_type=norm_type,
-            t_interpolation=t_interpolation,
-            connect_res_layer_num=connect_res_layer_num,
-            l1_upsample_block=l1_upsample_block,
-            l1_upsample_wavelet=l1_upsample_wavelet,
-            l2_upsample_block=l2_upsample_block,
-            l2_upsample_wavelet=l2_upsample_wavelet
-        )
-
-        self.configure_cache_offset(l1_dowmsample_block)
-
-        self.enable_tiling(use_tiling)
-
-        if from_pretrained is not None:
-            self.init_from_ckpt(from_pretrained)
-
-
-class WFVAEForOpenSoraPlan(BaseWFVAE):
-    def __init__(self,
-            from_pretrained: str = None,
-            latent_dim: int = 8,
-            base_channels: int = 128,
-            encoder_num_resblocks: int = 2,
-            encoder_energy_flow_hidden_size: int = 64,
-            decoder_num_resblocks: int = 2,
-            decoder_energy_flow_hidden_size: int = 128,
-            use_attention: bool = True,
-            dropout: float = 0.0,
-            norm_type: str = "groupnorm",
-            t_interpolation: str = "nearest",
-            vae_scale_factor: list = None,
-            use_tiling: bool = False,
-            connect_res_layer_num: int = 2,
-            l1_dowmsample_block: str = "Downsample",
-            l1_downsample_wavelet: str = "HaarWaveletTransform2D",
-            l2_dowmsample_block: str = "Spatial2xTime2x3DDownsample",
-            l2_downsample_wavelet: str = "HaarWaveletTransform3D",
-            l1_upsample_block: str = "Upsample",
-            l1_upsample_wavelet: str = "InverseHaarWaveletTransform2D",
-            l2_upsample_block: str = "Spatial2xTime2x3DUpsample",
-            l2_upsample_wavelet: str = "InverseHaarWaveletTransform3D",
-            scale: list = None,
-            shift: list = None,
-            dtype: str = "fp32",
-            **kwargs
-        ):
-        super().__init__(dtype, scale, shift, vae_scale_factor)
-        self.encoder = EncoderForOpenSoraPlan(
-            latent_dim=latent_dim,
-            base_channels=base_channels,
-            num_resblocks=encoder_num_resblocks,
-            energy_flow_hidden_size=encoder_energy_flow_hidden_size,
-            dropout=dropout,
-            use_attention=use_attention,
-            norm_type=norm_type,
-            l1_dowmsample_block=l1_dowmsample_block,
-            l1_downsample_wavelet=l1_downsample_wavelet,
-            l2_dowmsample_block=l2_dowmsample_block,
-            l2_downsample_wavelet=l2_downsample_wavelet
-        )
-        self.decoder = DecoderForOpenSoraPlan(
-            latent_dim=latent_dim,
-            base_channels=base_channels,
-            num_resblocks=decoder_num_resblocks,
-            energy_flow_hidden_size=decoder_energy_flow_hidden_size,
-            dropout=dropout,
-            use_attention=use_attention,
-            norm_type=norm_type,
-            t_interpolation=t_interpolation,
-            connect_res_layer_num=connect_res_layer_num,
-            l1_upsample_block=l1_upsample_block,
-            l1_upsample_wavelet=l1_upsample_wavelet,
-            l2_upsample_block=l2_upsample_block,
-            l2_upsample_wavelet=l2_upsample_wavelet
-        )
-
-        self.configure_cache_offset(l1_dowmsample_block)
-
-        self.enable_tiling(use_tiling)
-
-        if from_pretrained is not None:
-            self.init_from_ckpt(from_pretrained)
-
-    def tile_encode(self, x):
-        b, c, t, h, w = x.shape
-
-        start_end = self.build_chunk_start_end(t)
-        result = []
-        for idx, (start, end) in enumerate(start_end):
-            self._set_first_chunk(idx == 0)
-            chunk = x[:, :, start:end, :, :]
-            chunk = self.encoder(chunk)
-            if self.use_quant_layer:
-                chunk = self.quant_conv(chunk)
-            result.append(chunk)
-
-        return torch.cat(result, dim=2)
-
-    def tile_decode(self, x):
-        b, c, t, h, w = x.shape
-        start_end = self.build_chunk_start_end(t, decoder_mode=True)
-
-        result = []
-        for idx, (start, end) in enumerate(start_end):
-            self._set_first_chunk(idx == 0)
-
-            if end + 1 < t:
-                chunk = x[:, :, start:end + 1, :, :]
-            else:
-                chunk = x[:, :, start:end, :, :]
-
-            if self.use_quant_layer:
-                chunk = self.post_quant_conv(chunk)
-            chunk = self.decoder(chunk)
-
-            if end + 1 < t:
-                chunk = chunk[:, :, :-self.temporal_uptimes]
-                result.append(chunk.clone())
-            else:
-                result.append(chunk.clone())
-
-        return torch.cat(result, dim=2)
-
-    def forward(self, x):
-        z = self.encode(x)
-        dec = self.decode(z)
-        return dec

@@ -8,9 +8,9 @@ from torch import nn
 import torch.nn.functional as F
 from diffusers.models.normalization import RMSNorm
 
-from mindspeed_mm.utils.utils import cast_tuple, video_to_image
+from mindspeed_mm.models.common.communications import collect_tensors_across_ranks, split_tensor
+from mindspeed_mm.utils.utils import cast_tuple, video_to_image, get_context_parallel_group, get_context_parallel_rank
 from mindspeed_mm.models.common.conv import CausalConv3d, WfCausalConv3d, TimePaddingCausalConv3d
-from mindspeed_mm.utils.utils import get_context_parallel_rank
 
 
 class Upsample(nn.Module):
@@ -321,7 +321,7 @@ class TimeUpsampleRes2x(nn.Module):
 
 
 class Spatial2xTime2x3DDownsample(nn.Module):
-    def __init__(self, in_channels, out_channels, conv_type="CausalConv3d"):
+    def __init__(self, in_channels, out_channels, conv_type="CausalConv3d", enable_vae_cp=False):
         super().__init__()
         if conv_type == "WfCausalConv3d":
             ConvLayer = WfCausalConv3d
@@ -329,12 +329,17 @@ class Spatial2xTime2x3DDownsample(nn.Module):
             ConvLayer = CausalConv3d
         else:
             raise ValueError(f"Unsupported convolution type: {conv_type}")
-        self.conv = ConvLayer(in_channels, out_channels, kernel_size=3, padding=0, stride=2)
+        self.conv = ConvLayer(in_channels, out_channels, kernel_size=3, padding=0, stride=2, parallel_input=False)
+        self.enable_vae_cp = enable_vae_cp
 
     def forward(self, x):
         pad = (0, 1, 0, 1, 0, 0)
+        if self.enable_vae_cp:
+            x = torch.concat(collect_tensors_across_ranks(x, get_context_parallel_group()), 2)
         x = torch.nn.functional.pad(x, pad, mode="constant", value=0)
         x = self.conv(x)
+        if self.enable_vae_cp:
+            x = split_tensor(x, get_context_parallel_group(), get_context_parallel_rank())
         return x
 
 

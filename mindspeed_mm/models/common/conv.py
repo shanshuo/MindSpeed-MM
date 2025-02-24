@@ -147,6 +147,8 @@ class WfCausalConv3d(nn.Module):
         kernel_size: Union[int, Tuple[int, int, int]],
         enable_cached=False,
         bias=True,
+        is_first_chunk=True,
+        parallel_input=True,
         **kwargs,
     ):
         super().__init__()
@@ -168,33 +170,32 @@ class WfCausalConv3d(nn.Module):
             bias=bias
         )
         self.enable_cached = enable_cached
-
-        self.is_first_chunk = True
-
+        self.is_first_chunk = is_first_chunk
+        self.parallel_input = parallel_input
         self.causal_cached = deque()
         self.cache_offset = 0
 
     def forward(self, x):
-        if self.is_first_chunk:
+        if self.is_first_chunk and (get_context_parallel_rank() == 0 or not self.parallel_input):
             first_frame_pad = x[:, :, :1, :, :].repeat(
                 (1, 1, self.time_kernel_size - 1, 1, 1)
             )
-        else:
+            x = torch.concatenate((first_frame_pad, x), dim=2)
+        elif self.enable_cached:
             first_frame_pad = self.causal_cached.popleft()
-
-        x = torch.concatenate((first_frame_pad, x), dim=2)
+            x = torch.concatenate((first_frame_pad, x), dim=2)
 
         if self.enable_cached and self.time_kernel_size != 1:
             if (self.time_kernel_size - 1) // self.stride[0] != 0:
                 if self.cache_offset == 0:
-                    self.causal_cached.append(x[:, :, -(self.time_kernel_size - 1) // self.stride[0]:])
+                    self.causal_cached.append(x[:, :, -(self.time_kernel_size - 1) // self.stride[0]:].clone())
                 else:
                     self.causal_cached.append(
-                        x[:, :, :-self.cache_offset][:, :, -(self.time_kernel_size - 1) // self.stride[0]:])
+                        x[:, :, :-self.cache_offset][:, :, -(self.time_kernel_size - 1) // self.stride[0]:].clone)
             else:
-                self.causal_cached.append(x[:, :, 0:0, :, :])
-        else:
-            self.causal_cached.append(x[:, :, 0:0, :, :])
+                self.causal_cached.append(x[:, :, 0:0, :, :].clone())
+        elif self.enable_cached:
+            self.causal_cached.append(x[:, :, 0:0, :, :].clone())
 
         return self.conv(x)
 
@@ -272,6 +273,7 @@ class ContextParallelCausalConv3d(nn.Module):
         if not (is_odd(height_kernel_size) and is_odd(width_kernel_size)):
             raise AssertionError("Height and width must be odd.")
 
+        kwargs.pop("padding", 0)
         time_pad = time_kernel_size - 1
         height_pad = height_kernel_size // 2
         width_pad = width_kernel_size // 2
