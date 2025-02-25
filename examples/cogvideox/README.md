@@ -303,8 +303,27 @@ CogvideoX训练阶段的启动文件为shell脚本，主要分为如下4个：
 
 * 当开启SP时，在启动脚本文件中添加`--sequence-parallel`参数。
 
+* 当开启Encoder-DP时，需要将[model_cogvideox_i2v_1.5.json](i2v_1.5/model_cogvideox_i2v_1.5.json) 或者[model_cogvideox_t2v_1.5.json](t2v_1.5/model_cogvideox_t2v_1.5.json)中的`enable_encoder_dp`选项改为`true`。注意:需要在开启CP/TP，并且`load_video_features`为`false`及`load_text_features`为`false`才能启用。
 
-
+* 当开启分层Zero时，需要在[pretrain_cogvideox_t2v_1.5.sh](t2v_1.5/pretrain_cogvideox_t2v_1.5.sh)或者[pretrain_cogvideox_i2v_1.5.sh](i2v_1.5/pretrain_cogvideox_i2v_1.5.sh)里面添加下面的参数，
+  ```shell
+  --layerzero \
+  --layerzero-config ./zero_config.yaml \
+  ```
+  参数里面的yaml文件如下面所示:
+  ```yaml
+  zero3_size: 8  
+  tranformer_layers:
+    - mindspeed_mm.models.predictor.dits.sat_dit.VideoDiTBlock
+  backward_prefetch: 'BACKWARD_PRE'
+  param_dtype: "bf16"
+  reduce_dtype: "fp32"
+  forward_prefetch: True
+  limit_all_gathers: True
+  ignored_modules:
+    - ae
+    - text_encoder
+  ```  
 
 模型参数配置文件中的`head_dim`字段原模型默认配置为64。此字段调整为128会更加亲和昇腾。
 

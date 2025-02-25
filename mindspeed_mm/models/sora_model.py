@@ -23,9 +23,18 @@ from megatron.training.arguments import core_transformer_config_from_args
 from torch import nn
 
 from mindspeed_mm.models.ae import AEModel
+from mindspeed_mm.models.common.communications import collect_tensors_across_ranks
 from mindspeed_mm.models.diffusion import DiffusionModel
 from mindspeed_mm.models.predictor import PredictModel
 from mindspeed_mm.models.text_encoder import TextEncoder
+from mindspeed_mm.data.data_utils.constants import (
+    LATENTS,
+    PROMPT,
+    VIDEO_MASK,
+    PROMPT_MASK,
+    MASKED_VIDEO,
+    INPUT_MASK
+)
 
 logger = getLogger(__name__)
 
@@ -51,6 +60,16 @@ class SoRAModel(nn.Module):
         super().__init__()
         self.config = core_transformer_config_from_args(get_args())
         self.task = config.task if hasattr(config, "task") else "t2v"
+        self.enable_encoder_dp = config.enable_encoder_dp if hasattr(config, "enable_encoder_dp") else False
+        if self.enable_encoder_dp and mpu.get_pipeline_model_parallel_world_size() > 1:
+            raise AssertionError("Encoder DP cannot be used with PP")
+        # Track the current index to save or fetch the encoder cache when encoder dp is enabled
+        self.cache = {}
+        self.index = 0
+        if mpu.get_virtual_pipeline_model_parallel_world_size() is not None:
+            raise NotImplementedError("Not support virtual_pipeline_model_parallel now. ")
+        else:
+            self.pp_rank = mpu.get_pipeline_model_parallel_rank()
 
         args = get_args()
         if args.dist_train:
@@ -100,26 +119,36 @@ class SoRAModel(nn.Module):
         args = get_args()
         if self.pre_process:
             with torch.no_grad():
-                # Visual Encode
-                if self.load_video_features:
-                    latents = video
-                else:
-                    if self.task == "t2v":
-                        latents, _ = self.ae.encode(video)
-                    elif self.task == "i2v":
-                        latents, i2v_results = self.ae.encode(video, **kwargs)
-                        kwargs.update(i2v_results)
+                i2v_results = None
+                if video is not None:
+                    self.index = 0
+                    # Visual Encode
+                    if self.load_video_features:
+                        latents = video
                     else:
-                        raise NotImplementedError(f"Task {self.task} if not Implemented!")
+                        if self.task == "t2v":
+                            latents, _ = self.ae.encode(video)
+                        elif self.task == "i2v":
+                            latents, i2v_results = self.ae.encode(video, **kwargs)
+                            kwargs.update(i2v_results)
+                        else:
+                            raise NotImplementedError(f"Task {self.task} if not Implemented!")
 
-                # Text Encode
-                if self.load_text_features:
-                    prompt = prompt_ids
-                    if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
-                        prompt = [p.npu() for p in prompt]
-                else:
-                    prompt = self.text_encoder.encode(prompt_ids, prompt_mask)
-                    
+                    # Text Encode
+                    if self.load_text_features:
+                        prompt = prompt_ids
+                        if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
+                            prompt = [p.npu() for p in prompt]
+                    else:
+                        prompt = self.text_encoder.encode(prompt_ids, prompt_mask)
+            # Gather the results after encoding of ae and text_encoder
+            if self.enable_encoder_dp:
+                if self.index == 0:
+                    self.init_cache(latents, prompt, video_mask, prompt_mask, i2v_results)
+                latents, prompt, video_mask, prompt_mask, i2v_results = self.get_feature_from_cache()
+
+            if self.task == "i2v":
+                kwargs.update(i2v_results)
             noised_latents, noise, timesteps = self.diffusion.q_sample(latents, model_kwargs=kwargs, mask=video_mask)
             predictor_input_latent, predictor_timesteps, predictor_prompt = noised_latents, timesteps, prompt
             predictor_video_mask, predictor_prompt_mask = video_mask, prompt_mask
@@ -167,7 +196,7 @@ class SoRAModel(nn.Module):
             extra_kwargs=kwargs)
 
     def compute_loss(
-        self, model_output, latents, noised_latents, timesteps, noise, video_mask, **kwargs
+            self, model_output, latents, noised_latents, timesteps, noise, video_mask, **kwargs
     ):
         """compute diffusion loss"""
         loss_dict = self.diffusion.training_losses(
@@ -210,3 +239,35 @@ class SoRAModel(nn.Module):
         if unexpected_keys is not None:
             logger.info(f"Unexpected key(s) in state_dict: {unexpected_keys}.")
         return None
+
+    def init_cache(self, latents, prompt, video_mask, prompt_mask, i2v_results=None):
+        """Initialize cache in the first step."""
+        self.cache = {}
+        group = mpu.get_tensor_and_context_parallel_group()
+        # gather as list
+        for key, value in [(LATENTS, latents), (PROMPT, prompt), (VIDEO_MASK, video_mask), (PROMPT_MASK, prompt_mask)]:
+            if value is not None:
+                self.cache.update({key: collect_tensors_across_ranks(value, group=group)})
+
+        if self.task != "i2v" or not i2v_results:
+            return
+
+        for key in [MASKED_VIDEO, INPUT_MASK]:
+            if key in i2v_results:
+                self.cache[key] = collect_tensors_across_ranks(i2v_results[key], group=group)
+
+    def get_feature_from_cache(self):
+        """Get from the cache"""
+
+        latents = self.cache[LATENTS][self.index] if LATENTS in self.cache else None
+        prompt = self.cache[PROMPT][self.index] if PROMPT in self.cache else None
+        video_mask = self.cache[VIDEO_MASK][self.index] if VIDEO_MASK in self.cache else None
+        prompt_mask = self.cache[PROMPT_MASK][self.index] if PROMPT_MASK in self.cache else None
+
+        i2v_results = {}
+        if self.task == "i2v":
+            i2v_results[MASKED_VIDEO] = self.cache[MASKED_VIDEO][self.index] if MASKED_VIDEO in self.cache else None
+            i2v_results[INPUT_MASK] = self.cache[INPUT_MASK][self.index] if INPUT_MASK in self.cache else None
+
+        self.index += 1
+        return latents, prompt, video_mask, prompt_mask, i2v_results

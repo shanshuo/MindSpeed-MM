@@ -18,8 +18,8 @@ from mindspeed_mm.training import pretrain
 from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
 from mindspeed_mm.data.data_utils.constants import (
     VIDEO,
-    PROMPT_IDS, 
-    PROMPT_MASK, 
+    PROMPT_IDS,
+    PROMPT_MASK,
     VIDEO_MASK
 )
 from mindspeed_mm.data.data_utils.utils import build_iterations
@@ -70,10 +70,25 @@ def loss_func(output_tensor):
     return loss, {"loss": averaged_loss[0]}
 
 
+def get_batch_for_step(data_iterator):
+    args = get_args()
+    enable_encoder_dp = args.mm.model.enable_encoder_dp if hasattr(args.mm.model, "enable_encoder_dp") else False
+    tp_cp_group_size = None
+    if enable_encoder_dp:
+        tp_cp_group_size = torch.distributed.get_world_size(mpu.get_tensor_and_context_parallel_group())
+
+    if tp_cp_group_size is None or not enable_encoder_dp or tp_cp_group_size <= 1:
+        return get_batch(data_iterator)
+
+    # Only the first step of a round needs to get batch when enable encoder dp
+    batch = get_batch(data_iterator) if args.curr_iteration % tp_cp_group_size == 0 else {}
+    return batch
+
+
 def forward_step(data_iterator, model):
     """Forward step."""
     if mpu.is_pipeline_first_stage():
-        batch = get_batch(data_iterator)
+        batch = get_batch_for_step(data_iterator)
         video = batch.pop(VIDEO, None)
         prompt_ids = batch.pop(PROMPT_IDS, None)
         video_mask = batch.pop(VIDEO_MASK, None)
@@ -90,10 +105,17 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     args = get_args()
     data_config = args.mm.data
     train_dataset = build_mm_dataset(data_config.dataset_param)
+
+    enable_encoder_dp = args.mm.model.enable_encoder_dp if hasattr(args.mm.model, "enable_encoder_dp") else False
+    if enable_encoder_dp:
+        process_group = torch.distributed.group.WORLD
+    else:
+        process_group = mpu.get_data_parallel_group()
+
     train_dataloader = build_mm_dataloader(
         train_dataset,
         data_config.dataloader_param,
-        process_group=mpu.get_data_parallel_group(),
+        process_group=process_group,
         consumed_samples=args.consumed_train_samples,
         dataset_param=data_config.dataset_param,
     )
