@@ -52,8 +52,6 @@ GPT_ARGS="
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
     --seq-length 4096 \
-    --attention-dropout 0.0 \
-    --hidden-dropout 0.0 \
     --tokenizer-type NullTokenizer \
     --vocab-size 92553 \
     --position-embedding-type rope \

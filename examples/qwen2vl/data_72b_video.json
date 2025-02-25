@@ -15,7 +15,6 @@
             "dataset_dir": "./data",
             "dataset": "./data/mllm_video_demo.json",
             "cache_dir": "./data/cache_dir",
-            "cutoff_len": 1024,
             "train_on_prompt": false,
             "mask_history": false,
             "preprocessing_batch_size": 1000,

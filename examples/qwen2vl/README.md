@@ -296,7 +296,7 @@ NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 ```
 注意，当开启PP时，`model.json`中配置的`vision_encoder`和`text_decoder`的`pipeline_num_layer`参数控制了各自的PP切分策略。对于流水线并行，要先处理`vision_encoder`再处理`text_decoder`。
-比如7b默认的值`[32,0,0,0]`、`[1,10,10,7]`，其含义为PP域内第一张卡先放32层`vision_encoder`再放1层`text_decoder`、第二张卡放`text_decoder`接着的10层、第三张卡放`text_decoder`接着的10层、第四张卡放`text_decoder`接着的7层，`vision_encoder`没有放完时不能先放`text_decoder`（比如`[30,2,0,0]`、`[1,10,10,7]`的配置是错的）    
+比如7b默认的值`[32,0,0,0]`、`[1,10,10,7]`，其含义为PP域内第一张卡先放32层`vision_encoder`再放1层`text_decoder`、第二张卡放`text_decoder`接着的10层、第三张卡放`text_decoder`接着的10层、第四张卡放`text_decoder`接着的7层，`vision_encoder`没有放完时不能先放`text_decoder`（比如`[30,2,0,0]`、`[1,10,10,7]`的配置是错的）
 
 同时注意，如果某张卡上的参数全部冻结时会导致没有梯度（比如`vision_encoder`冻结时PP配置`[30,2,0,0]`、`[0,11,10,7]`），需要在`finetune_qwen2vl_7b.sh`中`GPT_ARGS`参数中增加`--enable-dummy-optimizer`，参考[dummy_optimizer特性文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/dummy_optimizer.md)。
 
@@ -379,7 +379,7 @@ mm-convert  Qwen2VLConverter resplit \
   --cfg.source_parallel_config.tp_size 1 \
   --cfg.target_parallel_config.llm_pp_layers [4,24] \
   --cfg.target_parallel_config.vit_pp_layers [32,0] \
-  --cfg.target_parallel_config.tp_size 1 
+  --cfg.target_parallel_config.tp_size 1
 # 其中
 # source_dir: 微调后保存的权重目录
 # target_dir: 希望重新pp切分后保存的目录
@@ -493,6 +493,5 @@ bash examples/qwen2vl/evaluate_qwen2vl_7b.sh
 
 ## 注意事项
 
-1. 在使用流水线并行策略进行多机训练可能会出现卡住现象，可参考[此处](https://gitee.com/ascend/MindSpeed/pulls/1627/files)修改。
-2. 在 `finetune_xx.sh`里，与模型结构相关的参数并不生效，以`examples/qwen2vl/model_xb.json`里同名参数配置为准，非模型结构的训练相关参数在 `finetune_xx.sh`修改。
-3. LoRA为框架通用能力，当前功能已支持，可参考[LoRA特性文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/lora_finetune.md)。
+1. 在 `finetune_xx.sh`里，与模型结构相关的参数并不生效，以`examples/qwen2vl/model_xb.json`里同名参数配置为准，非模型结构的训练相关参数在 `finetune_xx.sh`修改。
+2. LoRA为框架通用能力，当前功能已支持，可参考[LoRA特性文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/lora_finetune.md)。

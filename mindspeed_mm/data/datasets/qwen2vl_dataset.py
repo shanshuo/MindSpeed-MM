@@ -5,6 +5,7 @@ from datasets import load_dataset
 from torch.utils.data import Dataset
 from transformers.training_args import TrainingArguments
 
+from megatron.training import get_args
 from mindspeed_mm.data.data_utils.func_utils.convert import (
     DataArguments,
     DatasetAttr,
@@ -21,7 +22,10 @@ logger = get_logger(__name__)
 
 
 def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
+    if "cutoff_len" in basic_param.keys():
+        raise ValueError("`cutoff_len` is deprecated, please use `seq_length` instead.")
     data_args = DataArguments(**basic_param)
+    data_args.cutoff_len = get_args().seq_length
     process_args = ProcessorArguments(**preprocess_param)
     dataset_attr = DatasetAttr(**dataset_param["attr"])
 

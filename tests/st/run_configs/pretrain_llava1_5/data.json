@@ -28,7 +28,6 @@
             "autotokenizer_name": "AutoTokenizer",
             "from_pretrained": "/home/ci_resource/models/vicuna-7b-v1-5",
             "cache_dir":null,
-            "model_max_length": 2048,
             "padding_side": "right",
             "use_fast": false
         },

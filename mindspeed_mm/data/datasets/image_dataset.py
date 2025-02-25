@@ -10,6 +10,7 @@ import copy
 from typing import Union
 import torch
 
+from megatron.training import get_args
 from mindspeed_mm.data.data_utils.utils import (
     ImageProcesser,
     preprocess,
@@ -104,6 +105,7 @@ class MultiModalChatDataset(MMBaseDataset):
                                               use_thumbnail=self.use_thumbnail)
         if tokenizer_config is not None:
             self.tokenizer = Tokenizer(tokenizer_config).get_tokenizer()
+        self.tokenizer.model_max_length = get_args().seq_length
 
     def __getitem__(self, index):
         return self.getitem(index)
@@ -175,13 +177,13 @@ class MultiModalChatDataset(MMBaseDataset):
         # Preprocess the conversations and generate the return dictionary
         num_image_tokens = [self.num_image_token] * num_patches
         ret = preprocess(
-            self.template_name, 
+            self.template_name,
             sources=[copy.deepcopy(data_item["conversations"])],
-            tokenizer=self.tokenizer, 
-            num_image_token_list=num_image_tokens, 
+            tokenizer=self.tokenizer,
+            num_image_token_list=num_image_tokens,
             group_by_length=self.group_by_length,
             is_multimodal=self.is_multimodal,
-            mm_use_im_start_end=self.mm_use_im_start_end, 
+            mm_use_im_start_end=self.mm_use_im_start_end,
             num_image=num_patches
         )
         # Create the final return dictionary

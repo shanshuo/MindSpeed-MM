@@ -10,6 +10,7 @@ import torch
 from torch.nn import functional as F
 from transformers import WhisperProcessor
 
+from megatron.training import get_args
 from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
 from mindspeed_mm.data.data_utils.func_utils.collator import MultiModalDataCollatorForSeq2Seq, PairwiseDataCollatorWithPadding
 from mindspeed_mm.data.data_utils.func_utils.convert import load_tokenizer, IGNORE_INDEX
@@ -30,9 +31,9 @@ from mindspeed_mm.data.data_utils.constants import (
 class DataCollatorForLlava(object):
     """Collate examples for supervised fine-tuning."""
 
-    def __init__(self, pad_token_id, model_max_length, **kwargs):
+    def __init__(self, pad_token_id, **kwargs):
         self.pad_token_id = pad_token_id
-        self.model_max_length = model_max_length
+        self.model_max_length = get_args().seq_length
         self.ignore_index = MODEL_CONSTANTS['llava']['IGNORE_INDEX']
 
     def __call__(self, instances: Sequence[Dict]) -> Dict[str, torch.Tensor]:
@@ -124,7 +125,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         self.processor = WhisperProcessor.from_pretrained(
             processor_name_or_path,
             language=language,
-            task=task, 
+            task=task,
             local_files_only=True,
         )
 
@@ -259,7 +260,7 @@ class DataCollatorForOpenSoraPlan:
             cond_mask = [item.get(PROMPT_MASK, None) for item in batch]  # b [1 l]
         elif self.use_text_feature:
             input_ids = [item.get(PROMPT_IDS, None)[0] for item in batch]  # b [1 l]
-            cond_mask = [item.get(PROMPT_MASK, None)[0] for item in batch]  # b [1 
+            cond_mask = [item.get(PROMPT_MASK, None)[0] for item in batch]  # b [1
             warnings.warn("input_ids_2 and cond_mask_2 features are not supported yet and will be None for now",
                           FutureWarning)
         else:

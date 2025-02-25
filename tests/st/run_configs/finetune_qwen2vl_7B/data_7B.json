@@ -15,7 +15,6 @@
             "dataset_dir": "./data",
             "dataset": "/home/ci_resource/data/qwen2vl/qwen2vl_7b/mllm_format_llava_instruct_data.json",
             "cache_dir": "./data/cache_dir",
-            "cutoff_len": 1024,
             "train_on_prompt": false,
             "mask_history": false,
             "overwrite_cache": true,

@@ -60,9 +60,7 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --seq-length 8192 \
-    --attention-dropout 0.0 \
-    --hidden-dropout 0.0 \
+    --seq-length 4096 \
     --tokenizer-type NullTokenizer \
     --vocab-size 151674 \
     --position-embedding-type rope \

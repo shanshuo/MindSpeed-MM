@@ -14,14 +14,13 @@
                     {"trans_type": "Resize", "param": {"size": [448, 448], "interpolation": "BICUBIC"}},
                     {"trans_type": "ToTensor"},
                     {"trans_type": "norm_fun", "param": {"mean":[0.485, 0.456, 0.406], "std": [0.229, 0.224, 0.225]}}
-                ]   
+                ]
             }
         },
         "tokenizer_config": {
             "hub_backend": "hf",
             "autotokenizer_name": "AutoTokenizer",
             "from_pretrained": "OpenGVLab/InternVL2-26B",
-            "model_max_length": 4096,
             "add_eos_token": false,
             "trust_remote_code": true,
             "use_fast": false

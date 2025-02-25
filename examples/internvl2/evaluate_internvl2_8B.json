@@ -102,7 +102,6 @@
         "hub_backend": "hf",
         "autotokenizer_name": "AutoTokenizer",
         "from_pretrained": "./InternVL2-8B",
-        "model_max_length": 4096,
         "add_eos_token": false,
         "trust_remote_code": true,
         "use_fast": false

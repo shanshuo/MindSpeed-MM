@@ -48,7 +48,6 @@ GPT_ARGS="
     --vocab-size 152064 \
     --seq-length 1024 \
     --make-vocab-size-divisible-by 1 \
-    --init-method-std 0.01 \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
     --swiglu \
@@ -57,7 +56,6 @@ GPT_ARGS="
     --bf16 \
     --load $LOAD_PATH \
     --variable-seq-lengths \
-    --enable-one-logger \
     --use-flash-attn \
     --no-load-optim \
     --no-load-rng

@@ -32,7 +32,6 @@ LOAD_PATH="./qwen_7b_pp1/Qwen2-VL-7B-Instruct"
 TP=1
 PP=1
 CP=1
-SEQ_LEN=1024
 MBS=1
 GRAD_ACC_STEP=1
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
@@ -56,7 +55,6 @@ GPT_ARGS="
     --vocab-size 152064 \
     --seq-length 1024 \
     --make-vocab-size-divisible-by 1 \
-    --init-method-std 0.01 \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
     --swiglu \
@@ -66,7 +64,6 @@ GPT_ARGS="
     --load $LOAD_PATH \
     --vocab-size 1 \
     --variable-seq-lengths \
-    --enable-one-logger \
     --distributed-timeout-minutes 1000 \
     --use-flash-attn \
     --no-load-optim \

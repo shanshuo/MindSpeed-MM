@@ -27,7 +27,6 @@ MM_TOOL="$BASEPATH/mindspeed_mm/tools/tools.json"
 TP=1
 PP=4
 CP=1
-SEQ_LEN=1024
 MBS=1
 GRAD_ACC_STEP=2
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
@@ -47,16 +46,10 @@ GPT_ARGS="
     --pipeline-model-parallel-size ${PP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 1 \
-    --hidden-size 1 \
-    --ffn-hidden-size 1 \
-    --num-attention-heads 1 \
     --tokenizer-type NullTokenizer \
-    --vocab-size 1 \
-    --seq-length 1 \
-    --max-position-embeddings 1 \
+    --vocab-size 152064 \
+    --seq-length 1024 \
     --make-vocab-size-divisible-by 1 \
-    --init-method-std 0.01 \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
     --swiglu \

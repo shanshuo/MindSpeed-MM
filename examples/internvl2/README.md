@@ -515,6 +515,3 @@ bash examples/internvl2/evaluate_internvl2_8B.sh
 - *.csv文件，这个文件会输出统计准确率等数据。
 
 <a id="jump7"></a>
-
-## 注意事项
-1. 在使用流水线并行策略进行多机训练可能会出现卡住现象，可参考[此处](https://gitee.com/ascend/MindSpeed/pulls/1627/files)修改。
