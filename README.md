@@ -21,6 +21,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 * [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型 【Prototype】
 * [Feb. 17, 2025]: 🔥 MindSpeed-MM支持Mindspeed-Core & Megatron 0.8.0版本
+* [Feb. 15, 2025]: 🚀 MindSpeed-MM支持Sana模型 【Prototype】
 * [Feb. 06, 2025]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.3模型PP与VPP 【Prototype】
 * [Jan. 22, 2025]: 🎉 MindSpeed-MM支持Qwen2VL视频模态
 * [Jan. 16, 2025]: 🎉 MindSpeed-MM支持wfvae训练
@@ -37,7 +38,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 * [Oct. 21, 2024]: 🚀 MindSpeed-MM支持InternVL2-8B、以及Qwen2VL-7B模型
 * [Oct. 16, 2024]: 🌱 MindSpeed-MM首版本1.0.RC3发布
 
-> 注： Prototype特性未经过充分验证，可能存在不稳定和bug问题，beta表示非商用特性
+> 注： **Prototype**特性未经过充分验证，可能存在不稳定和bug问题，**beta**表示非商用特性
 
 ---
 
@@ -139,7 +140,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
   </thead>
   <tbody>
-    <tr> 
+    <tr>
       <td rowspan="19"> 多模态生成 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/hunyuanvideo">HunyuanVideo</a></td>
       <td><a href="https://huggingface.co/tencent/HunyuanVideo">13B</a></td>

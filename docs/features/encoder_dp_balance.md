@@ -1,4 +1,4 @@
-# encoder数据负载均衡
+# Encoder数据负载均衡 (beta)
 
 ## 问题分析
 
