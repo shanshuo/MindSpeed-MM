@@ -1,6 +1,7 @@
 import importlib
 import torch
 import torch.nn as nn
+
 from mindspeed_mm.utils.utils import get_dtype
 
 
@@ -25,18 +26,18 @@ class TextEncoder(nn.Module):
                 "backend": type-str, "hf" or "om",
                 "model_id": type-str, "AutoModel" or other automodel name,
                 "dtype": type-str, dtype of text encoder
-                
+
                 (2) args for automodel.from_pretrained() of transformers or openmind
                 "pretrained_model_name_or_path": type-str, local path or hub path,
                 "local_files_only": type-bool,
                 ...
             }
-        - If `config` is a list of dictionaries, each dictionary in the list will be used to instantiate a separate Text Encoder Model instance, 
+        - If `config` is a list of dictionaries, each dictionary in the list will be used to instantiate a separate Text Encoder Model instance,
             effectively allowing the creation of multiple Text Encoder based on different configurations.
     """
     def __init__(self, config):
         super().__init__()
-        
+
         if isinstance(config, list) or isinstance(config, tuple):
             self.text_encoders = nn.ModuleList()
             for config_i in config:
@@ -59,7 +60,7 @@ class TextEncoder(nn.Module):
         else:
             outputs = self._single_encode(self.text_encoders, input_ids, mask)
         return outputs
-    
+
     def _single_encode(self, text_encoder, input_ids, attention_mask, **kwargs):
         *BN, L = input_ids.shape
         input_ids = input_ids.to(text_encoder.device).view(-1, L)
@@ -90,16 +91,16 @@ class TextEncoder(nn.Module):
                 )
                 * emb
             )
-        
+
         if text_encoder.output_key in ["last_hidden_state", "hidden_states"]:
             emb = emb.view(*BN, L, -1)
         elif text_encoder.output_key in ["pooler_output"]:
             emb = emb.view(*BN, -1)
         else:
             raise NotImplementedError(f"Text encoder output_key: {text_encoder.output_key} is not implenmented! ")
-        
-        return emb            
-    
+
+        return emb
+
     def _init_text_encoder(self, config):
         if not isinstance(config, dict):
             config = config.to_dict()
@@ -116,6 +117,12 @@ class TextEncoder(nn.Module):
             self.automodel_name = TEXT_ENCODER_MAPPING[model_id]
         config["pretrained_model_name_or_path"] = config.pop("from_pretrained")
         config["torch_dtype"] = get_dtype(config.pop("dtype"))
+        config["local_files_only"] = True
+        try:
+            from megatron.training import get_args
+            config["trust_remote_code"] = get_args().trust_remote_code
+        except (ImportError, AssertionError):
+            config["trust_remote_code"] = False
 
         # Only huggingface backend is supported, OpenMind backend will be supported soon.
         module = importlib.import_module("transformers")

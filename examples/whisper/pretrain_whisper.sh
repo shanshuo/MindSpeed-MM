@@ -65,6 +65,7 @@ GPT_ARGS="
     --overlap-grad-reduce \
     --overlap-param-gather \
     --num-workers 4 \
+    --trust-remote-code \
 "
 
 MM_ARGS="

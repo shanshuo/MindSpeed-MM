@@ -3,7 +3,7 @@ import os
 from copy import deepcopy
 from dataclasses import dataclass
 import stat
-import re 
+import re
 
 import torch
 from transformers import AutoModelForCausalLM, AutoConfig
@@ -78,10 +78,13 @@ model_config_dict = {
 
 def load_from_hf(load_dir, trust_remote_code):
     # Load Huggingface model.
-    hf_model = AutoModelForCausalLM.from_pretrained(load_dir, device_map='cpu', trust_remote_code=trust_remote_code,
-                                                    local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(
+        load_dir, device_map='cpu',
+        trust_remote_code=trust_remote_code,
+        local_files_only=True)
     print(hf_model)
-    config = AutoConfig.from_pretrained(load_dir, trust_remote_code=trust_remote_code)
+    config = AutoConfig.from_pretrained(
+        load_dir, trust_remote_code=trust_remote_code, local_files_only=True)
     global llm_arch
     llm_arch = config.llm_config.architectures[0]
     return hf_model, config
@@ -187,7 +190,7 @@ def convert_hg_to_mm(_state_dict, model_config, num_key_value_heads):
                 new_key = new_key.replace('post_attention_layernorm', 'pre_mlp_layernorm')
                 new_key = new_key.replace('gate_proj', 'linear_fc1_gate')
                 new_key = new_key.replace('up_proj', 'linear_fc1_up')
-                new_key = new_key.replace('down_proj', 'linear_fc2')                
+                new_key = new_key.replace('down_proj', 'linear_fc2')
                 new_key = new_key.replace('model.norm', 'decoder.final_layernorm')
                 new_key = new_key.replace('model.embed_tokens', 'embedding.word_embeddings')
 
@@ -222,10 +225,10 @@ def convert_hg_to_mm(_state_dict, model_config, num_key_value_heads):
                 wv = new_dict[v_name]
             else:
                 raise AssertionError(f'Missing key {v_name}')
-            
+
             q_chunks = torch.chunk(wq, num_key_value_heads, dim=0)
             k_chunks = torch.chunk(wk, num_key_value_heads, dim=0)
-            v_chunks = torch.chunk(wv, num_key_value_heads, dim=0)            
+            v_chunks = torch.chunk(wv, num_key_value_heads, dim=0)
             all_chunks = []
             for j in range(num_key_value_heads):
                 all_chunks.append(q_chunks[j])
@@ -260,10 +263,10 @@ def convert_hg_to_mm(_state_dict, model_config, num_key_value_heads):
                 wv = new_dict[v_name]
             else:
                 raise AssertionError(f'Missing key {v_name}')
-            
+
             q_chunks = torch.chunk(wq, num_key_value_heads, dim=0)
             k_chunks = torch.chunk(wk, num_key_value_heads, dim=0)
-            v_chunks = torch.chunk(wv, num_key_value_heads, dim=0)            
+            v_chunks = torch.chunk(wv, num_key_value_heads, dim=0)
             all_chunks = []
             for j in range(num_key_value_heads):
                 all_chunks.append(q_chunks[j])
@@ -276,7 +279,7 @@ def convert_hg_to_mm(_state_dict, model_config, num_key_value_heads):
             if k_name in new_dict:
                 new_dict.pop(k_name)
             if v_name in new_dict:
-                new_dict.pop(v_name)            
+                new_dict.pop(v_name)
 
 
     # 合并mlp的gate和up权重
@@ -433,17 +436,17 @@ if __name__ == '__main__':
     model_config = get_model_config(
         args.model_size, args.vpp)
     pp_split = merge_pp_index(model_config)
-    
+
     for key, value in state_dict.items():
         print(key, value.shape)
     state_dict = convert_hg_to_mm(state_dict, model_config, num_key_value_heads)
     pipeline_state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
-    
+
     if len(remains) > 0:
         print(remains)
         raise RuntimeWarning("There are some weights ungrouped.")
 
-    
+
     for rank, pipeline_state_dict in enumerate(pipeline_state_dicts):
         print(20 * '#', f'stage {rank}', 20 * '#')
         for key, value in pipeline_state_dict.items():

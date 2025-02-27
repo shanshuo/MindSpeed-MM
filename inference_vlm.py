@@ -4,6 +4,7 @@ import mindspeed.megatron_adaptor
 from megatron.training import get_args
 from mindspeed_mm.tasks.inference.pipeline import vlm_pipeline_dict
 from mindspeed_mm.configs.config import mm_extra_args_provider
+from mindspeed_mm.arguments import extra_args_provider_decorator
 
 
 def main():
@@ -14,7 +15,7 @@ def main():
     torch.set_grad_enabled(False)
 
     initialize_megatron(
-        extra_args_provider=mm_extra_args_provider, args_defaults={'tokenizer_type': 'GPT2BPETokenizer'}
+        extra_args_provider=extra_args_provider_decorator(mm_extra_args_provider), args_defaults={'tokenizer_type': 'GPT2BPETokenizer'}
     )
     args = get_args()
     merge_mm_args(args)

@@ -14,6 +14,7 @@
 from datasets import Audio, load_dataset
 from torch.utils.data import Dataset
 from transformers import WhisperProcessor
+from megatron.training import get_args
 
 
 class AudioDataset(Dataset):
@@ -40,7 +41,7 @@ class AudioDataset(Dataset):
             dataset_name_or_path,
             language,
             split="train+validation",
-            trust_remote_code=True,
+            trust_remote_code=get_args().trust_remote_code,
         )
         train_dataset = train_dataset.remove_columns(
             [
@@ -59,7 +60,7 @@ class AudioDataset(Dataset):
         processor = WhisperProcessor.from_pretrained(
             processor_name_or_path,
             language=processor_language,
-            task=task, 
+            task=task,
             local_files_only=True,
         )
         feature_extractor = processor.feature_extractor

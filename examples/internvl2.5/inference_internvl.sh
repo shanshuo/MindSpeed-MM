@@ -53,6 +53,7 @@ GPT_ARGS="
     --no-masked-softmax-fusion \
     --use-distributed-optimizer \
     --bf16 \
+    --trust-remote-code \
 "
 
 OUTPUT_ARGS="

@@ -15,7 +15,6 @@
        "hub_backend": "hf",
         "model_id": "T5",
         "from_pretrained": "DeepFloyd/t5-v1_1-xxl",
-        "local_files_only": false,
         "low_cpu_mem_usage": true,
         "dtype": "fp32"
     },
@@ -23,7 +22,6 @@
         "hub_backend": "hf",
         "autotokenizer_name": "AutoTokenizer",
         "from_pretrained": "DeepFloyd/t5-v1_1-xxl",
-        "local_files_only": false,
         "model_max_length":300
     },
     "predictor": {

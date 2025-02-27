@@ -1,5 +1,4 @@
 import importlib
-from torch import nn
 
 
 class Tokenizer:
@@ -20,7 +19,7 @@ class Tokenizer:
                 "local_files_only": type-bool,
                 ...
             }
-        - If `config` is a list of dictionaries, each dictionary in the list will be used to instantiate a separate Tokenizer instance, 
+        - If `config` is a list of dictionaries, each dictionary in the list will be used to instantiate a separate Tokenizer instance,
             effectively allowing the creation of multiple tokenizers based on different configurations.
     """
 
@@ -32,11 +31,11 @@ class Tokenizer:
                 tokenizer_i = self._init_tokenizer(module, config_i)
                 self.tokenizers.append(tokenizer_i)
         else:
-            self.tokenizers = self._init_tokenizer(module, config)           
+            self.tokenizers = self._init_tokenizer(module, config)
 
     def get_tokenizer(self):
         return self.tokenizers
-    
+
     def _init_tokenizer(self, module, config):
         if not isinstance(config, dict):
             config = config.to_dict()
@@ -45,5 +44,11 @@ class Tokenizer:
         self.backend = config.pop("hub_backend")
         tokenizer_name = config.pop("autotokenizer_name")
         config["pretrained_model_name_or_path"] = config.pop("from_pretrained")
+        config["local_files_only"] = True
+        try:
+            from megatron.training import get_args
+            config["trust_remote_code"] = get_args().trust_remote_code
+        except (ImportError, AssertionError):
+            config["trust_remote_code"] = False
         tokenizer_cls = getattr(module, tokenizer_name)
         return tokenizer_cls.from_pretrained(**config)

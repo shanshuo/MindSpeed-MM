@@ -40,7 +40,8 @@ def preprocess_text_encoder_tokenizer(source_dir, save_dir):
     model = LlavaForConditionalGeneration.from_pretrained(
         source_dir,
         torch_dtype=torch.float16,
-        low_cpu_mem_usage=True
+        low_cpu_mem_usage=True,
+        local_files_only=True
     )
     model.language_model.save_pretrained(save_dir)
     processor.tokenizer.save_pretrained(save_dir)
@@ -122,7 +123,7 @@ def get_tp_split_layer_names(
             f"single_blocks.{index}.linear1.weight",
             f"single_blocks.{index}.linear1.bias",
         ]
-    
+
     return (
         column_parallel_linears,
         row_parallel_linears,
@@ -165,7 +166,7 @@ def split_by_tp(
             new_state_dict[name] = torch.chunk(state_dict[name], tp_size, dim=0)[tp_rank]
         for name in row_parallel_linears:
             new_state_dict[name] = torch.chunk(state_dict[name], tp_size, dim=1)[tp_rank]
-        
+
         for name in qkv_fused_projs:
             wq, wk, wv = torch.chunk(state_dict[name], 3, dim=0)
             wq = torch.chunk(wq, tp_size, dim=0)[tp_rank]
@@ -210,7 +211,7 @@ def merge_by_tp(
 
     if tp_size == 1:
         return state_dicts
-    
+
     merged_state_dict = copy.deepcopy(state_dicts[0])
     (
         column_parallel_linears,
@@ -234,7 +235,7 @@ def merge_by_tp(
             [state_dicts[tp_rank][name] for tp_rank in range(tp_size)],
             dim=1
         )
-    
+
     for name in qkv_fused_projs:
         wq = torch.cat(
             [torch.chunk(state_dicts[tp_rank][name], 3, dim=0)[0] for tp_rank in range(tp_size)],
@@ -270,7 +271,7 @@ def merge_by_tp(
             dim=0
         )
         merged_state_dict[name] = torch.cat([wq, wk, wv, wmlp], dim=0)
-    
+
     for name in x_mlp_fused_row_parallel_linear:
         wx = torch.cat(
             [state_dicts[tp_rank][name][:, :hidden_size // tp_size] for tp_rank in range(tp_size)],
@@ -281,7 +282,7 @@ def merge_by_tp(
             dim=1,
         )
         merged_state_dict[name] = torch.cat([wx, wmlp], dim=1)
-    
+
     return merged_state_dict
 
 
@@ -301,7 +302,7 @@ def load_state_dicts_by_tp(load_dir: str, tp_size: int = 2) -> List[Dict[str, An
         state_dict_path = os.path.join(load_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
         tp_state_dicts.append(torch.load(state_dict_path)['model'])
 
-    return tp_state_dicts    
+    return tp_state_dicts
 
 
 def save(state_dicts: List[Dict], save_dir: str, latest_checkpointed_iteration="release"):
@@ -316,7 +317,7 @@ def save(state_dicts: List[Dict], save_dir: str, latest_checkpointed_iteration="
         directory = 'release'
     else:
         directory = 'iter_{:07d}'.format(latest_checkpointed_iteration)
-    
+
     for tp_rank, state_dict in enumerate(state_dicts):
         os.makedirs(os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}"))
         save_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}", "model_optim_rng.pt")
@@ -331,7 +332,7 @@ def get_args():
     parser.add_argument("--source_path", type=str, default="./transformers/mp_rank_00/model_states.pt", help="Source path of checkpoint")
     parser.add_argument("--target_path", type=str, default="./ckpt/hunyuanvideo/", help="Save path of MM checkpoint")
     parser.add_argument("--tp_size", type=int, default=2, help="Tensor model parallel world size")
-    parser.add_argument("--mode", type=str, default="split", choices=["split", "merge"], 
+    parser.add_argument("--mode", type=str, default="split", choices=["split", "merge"],
         help="Split mode is used to split the pretrained weights according to tp_size before training, \
         and Merge mode is used to merge weights based on tp_size after training is completed")
 
@@ -345,7 +346,7 @@ if __name__ == "__main__":
     if args.module == "text_encoder":
         preprocess_text_encoder_tokenizer(args.source_path, args.target_path)
     else:
-        if args.mode == "split":    
+        if args.mode == "split":
             source_state_dict = torch.load(args.source_path, map_location='cpu')['module']
             state_dict = replace_state_dict(source_state_dict, convert_mapping=DIT_CONVERT_MAPPING)
             state_dicts = split_by_tp(

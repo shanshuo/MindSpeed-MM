@@ -151,9 +151,9 @@ cython_debug/
 /ci/kernel*/
 
 # mindspeed core
-/mindspeed/
+mindspeed
 
-# test 
+# test
 /tests/st/run_jsons/
 /tests/st/run_logs/
 

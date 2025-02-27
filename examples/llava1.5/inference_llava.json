@@ -89,8 +89,7 @@
   "tokenizer":{
       "hub_backend": "hf",
       "autotokenizer_name": "AutoTokenizer",
-      "from_pretrained": "llava_weights/vicuna-7b-v1.5",
-      "local_files_only": false
+      "from_pretrained": "llava_weights/vicuna-7b-v1.5"
   },
   "generation_config":{
       "bos_token_id": 1,

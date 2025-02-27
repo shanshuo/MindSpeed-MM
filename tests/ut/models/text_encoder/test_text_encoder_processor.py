@@ -26,7 +26,7 @@ class TestTextEncoder:
         text_encoder_dict = {
                 "hub_backend": "hf",
                 "model_id": "T5",
-                "dtype": "bf16", 
+                "dtype": "bf16",
                 "from_pretrained": T5_MODEL_PATH,
         }
         tokenizer_dict = {

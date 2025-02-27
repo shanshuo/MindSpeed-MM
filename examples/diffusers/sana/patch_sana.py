@@ -72,7 +72,8 @@ def create_load_model_hook(
                     raise ValueError(f"unexpected save model: {model.__class__}")
         else:
             transformer_ = SanaTransformer2DModel.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="transformer"
+                args.pretrained_model_name_or_path, subfolder="transformer",
+                local_files_only=True
             )
 
         # Make sure the trainable params are in float32. This is again needed since the base models

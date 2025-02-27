@@ -74,6 +74,7 @@ GPT_ARGS="
     --bf16 \
     --distributed-timeout-minutes 1000 \
     --use-flash-attn \
+    --trust-remote-code \
 "
 
 OUTPUT_ARGS="

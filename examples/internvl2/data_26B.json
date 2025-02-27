@@ -22,7 +22,6 @@
             "autotokenizer_name": "AutoTokenizer",
             "from_pretrained": "OpenGVLab/InternVL2-26B",
             "add_eos_token": false,
-            "trust_remote_code": true,
             "use_fast": false
         },
         "use_text_processer": true,

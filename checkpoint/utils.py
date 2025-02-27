@@ -42,7 +42,7 @@ class ParallelConfig(BaseModel):
         if len(self.vit_pp_layers) < 1:
             raise ValueError("pp layers长度至少为1")
         return self
-    
+
 
 class VppParallelConfig(BaseModel):
     """权模型切分配置，包括tp的size，以及pp切分时vit和llm在pp域每张卡上切分的层数"""
@@ -59,7 +59,7 @@ class VppParallelConfig(BaseModel):
     @computed_field
     def pp_size(self) -> PositiveInt:
         return len(self.llm_pp_layers[0])
-    
+
     @computed_field
     def vpp_size(self) -> PositiveInt:
         return len(self.llm_pp_layers)
@@ -71,7 +71,7 @@ class VppParallelConfig(BaseModel):
         if len(self.vit_pp_layers) < 1:
             raise ValueError("pp layers长度至少为1")
         return self
-    
+
     @model_validator(mode='after')
     def validate_vpp_layers(self) -> "VppParallelConfig":
         pp_size = self.pp_size
@@ -91,7 +91,7 @@ class HfConfig(BaseModel):
 
     @cached_property
     def config(self) -> PretrainedConfig:
-        return AutoConfig.from_pretrained(self.hf_dir)
+        return AutoConfig.from_pretrained(self.hf_dir, local_files_only=True)
 
     @model_validator(mode='after')
     def validate_hf_dir(self) -> "HfConfig":
@@ -147,7 +147,7 @@ class ConvertResplitConfig(BaseModel):
         if sum(self.source_parallel_config.llm_pp_layers) != sum(self.target_parallel_config.llm_pp_layers):
             raise ValueError("llm pp layers not equal!")
         return self
-    
+
 
 # BaseModel/dataclasses注意要在field的下一行添加描述说明
 class ConvertVppMMConfig(BaseModel):

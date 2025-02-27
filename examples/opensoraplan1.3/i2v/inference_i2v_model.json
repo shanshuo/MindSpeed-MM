@@ -1,4 +1,4 @@
-{   
+{
     "predictor": {
         "model_id": "videoditsparsei2v",
         "from_pretrained": "./weights/sparsedit/sparsediti2v_mm.pth",
@@ -49,10 +49,9 @@
         "hub_backend": "hf",
         "autotokenizer_name": "AutoTokenizer",
         "from_pretrained": "./weights/google/mt5-xxl",
-        "local_files_only": false,
         "model_max_length": 512
     },
-    
+
     "diffusion": {
         "model_id": "EulerAncestralDiscrete",
         "num_inference_steps":100,

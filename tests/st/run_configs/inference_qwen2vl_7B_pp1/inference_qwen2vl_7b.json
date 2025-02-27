@@ -84,8 +84,7 @@
     "tokenizer": {
         "hub_backend": "hf",
         "autotokenizer_name": "AutoTokenizer",
-        "from_pretrained": "/home/ci_resource/models/qwen2vl_7b/qwen2vl7b",
-        "local_files_only":false
+        "from_pretrained": "/home/ci_resource/models/qwen2vl_7b/qwen2vl7b"
     },
     "generation_config": {
         "bos_token_id": 151643,

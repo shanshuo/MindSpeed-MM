@@ -13,10 +13,13 @@ llm_arch = ''
 
 def load_from_hf(load_dir, trust_remote_code):
     # Load Huggingface model.
-    hf_model = AutoModelForCausalLM.from_pretrained(load_dir, device_map='cpu', trust_remote_code=trust_remote_code,
-                                                    local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(
+        load_dir, device_map='cpu',
+        trust_remote_code=trust_remote_code,
+        local_files_only=True)
     print(hf_model)
-    config = AutoConfig.from_pretrained(load_dir, trust_remote_code=trust_remote_code)
+    config = AutoConfig.from_pretrained(
+        load_dir, trust_remote_code=trust_remote_code, local_files_only=True)
     global llm_arch
     llm_arch = config.llm_config.architectures[0]
     return hf_model

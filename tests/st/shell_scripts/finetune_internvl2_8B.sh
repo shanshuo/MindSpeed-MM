@@ -79,6 +79,7 @@ GPT_ARGS="
     --normalization RMSNorm \
     --use-fused-rmsnorm \
     --num-workers 4 \
+    --trust-remote-code \
 "
 
 OUTPUT_ARGS="

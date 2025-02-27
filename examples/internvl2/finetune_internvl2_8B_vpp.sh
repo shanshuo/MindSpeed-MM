@@ -80,6 +80,7 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --num-workers 4 \
+    --trust-remote-code \
 "
 
 OUTPUT_ARGS="

@@ -34,6 +34,7 @@ def process_args(parser):
     parser = _add_network_size_args(parser)
     parser = _add_dummy_optimizer_args(parser)
     parser = _add_logging_args(parser)
+    parser = _add_security_args(parser)
     return parser
 
 
@@ -75,7 +76,9 @@ def _add_training_args(parser):
                        action='store_true',
                        default=False,
                        help='Use internal format to train')
-    group.add_argument('--virtual-pipeline-model-parallel-size', type=int, default=None,
+    group.add_argument('--virtual-pipeline-model-parallel-size',
+                       type=int,
+                       default=None,
                        help='vpp size')
     group.add_argument('--encoder-dp-balance',
                        action='store_true',
@@ -115,11 +118,22 @@ def _add_dummy_optimizer_args(parser):
 
 
 def _add_logging_args(parser):
-    group = parser.add_argument_group(title='mm_logging')
+    group = parser.add_argument_group(title='logging')
 
     group.add_argument('--log-tps',
                        action='store_true',
                        default=False,
                        help='calculate and log average tokens per sample')
-    
+
+    return parser
+
+
+def _add_security_args(parser):
+    group = parser.add_argument_group(title='security configuration')
+
+    group.add_argument('--trust-remote-code',
+                       action='store_true',
+                       default=False,
+                       help='Whether or not to allow for custom models defined on the Hub in their own modeling files.')
+
     return parser

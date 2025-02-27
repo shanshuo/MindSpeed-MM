@@ -84,8 +84,7 @@
     "tokenizer": {
         "hub_backend": "hf",
         "autotokenizer_name": "AutoTokenizer",
-        "from_pretrained": "ckpt/hf_path/Qwen2-VL-2B-Instruct",
-        "local_files_only":false
+        "from_pretrained": "ckpt/hf_path/Qwen2-VL-2B-Instruct"
     },
     "generation_config": {
         "bos_token_id": 151643,

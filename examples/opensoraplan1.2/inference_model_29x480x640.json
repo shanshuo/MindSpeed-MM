@@ -47,7 +47,6 @@
         "hub_backend": "hf",
         "model_id": "MT5",
         "from_pretrained": "./weights/google/mt5-xxl",
-        "local_files_only": false,
         "low_cpu_mem_usage": true,
         "dtype": "fp16"
     },
@@ -55,7 +54,6 @@
         "hub_backend": "hf",
         "autotokenizer_name": "AutoTokenizer",
         "from_pretrained": "./opensoraplanv12/weights/mt5",
-        "local_files_only": false,
         "model_max_length": 512
     },
     "predictor": {

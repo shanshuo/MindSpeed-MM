@@ -54,6 +54,7 @@ GPT_ARGS="
     --use-distributed-optimizer \
     --bf16 \
     --use-flash-attn \
+    --trust-remote-code \
 "
 
 OUTPUT_ARGS="

@@ -86,7 +86,8 @@ GPT_ARGS="
     --load $LOAD_PATH \
     --variable-seq-lengths \
     --normalization RMSNorm \
-    --num-workers 4
+    --num-workers 4 \
+    --trust-remote-code \
 "
 
 OUTPUT_ARGS="

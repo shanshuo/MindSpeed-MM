@@ -7,11 +7,14 @@ from transformers import AutoModelForCausalLM, AutoConfig
 
 def load_from_hf(load_dir, trust_remote_code):
     # Load Huggingface model.
-    hf_model = AutoModelForCausalLM.from_pretrained(load_dir, device_map='cpu', trust_remote_code=trust_remote_code,
-                                                    torch_dtype=torch.bfloat16, local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(
+        load_dir, device_map='cpu',
+        trust_remote_code=trust_remote_code,
+        torch_dtype=torch.bfloat16, local_files_only=True)
     print(hf_model)
-    config = AutoConfig.from_pretrained(load_dir, trust_remote_code=trust_remote_code)
-    
+    config = AutoConfig.from_pretrained(
+        load_dir, trust_remote_code=trust_remote_code, local_files_only=True)
+
     return hf_model, config
 
 
@@ -26,7 +29,7 @@ def merge_qkv(wq, wk, wv, ng=32):
         qkv[j * d : j * d + dq, :] = wq[j * dq : (j + 1) * dq, :]
         qkv[j * d + dq : j * d + dq + dkv, :] = wk[j * dkv : (j + 1) * dkv, :]
         qkv[j * d + dq + dkv : j * d + dq + dkv * 2, :] = wv[j * dkv : (j + 1) * dkv, :]
-    
+
     return qkv
 
 

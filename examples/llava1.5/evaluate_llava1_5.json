@@ -87,7 +87,6 @@
     "hub_backend": "hf",
     "autotokenizer_name": "AutoTokenizer",
     "from_pretrained": "./llava_7b",
-    "local_files_only": false,
     "use_fast": false
   },
   "generation_config": {

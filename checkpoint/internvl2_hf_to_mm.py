@@ -17,8 +17,10 @@ from checkpoint.utils import ConvertVppMMConfig
 
 def load_from_hf(load_dir, trust_remote_code):
     # Load Huggingface model.
-    hf_model = AutoModelForCausalLM.from_pretrained(load_dir, device_map='cpu', trust_remote_code=trust_remote_code,
-                                                    local_files_only=True)
+    hf_model = AutoModelForCausalLM.from_pretrained(
+        load_dir, device_map='cpu',
+        trust_remote_code=trust_remote_code,
+        local_files_only=True)
     print(hf_model)
 
     return hf_model
@@ -274,7 +276,7 @@ def main(convert_config: ConvertVppMMConfig):
 
     pp_size = parallel_config.pp_size
     vp_size = parallel_config.vpp_size
-    
+
     pp_split = merge_pp_index(
         vit_pipeline_num_layers=parallel_config.vit_pp_layers,
         llm_pipeline_num_layers=parallel_config.llm_pp_layers
@@ -288,7 +290,7 @@ def main(convert_config: ConvertVppMMConfig):
     if len(remains) > 0:
         print(remains)
         raise RuntimeWarning("There are some weights ungrouped.")
-    
+
     for rank, pipeline_state_dict in enumerate(pipeline_state_dicts):
         print(20 * '#', f'stage {rank}', 20 * '#')
         for key, value in pipeline_state_dict.items():
