@@ -19,6 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
+* [Feb. 20, 2025]: 🚀 MindSpeed-MM支持InternVL2.5-78B模型 【Prototype】
 * [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型 【Prototype】
 * [Feb. 17, 2025]: 🔥 MindSpeed-MM支持Mindspeed-Core & Megatron 0.8.0版本
 * [Feb. 15, 2025]: 🚀 MindSpeed-MM支持Sana模型 【Prototype】
@@ -174,7 +175,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/opensoraplan1.2">OpenSoraPlan 1.2</a></td>
       <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.2.0">8.7B</a></td>
-      <td>预训练</td>
+      <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 0.42 (SPS) </td>
@@ -254,7 +255,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sdxl">SDXL</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/5956b68a6927126daffc2c5a6d1a9a189defe288">3.5B</a></td>
-      <td>预训练</td>
+      <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 29.92  (FPS)</td>
@@ -263,7 +264,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td><a href="https://github.com/huggingface/diffusers/tree/5956b68a6927126daffc2c5a6d1a9a189defe288">3.5B</a></td>
-      <td>预训练</td>
+      <td> 预训练 </td>
       <td> 1x8</td>
       <td> FP16 </td>
       <td> 28.51 (FPS)</td>
@@ -273,7 +274,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/5f724735437d91ed05304da478f3b2022fe3f6fb">2B</a></td>
-      <td>全参微调</td>
+      <td> 全参微调 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 16.09 (FPS)</td>
@@ -283,7 +284,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sd3">SD3.5</a></td>
       <td><a href="https://github.com/huggingface/diffusers/tree/5f724735437d91ed05304da478f3b2022fe3f6fb"> 8.1B </a></td>
-      <td>全参微调</td>
+      <td> 全参微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 26.20 (FPS)</td>
@@ -292,7 +293,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td><a href="https://github.com/huggingface/diffusers/tree/94643fac8a27345f695500085d78cc8fa01f5fa9"> 8.1B </a></td>
-      <td>Lora微调</td>
+      <td> Lora微调 </td>
       <td> 1x8 </td>
       <td> FP16 </td>
       <td> 47.93 (FPS)</td>
@@ -302,7 +303,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/flux">Flux</a></td>
       <td><a href="https://github.com/huggingface/diffusers/blob/main/examples/dreambooth">12B</a></td>
-      <td>全参微调</td>
+      <td> 全参微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 55.23 (FPS) </td>
@@ -312,7 +313,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/sana">Sana</a></td>
       <td><a href="https://github.com/huggingface/diffusers/blob/main/examples/dreambooth">1.6B</a></td>
-      <td>Lora微调</td>
+      <td> Lora微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 28.7 (FPS) </td>
@@ -322,7 +323,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
       <td><a href="https://github.com/Kwai-Kolors/Kolors">2.6B</a></td>
-      <td>推理</td>
+      <td> 推理 </td>
       <td> 1x1 </td>
       <td> FP16 </td>
       <td> / </td>
@@ -330,10 +331,10 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="8"> 多模态理解 </td>
+      <td rowspan="9"> 多模态理解 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/llava1.5">LLaVA 1.5</a></td>
       <td><a href="https://github.com/haotian-liu/LLaVA">7B</a></td>
-      <td>全参微调</td>
+      <td> 全参微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 48.27 (SPS) </td>
@@ -341,9 +342,9 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
    <tr>
-      <td rowspan="4"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/internvl2">Intern-VL-2.0</a></td>
+      <td rowspan="4"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/internvl2">InternVL 2.0</a></td>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-2B">2B</a></td>
-      <td>微调</td>
+      <td> 微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 33.77 (SPS) </td>
@@ -352,7 +353,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-8B">8B</a></td>
-      <td>微调</td>
+      <td> 微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 12.86 (SPS) </td>
@@ -361,7 +362,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td><a href="https://huggingface.co/OpenGVLab/InternVL2-26B">26B</a></td>
-      <td>微调</td>
+      <td> 微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 3.31 (SPS) </td>
@@ -378,9 +379,19 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Test】</td>
     </tr>
     <tr>
+      <td rowspan=""><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/internvl2.5">InternVL 2.5</a></td>
+      <td><a href="https://huggingface.co/OpenGVLab/InternVL2_5-78B">78B</a></td>
+      <td> 微调 </td>
+      <td> 8x8 </td>
+      <td> BF16 </td>
+      <td> / </td>
+      <td> / </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
       <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2vl">Qwen2-VL</a></td>
       <td><a href="https://qwen2.org/vl/">2B</a></td>
-      <td>微调</td>
+      <td> 微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 34.15 (SPS) </td>
@@ -389,7 +400,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td><a href="https://qwen2.org/vl/">7B</a></td>
-      <td>微调</td>
+      <td> 微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
       <td> 13.28 (SPS) </td>
@@ -398,7 +409,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td><a href="https://qwen2.org/vl/">72B</a></td>
-      <td>微调</td>
+      <td> 微调 </td>
       <td> 4x16 (A3) </td>
       <td> BF16 </td>
       <td> 261.25 (TPS) </td>
@@ -409,7 +420,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 语音识别 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/whisper">Whisper</a></td>
       <td><a href="https://github.com/openai/whisper">1.5B</a></td>
-      <td>预训练</td>
+      <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 93.38 (SPS) </td>
@@ -439,8 +450,8 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm/CogVLM2">CogVLM-2</a></td>
       <td><a href="https://github.com/THUDM/CogVLM2">8B</a></td>
-      <td>微调</td>
-      <td> 1x8</td>
+      <td> 微调 </td>
+      <td> 1x8 </td>
       <td> BF16 </td>
       <td> 3.9 (s/it) </td>
       <td> 3.3 (s/it) </td>
@@ -449,7 +460,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm/PLLaVA">PLLaVA</a></td>
       <td><a href="https://github.com/magic-research/PLLaVA">7B</a></td>
-      <td>预训练</td>
+      <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 0.841 (s/step) </td>
@@ -458,7 +469,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td><a href="https://github.com/magic-research/PLLaVA">7B</a></td>
-      <td>预训练</td>
+      <td> 预训练 </td>
       <td> 1x8</td>
       <td> FP32 </td>
       <td> 0.935 (s/step) </td>
@@ -468,7 +479,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm/MiniCPM-V">miniCPM-V 2.5</a></td>
       <td><a href="https://github.com/OpenBMB/MiniCPM-V">8B</a></td>
-      <td>全参微调</td>
+      <td> 全参微调 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 1046 (s)/50-200steps </td>
@@ -477,7 +488,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td><a href="https://github.com/OpenBMB/MiniCPM-V">8B</a></td>
-      <td>Lora微调</td>
+      <td> Lora微调 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 603 (s)/50-200steps </td>
@@ -487,7 +498,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm/HunyuanDiT">HunYuanDiT</a></td>
       <td><a href="https://github.com/Tencent/HunyuanDiT">1.5B</a></td>
-      <td>预训练</td>
+      <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 1099.5 (ms/step) </td>
@@ -495,9 +506,9 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm/InternVL1.5">Intern-VL-1.5</a></td>
+      <td><a href="https://gitee.com/ascend/ModelZoo-PyTorch/tree/master/PyTorch/built-in/mm/InternVL1.5">InternVL 1.5</a></td>
       <td><a href="https://github.com/OpenGVLab/InternVL/tree/v1.5.0">26B</a></td>
-      <td>微调训练</td>
+      <td> 微调训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 4.952 (FPS) </td>
