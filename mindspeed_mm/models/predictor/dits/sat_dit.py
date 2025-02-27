@@ -108,7 +108,6 @@ class SatDiT(MultiModalModule):
         self.concat_text_embed = concat_text_embed
         args = get_args()
         self.sequence_parallel = args.sequence_parallel
-        self.text_length = self._get_text_length(input_size, text_length)
         self.ori_text_length = text_length
         self.seq_len = text_length + reduce(mul, input_size) // reduce(mul, patch_size)
         self.text_hidden_size = text_hidden_size
@@ -184,7 +183,6 @@ class SatDiT(MultiModalModule):
                     interpolation_scale=interpolation_scale,
                     enable_sequence_parallelism=self.enable_sequence_parallelism,
                     time_embed_dim=self.time_embed_dim,
-                    text_length=self.text_length,
                     patch_size=self.patch_size
                 )
                 for i in range(num_layers)
@@ -254,11 +252,6 @@ class SatDiT(MultiModalModule):
             class_labels: Used to indicate class labels conditioning.
             use_image_num: The number of images use for trainning.
         """
-        b = latents.shape[0]
-        t, h, w = self.input_size[0], self.input_size[1], self.input_size[2]
-        frames = t - use_image_num
-        vid_mask, img_mask = None, None
-        prompt_vid_mask, prompt_img_mask = None, None
 
         # RNG context
         if self.sequence_parallel:
@@ -266,11 +259,16 @@ class SatDiT(MultiModalModule):
         else:
             rng_context = nullcontext()
 
-        # 1. Input
-        frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
-        height, width = h // self.patch_size_h, w // self.patch_size_w
-
         if self.pre_process:
+            _, _, t, h, w = latents.shape
+            frames = t - use_image_num
+            vid_mask, img_mask = None, None
+            prompt_vid_mask, prompt_img_mask = None, None
+
+            # 1. Input
+            frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
+            height, width = h // self.patch_size_h, w // self.patch_size_w
+
             if "masked_video" in kwargs.keys() and kwargs["masked_video"] is not None:
                 latents = torch.cat([latents, kwargs["masked_video"]], dim=1)
 
@@ -289,6 +287,15 @@ class SatDiT(MultiModalModule):
             if self.sequence_parallel:
                 latents_vid = tensor_parallel.scatter_to_sequence_parallel_region(latents_vid)
         else:
+            t, h, w = self.input_size # PP currently does not support dynamic resolution.
+            frames = t - use_image_num
+            vid_mask, img_mask = None, None
+            prompt_vid_mask, prompt_img_mask = None, None
+
+            # 1. Input
+            frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
+            height, width = h // self.patch_size_h, w // self.patch_size_w
+
             latents_vid = latents
             prompt_vid = prompt
             timestep_vid = timestep
@@ -320,6 +327,7 @@ class SatDiT(MultiModalModule):
                         frames=frames,
                         height=height,
                         width=width,
+                        text_length=torch.tensor(self._get_text_length([t, h, w], self.rope.text_length)),
                         rotary_pos_emb=rotary_pos_emb
                     )
             else:
@@ -336,6 +344,7 @@ class SatDiT(MultiModalModule):
                             height=height,
                             width=width,
                             rotary_pos_emb=rotary_pos_emb,
+                            text_length=torch.tensor(self._get_text_length([t, h, w], self.rope.text_length)),
                             checkpoint_skip_core_attention=self.checkpoint_skip_core_attention
                         )
 
@@ -376,6 +385,7 @@ class SatDiT(MultiModalModule):
         height,
         width,
         rotary_pos_emb,
+        text_length,
         **kwargs
     ):
         """Forward method with activation checkpointing."""
@@ -408,6 +418,7 @@ class SatDiT(MultiModalModule):
                     height,
                     width,
                     rotary_pos_emb,
+                    text_length,
                 )
                 layer_num += self.recompute_num_layers
         elif self.recompute_method == "block":
@@ -426,6 +437,7 @@ class SatDiT(MultiModalModule):
                         height,
                         width,
                         rotary_pos_emb,
+                        text_length,
                     )
                 else:
                     block = self._get_block(layer_num)
@@ -440,6 +452,7 @@ class SatDiT(MultiModalModule):
                         height=height,
                         width=width,
                         rotary_pos_emb=rotary_pos_emb,
+                        text_length=text_length,
                         checkpoint_skip_core_attention=self.checkpoint_skip_core_attention
                     )
         else:
@@ -636,7 +649,6 @@ class VideoDiTBlock(nn.Module):
         interpolation_scale: Tuple[float] = None,
         enable_sequence_parallelism: bool = False,
         time_embed_dim=None,
-        text_length=None,
         rope=None,
         patch_size=None
     ):
@@ -652,7 +664,6 @@ class VideoDiTBlock(nn.Module):
                 f" define `num_embeds_ada_norm` if setting `norm_type` to {norm_type}."
             )
         self.norm_type = norm_type
-        self.text_length = text_length
         self.positional_embeddings = positional_embeddings
 
         if positional_embeddings and (num_positional_embeddings is None):
@@ -751,6 +762,7 @@ class VideoDiTBlock(nn.Module):
         height: torch.int64 = None,
         width: torch.int64 = None,
         rotary_pos_emb=None,
+        text_length: torch.int64 = None,
         checkpoint_skip_core_attention: bool = False,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
     ) -> torch.FloatTensor:
@@ -764,11 +776,12 @@ class VideoDiTBlock(nn.Module):
                 frames,
                 height,
                 width,
+                text_length,
                 rotary_pos_emb
             )
         else:
             q, k, v, gate_msa, text_gate_msa, scale_mlp, shift_mlp, text_scale_mlp, text_shift_mlp, gate_mlp, text_gate_mlp = self.before_attention(
-                latents, timestep, frames, height, width, rotary_pos_emb)
+                latents, timestep, frames, height, width, text_length, rotary_pos_emb)
 
         # self_attention
         attn_output = self.attention(
@@ -792,7 +805,8 @@ class VideoDiTBlock(nn.Module):
                 text_scale_mlp,
                 text_shift_mlp,
                 gate_mlp,
-                text_gate_mlp
+                text_gate_mlp,
+                text_length,
             )
         else:
             latents = self.after_attetion(
@@ -805,7 +819,8 @@ class VideoDiTBlock(nn.Module):
                 text_scale_mlp,
                 text_shift_mlp,
                 gate_mlp,
-                text_gate_mlp
+                text_gate_mlp,
+                text_length,
             )
 
         return latents
@@ -821,6 +836,7 @@ class VideoDiTBlock(nn.Module):
         frames: torch.int64 = None,
         height: torch.int64 = None,
         width: torch.int64 = None,
+        text_length: torch.int64 = None,
         rotary_pos_emb=None,
         key: Optional[torch.Tensor] = None,
         mask: Optional[torch.Tensor] = None
@@ -829,6 +845,7 @@ class VideoDiTBlock(nn.Module):
         frames = frames.item()
         height = height.item()
         width = width.item()
+        text_length = text_length.item()
         input_layout = "sbh" if self.enable_sequence_parallelism or self.sequence_parallel else "bsh"
 
         if self.enable_sequence_parallelism or self.sequence_parallel:
@@ -855,8 +872,8 @@ class VideoDiTBlock(nn.Module):
                 text_scale_mlp,
                 text_gate_mlp,
             ) = _scale_shift_table.unsqueeze(0).chunk(12, dim=2)
-            latents_text = latents[:self.text_length]
-            latents_vid = latents[self.text_length:]
+            latents_text = latents[:text_length]
+            latents_vid = latents[text_length:]
         else:
             _scale_shift_table = self.scale_shift_table(timestep)[0]
             _scale_shift_table = tensor_parallel.mappings.gather_from_tensor_model_parallel_region(
@@ -876,8 +893,8 @@ class VideoDiTBlock(nn.Module):
                 text_scale_mlp,
                 text_gate_mlp,
             ) = _scale_shift_table.unsqueeze(1).chunk(12, dim=2)
-            latents_text = latents[:, :self.text_length]
-            latents_vid = latents[:, self.text_length:]
+            latents_text = latents[:, :text_length]
+            latents_vid = latents[:, text_length:]
         latents_vid = self.norm1(latents_vid)
         latents_text = self.norm1(latents_text)
         latents_vid = latents_vid * (1 + scale_msa) + shift_msa
@@ -906,34 +923,36 @@ class VideoDiTBlock(nn.Module):
         text_scale_mlp,
         text_shift_mlp,
         gate_mlp,
-        text_gate_mlp
+        text_gate_mlp,
+        text_length,
     ):
+        text_length = text_length.item()
         output_layout = "sbh" if self.enable_sequence_parallelism or self.sequence_parallel else "bsh"
         attn_output = self.self_atten.function_after_core_attention(attn_output, output_layout)
 
         if self.enable_sequence_parallelism or self.sequence_parallel:
-            attn_vid_output = gate_msa * attn_output[self.text_length:]
-            attn_text_output = text_gate_msa * attn_output[:self.text_length]
+            attn_vid_output = gate_msa * attn_output[text_length:]
+            attn_text_output = text_gate_msa * attn_output[:text_length]
             attn_output = torch.cat((attn_text_output, attn_vid_output), dim=0)
         else:
-            attn_vid_output = gate_msa * attn_output[:, self.text_length:]
-            attn_text_output = text_gate_msa * attn_output[:, :self.text_length]
+            attn_vid_output = gate_msa * attn_output[:, text_length:]
+            attn_text_output = text_gate_msa * attn_output[:, :text_length]
             attn_output = torch.cat((attn_text_output, attn_vid_output), dim=1)
 
         latents = attn_output + latents
 
         # 2. Feed-forward
         if self.enable_sequence_parallelism or self.sequence_parallel:
-            latents_text = latents[:self.text_length]
-            latents_vid = latents[self.text_length:]
+            latents_text = latents[:text_length]
+            latents_vid = latents[text_length:]
             latents_text = self.norm2(latents_text)
             latents_vid = self.norm2(latents_vid)
             latents_vid = latents_vid * (1 + scale_mlp) + shift_mlp
             latents_text = latents_text * (1 + text_scale_mlp) + text_shift_mlp
             norm_latents = torch.cat((latents_text, latents_vid), dim=0)
         else:
-            latents_text = latents[:, :self.text_length]
-            latents_vid = latents[:, self.text_length:]
+            latents_text = latents[:, :text_length]
+            latents_vid = latents[:, text_length:]
             latents_text = self.norm2(latents_text)
             latents_vid = self.norm2(latents_vid)
             latents_vid = latents_vid * (1 + scale_mlp) + shift_mlp
@@ -943,12 +962,12 @@ class VideoDiTBlock(nn.Module):
         ff_output = self.ff(norm_latents)
 
         if self.enable_sequence_parallelism or self.sequence_parallel:
-            ff_vid_output = gate_mlp * ff_output[self.text_length:]
-            ff_text_output = text_gate_mlp * ff_output[:self.text_length]
+            ff_vid_output = gate_mlp * ff_output[text_length:]
+            ff_text_output = text_gate_mlp * ff_output[:text_length]
             ff_output = torch.cat((ff_text_output, ff_vid_output), dim=0)
         else:
-            ff_vid_output = gate_mlp * ff_output[:, self.text_length:]
-            ff_text_output = text_gate_mlp * ff_output[:, :self.text_length]
+            ff_vid_output = gate_mlp * ff_output[:, text_length:]
+            ff_text_output = text_gate_mlp * ff_output[:, :text_length]
             ff_output = torch.cat((ff_text_output, ff_vid_output), dim=1)
 
         latents = ff_output + latents
