@@ -229,7 +229,7 @@ class DiffusersScheduler:
         with tqdm(total=self.num_inference_steps) as progress_bar:
             old_pred_original_sample = None
             for i, t in enumerate(self.timesteps):
-                # timestep = torch.tensor([i] * shape[0], device=self.device)
+
                 latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
                 if not isinstance(self.diffusion, FlowMatchEulerDiscreteScheduler):
                     latent_model_input = self.diffusion.scale_model_input(latent_model_input, t)

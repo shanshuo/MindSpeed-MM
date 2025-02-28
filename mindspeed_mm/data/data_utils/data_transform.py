@@ -57,7 +57,7 @@ def to_tensor(clip):
         raise TypeError(
             "Clip tensor should have data type uint8, but it is %s" % str(clip.dtype)
         )
-    # return clip.float().permute(3, 0, 1, 2) / 255.0
+
     return clip.float() / 255.0
 
 
@@ -70,7 +70,7 @@ def to_tensor_after_resize(clip):
         clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W), but in [0, 1]
     """
     _is_tensor_video_clip(clip)
-    # return clip.float().permute(3, 0, 1, 2) / 255.0
+
     return clip.float() / 255.0
 
 

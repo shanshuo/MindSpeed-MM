@@ -13,7 +13,7 @@ def _adjust_tensor_dimensions(tensor, scatter_idx, gather_idx):
     dims = list(range(tensor.dim()))
 
     if gather_idx == 0:
-        # scatter_idx >= 2
+
         if scatter_idx != 1:
             dims[1], dims[gather_idx] = dims[gather_idx], dims[1]
             dims[0], dims[scatter_idx] = dims[scatter_idx], dims[0]
@@ -31,7 +31,7 @@ def _adjust_tensor_dimensions(tensor, scatter_idx, gather_idx):
     else:
         if scatter_idx == 0:
             dims[1], dims[gather_idx] = dims[scatter_idx], dims[0]
-        # scatter_idx >= 1
+
         else:
             dims[0], dims[scatter_idx] = dims[scatter_idx], dims[0]
             dims[1], dims[gather_idx] = dims[gather_idx], dims[1]

@@ -62,15 +62,16 @@ from transformers.generation.stopping_criteria import (
     validate_stopping_criteria,
 )
 
-if TYPE_CHECKING:
-    from transformers.modeling_utils import PreTrainedModel
-    from transformers.generation.streamers import BaseStreamer
 from mindspeed_mm.configs.config import ConfigReader as GenerationConfig
 from megatron.core import mpu
 from megatron.inference.text_generation.communication import (
     copy_from_last_to_first_pipeline_stage,
     broadcast_from_last_pipeline_stage,
 )
+
+if TYPE_CHECKING:
+    from transformers.modeling_utils import PreTrainedModel
+    from transformers.generation.streamers import BaseStreamer
 
 
 class ExplicitEnum(str, Enum):

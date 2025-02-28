@@ -1,3 +1,5 @@
+__all__ = ["sora_pipeline_dict", "vlm_pipeline_dict"]
+
 from mindspeed_mm.tasks.inference.pipeline.opensora_pipeline import OpenSoraPipeline
 from mindspeed_mm.tasks.inference.pipeline.opensoraplan_pipeline import OpenSoraPlanPipeline
 from mindspeed_mm.tasks.inference.pipeline.cogvideox_pipeline import CogVideoXPipeline
@@ -19,4 +21,3 @@ vlm_pipeline_dict = {
     "Qwen2VlPipeline": Qwen2VlPipeline
 }
 
-__all__ = ["sora_pipeline_dict", "vlm_pipeline_dict"]

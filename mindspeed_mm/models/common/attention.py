@@ -1375,7 +1375,7 @@ class SeqParallelAttention(Attention):
 
         qkv = qkv.view(qkv_shape)
 
-        # sp_group = get_sequence_parallel_group()
+
         sp_group = mpu.get_context_parallel_group()
 
         # apply all_to_all to gather sequence and split attention heads

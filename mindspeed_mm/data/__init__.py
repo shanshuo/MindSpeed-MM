@@ -1,3 +1,7 @@
+__all__ = [
+    "build_mm_dataset", "build_mm_dataloader"
+]
+
 import copy
 
 from torch.utils.data import ConcatDataset
@@ -20,9 +24,6 @@ from mindspeed_mm.data.datasets.qwen2vl_dataset import Qwen2vlDataset
 from mindspeed_mm.data.datasets.ae_dataset import TrainVideoDataset
 from mindspeed_mm.models.ae.training.global_vars import get_ae_args
 
-__all__ = [
-    "build_mm_dataset", "build_mm_dataloader"
-]
 
 
 def build_mm_dataset(dataset_param):

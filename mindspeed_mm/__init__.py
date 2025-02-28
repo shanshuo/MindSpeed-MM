@@ -1,3 +1,11 @@
+__all__ = [
+    "ConfigReader", "build_mm_dataset", "build_mm_dataloader", "AEModel", "CausalVAE", "VideoAutoencoder3D",
+    "DiffusionModel", "PredictModel", "TextEncoder", "Tokenizer", "VisionModel", "SDModel", "SoRAModel",
+    "VLModel", "PatchesManager", "sora_pipeline_dict", "vlm_pipeline_dict", "is_npu_available", "get_device",
+    "get_dtype",
+    "video_to_image", "cast_tuple", "pretrain", "train"
+]
+
 from mindspeed_mm.configs.config import ConfigReader
 from mindspeed_mm.data import build_mm_dataset, build_mm_dataloader
 from mindspeed_mm.models import (
@@ -24,13 +32,6 @@ from mindspeed_mm.utils.utils import (
 )
 from mindspeed_mm.training import pretrain, train
 
-__all__ = [
-    "ConfigReader", "build_mm_dataset", "build_mm_dataloader", "AEModel", "CausalVAE", "VideoAutoencoder3D",
-    "DiffusionModel", "PredictModel", "TextEncoder", "Tokenizer", "VisionModel", "SDModel", "SoRAModel",
-    "VLModel", "PatchesManager", "sora_pipeline_dict", "vlm_pipeline_dict", "is_npu_available", "get_device",
-    "get_dtype",
-    "video_to_image", "cast_tuple", "pretrain", "train"
-]
 
 from mindspeed_mm.tasks.finetune.lora.lora_patch import apply_patches
 from mindspeed_mm.patchs import validate_args_patch

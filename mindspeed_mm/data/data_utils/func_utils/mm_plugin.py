@@ -9,12 +9,12 @@ import av
 import numpy as np
 from typing_extensions import override
 
+from PIL import Image
+from PIL.Image import Image as ImageObject
+
 VIDEO_PLACEHOLDER = os.getenv("VIDEO_PLACEHOLDER", "<video>")
 IMAGE_PLACEHOLDER = os.getenv("IMAGE_PLACEHOLDER", "<image>")
 IGNORE_INDEX = -100
-
-from PIL import Image
-from PIL.Image import Image as ImageObject
 
 
 @dataclass
