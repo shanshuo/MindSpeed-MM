@@ -83,9 +83,9 @@ class Qwen2VlPipeline(GenerationMixin):
         if not messages:
             content = [{"type": "text", "text": prompt}]
             if images:
-                content.extend({"type": "image", "image": images})
+                content.append({"type": "image", "image": images})
             if videos:
-                content.extend({"type": "video", "video": videos})
+                content.append({"type": "video", "video": videos})
 
             messages = [[
                 {
