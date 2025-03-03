@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from accelerator import DistributedType
+from accelerate import DistributedType
 from diffusers import SanaPipeline, SanaTransformer2DModel
 from diffusers.training_utils import cast_training_params
 from peft.utils import get_peft_model_state_dict
@@ -72,8 +72,9 @@ def create_load_model_hook(
                     raise ValueError(f"unexpected save model: {model.__class__}")
         else:
             transformer_ = SanaTransformer2DModel.from_pretrained(
-                args.pretrained_model_name_or_path, subfolder="transformer",
-                local_files_only=True
+                args.pretrained_model_name_or_path,
+                subfolder="transformer",
+                local_files_only=True,
             )
 
         # Make sure the trainable params are in float32. This is again needed since the base models
