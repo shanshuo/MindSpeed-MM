@@ -70,6 +70,7 @@
         "conv_padding": 0,
         "num_res_blocks": 3,
         "hidden_size_mult": [1,2,2,4],
+        "use_tiling": false,
         "encoder_attention": "",
         "encoder_nonlinearity": "swish",
         "encoder_conv_in": "ContextParallelCausalConv3d",

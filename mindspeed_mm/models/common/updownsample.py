@@ -86,7 +86,7 @@ class DownSample3D(nn.Module):
             h, w = x.shape[-2:]
             x = rearrange(x, "b c t h w -> (b h w) c t")
 
-            if get_context_parallel_rank() == 0 and enable_cp:
+            if self.enable_cp_or_tiling(enable_cp, x):
                 # split first frame
                 x_first, x_rest = x[..., 0], x[..., 1:]
 
@@ -119,6 +119,9 @@ class DownSample3D(nn.Module):
             x = torch.nn.functional.avg_pool2d(x, kernel_size=2, stride=2)
             x = rearrange(x, "(b t) c h w -> b c t h w", t=t)
         return x
+
+    def enable_cp_or_tiling(self, enable_cp, x):
+        return get_context_parallel_rank() == 0 and enable_cp or (not enable_cp and x.shape[-1] % 2 == 1)
 
 
 class Upsample3D(nn.Module):

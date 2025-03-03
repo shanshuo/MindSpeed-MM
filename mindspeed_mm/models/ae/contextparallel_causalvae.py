@@ -127,6 +127,12 @@ class ContextParallelCasualVAE(MultiModalModule):
         use_quant_layer: bool = True,
         encoder_gather_norm: bool = False,
         decoder_gather_norm: bool = False,
+        scale_factor: float = 0.7,
+        tile_sample_min_height: int = 480,
+        tile_sample_min_width: int = 720,
+        tile_overlap_factor_height: float = 1 / 6,
+        tile_overlap_factor_width: float = 1 / 5,
+        frame_batch_size: int = 8,
         **kwargs
     ) -> None:
         super().__init__(config=None)
@@ -134,10 +140,12 @@ class ContextParallelCasualVAE(MultiModalModule):
         self.tile_sample_min_size = tile_sample_min_size
         self.tile_sample_min_size_t = tile_sample_min_size_t
         self.tile_latent_min_size = int(self.tile_sample_min_size / (2 ** (len(hidden_size_mult) - 1)))
+        self.hidden_size_mult = hidden_size_mult
 
         self.tile_latent_min_size_t = tile_latent_min_size_t
         self.tile_overlap_factor = tile_overlap_factor
         self.vae_scale_factor = vae_scale_factor
+        self.scale_factor = scale_factor
         self.use_tiling = use_tiling
         self.use_quant_layer = use_quant_layer
 
@@ -194,6 +202,14 @@ class ContextParallelCasualVAE(MultiModalModule):
         if self.cp_size > 0:
             if not is_context_parallel_initialized():
                 initialize_context_parallel(self.cp_size)
+
+        # tiling parameters
+        self.tile_sample_min_height = tile_sample_min_height // 2
+        self.tile_sample_min_width = tile_sample_min_width // 2
+        self.tile_overlap_factor_height = tile_overlap_factor_height
+        self.tile_overlap_factor_width = tile_overlap_factor_width
+        self.frame_batch_size = frame_batch_size
+
 
     def get_encoder(self):
         if self.use_quant_layer:
@@ -264,13 +280,29 @@ class ContextParallelCasualVAE(MultiModalModule):
 
     def _encode(self, x, enable_cp=True, invert_scale_latents=False, generator=None, **kwargs):
         x = x.permute(0, 2, 1, 3, 4).contiguous()
+        _, _, _, height, width = x.shape
+
+        if self.use_tiling and enable_cp:
+            raise NotImplementedError("Tiling and vae-cp cannot be supported at the same time.")
+
+        if self.use_tiling:
+            if width > self.tile_sample_min_width or height > self.tile_sample_min_height:
+                tiled_output = self.tiled_encode(x, enable_cp=enable_cp)
+
+                posterior = DiagonalGaussianDistribution(tiled_output)
+                res = posterior.sample(generator=generator)
+                if not invert_scale_latents:
+                    res = self.scale_factor * res
+                return res
+            else:
+                print_rank_0("Not use tiling encode.")
 
         if self.cp_size > 0 and enable_cp:
             global_src_rank = get_context_parallel_group_rank() * self.cp_size
             torch.distributed.broadcast(x, src=global_src_rank, group=get_context_parallel_group())
             x = _conv_split(x, dim=2, kernel_size=1)
 
-        h = self.encoder(x, enable_cp=enable_cp)
+        h, conv_cache = self.encoder(x, enable_cp=enable_cp, conv_cache=None)
         if self.use_quant_layer:
             h = self.quant_conv(h)
         posterior = DiagonalGaussianDistribution(h)
@@ -281,7 +313,7 @@ class ContextParallelCasualVAE(MultiModalModule):
             res = _conv_gather(res, dim=2, kernel_size=1)
 
         if not invert_scale_latents:
-            res = 0.7 * res
+            res = self.scale_factor * res
 
         return res
 
@@ -362,29 +394,58 @@ class ContextParallelCasualVAE(MultiModalModule):
         out = torch.cat(all_out, dim=0)
         return out
 
-    def tiled_encode(self, x):
-        t = x.shape[2]
-        t_chunk_idx = [i for i in range(0, t, self.tile_sample_min_size_t - 1)]
-        if len(t_chunk_idx) == 1 and t_chunk_idx[0] == 0:
-            t_chunk_start_end = [[0, t]]
-        else:
-            t_chunk_start_end = [[t_chunk_idx[i], t_chunk_idx[i + 1] + 1] for i in range(len(t_chunk_idx) - 1)]
-            if t_chunk_start_end[-1][-1] > t:
-                t_chunk_start_end[-1][-1] = t
-            elif t_chunk_start_end[-1][-1] < t:
-                last_start_end = [t_chunk_idx[-1], t]
-                t_chunk_start_end.append(last_start_end)
-        moments = []
-        for idx, (start, end) in enumerate(t_chunk_start_end):
-            chunk_x = x[:, :, start: end]
-            if idx != 0:
-                moment = self.tiled_encode2d(chunk_x, return_moments=True)[:, :, 1:]
-            else:
-                moment = self.tiled_encode2d(chunk_x, return_moments=True)
-            moments.append(moment)
-        moments = torch.cat(moments, dim=2)
-        posterior = DiagonalGaussianDistribution(moments)
-        return posterior
+    def tiled_encode(self, x, enable_cp=True):
+        batch_size, num_channels, num_frames, height, width = x.shape
+        tile_latent_min_height = int(self.tile_sample_min_height / (2 ** (len(self.hidden_size_mult) - 1)))
+        tile_latent_min_width = int(self.tile_sample_min_width / (2 ** (len(self.hidden_size_mult) - 1)))
+
+        overlap_height = int(self.tile_sample_min_height * (1 - self.tile_overlap_factor_height))
+        overlap_width = int(self.tile_sample_min_width * (1 - self.tile_overlap_factor_width))
+        blend_extent_height = int(tile_latent_min_height * self.tile_overlap_factor_height)
+        blend_extent_width = int(tile_latent_min_width * self.tile_overlap_factor_width)
+        row_limit_height = tile_latent_min_height - blend_extent_height
+        row_limit_width = tile_latent_min_width - blend_extent_width
+
+        rows = []
+        for i in range(0, height, overlap_height):
+            row = []
+            for j in range(0, width, overlap_width):
+                num_batches = max(num_frames // self.frame_batch_size, 1)
+                conv_cache = None
+                time = []
+
+                for k in range(num_batches):
+                    remaining_frames = num_frames % self.frame_batch_size
+                    start_frame = self.frame_batch_size * k + (0 if k == 0 else remaining_frames)
+                    end_frame = self.frame_batch_size * (k + 1) + remaining_frames
+                    tile = x[
+                           :,
+                           :,
+                           start_frame:end_frame,
+                           i: i + self.tile_sample_min_height,
+                           j: j + self.tile_sample_min_width,
+                           ]
+                    tile, conv_cache = self.encoder(tile, conv_cache=conv_cache, enable_cp=enable_cp, use_conv_cache=True)
+                    if self.use_quant_layer:
+                        tile = self.quant_conv(tile)
+                    time.append(tile)
+
+                row.append(torch.cat(time, dim=2))
+            rows.append(row)
+
+        result_rows = []
+        for i, row in enumerate(rows):
+            result_row = []
+            for j, tile in enumerate(row):
+                if i > 0:
+                    tile = self.blend_v(rows[i - 1][j], tile, blend_extent_height)
+                if j > 0:
+                    tile = self.blend_h(row[j - 1], tile, blend_extent_width)
+                result_row.append(tile[:, :, :, :row_limit_height, :row_limit_width])
+            result_rows.append(torch.cat(result_row, dim=4))
+
+        moments = torch.cat(result_rows, dim=3)
+        return moments
 
     def tiled_decode(self, x, enable_cp=True):
         t = x.shape[2]
@@ -409,43 +470,6 @@ class ContextParallelCasualVAE(MultiModalModule):
         dec_ = torch.cat(dec_, dim=2)
         return dec_
 
-    def tiled_encode2d(self, x, return_moments=False):
-        overlap_size = int(self.tile_sample_min_size * (1 - self.tile_overlap_factor))
-        blend_extent = int(self.tile_latent_min_size * self.tile_overlap_factor)
-        row_limit = self.tile_latent_min_size - blend_extent
-
-        # Split the image into 512x512 tiles and encode them separately.
-        rows = []
-        for i in range(0, x.shape[3], overlap_size):
-            row = []
-            for j in range(0, x.shape[4], overlap_size):
-                tile = x[:, :, :,
-                       i: i + self.tile_sample_min_size,
-                       j: j + self.tile_sample_min_size,
-                       ]
-                tile = self.encoder(tile)
-                if self.use_quant_layer:
-                    tile = self.quant_conv(tile)
-                row.append(tile)
-            rows.append(row)
-        result_rows = []
-        for i, row in enumerate(rows):
-            result_row = []
-            for j, tile in enumerate(row):
-                # blend the above tile and the left tile
-                # to the current tile and add the current tile to the result row
-                if i > 0:
-                    tile = self.blend_v(rows[i - 1][j], tile, blend_extent)
-                if j > 0:
-                    tile = self.blend_h(row[j - 1], tile, blend_extent)
-                result_row.append(tile[:, :, :, :row_limit, :row_limit])
-            result_rows.append(torch.cat(result_row, dim=4))
-
-        moments = torch.cat(result_rows, dim=3)
-        posterior = DiagonalGaussianDistribution(moments)
-        if return_moments:
-            return moments
-        return posterior
 
     def tiled_decode2d(self, z, enable_cp=True):
         overlap_size = int(self.tile_latent_min_size * (1 - self.tile_overlap_factor))
@@ -641,26 +665,44 @@ class Encoder(nn.Module):
             padding=conv_padding
         )
 
-    def forward(self, x, enable_cp=True):
-        h = self.conv_in(x, enable_cp=enable_cp)
+    def forward(self, x, enable_cp=True, conv_cache=None, use_conv_cache=False):
+        new_conv_cache = {}
+        conv_cache = conv_cache or {}
 
+        h, new_conv_cache["conv_in"] = self.conv_in(x, enable_cp=enable_cp,
+                                                    conv_cache=conv_cache.get("conv_cache"),
+                                                    use_conv_cache=use_conv_cache)
+
+        # 1. Down
         for i_level in range(self.num_resolutions):
             for i_block in range(self.num_res_blocks):
-                h = self.down[i_level].block[i_block](h, enable_cp=enable_cp)
+                conv_cache_key = f"resnet_{i_level}_{i_block}"
+                h, new_conv_cache[conv_cache_key] = self.down[i_level].block[i_block](h, enable_cp=enable_cp,
+                                                                                      conv_cache=conv_cache.get(conv_cache_key),
+                                                                                      use_conv_cache=use_conv_cache)
                 if len(self.down[i_level].attn) > 0:
                     h = self.down[i_level].attn[i_block](h)
             if i_level != self.num_resolutions - 1:
-                h = self.down[i_level].downsample(h)
+                h = self.down[i_level].downsample(h, enable_cp=enable_cp)
 
-        h = self.mid.block_1(h, enable_cp=enable_cp)
+        # 2. Mid
+        h, new_conv_cache["resnet_1"] = self.mid.block_1(h, enable_cp=enable_cp,
+                                                         conv_cache=conv_cache.get("resnet_1"),
+                                                         use_conv_cache=use_conv_cache)
         if self.enbale_attn1:
             h = self.mid.attn_1(h, enable_cp=enable_cp)
-        h = self.mid.block_2(h, enable_cp=enable_cp)
+        h, new_conv_cache["resnet_2"] = self.mid.block_2(h, enable_cp=enable_cp,
+                                                         conv_cache=conv_cache.get("resnet_2"),
+                                                         use_conv_cache=use_conv_cache)
+
+        # 3. Post-process
         h = self.norm_out(h, enable_cp=enable_cp)
         if self.enable_nonlinearity:
             h = self.nonlinearity(h)
-        h = self.conv_out(h, enable_cp=enable_cp)
-        return h
+        h, new_conv_cache["conv_out"] = self.conv_out(h, enable_cp=enable_cp,
+                                                      conv_cache=conv_cache.get("conv_out"),
+                                                      use_conv_cache=use_conv_cache)
+        return h, new_conv_cache
 
 
 class Decoder(nn.Module):
@@ -793,15 +835,15 @@ class Decoder(nn.Module):
     def forward(self, z, enable_cp=True, clear_fake_cp_cache=True, **kwargs):
         zq = z
         is_encode = False
-        h = self.conv_in(z, clear_cache=clear_fake_cp_cache)
-        h = self.mid.block_1(h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp, is_encode=is_encode)
+        h, _ = self.conv_in(z, clear_cache=clear_fake_cp_cache)
+        h, _ = self.mid.block_1(h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp, is_encode=is_encode)
         if self.enable_attention:
             h = self.mid.attn_1(h)
-        h = self.mid.block_2(h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp, is_encode=is_encode)
+        h, _ = self.mid.block_2(h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp, is_encode=is_encode)
 
         for i_level in reversed(range(self.num_resolutions)):
             for i_block in range(self.num_res_blocks + 1):
-                h = self.up[i_level].block[i_block](h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache,
+                h, _ = self.up[i_level].block[i_block](h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache,
                                                     enable_cp=enable_cp, is_encode=is_encode)
                 if len(self.up[i_level].attn) > 0:
                     h = self.up[i_level].attn[i_block](h, zq=zq)
@@ -813,5 +855,5 @@ class Decoder(nn.Module):
         h = self.norm_out(h, zq=zq, clear_fake_cp_cache=clear_fake_cp_cache, enable_cp=enable_cp)
         if self.enable_nonlinearity:
             h = self.nonlinearity(h)
-        h = self.conv_out(h, clear_cache=clear_fake_cp_cache)
+        h, _ = self.conv_out(h, clear_cache=clear_fake_cp_cache)
         return h

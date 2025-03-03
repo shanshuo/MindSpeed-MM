@@ -190,9 +190,11 @@ class SpatialNorm3D(nn.Module):
             zq = torch.cat(interpolated_splits, dim=1)
 
         if self.add_conv:
-            zq = self.conv(zq, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
+            zq, _ = self.conv(zq, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
 
         norm_f = self.norm_layer(f)
 
-        new_f = norm_f * self.conv_y(zq, enable_cp=enable_cp) + self.conv_b(zq, enable_cp=enable_cp)
+        conv_y_out, _ = self.conv_y(zq, enable_cp=enable_cp)
+        conv_b_out, _ = self.conv_b(zq, enable_cp=enable_cp)
+        new_f = norm_f * conv_y_out + conv_b_out
         return new_f

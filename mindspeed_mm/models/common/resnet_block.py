@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict
 
 import torch
 from torch import nn
@@ -116,17 +116,22 @@ class ResnetBlock3D(nn.Module):
         h = x
         h = self.norm1(h)
         h = self.activation(h)
-        h = self.conv1(h)
+        h_conv1 = self.conv1(h)
+        h = h_conv1[0] if isinstance(h_conv1, tuple) else h_conv1
+
         h = self.norm2(h)
         h = self.activation(h)
         h = self.dropout(h)
-        h = self.conv2(h)
+        h_conv2 = self.conv2(h)
+        h = h_conv2[0] if isinstance(h_conv2, tuple) else h_conv2
 
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                x = self.conv_shortcut(x)
+                x_conv_shortcut = self.conv_shortcut(x)
+                x = x_conv_shortcut[0] if isinstance(x_conv_shortcut, tuple) else x_conv_shortcut
             else:
-                x = self.nin_shortcut(x)
+                x_nin_shortcut = self.nin_shortcut(x)
+                x = x_nin_shortcut[0] if isinstance(x_nin_shortcut, tuple) else x_nin_shortcut
         return x + h
 
 
@@ -193,7 +198,10 @@ class ContextParallelResnetBlock3D(nn.Module):
                 )
         self.act = Sigmoid()
 
-    def forward(self, x, temb=None, zq=None, clear_fake_cp_cache=True, enable_cp=True, is_encode=True):
+    def forward(self, x, temb=None, zq=None, clear_fake_cp_cache=True, enable_cp=True, is_encode=True,
+                           conv_cache: Optional[Dict[str, torch.Tensor]] = None, use_conv_cache=False):
+        new_conv_cache = {}
+        conv_cache = conv_cache or {}
         h = x
 
         if zq is not None:
@@ -204,7 +212,9 @@ class ContextParallelResnetBlock3D(nn.Module):
         h = self.act(h)
         # i2v train image encode need close vae-cp
         conv_enable_cp = enable_cp if is_encode else True
-        h = self.conv1(h, clear_cache=clear_fake_cp_cache, enable_cp=conv_enable_cp)
+        h, new_conv_cache["conv1"] = self.conv1(h, clear_cache=clear_fake_cp_cache, enable_cp=conv_enable_cp,
+                                                conv_cache=conv_cache.get("conv1"),
+                                                use_conv_cache=use_conv_cache)
 
         if temb is not None:
             h = h + self.temb_proj(self.act(temb))[:, :, None, None, None]
@@ -216,15 +226,21 @@ class ContextParallelResnetBlock3D(nn.Module):
 
         h = self.act(h)
         h = self.dropout(h)
-        h = self.conv2(h, clear_cache=clear_fake_cp_cache, enable_cp=conv_enable_cp)
+        h, new_conv_cache["conv2"] = self.conv2(h, clear_cache=clear_fake_cp_cache, enable_cp=conv_enable_cp,
+                                                conv_cache=conv_cache.get("conv2"),
+                                                use_conv_cache=use_conv_cache)
 
         if self.in_channels != self.out_channels:
             if self.use_conv_shortcut:
-                x = self.conv_shortcut(x, clear_cache=clear_fake_cp_cache, enable_cp=enable_cp)
+                x, new_conv_cache["conv_shortcut"] = self.conv_shortcut(x,
+                                                                        clear_cache=clear_fake_cp_cache,
+                                                                        enable_cp=enable_cp,
+                                                                        conv_cache=conv_cache.get("conv_shortcut"),
+                                                                        use_conv_cache=use_conv_cache)
             else:
                 x = self.nin_shortcut(x)
 
-        return x + h
+        return x + h, new_conv_cache
 
 
 class ResnetBlockCausal3D(nn.Module):

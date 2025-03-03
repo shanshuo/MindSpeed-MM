@@ -1,4 +1,4 @@
-from typing import Union, Tuple
+from typing import Union, Tuple, Optional
 from collections import deque
 
 import torch
@@ -289,15 +289,19 @@ class ContextParallelCausalConv3d(nn.Module):
         self.conv = SafeConv3d(chan_in, chan_out, kernel_size, stride=stride, dilation=dilation, **kwargs)
         self.cache_padding = None
 
-    def forward(self, input_, clear_cache=True, enable_cp=True):
+    def forward(self, input_, clear_cache=True, enable_cp=True, conv_cache: Optional[torch.Tensor] = None,
+                use_conv_cache=False):
         if enable_cp:
             input_parallel = fake_cp_pass_from_previous_rank(
                 input_, self.temporal_dim, self.time_kernel_size, self.cache_padding
             )
         else:
-            input_parallel = torch.cat(
-                [input_[:,:,0:1]] * (self.time_kernel_size - 1) + [input_], dim=2
-            )
+            kernel_size = self.time_kernel_size
+            if kernel_size > 1 and use_conv_cache:
+                cached_inputs = [conv_cache] if conv_cache is not None else [input_[:, :, :1]] * (kernel_size - 1)
+                input_parallel = torch.cat(cached_inputs + [input_], dim=2)
+            else:
+                input_parallel = torch.cat([input_[:, :, 0:1]] * (self.time_kernel_size - 1) + [input_], dim=2)
 
         del self.cache_padding
         self.cache_padding = None
@@ -323,11 +327,13 @@ class ContextParallelCausalConv3d(nn.Module):
                     self.cache_padding = recv_buffer.contiguous().detach().clone().cpu()
 
         padding_2d = (self.width_pad, self.width_pad, self.height_pad, self.height_pad)
+        if use_conv_cache:
+            conv_cache = input_parallel[:, :, -self.time_kernel_size + 1:].clone()
         input_parallel = F.pad(input_parallel, padding_2d, mode="constant", value=0)
 
         output_parallel = self.conv(input_parallel)
         output = output_parallel
-        return output
+        return output, conv_cache
 
 
 class TimePaddingCausalConv3d(nn.Module):
