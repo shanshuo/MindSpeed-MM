@@ -77,7 +77,7 @@ accelerate launch --config_file ${config_file} \
   --gradient_checkpointing \
   --mixed_precision=$mixed_precision \
   --max_grad_norm=1 \
-  --dataloader_num_workers=8 \
+  --dataloader_num_workers=0 \
   --gradient_accumulation_steps=$gradient_accumulation_steps \
   --learning_rate=1e-05 \
   --lr_scheduler="constant" \

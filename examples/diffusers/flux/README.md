@@ -197,7 +197,7 @@
     config_file="pretrain_${mixed_precision}_accelerate_config.yaml"
 
     # accelerate launch --config_file ${config_file} \ 目录下
-    --dataloader_num_workers=8 \ # 根据系统配置选择num workers数量
+    --dataloader_num_workers=0 \ # 请基于系统配置与数据大小进行调整num workers
     ```
 
 3. 【修改代码文件】

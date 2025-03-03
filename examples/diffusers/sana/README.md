@@ -186,6 +186,9 @@ Sana是由NVIDIA、麻省理工学院和清华大学共同推出的文生图模�
     resolution=1024
     gradient_accumulation_steps=1
     config_file="bf16_accelerate_config.yaml"
+
+    # accelerate launch --config_file ${config_file} \ 目录下
+    --dataloader_num_workers=8 \ # 请基于系统配置与数据大小进行调整num workers
     ```
 
 3. 【修改代码文件】
