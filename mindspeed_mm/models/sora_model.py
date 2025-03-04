@@ -147,7 +147,7 @@ class SoRAModel(nn.Module):
                     self.init_cache(latents, prompt, video_mask, prompt_mask, i2v_results)
                 latents, prompt, video_mask, prompt_mask, i2v_results = self.get_feature_from_cache()
 
-            if self.task == "i2v":
+            if self.task == "i2v" and i2v_results is not None:
                 kwargs.update(i2v_results)
             noised_latents, noise, timesteps = self.diffusion.q_sample(latents, model_kwargs=kwargs, mask=video_mask)
             predictor_input_latent, predictor_timesteps, predictor_prompt = noised_latents, timesteps, prompt
