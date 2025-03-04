@@ -36,8 +36,8 @@ MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="ckpt/mm_path/Qwen2-VL-72B-Instruct"
 SAVE_PATH="save_dir"
 
-TP=1
-PP=16
+TP=2
+PP=8
 CP=1
 MBS=1
 GRAD_ACC_STEP=96

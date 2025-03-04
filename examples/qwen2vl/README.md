@@ -131,9 +131,9 @@ mm-convert  Qwen2VLConverter hf_to_mm \
 mm-convert  Qwen2VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-72B-Instruct" \
   --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-72B-Instruct" \
-  --cfg.parallel_config.llm_pp_layers [1,5,5,5,5,5,5,5,5,5,6,6,6,6,6,4] \
-  --cfg.parallel_config.vit_pp_layers [32,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] \
-  --cfg.parallel_config.tp_size 1
+  --cfg.parallel_config.llm_pp_layers [5,11,11,11,11,11,11,9] \
+  --cfg.parallel_config.vit_pp_layers [32,0,0,0,0,0,0,0] \
+  --cfg.parallel_config.tp_size 2
 # 其中：
 # mm_dir: 转换后保存目录
 # hf_dir: huggingface权重目录
