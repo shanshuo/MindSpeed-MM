@@ -9,6 +9,7 @@
     - [静态采集](#静态采集)
     - [动态采集](#动态采集)
   - [Sora类模型特征提取](#sora类模型特征提取)
+  - [内存快照提取](#内存快照提取)
 
 ## <a id="jump1"></a>Profiling采集工具
 
@@ -105,3 +106,60 @@ prof.stop()
 ```
 
 配置完成后，调用[feature_extraction_t2v.sh](./feature_extraction/feature_extraction_t2v.sh)即可提取数据特征。
+
+## <a id="memory"></a>内存快照提取
+
+套件集成了昇腾[内存快照采集工具](./mem_profiler.py)，以提供对模型运行情况的分析。内置模型均已适配，只需修改[tools.json](./tools.json)文件即可生效。
+
+对复用[训练流程](../../mindspeed_mm/training.py)的模型，同样仅需修改配置。支持的配置项如下。
+
+```json5
+{
+  "memory_profile": {
+    "enable": false,    // 内存采集功能开关
+    "start_step": 0,    // 开始录制的步数。数值为训练步数的起始点，0代表初始化过程
+    "end_step": 2,      // 结束录制的步数。数值为训练步数的起始点，0代表初始化过程
+    "save_path": "./memory_snapshot",  // 快照文件保存路径
+    "dump_ranks": [     // 录制快照的rank列表，从0开始
+      0
+    ],
+    "stacks": "all",    // 堆栈信息录制。可选项：python/all
+    "max_entries": null // 最大记录数，null则无限制
+  }
+}
+```
+
+对独立的训练流程，可参考下列代码，对训练脚本做适配以使用profiler特性。参数配置同上。
+
+```python
+from megatron.training import get_args
+from mindspeed_mm.tools.mem_profiler import memory_profiler
+
+args = get_args()                                   # 获取配置
+memory_profiler.reset(args.mm.tool.memory_profile)  # 使用配置刷新profiler状态
+training_preparation()                              # 运行训练准备代码
+while iteration < args.train_iters:                 # 训练主循环
+    memory_profiler.step()                          # 调用profiler记录一个迭代
+    train_one_step()                                # 训练一个迭代
+memory_profiler.stop()                              # 停止采集
+```
+
+对于不具备典型训练结构的脚本，或者局部的手动调试，可直接调用基础函数。(不推荐)
+
+```python
+code_not_record()
+from mindspeed_mm.tools.mem_profiler import _record
+_record()
+code_to_record()
+```
+
+dump与开始录制可以在不同文件内。
+
+```python
+code_to_record()
+from mindspeed_mm.tools.mem_profiler import _dump, _stop
+_dump()
+_stop()
+```
+
+dump执行完成后，会在输出目录生成`snapshot_`开头的`pickle`文件，可以在[torch页面](https://pytorch.org/memory_viz)可视化查看内存快照。

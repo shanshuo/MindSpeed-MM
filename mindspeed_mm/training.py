@@ -46,6 +46,7 @@ from megatron.training.utils import (
 
 from mindspeed_mm.configs.config import merge_mm_args
 from mindspeed_mm.tools.profiler import Profiler
+from mindspeed_mm.tools.mem_profiler import memory_profiler
 from mindspeed_mm.arguments import extra_args_provider_decorator
 from mindspeed_mm.patchs import PatchesManager
 from mindspeed_mm.utils.random import seed_all
@@ -149,6 +150,8 @@ def pretrain(
     if one_logger:
         one_logger.log_metrics({"train_iterations_warmup": 5})
 
+    memory_profiler.reset(args.mm.tool.memory_profile)
+
     # Model, optimizer, and learning rate.
     timers("model-and-optimizer-setup", log_level=0).start(barrier=True)
     model, optimizer, opt_param_scheduler = setup_model_and_optimizer(
@@ -251,6 +254,8 @@ def pretrain(
             verbose=True,
             write_to_tensorboard=not args.skip_train,
         )
+
+    memory_profiler.stop()
 
 
 def train(
@@ -377,6 +382,7 @@ def train(
     prof.start()
 
     while iteration < args.train_iters:
+        memory_profiler.step()
         # Update number of microbatches first without consistency check to decide if a
         # checkpoint should be saved. If the number of microbatches is different
         # from the previous iteration, save a checkpoint. Then run consistency check
