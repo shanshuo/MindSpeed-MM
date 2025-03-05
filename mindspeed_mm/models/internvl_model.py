@@ -13,6 +13,8 @@ from mindspeed_mm.models.text_encoder.text_encoder import TextEncoder
 from mindspeed_mm.models.vision.vision_model import VisionModel
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.module_spec.internvl_layer_spec import get_language_layer_spec, get_vit_layer_spec
+from mindspeed_mm.models.common.communications import cal_split_sizes
+from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
 from mindspeed_mm.models.common.mm_gpt_model import MMGPTModel
 from mindspeed_mm.utils.utils import EncoderBalanceComm
 
@@ -389,6 +391,13 @@ class InternVLModel(MultiModalModule):
                 input_embeds = input_embeds.reshape(B, S, H).transpose(0, 1)
 
             attention_mask = self._prepare_decoder_attention_mask(attention_mask)
+            
+            split_gather_sizes = None 
+            args = get_args()
+            if args.context_parallel_size is not None and args.context_parallel_size > 1:
+                split_gather_sizes = cal_split_sizes(input_embeds.shape[0], args.context_parallel_size)
+                input_embeds = split_forward_gather_backward(input_embeds, mpu.get_context_parallel_group(), 
+                                                            dim=0, grad_scale="down", split_sizes=split_gather_sizes)
 
             output = self.text_decoder(
                 input_ids=input_ids,
@@ -399,6 +408,9 @@ class InternVLModel(MultiModalModule):
             )
             
             if self.text_decoder.post_process:
+                if args.context_parallel_size is not None and args.context_parallel_size > 1:
+                    output = gather_forward_split_backward(output, mpu.get_context_parallel_group(), 
+                                                            dim=1, grad_scale="up", gather_sizes=split_gather_sizes)
                 logits = output
                 logits = logits.float()
 

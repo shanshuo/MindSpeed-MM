@@ -13,6 +13,7 @@ import torch.utils.checkpoint
 import torch_npu
 from timm.models.layers import DropPath
 
+from megatron.core import mpu 
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
@@ -23,6 +24,8 @@ from megatron.core.utils import make_viewless_tensor
 from megatron.training.global_vars import get_args
 
 from mindspeed_mm.models.common.module import MultiModalModule
+from mindspeed_mm.models.common.communications import cal_split_sizes
+from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
 
 
 class InternRMSNorm(nn.Module):
@@ -288,6 +291,10 @@ class InternVisionEmbeddings(nn.Module):
             self._get_pos_embed(self.position_embedding[:, 1:, :], height, width)
         ], dim=1)
         embeddings = embeddings + position_embedding.to(target_dtype)
+        if get_args().context_parallel_size is not None and get_args().context_parallel_size > 1:
+            split_gather_sizes = cal_split_sizes(self.num_positions, get_args().context_parallel_size)
+            embeddings = split_forward_gather_backward(embeddings, mpu.get_context_parallel_group(),
+                                                    dim=1, grad_scale="down", split_sizes=split_gather_sizes)
         return embeddings
 
 
@@ -427,6 +434,11 @@ class InternViT(MultiModalModule):
             attention_mask = attention_mask < 0.5
 
         encoder_outputs = self.encoder(hidden_states, attention_mask)
+        
+        if get_args().context_parallel_size is not None and get_args().context_parallel_size > 1:
+            split_gather_sizes = cal_split_sizes(self.seq_length, get_args().context_parallel_size)
+            encoder_outputs = gather_forward_split_backward(encoder_outputs, mpu.get_context_parallel_group(),
+                                                            dim=0, grad_scale="up", gather_sizes=split_gather_sizes)
 
         if self.post_process:
             encoder_outputs = encoder_outputs.transpose(0, 1)

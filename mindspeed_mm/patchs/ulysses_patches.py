@@ -7,8 +7,12 @@ from typing import Any, Tuple, List
 import torch 
 from torch import Tensor 
 from torch.nn import Module 
+import torch.distributed as dist 
+from megatron.core import mpu
+from megatron.training import get_args
 from mindspeed.megatron_adaptor import get_mindspeed_args
 from mindspeed.patch_utils import MindSpeedPatchesManager as pm
+
 try: 
     from mindspeed.core.context_parallel.unaligned_cp.mapping import all_to_all
     native_all_to_all = False
@@ -83,9 +87,36 @@ class UlyssesContextAttention(torch.nn.Module):
         # out e.g., [s/p::h]
         return output
 
+    
+def get_rotary_seq_len(
+    self,
+    inference_params,
+    transformer,
+    transformer_input,
+    transformer_config
+) -> float:
+    if inference_params is not None:
+        rotary_seq_len = inference_params.max_sequence_length
+    else:
+        if transformer.input_tensor is not None:
+            rotary_seq_len = transformer.input_tensor.size(0)
+        else:
+            rotary_seq_len = transformer_input.size(0)
+            
+        if hasattr(get_args(), "context_parallel_size"):
+            if int(get_args().context_parallel_size) > 1:
+                rotary_seq_len = torch.Tensor([rotary_seq_len]).cuda().int()
+                torch.distributed.all_reduce(rotary_seq_len, op=torch.distributed.ReduceOp.SUM, group=mpu.get_context_parallel_group())
+                rotary_seq_len = rotary_seq_len.item()
+            
+    return rotary_seq_len
+    
+
 mindspeed_args = get_mindspeed_args()
 if hasattr(mindspeed_args, 'context_parallel_algo') and hasattr(mindspeed_args, 'context_parallel_size'):
     if mindspeed_args.context_parallel_algo == "ulysses_cp_algo" and int(mindspeed_args.context_parallel_size) > 1:
         pm.register_patch('mindspeed.core.context_parallel.ulysses_context_parallel.UlyssesContextAttention', 
                         UlyssesContextAttention, force_patch=True)
+        pm.register_patch('megatron.core.models.common.embeddings.rotary_pos_embedding.RotaryEmbedding.get_rotary_seq_len',
+                        get_rotary_seq_len, force_patch=True)
         pm.apply_patches()
