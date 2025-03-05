@@ -15,7 +15,8 @@ from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MM
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.generation_mixin import GenerationMixin
 from mindspeed_mm.data.data_utils.conversation import get_conv_template
-from mindspeed_mm.data.data_utils.utils import VideoReader, dynamic_preprocess, read_frames_decord
+from mindspeed_mm.data.data_utils.utils import VideoReader
+from mindspeed_mm.data.data_utils.multimodal_image_video_preprocess import dynamic_preprocess
 
 
 def build_infer_transform(input_size):

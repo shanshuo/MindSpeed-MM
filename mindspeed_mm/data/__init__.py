@@ -14,7 +14,7 @@ from mindspeed_mm.data.dataloader.dataloader import (
     prepare_sampler_dataloader,
     prepare_variable_dataloader,
 )
-from mindspeed_mm.data.datasets.image_dataset import MultiModalChatDataset
+from mindspeed_mm.data.datasets.multimodal_dataset import MultiModalChatDataset
 from mindspeed_mm.data.datasets.t2i_dataset import T2IDataset
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset, DynamicVideoTextDataset
 from mindspeed_mm.data.datasets.i2v_dataset import I2VDataset
@@ -53,7 +53,7 @@ def build_mm_dataset(dataset_param):
         return DynamicVideoTextDataset(basic_param, preprocess_param, **dataset_param)
     elif dataset_type == "video":
         return VideoDataset(basic_param, preprocess_param, **dataset_param)
-    elif dataset_type == "image":
+    elif dataset_type == "multimodal":
         if not isinstance(basic_param, list):
             basic_param = [basic_param]
         datasets = []

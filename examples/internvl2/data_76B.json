@@ -1,6 +1,6 @@
 {
     "dataset_param": {
-        "dataset_type": "image",
+        "dataset_type": "multimodal",
         "basic_parameters": {
             "data_path": "/path/json_path",
             "data_folder": "/path/root_path",
@@ -8,7 +8,6 @@
         },
         "preprocess_parameters": {
             "image_reader_type": "torchvision",
-            "image_processer_type": "image2pixel",
             "train_pipeline": {
                 "image":[
                     {"trans_type": "Resize", "param": {"size": [448, 448], "interpolation": "BICUBIC"}},

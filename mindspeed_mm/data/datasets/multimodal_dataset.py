@@ -7,17 +7,15 @@
 
 import os
 import copy
+import random
 from typing import Union
-import torch
 
-from megatron.training import get_args
-from mindspeed_mm.data.data_utils.utils import (
-    ImageProcesser,
-    preprocess,
-    read_frames_decord
-)
+import torch
+from megatron.training import get_args, print_rank_0
+from mindspeed_mm.data.data_utils.utils import preprocess
 from mindspeed_mm.data.datasets.mm_base_dataset import MMBaseDataset
 from mindspeed_mm.models import Tokenizer
+from mindspeed_mm.data.data_utils.multimodal_image_video_preprocess import get_multimodal_image_video_preprocessor
 
 
 class MultiModalChatDataset(MMBaseDataset):
@@ -41,7 +39,7 @@ class MultiModalChatDataset(MMBaseDataset):
         use_thumbnail (bool): Flag to indicate if thumbnails should be used for images.
         min_dynamic_patch (int): The minimum number of dynamic patches.
         max_dynamic_patch (int): The maximum number of dynamic patches.
-        repeat_time (int): The number of times to repeat the data processing.
+        repeat_time (float): The number of times to repeat the data processing.
     """
 
     def __init__(
@@ -64,7 +62,7 @@ class MultiModalChatDataset(MMBaseDataset):
             min_num_frame: int = 4, # for video data
             max_num_frame: int = 12, # for video data
             sampling_method: str = "rand", # for video data
-            repeat_time: int = 1,
+            repeat_time: float = 1.0,
             **kwargs,
     ):
         super().__init__(**basic_param)
@@ -94,46 +92,76 @@ class MultiModalChatDataset(MMBaseDataset):
         self.mm_use_im_start_end = mm_use_im_start_end
         self.train_pipeline = img_process.get("train_pipeline", None)
         self.image_reader_type = img_process.get("image_reader_type", "torchvision")
-        self.image_processer_type = img_process.get("image_processer_type", "image2pixel")
-        self.image_processer = ImageProcesser(train_pipeline=self.train_pipeline,
-                                              image_processer_type=self.image_processer_type,
-                                              image_reader_type=self.image_reader_type,
-                                              dynamic_image_size=self.dynamic_image_size,
-                                              image_size=self.image_size,
-                                              min_dynamic_patch=self.min_dynamic_patch,
-                                              max_dynamic_patch=self.max_dynamic_patch,
-                                              use_thumbnail=self.use_thumbnail)
-        if tokenizer_config is not None:
-            self.tokenizer = Tokenizer(tokenizer_config).get_tokenizer()
+
+        self.tokenizer = Tokenizer(tokenizer_config).get_tokenizer()
         self.tokenizer.model_max_length = get_args().seq_length
+        self.img_video_processor = self._init_image_video_processor()
 
     def __getitem__(self, index):
         return self.getitem(index)
 
     def __len__(self):
         return len(self.data_samples)
+    
+    def _init_image_video_processor(self):
+        return get_multimodal_image_video_preprocessor(
+            template_name=self.template_name,
+            train_pipeline=self.train_pipeline,
+            image_reader_type=self.image_reader_type,
+            tokenizer=self.tokenizer,
+            dynamic_image_size=self.dynamic_image_size,
+            patch_size=self.patch_size,
+            image_size=self.image_size,
+            min_dynamic_patch=self.min_dynamic_patch,
+            max_dynamic_patch=self.max_dynamic_patch,
+            use_thumbnail=self.use_thumbnail,
+            min_num_frame=self.min_num_frame,
+            max_num_frame=self.max_num_frame,
+            sampling_method=self.sampling_method
+            )
+            
+    @staticmethod
+    def _init_return_dict():
+        return {
+            "pixel_values": None,
+            "image_flags": None,
+            "input_ids": None,
+            "labels": None,
+            "attention_mask": None
+        }
+    
+    def _filter_return_dict_keys(self, ret):
+        allowed_keys = list(self._init_return_dict().keys())
+        keys_to_remove = [key for key in list(ret.keys()) if key not in allowed_keys]
+        for key in keys_to_remove:
+            ret.pop(key, None)
+    
+    def get_path(self, data_path):
+        return os.path.join(self.data_folder, data_path)
 
     def multi_modal_get_item(self, data_item):
         # Ensure the first conversation contains an image placeholder
         if "<image>" not in data_item["conversations"][0]["value"]:
             data_item["conversations"][0]["value"] = "<image>\n" + data_item["conversations"][0]["value"]
 
-        image_path = os.path.join(self.data_folder, data_item["image"])
-        pixel_values = self.image_processer(image_path, mode='single_image', num_image=1)
-        num_patches = pixel_values.size(0)
+        ret = self._init_return_dict()
+        image_path = self.get_path(data_item["image"])
+        ret_img = self.img_video_processor(image_path=image_path, mode='single_image', num_image=1)
+        ret.update(ret_img)
+        num_image_patches = ret["pixel_values"].size(0)
 
-        ret = preprocess(
+        ret_tokenizer = preprocess(
             template_name=self.template_name,
             sources=copy.deepcopy([data_item["conversations"]]),
             tokenizer=self.tokenizer,
-            num_image_token_list=[self.num_image_token * num_patches],
+            num_image_token_list=[self.num_image_token * num_image_patches],
             group_by_length=self.group_by_length,
             is_multimodal=self.is_multimodal,
             mm_use_im_start_end=self.mm_use_im_start_end
         )
-
-        ret["pixel_values"] = pixel_values
-        ret["image_flags"] = torch.tensor([1] * num_patches, dtype=torch.long)
+        ret.update(ret_tokenizer)
+        ret["image_flags"] = torch.tensor([1] * num_image_patches, dtype=torch.long)
+        self._filter_return_dict_keys(ret)
 
         return ret
 
@@ -144,39 +172,24 @@ class MultiModalChatDataset(MMBaseDataset):
         pass
 
     def video_get_item(self, data_item):
-        # Build transformation function
-        transform = self.image_processer.image_transforms
-
         # Ensure the first conversation contains a video placeholder
         if "<video>" not in data_item["conversations"][0]["value"]:
             data_item["conversations"][0]["value"] = "<video>\n" + data_item["conversations"][0]["value"]
 
-        # Get the video file path
-        video_file = data_item["video"]
-        video_path = os.path.join(self.data_folder, video_file)
-
-        # Load videos without using tcsloader.
-        image_list = read_frames_decord(
-            video_path=video_path,
-            num_frames=self.max_num_frame,
-            min_num_frames=self.min_num_frame,
-            sample=self.sampling_method,
-            clip=data_item.get("clip", None)
-        )
+        ret = self._init_return_dict()
+        video_path = self.get_path(data_item["video"])
+        ret_video = self.img_video_processor(video_path=video_path, clip=data_item.get("clip", None))
+        ret.update(ret_video)
+        num_image_patches = ret["pixel_values"].size(0)
 
         # Generate special tokens for each video frame
-        special_tokens = "\n".join(["Frame-{}: <image>".format(i + 1) for i in range(len(image_list))])
+        special_tokens = "\n".join(["Frame-{}: <image>".format(i + 1) for i in range(len(ret["image_list"]))])
         data_item["conversations"][0]["value"] = data_item["conversations"][0]["value"].replace(
             "<video>\n", special_tokens + "\n")
 
-        # Transform each frame image and stack them into a tensor
-        pixel_values = [transform(image) for image in image_list]
-        pixel_values = torch.stack(pixel_values)
-        num_patches = pixel_values.size(0)
-
         # Preprocess the conversations and generate the return dictionary
-        num_image_tokens = [self.num_image_token] * num_patches
-        ret = preprocess(
+        num_image_tokens = [self.num_image_token] * num_image_patches
+        ret_tokenizer = preprocess(
             self.template_name,
             sources=[copy.deepcopy(data_item["conversations"])],
             tokenizer=self.tokenizer,
@@ -184,28 +197,33 @@ class MultiModalChatDataset(MMBaseDataset):
             group_by_length=self.group_by_length,
             is_multimodal=self.is_multimodal,
             mm_use_im_start_end=self.mm_use_im_start_end,
-            num_image=num_patches
+            num_image=num_image_patches
         )
-        # Create the final return dictionary
-        ret = dict(
-            input_ids=ret['input_ids'],
-            labels=ret['labels'],
-            attention_mask=ret['attention_mask'],
-            pixel_values=pixel_values,
-            image_flags=torch.tensor([1] * num_patches, dtype=torch.long)
-        )
+        ret.update(ret_tokenizer)
+        ret["image_flags"] = torch.tensor([1] * num_image_patches, dtype=torch.long)
+        self._filter_return_dict_keys(ret)
+
         return ret
 
     def getitem(self, index):
         index = index % len(self.data_samples)
-        data_item = copy.deepcopy(self.data_samples[index])
-        if "image" in data_item and len(data_item["image"]) != 0:
-            if isinstance(data_item["image"], list):
-                raise AssertionError(f"Dose not support multi picture inference.")
-            else:
-                ret = self.multi_modal_get_item(data_item)
-        elif "video" in data_item and data_item["video"] is not None and data_item["video"] != "":
-            ret = self.video_get_item(data_item)
-        else:
-            raise AssertionError(f"Inference data type must be image or video.")
-        return ret
+        try_cnt, max_try = 0, 10
+        while True:
+            if try_cnt == max_try:
+                raise InterruptedError(f"MultiModalChatDataset failed to get item after {max_try} times")
+            try:
+                data_item = copy.deepcopy(self.data_samples[index])
+                if "image" in data_item and len(data_item["image"]) != 0:
+                    if isinstance(data_item["image"], list):
+                        raise AssertionError(f"Dose not support multi picture inference.")
+                    else:
+                        ret = self.multi_modal_get_item(data_item)
+                elif "video" in data_item and data_item["video"] is not None and data_item["video"] != "":
+                    ret = self.video_get_item(data_item)
+                else:
+                    raise AssertionError(f"Inference data type must be image or video.")
+                return ret
+            except Exception as e:
+                try_cnt += 1
+                print_rank_0(f"Error: {e}")
+                index = random.randint(0, len(self.data_samples) - 1)

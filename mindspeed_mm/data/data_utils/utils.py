@@ -293,67 +293,6 @@ def read_video_av(
     return vframes, aframes, info
 
 
-def get_frame_indices(num_frames, vlen, sample='rand', fix_start=None, input_fps=1, max_num_frames=-1):
-    if sample in ['rand', 'middle']: # uniform sampling
-        acc_samples = min(num_frames, vlen)
-        # split the video into `acc_samples` intervals, and sample from each interval.
-        intervals = np.linspace(start=0, stop=vlen, num=acc_samples + 1).astype(int)
-        ranges = []
-        for idx, interv in enumerate(intervals[:-1]):
-            ranges.append((interv, intervals[idx + 1] - 1))
-        if sample == 'rand':
-            frame_indices = [random.choice(range(x[0], x[1])) for x in ranges] # little different
-        elif fix_start is not None:
-            frame_indices = [x[0] + fix_start for x in ranges]
-        elif sample == 'middle':
-            frame_indices = [(x[0] + x[1]) // 2 for x in ranges]
-        else:
-            raise NotImplementedError
-
-        if len(frame_indices) < num_frames:  # padded with last frame
-            padded_frame_indices = [frame_indices[-1]] * num_frames
-            padded_frame_indices[:len(frame_indices)] = frame_indices
-            frame_indices = padded_frame_indices
-    elif 'fps' in sample:  # fps0.5, sequentially sample frames at 0.5 fps
-        output_fps = float(sample[3:])
-        duration = float(vlen) / input_fps
-        delta = 1 / output_fps  # gap between frames, this is also the clip length each frame represents
-        frame_seconds = np.arange(0 + delta / 2, duration + delta / 2, delta)
-        frame_indices = np.around(frame_seconds * input_fps).astype(int)
-        frame_indices = [e for e in frame_indices if e < vlen]
-        if max_num_frames > 0 and len(frame_indices) > max_num_frames:
-            frame_indices = frame_indices[:max_num_frames]
-    else:
-        raise ValueError
-    return frame_indices
-
-
-def read_frames_decord(
-        video_path, num_frames, sample='rand', fix_start=None, client=None, clip=None, min_num_frames=4
-):
-    video_reader, _, _ = VideoReader(video_reader_type="decoder", num_threads=1)(video_path)
-    vlen = len(video_reader)
-    fps = video_reader.get_avg_fps()
-    duration = vlen / float(fps)
-    if clip:
-        start, end = clip
-        duration = end - start
-        vlen = int(duration * fps)
-        start_index = int(start * fps)
-
-    t_num_frames = np.random.randint(min_num_frames, num_frames + 1)
-
-    frame_indices = get_frame_indices(
-        t_num_frames, vlen, sample=sample, fix_start=fix_start,
-        input_fps=fps
-    )
-    if clip:
-        frame_indices = [f + start_index for f in frame_indices]
-    frames = video_reader.get_batch(frame_indices).asnumpy()  # (T, H, W, C), np.uint8
-    frames = [Image.fromarray(frames[i]) for i in range(frames.shape[0])]
-    return frames
-
-
 class VideoProcesser:
     """Used for video data preprocessing"""
 
@@ -816,8 +755,6 @@ class ImageProcesser:
             image = self.image_to_video(image_path)
         elif self.image_processer_type == "image2image":
             image = self.image_to_image(image_path)
-        elif self.image_processer_type == "image2pixel":
-            image = self.image_to_pixel_values(image_path, self.train_pipeline, mode, num_image)
         else:
             raise NotImplementedError(
                 f"Unsupported image processer type: {self.image_processer_type}"
@@ -845,31 +782,6 @@ class ImageProcesser:
         # [1 C H W] -> [C 1 H W]
         image = image.permute(1, 0, 2, 3)
         return image
-
-    def image_to_pixel_values(self, image_path, train_pipeline, mode="", num_image=1):
-        image = self.image_reader(image_path)
-        max_num = self.max_dynamic_patch // num_image if mode == "multi_image" else self.max_dynamic_patch
-        if self.image_reader_type == "torchvision":
-            if self.dynamic_image_size:  # If dynamic image size is enabled, preprocess the image dynamically
-                images = dynamic_preprocess(image, min_num=self.min_dynamic_patch, max_num=max_num,
-                                            image_size=self.image_size, use_thumbnail=self.use_thumbnail)
-            else:  # Otherwise, use the original image as a single patch
-                images = [image]
-
-            # Apply the transformation to each image and stack the results into a tensor
-            pixel_values = [self.image_transforms(image) for image in images]
-            pixel_values = pixel_values if mode == "multi_image" else torch.stack(pixel_values)
-        else:
-            if train_pipeline["pad2square"]:
-                expand2square = Expand2Square(mean=train_pipeline["image_mean"])
-                image = expand2square(image)
-
-            processor_kwargs = copy.deepcopy(train_pipeline)
-            processor_kwargs.pop("pad2square", None)
-
-            processer = CLIPImageProcessor(**train_pipeline)
-            pixel_values = processer.preprocess(image, return_tensors="pt", **processor_kwargs)["pixel_values"][0]
-        return pixel_values
 
     def image_reader(self, image_path):
         if self.image_reader_type in ["torchvision", "CLIPImageProcessor"]:
@@ -1242,89 +1154,6 @@ def collate_fn_default(batch):
         ret["input_ids"] = input_ids
 
     return ret
-
-
-def find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size):
-    """
-    This function finds the closest aspect ratio from a set of target aspect ratios based on the input
-    image's aspect ratio. It calculates the difference between the input image's aspect ratio and each
-    target aspect ratio, and returns the ratio that has the smallest difference. If two ratios have the same
-    difference, it chooses the one whose area is closer to a specific size threshold.
-    :param aspect_ratio: The aspect ratio of the input image, calculated as width / height.
-    :param target_ratios: A list of target aspect ratios in the form of tuples, where each tuple represents a width-height ratio.
-    :param width: The width of the input image.
-    :param height: The height of the input image.
-    :param image_size: A reference size used for comparing the areas of the input image and the target ratios.
-    :return:best_ratio (tuple): The target aspect ratio that is closest to the input image's aspect ratio.
-    """
-    best_ratio_diff = float("inf")
-    best_ratio = (1, 1)
-    area = width * height
-    for ratio in target_ratios:
-        target_aspect_ratio = ratio[0] / ratio[1]
-        ratio_diff = abs(aspect_ratio - target_aspect_ratio)
-        if ratio_diff < best_ratio_diff:
-            best_ratio_diff = ratio_diff
-            best_ratio = ratio
-        elif ratio_diff == best_ratio_diff:
-            if area > 0.5 * image_size * image_size * ratio[0] * ratio[1]:
-                best_ratio = ratio
-    return best_ratio
-
-
-def dynamic_preprocess(image, min_num=1, max_num=6, image_size=448, use_thumbnail=False):
-    """
-    This function dynamically preprocesses an input image by resizing it to match a closest target
-    aspect ratio and then splitting the resized image into smaller blocks. It optionally generates
-    a thumbnail version of the image. The preprocessing is useful for adjusting the input data for tasks like
-    data augmentation or image classification in machine learning.
-    :param image:The input image to be processed.
-    :param min_num: The minimum number of blocks used to create target aspect ratios.
-    :param max_num:The maximum number of blocks used to create target aspect ratios.
-    :param image_size:The size to which the image should be resized before splitting into blocks.
-    :param use_thumbnail: If True, a thumbnail version of the image will be generated and added to the list of
-                          processed images when the number of blocks is greater than 1.
-    :return:processed_images (list of PIL.Image): A list of processed images, including blocks of the resized image,
-                    and optionally a thumbnail image. The number of blocks is determined by the target aspect ratio.
-    """
-    orig_width, orig_height = image.size
-    aspect_ratio = orig_width / orig_height
-
-    # calculate the existing image aspect ratio
-    target_ratios = set()
-    for n in range(min_num, max_num + 1):
-        for i in range(1, n + 1):
-            for j in range(1, n + 1):
-                if min_num <= i * j <= max_num:
-                    target_ratios.add((i, j))
-    target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
-
-    # find the closest aspect ratio to the target
-    target_aspect_ratio = find_closest_aspect_ratio(
-        aspect_ratio, target_ratios, orig_width, orig_height, image_size)
-
-    # calculate the target width and height
-    target_width = image_size * target_aspect_ratio[0]
-    target_height = image_size * target_aspect_ratio[1]
-    blocks = target_aspect_ratio[0] * target_aspect_ratio[1]
-
-    # resize the image
-    resized_img = image.resize((target_width, target_height))
-    processed_images = []
-    for i in range(blocks):
-        box = (
-            (i % (target_width // image_size)) * image_size,
-            (i // (target_width // image_size)) * image_size,
-            ((i % (target_width // image_size)) + 1) * image_size,
-            ((i // (target_width // image_size)) + 1) * image_size
-        )
-        # split the image
-        split_img = resized_img.crop(box)
-        processed_images.append(split_img)
-    if use_thumbnail and len(processed_images) != 1:
-        thumbnail_img = image.resize((image_size, image_size))
-        processed_images.append(thumbnail_img)
-    return processed_images
 
 
 def preprocess_multimodal(

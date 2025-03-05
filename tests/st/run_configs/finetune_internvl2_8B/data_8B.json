@@ -1,6 +1,6 @@
 {
     "dataset_param": {
-        "dataset_type": "image",
+        "dataset_type": "multimodal",
         "basic_parameters": {
             "data_path": "/home/ci_resource/data/internvlv1-2-sft/opensource/ai2d_train_12k.jsonl",
             "data_folder": "/home/ci_resource/data/internvlv1-2-sft/data/ai2d",
@@ -8,7 +8,6 @@
         },
         "preprocess_parameters": {
             "image_reader_type": "torchvision",
-            "image_processer_type": "image2pixel",
             "train_pipeline": {
                 "image":[
                     {"trans_type": "Resize", "param": {"size": [448, 448], "interpolation": "BICUBIC"}},

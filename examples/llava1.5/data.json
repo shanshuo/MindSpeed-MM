@@ -1,13 +1,12 @@
 {
     "dataset_param": {
-        "dataset_type": "image",
+        "dataset_type": "multimodal",
         "basic_parameters": {
             "data_path": "/your_llava_data_path/LLaVA-Pretrain/blip_laion_cc_sbu_558k.json",
             "data_folder": "/your_llava_data_path/LLaVA-Pretrain/images/"
         },
         "preprocess_parameters": {
             "image_reader_type": "CLIPImageProcessor",
-            "image_processer_type": "image2pixel",
             "train_pipeline": {
                 "crop_size": {"height": 336, "width": 336},
                 "do_center_crop": true,
