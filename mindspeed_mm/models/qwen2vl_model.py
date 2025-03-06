@@ -5,6 +5,7 @@ from torch.nn import CrossEntropyLoss
 
 from megatron.core import InferenceParams, mpu
 from megatron.core import tensor_parallel
+from megatron.core.tensor_parallel import scatter_to_sequence_parallel_region
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
@@ -297,16 +298,19 @@ class Qwen2VLModel(MultiModalModule):
             input_embeds = None
             if self.text_decoder.pre_process:
                 input_embeds = self.text_decoder.embedding(input_ids=input_ids, position_ids=position_ids).clone()
+                
+                _input_ids = input_ids
+                if self.config.sequence_parallel:
+                    _input_ids = scatter_to_sequence_parallel_region(_input_ids.transpose(0, 1)).transpose(0, 1)
+                    
                 if vit_embeds is not None:
                     input_embeds = input_embeds.transpose(0, 1)  # bsh
-                    image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
+                    image_mask = torch.eq(_input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
                     vit_embeds = vit_embeds[:, 0, :]
                     input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
                     input_embeds = input_embeds.transpose(0, 1).clone()
 
             seq_len = input_ids.shape[1]
-            if self.config.sequence_parallel:
-                seq_len *= mpu.get_tensor_model_parallel_world_size()
             if inference_params is not None:
                 past_seen_tokens = attention_mask.shape[1] - 1 if inference_params.key_value_memory_dict else 0
             else:

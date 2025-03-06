@@ -12,6 +12,7 @@ from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.core.tensor_parallel.mappings import scatter_to_sequence_parallel_region, gather_from_sequence_parallel_region
 from megatron.training import get_args
 
 from mindspeed.core.context_parallel.unaligned_cp.mapping import cal_split_sizes, split_forward_gather_backward,\
@@ -458,6 +459,9 @@ class Qwen2VLViT(MultiModalModule):
                 raise AssertionError("Please check the commit id of your MindSpeed")
             set_actual_seq_len(tuple(cu_seqlens[1:].cpu().numpy().tolist()))
             
+        if get_args().sequence_parallel:
+            hidden_states = scatter_to_sequence_parallel_region(hidden_states)
+            
         if mpu.get_context_parallel_world_size() > 1:
             split_gather_sizes = cal_split_sizes(hidden_states.shape[0], mpu.get_context_parallel_world_size())
             rotary_pos_emb = split_forward_gather_backward(
@@ -489,6 +493,9 @@ class Qwen2VLViT(MultiModalModule):
                 split_gather_sizes,
                 "up"
             )
+            
+        if get_args().sequence_parallel:
+            hidden_states = gather_from_sequence_parallel_region(hidden_states)
             
         if get_args().use_flash_attn:
             set_actual_seq_len(None)
