@@ -35,6 +35,7 @@ def process_args(parser):
     parser = _add_dummy_optimizer_args(parser)
     parser = _add_logging_args(parser)
     parser = _add_security_args(parser)
+    parser = _add_rlfh_args(parser)
     return parser
 
 
@@ -135,5 +136,42 @@ def _add_security_args(parser):
                        action='store_true',
                        default=False,
                        help='Whether or not to allow for custom models defined on the Hub in their own modeling files.')
+
+    return parser
+
+
+def _add_rlfh_args(parser):
+    group = parser.add_argument_group(title='dpo')
+
+    group.add_argument(
+        '--dpo-beta',
+        type=float,
+        default=0.1,
+        help="The beta parameter for the DPO loss"
+    )
+    group.add_argument(
+        '--dpo-loss-type',
+        default="sigmoid",
+        choices=["sigmoid"],
+        help="The type of DPO loss to use"
+    )
+    group.add_argument(
+        "--dpo-label-smoothing",
+        type=float,
+        default=0.0,
+        help="The robust DPO label smoothing parameter in cDPO that should be between 0 and 0.5."
+    )
+    group.add_argument(
+        '--ref-model',
+        default=None,
+        type=str,
+        help='Path to the reference model used for the PPO or DPO training.'
+    )
+    group.add_argument(
+        '--pref-ftx',
+        default=0.0,
+        type=float,
+        help="The supervised fine-tuning loss coefficient in DPO training.",
+    )
 
     return parser

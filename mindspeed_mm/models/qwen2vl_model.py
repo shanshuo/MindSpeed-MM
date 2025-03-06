@@ -178,6 +178,7 @@ class Qwen2VLModel(MultiModalModule):
             input_tensor = [input_tensor]
         if not len(input_tensor) == 1:
             raise AssertionError("input_tensor should only be length 1 for vlmodel")
+        self.input_tensor_dpo = input_tensor[0]
         if self.add_image_encoder:
             self.image_encoder.set_input_tensor(input_tensor[0])
         elif self.add_text_decoder:

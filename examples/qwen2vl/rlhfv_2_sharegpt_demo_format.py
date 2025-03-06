@@ -6,9 +6,9 @@ from datasets import load_dataset
 from tqdm import tqdm
 
 # Configuration parameters for dataset processing
-IMAGE_FOLDER = Path(".data/rlhf_v_images/res")  # Directory for storing processed images
-OUTPUT_JSON_PATH = ".data/rlhf-v.json"          # Output dataset file (JSON format)
-DATASET_NAME = ".data/datasets/rlhf-v"          # Local cache path for Hugging Face dataset
+IMAGE_FOLDER = Path("./data/rlhf_v_images/res")  # Directory for storing processed images
+OUTPUT_JSON_PATH = "./data/rlhf-v.json"          # Output dataset file (JSON format)
+DATASET_NAME = "./data/datasets/rlhf-v"          # Local cache path for Hugging Face dataset
 
 
 def validate_image(image_path):
