@@ -66,11 +66,6 @@ class SoRAModel(nn.Module):
         # Track the current index to save or fetch the encoder cache when encoder dp is enabled
         self.cache = {}
         self.index = 0
-        if mpu.get_virtual_pipeline_model_parallel_world_size() is not None:
-            raise NotImplementedError("Not support virtual_pipeline_model_parallel now. ")
-        else:
-            self.pp_rank = mpu.get_pipeline_model_parallel_rank()
-
         args = get_args()
         if args.dist_train:
             from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld

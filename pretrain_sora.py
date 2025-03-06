@@ -72,6 +72,7 @@ def loss_func(output_tensor):
 
 def get_batch_for_step(data_iterator):
     args = get_args()
+    args.curr_forward_iteration += 1
     enable_encoder_dp = args.mm.model.enable_encoder_dp if hasattr(args.mm.model, "enable_encoder_dp") else False
     tp_cp_group_size = None
     if enable_encoder_dp:
@@ -81,7 +82,8 @@ def get_batch_for_step(data_iterator):
         return get_batch(data_iterator)
 
     # Only the first step of a round needs to get batch when enable encoder dp
-    batch = get_batch(data_iterator) if args.curr_iteration % tp_cp_group_size == 0 else {}
+    batch = get_batch(data_iterator) if args.curr_forward_iteration % tp_cp_group_size == 1 else {}
+
     return batch
 
 
@@ -131,5 +133,5 @@ if __name__ == "__main__":
         ModelType.encoder_or_decoder,
         forward_step,
         extra_args_provider=mm_extra_args_provider,
-        args_defaults={"dataloader_type": "external", "vision_pretraining": False},
+        args_defaults={"dataloader_type": "external", "vision_pretraining": False, "curr_forward_iteration": 0},
     )

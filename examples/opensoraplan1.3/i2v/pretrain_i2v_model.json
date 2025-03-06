@@ -2,6 +2,7 @@
     "task": "i2v",
     "load_video_features": false,
     "load_text_features": false,
+    "enable_encoder_dp": false,
     "predictor": {
         "model_id": "videoditsparsei2v",
         "from_pretrained": null,
