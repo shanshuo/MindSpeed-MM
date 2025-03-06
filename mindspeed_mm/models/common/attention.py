@@ -20,7 +20,12 @@ from mindspeed.core.parallel_state import (
     get_context_parallel_group_for_hybrid_ring,
     get_context_parallel_for_hybrid_ring_world_size,
     get_context_parallel_for_hybrid_ring_rank,
-    get_context_parallel_for_hybrid_ring_global_ranks
+    get_context_parallel_for_hybrid_ring_global_ranks,
+    get_ring_ranks_for_intra_window,
+    get_ring_ranks_for_inter_window_kv,
+    get_ring_ranks_for_inter_window_dkv,
+    get_ring_group_for_intra_window,
+    get_ring_group_for_intra_window_send_recv_overlap
 )
 from mindspeed.core.context_parallel.unaligned_cp import mapping
 
@@ -223,8 +228,7 @@ class ParallelAttention(nn.Module):
         self.tp_size = mpu.get_tensor_model_parallel_world_size()
         self.head_dim = core.utils.divide(hidden_size, num_attention_heads)
         self.num_attention_heads_per_partition = core.utils.divide(num_attention_heads, self.tp_size)
-        self.num_attention_heads_per_partition_per_cp = core.utils.divide(self.num_attention_heads_per_partition,
-                                                                      self.cp_size)
+        self.attention_mask_type = args.attention_mask_type
         
         # Strided linear layer.
         if self.attention_type == AttnType.self_attn and self.is_qkv_concat:
@@ -481,6 +485,13 @@ class MultiHeadSparseAttentionSBH(ParallelAttention):
         self.sparse_n = sparse_n
         self.sparse_group = sparse_group
 
+        if args.context_parallel_algo == 'ulysses_cp_algo':
+            self.num_attention_heads_per_partition_per_cp = core.utils.divide(self.num_attention_heads_per_partition, self.cp_size)
+        elif args.context_parallel_algo == 'hybrid_cp_algo':
+            self.num_attention_heads_per_partition_per_cp = core.utils.divide(self.num_attention_heads_per_partition, args.ulysses_degree_in_cp)
+        else:
+            self.num_attention_heads_per_partition_per_cp = self.num_attention_heads_per_partition
+
         if args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
             in_hybrid_mode = False
             if get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None:
@@ -501,15 +512,20 @@ class MultiHeadSparseAttentionSBH(ParallelAttention):
             self.pse_type = 1
 
             self.cp_para = dict()
-            self.cp_para['causal'] = self.cp_attention_mask_type == 'causal'
+            self.cp_para['causal'] = args.attention_mask_type == 'causal'
             self.cp_para['cp_group'] = cp_group
             self.cp_para['cp_size'] = cp_size
             self.cp_para['rank'] = rank
             self.cp_para['cp_global_ranks'] = cp_global_ranks
             self.cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
-                    if self.use_cp_send_recv_overlap else None
+                    if args.use_cp_send_recv_overlap else None
             self.cp_para['pse'] = self.pse
             self.cp_para['pse_type'] = self.pse_type
+            self.cp_para['cp_inner_ranks'] = get_ring_ranks_for_intra_window()
+            self.cp_para['cp_outer_ranks'] = get_ring_ranks_for_inter_window_kv()
+            self.cp_para['cp_dkv_outer_ranks'] = get_ring_ranks_for_inter_window_dkv()
+            self.cp_para['cp_group_for_intra_window'] = get_ring_group_for_intra_window()
+            self.cp_para['cp_group_for_intra_window_send_recv_overlap'] = get_ring_group_for_intra_window_send_recv_overlap()
 
     def _sparse_1d(self, x, frame, height, width):
         """
@@ -572,7 +588,7 @@ class MultiHeadSparseAttentionSBH(ParallelAttention):
                 v = mapping.all_to_all(v, cp_group, scatter_dim=2, gather_dim=0)
             if args.context_parallel_algo == 'hybrid_cp_algo':
                 cp_group = get_context_parallel_group_for_hybrid_ulysses()
-                total_frames = frames * self.ulysses_degree_in_cp
+                total_frames = frames * args.ulysses_degree_in_cp
                 # apply all_to_all to gather sequence and split attention heads [s // sp, b, h, d] -> [s, b, h // sp, d]
                 q = mapping.all_to_all(q, cp_group, scatter_dim=2, gather_dim=0)
                 k = mapping.all_to_all(k, cp_group, scatter_dim=2, gather_dim=0)
@@ -613,7 +629,7 @@ class MultiHeadSparseAttentionSBH(ParallelAttention):
                 
             if args.context_parallel_algo == 'hybrid_cp_algo':
                 cp_group = get_context_parallel_group_for_hybrid_ulysses()
-                total_frames = frames * self.ulysses_degree_in_cp
+                total_frames = frames * args.ulysses_degree_in_cp
 
         if self.sparse1d:
             out = self._reverse_sparse_1d(out, total_frames, height, width)
@@ -637,10 +653,12 @@ class MultiHeadSparseAttentionSBH(ParallelAttention):
         value: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
     ):
-        batch_size = query.shape[1]
-        if mask is not None:
-            mask = mask.view(batch_size, 1, -1, mask.shape[-1])
         args = get_args()
+
+        batch_size = query.shape[1]
+        if mask is not None and args.context_parallel_algo not in ['megatron_cp_algo', 'hybrid_cp_algo']:
+            mask = mask.view(batch_size, 1, -1, mask.shape[-1])
+
         if self.cp_size > 1 and args.context_parallel_algo in ['megatron_cp_algo', 'hybrid_cp_algo']:
             scale = 1.0 / math.sqrt(self.head_dim)
             head_num = self.num_attention_heads_per_partition_per_cp

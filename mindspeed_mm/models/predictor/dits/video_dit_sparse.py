@@ -8,6 +8,8 @@ import torch.nn.functional as F
 from diffusers.models.embeddings import PixArtAlphaTextProjection
 from diffusers.models.normalization import AdaLayerNormSingle
 from megatron.core import mpu, tensor_parallel
+from mindspeed.core.parallel_state import (get_context_parallel_for_hybrid_ring_world_size,
+                                           get_context_parallel_for_hybrid_ring_rank)
 from megatron.training import get_args
 from megatron.legacy.model.enums import AttnType
 
@@ -198,6 +200,28 @@ class VideoDitSparse(MultiModalModule):
         if (video_mask_sparse_1d_group == False).all():
             video_mask_sparse_1d_group = None
         
+        args = get_args()
+        if args.context_parallel_algo == 'megatron_cp_algo' or args.context_parallel_algo == 'hybrid_cp_algo':
+            if args.context_parallel_algo == 'megatron_cp_algo':
+                r_size = mpu.get_context_parallel_world_size()
+                r_rank = mpu.get_context_parallel_rank()
+            else:
+                r_size = get_context_parallel_for_hybrid_ring_world_size()
+                r_rank = get_context_parallel_for_hybrid_ring_rank()
+            
+            if prompt_mask_sparse_1d is not None:
+                prompt_mask_sparse_1d_row = prompt_mask_sparse_1d.chunk(r_size, dim=2)[r_rank].contiguous()
+                prompt_mask_sparse_1d = [m.contiguous() for m in prompt_mask_sparse_1d_row.chunk(r_size, dim=3)]
+            if prompt_mask_sparse_1d_group is not None:
+                prompt_mask_sparse_1d_group_row = prompt_mask_sparse_1d_group.chunk(r_size, dim=2)[r_rank].contiguous()
+                prompt_mask_sparse_1d_group = [m.contiguous() for m in prompt_mask_sparse_1d_group_row.chunk(r_size, dim=3)]
+            if video_mask_sparse_1d is not None:
+                video_mask_sparse_1d_row = video_mask_sparse_1d.chunk(r_size, dim=2)[r_rank].contiguous()
+                video_mask_sparse_1d = [m.contiguous() for m in video_mask_sparse_1d_row.chunk(r_size, dim=3)]
+            if video_mask_sparse_1d_group is not None:
+                video_mask_sparse_1d_group_row = video_mask_sparse_1d_group.chunk(r_size, dim=2)[r_rank].contiguous()
+                video_mask_sparse_1d_group = [m.contiguous() for m in video_mask_sparse_1d_group_row.chunk(r_size, dim=3)]
+
         return {
             False: (video_mask_sparse_1d, prompt_mask_sparse_1d),
             True: (video_mask_sparse_1d_group, prompt_mask_sparse_1d_group)
