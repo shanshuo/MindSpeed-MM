@@ -17,6 +17,7 @@
   - [准备工作](#jump4.1)
   - [配置参数](#jump4.2)
   - [启动预训练](#jump4.3)
+
 ---
 <a id="jump1"></a>
 
@@ -107,6 +108,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 ```
 
 <a id="jump1.3"></a>
+
 #### 3. Decord搭建
 
 【X86版安装】
@@ -135,10 +137,9 @@ pip install decord==0.6.0
 
 - [vgg_lpips](https://heibox.uni-heidelberg.de/f/607503859c864bc1b30b/?dl=1)： 下载`vgg.pth`权重到`MindSpeed-MM/.cache/lpips/`目录下；
 
-- [vgg16](https://huggingface.co/google/mt5-xxl/)： 下载`vgg16-397923af.pth`权重到用户目录`~/.cache/torch/hub/checkpoints/`下；
+- [vgg16](https://download.pytorch.org/models/vgg16-397923af.pth)： 下载`vgg16-397923af.pth`权重到用户目录`~/.cache/torch/hub/checkpoints/`下；
 
 ---
-
 
 <a id="jump3"></a>
 
@@ -163,6 +164,7 @@ pip install decord==0.6.0
 
 ---
 <a id="jump4"></a>
+
 ## 预训练
 
 <a id="jump4.1"></a>
@@ -176,7 +178,6 @@ pip install decord==0.6.0
 #### 2. 配置参数
 
 需根据实际情况修改`model.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`perceptual_from_pretrained`、`video_folder`字段。
-
 
 【单机运行】
 
@@ -204,6 +205,7 @@ pip install decord==0.6.0
 <a id="jump4.3"></a>
 
 #### 3. 启动预训练
+
 ```shell
     bash examples/vae/pretrain_vae.sh
 ```

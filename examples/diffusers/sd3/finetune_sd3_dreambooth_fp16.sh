@@ -52,7 +52,7 @@ accelerate launch --config_file ${config_file} \
   --train_batch_size=$batch_size \
   --mixed_precision=$mixed_precision \
   --gradient_accumulation_steps=$gradient_accumulation_steps \
-  --dataloader_num_workers=8 \
+  --dataloader_num_workers=0 \
   --learning_rate=1e-6 \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \

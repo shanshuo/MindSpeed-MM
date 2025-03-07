@@ -20,10 +20,11 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 ## 🔥🔥🔥Latest News
 
 * [Feb. 20, 2025]: 🚀 MindSpeed-MM支持InternVL2.5-78B模型 【Prototype】
-* [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型 【Prototype】
+* [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型
 * [Feb. 17, 2025]: 🔥 MindSpeed-MM支持Mindspeed-Core & Megatron 0.8.0版本
-* [Feb. 15, 2025]: 🚀 MindSpeed-MM支持Sana模型 【Prototype】
+* [Feb. 15, 2025]: 🚀 MindSpeed-MM支持Sana模型
 * [Feb. 06, 2025]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.3模型PP与VPP 【Prototype】
+* [Jan. 24, 2025]: 🚀 MindSpeed-MM支持CogVideoX 1.5 5B模型
 * [Jan. 22, 2025]: 🎉 MindSpeed-MM支持Qwen2VL视频模态
 * [Jan. 16, 2025]: 🎉 MindSpeed-MM支持wfvae训练
 * [Dec. 30, 2024]: 🔥 MindSpeed-MM版本1.0.0发布
@@ -230,7 +231,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 1.88 (SPS) </td>
       <td> 2.09 (SPS) </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td rowspan="1"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX 1.5-I2V</a></td>
@@ -240,7 +241,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 1.81 (SPS) </td>
       <td> 2.01 (SPS) </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qihoo_t2x">Qihoo-T2X</a></td>
@@ -318,7 +319,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 28.7 (FPS) </td>
       <td> 32.8 (FPS) </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
@@ -390,7 +391,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     <tr>
       <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2vl">Qwen2-VL</a></td>
-      <td><a href="https://qwen2.org/vl/">2B</a></td>
+      <td><a href="https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct">2B</a></td>
       <td> 微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
@@ -399,7 +400,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://qwen2.org/vl/">7B</a></td>
+      <td><a href="https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct">7B</a></td>
       <td> 微调 </td>
       <td> 1x8 </td>
       <td> BF16 </td>
@@ -408,9 +409,9 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td><a href="https://qwen2.org/vl/">72B</a></td>
+      <td><a href="https://huggingface.co/Qwen/Qwen2-VL-72B-Instruct">72B</a></td>
       <td> 微调 </td>
-      <td> 4x16 (A3) </td>
+      <td> 4x8 (A3) </td>
       <td> BF16 </td>
       <td> 261.25 (TPS) </td>
       <td> 257.63 (TPS) </td>
