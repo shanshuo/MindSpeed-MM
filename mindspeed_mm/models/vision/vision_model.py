@@ -9,6 +9,7 @@ from mindspeed_mm.models.common.module import MultiModalModule
 from .vision_encoders.clip_vit_model import CLIPViT
 from .vision_encoders.internvit_model import InternViT
 from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
+from .vision_encoders.minicpm_vit_model import MiniCPMViT
 from .projectors.multimodal_projector import MultimodalProjector
 from .projectors.internvl_mlp import InternVLMLP
 
@@ -17,6 +18,7 @@ VISION_ENCODER_MAPPINGS = {
     "clip": CLIPViT,
     "InternViT": InternViT,
     "qwen2vit": Qwen2VLViT,
+    "MiniCPMViT": MiniCPMViT,
 }
 
 VISION_PROJECTION_MAPPINGS = {

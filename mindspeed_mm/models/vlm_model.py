@@ -257,7 +257,9 @@ class VLMModel(MultiModalModule):
             extra_block_kwargs: Optional[dict] = None,
             cache_position: Optional[torch.LongTensor] = None,
             rope_deltas: Optional[torch.LongTensor] = None,
-            image_flags: Optional[torch.LongTensor] = None
+            image_flags: Optional[torch.LongTensor] = None,
+            target_size: Optional[torch.Size] = None,
+            image_bound: Optional[torch.Tensor] = None
     ) -> Union[Dict[str, torch.Tensor], torch.Tensor]:
 
         if self.add_image_encoder and pixel_values is not None:
@@ -277,10 +279,31 @@ class VLMModel(MultiModalModule):
                 input_embeds = self.text_decoder.embedding(input_ids=input_ids, position_ids=position_ids).clone()
                 if vit_embeds is not None:
                     input_embeds = input_embeds.transpose(0, 1)  # bsh
-                    image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
-                    vit_embeds = vit_embeds[:, 0, :]
-                    input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
-                    input_embeds = input_embeds.transpose(0, 1).clone()
+                    # 用是否有image_bound做区分，实现minicpmv2.6模型vit_embeds嵌入input_embeds
+                    if image_bound is not None:
+                        vision_hidden_states = [i.type(input_embeds.dtype) if isinstance(
+                            i, torch.Tensor) else i for i in vit_hidden_states]
+                        bs = len(input_ids)
+                        for i in range(bs):
+                            cur_vs_hs = vision_hidden_states[i]
+                            if len(cur_vs_hs) > 0:
+                                cur_vllm_emb = input_embeds[i]
+                                cur_image_bound = image_bound[i]
+                                if len(cur_image_bound) > 0:
+                                    image_indices = torch.stack(
+                                        [torch.arange(r[0], r[1], dtype=torch.long) for r in cur_image_bound]
+                                    ).to(input_embeds.device)
+
+                                    cur_vllm_emb.scatter_(0,
+                                                          image_indices.view(-1, 1).repeat(1, cur_vllm_emb.shape[-1]),
+                                                          cur_vs_hs.view(-1, cur_vs_hs.shape[-1]))
+                                elif self.training:
+                                    cur_vllm_emb += cur_vs_hs[0].mean() * 0
+                    else:
+                        image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
+                        vit_embeds = vit_embeds[:, 0, :]
+                        input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
+                        input_embeds = input_embeds.transpose(0, 1).clone()
 
             attention_mask, position_ids = prepare_positionsids_mask_for_llm(config=self.config, input_ids=input_ids, inference_params=inference_params, attention_mask=attention_mask, position_ids=position_ids)
 

@@ -93,7 +93,7 @@ OUTPUT_ARGS="
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)
 mkdir -p logs
 torchrun $DISTRIBUTED_ARGS \
-    pretrain_minicpmv2_6.py \
+    pretrain_vlm.py \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \

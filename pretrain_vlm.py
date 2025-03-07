@@ -57,6 +57,8 @@ def get_batch(data_iterator):
     image_grid_thw = None
     image_flags = None
     pixel_values = None
+    target_size = None
+    image_bound = None
 
     if has_image or has_video:
         if has_image:
@@ -65,6 +67,12 @@ def get_batch(data_iterator):
                 image_grid_thw = batch['image_grid_thw'].to(torch.cuda.current_device())
             if 'image_flags' in batch:
                 image_flags = batch['image_flags'].to(torch.cuda.current_device())
+            if 'position_ids' in batch:
+                position_ids = batch['position_ids'].to(torch.cuda.current_device())
+            if 'tgt_size' in batch:
+                target_size = [tgt_size.to(torch.cuda.current_device()) for tgt_size in batch["tgt_sizes"] if isinstance(tgt_size, torch.Tensor)]
+            if 'image_bound' in batch:
+                image_bound = [img_bound.to(torch.cuda.current_device()) for img_bound in batch["image_bound"] if isinstance(img_bound, torch.Tensor)]
         if has_video:
             pixel_values = batch['pixel_values_videos'].to(torch.cuda.current_device())
             if 'video_grid_thw' in batch:
@@ -76,9 +84,13 @@ def get_batch(data_iterator):
         'attention_mask': attention_mask,
         'pixel_values': pixel_values,
         'image_grid_thw': image_grid_thw,
-        'image_flags': image_flags
+        'image_flags': image_flags,
+        'position_ids': position_ids,
+        'target_size': target_size,
+        'image_bound': image_bound
     }
-    return batch['input_ids'], batch['labels'], batch['attention_mask'], batch['pixel_values'], batch['image_grid_thw'], batch['image_flags']
+    return batch['input_ids'], batch['labels'], batch['attention_mask'], batch['pixel_values'], batch['image_grid_thw'], batch['image_flags'], \
+            batch['position_ids'], batch['target_size'], batch['image_bound']
 
 
 def loss_func(output_tensor):
@@ -101,12 +113,13 @@ def loss_func(output_tensor):
 def forward_step(data_iterator, model):
     """Forward step."""
     args = get_args()
-    input_ids, labels, attention_mask, pixel_values, image_grid_thw, image_flags = get_batch(data_iterator)
+    input_ids, labels, attention_mask, pixel_values, image_grid_thw, image_flags, position_ids, target_size, image_bound = get_batch(data_iterator)
     if pixel_values is not None:
         pixel_values = pixel_values.to(args.params_dtype)
 
     output_tensor = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw,
-                          attention_mask=attention_mask, labels=labels, image_flags=image_flags)
+                          attention_mask=attention_mask, labels=labels, image_flags=image_flags, position_ids=position_ids,
+                          target_size=target_size, image_bound=image_bound)
     return output_tensor, loss_func
 
 

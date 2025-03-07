@@ -1,9 +1,9 @@
 from mindspeed_mm.models.common.module_spec.qwen2vl_layer_spec import get_qwen2vl_layer_spec, get_mlp_module_spec, get_qwen2vlllm_layer_local_spec
 from mindspeed_mm.models.common.module_spec.internvl_layer_spec import get_language_layer_spec, get_vit_layer_spec
 from mindspeed_mm.models.common.module_spec.llava_layer_spec import get_layer_spec
+from mindspeed_mm.models.common.module_spec.minicpm_layer_spec import get_minicpm_vit_layer_spec
 
-
-vit_layer_specs = {'qwen2vit': get_qwen2vl_layer_spec, 'InternViT': get_vit_layer_spec, 'clip': get_layer_spec}
+vit_layer_specs = {'qwen2vit': get_qwen2vl_layer_spec, 'InternViT': get_vit_layer_spec, 'clip': get_layer_spec, 'MiniCPMViT': get_minicpm_vit_layer_spec}
 llm_layer_specs = {'qwen2lm': get_qwen2vlllm_layer_local_spec, 'internllm': get_language_layer_spec, 'llava': get_layer_spec}
 projector_layer_specs = {'lnmlp': get_mlp_module_spec, 'mlp': get_mlp_module_spec}
 
