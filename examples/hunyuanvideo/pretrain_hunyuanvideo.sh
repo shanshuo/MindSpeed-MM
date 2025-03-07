@@ -80,7 +80,7 @@ GPT_ARGS="
     --use-distributed-optimizer \
     --overlap-grad-reduce \
     --overlap-param-gather \
-    --normalization RMSNorm
+    --normalization RMSNorm \
     --use-fused-rmsnorm \
     --sequence-parallel \
 "

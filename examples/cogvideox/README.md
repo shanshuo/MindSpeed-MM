@@ -118,7 +118,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 # checkout commit from MindSpeed core_r0.8.0
-git checkout 3f09d6736571cf1e30f8ac97de77982d0ab32cc5
+git checkout 9bd51f777820aff70ab7507c8b4da7dde566b37b
 pip install -r requirements.txt 
 pip install -e .
 cd ..
@@ -323,7 +323,18 @@ CogvideoX训练阶段的启动文件为shell脚本，主要分为如下4个：
   ignored_modules:
     - ae
     - text_encoder
-  ```  
+  ```
+  
+  该特性和TP不能兼容，开启时TP必须设置为1，使用该特性训练时，保存的权重需要使用下面的转换脚本进行后处理才能用于推理：
+  
+      ```bash
+      source /usr/local/Ascend/ascend-toolkit/set_env.sh
+      # your_mindspeed_path和your_megatron_path分别替换为之前下载的mindspeed和megatron的路径
+      export PYTHONPATH=$PYTHONPATH:<your_mindspeed_path>
+      export PYTHONPATH=$PYTHONPATH:<your_megatron_path>
+      # input_folder为layerzero训练保存权重的路径，output_folder为输出的megatron格式权重的路径
+      python <your_mindspeed_path>/mindspeed/core/distributed/layerzero/state/scripts/convert_to_megatron.py --input_folder ./save_ckpt/hunyuanvideo/iter_000xxxx/ --output_folder ./save_ckpt/hunyuanvideo_megatron_ckpt/iter_000xxxx/ --prefix predictor
+      ```
 
 模型参数配置文件中的`head_dim`字段原模型默认配置为64。此字段调整为128会更加亲和昇腾。
 

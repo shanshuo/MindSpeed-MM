@@ -100,7 +100,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 # checkout commit from MindSpeed core_r0.8.0
-git checkout ca2b98ac11e059d114ad3a49c0d170cdae24dee7
+git checkout 9bd51f777820aff70ab7507c8b4da7dde566b37b
 pip install -r requirements.txt 
 pip install -e .
 cd ..
@@ -222,13 +222,13 @@ python examples/convert_ckpt_to_mm.py --source_path <hunyuan-video-t2v-720p/tran
 
 检查模型权重路径、数据集路径、提取后的特征保存路径等配置是否完成
 
-| 配置文件                                                    |       修改字段        | 修改说明                                            |
-| ----------------------------------------------------------- | :-------------------: | :-------------------------------------------------- |
-| examples/hunyuanvideo/feature_extract/data.json             |      num_frames       | 最大的帧数，超过则随机选取其中的num_frames帧        |
-| examples/hunyuanvideo/feature_extract/data.json             | max_height, max_width | 最大的长宽，超过则centercrop到最大分辨率            |
-| examples/hunyuanvideo/feature_extract/feature_extraction.sh |     NPUS_PER_NODE     | 卡数                                                |
-| examples/hunyuanvideo/feature_extract/model_hunyuanvideo.sh |    from_pretrained    | 修改为下载的权重所对应路径（包括VAE、Text Encoder） |
-| examples/hunyuanvideo/feature_extract/tools.json            |       save_path       | 提取后的特征保存路径                                |
+| 配置文件                                                     |       修改字段        | 修改说明                                            |
+| ------------------------------------------------------------ | :-------------------: | :-------------------------------------------------- |
+| examples/hunyuanvideo/feature_extract/data.json              |      num_frames       | 最大的帧数，超过则随机选取其中的num_frames帧        |
+| examples/hunyuanvideo/feature_extract/data.json              | max_height, max_width | 最大的长宽，超过则centercrop到最大分辨率            |
+| examples/hunyuanvideo/feature_extract/feature_extraction.sh  |     NPUS_PER_NODE     | 卡数                                                |
+| examples/hunyuanvideo/feature_extract/model_hunyuanvideo.json |    from_pretrained    | 修改为下载的权重所对应路径（包括VAE、Text Encoder） |
+| examples/hunyuanvideo/feature_extract/tools.json             |       save_path       | 提取后的特征保存路径                                |
 
 #### 启动特征提取
 
@@ -294,7 +294,17 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
   
   - 使能方式：`examples/hunyuanvideo/pretrain_hunyuanvideo.sh`的`GPT_ARGS`中加入`--layerzero`和`--layerzero-config ${layerzero_config}`
 
-  - 使用建议: 该特性和TP可以二选一，使能该特性时，TP推荐设置为1，配置文件`examples/hunyuanvideo/zero_config.yaml`中的`zero3_size`推荐设置为单机的卡数
+  - 使用建议: 该特性和TP只能二选一，使能该特性时，TP必须设置为1，配置文件`examples/hunyuanvideo/zero_config.yaml`中的`zero3_size`推荐设置为单机的卡数
+  
+  - 训练权重后处理：使用该特性训练时，保存的权重需要使用下面的转换脚本进行后处理才能用于推理：
+    ```bash
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
+    # your_mindspeed_path和your_megatron_path分别替换为之前下载的mindspeed和megatron的路径
+    export PYTHONPATH=$PYTHONPATH:<your_mindspeed_path>
+    export PYTHONPATH=$PYTHONPATH:<your_megatron_path>
+    # input_folder为layerzero训练保存权重的路径，output_folder为输出的megatron格式权重的路径
+    python <your_mindspeed_path>/mindspeed/core/distributed/layerzero/state/scripts/convert_to_megatron.py --input_folder ./save_ckpt/hunyuanvideo/iter_000xxxx/ --output_folder ./save_ckpt/hunyuanvideo_megatron_ckpt/iter_000xxxx/ --prefix predictor
+    ```
 
 #### 启动训练
 
