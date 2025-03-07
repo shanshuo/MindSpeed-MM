@@ -1,6 +1,5 @@
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 export CUDA_DEVICE_MAX_CONNECTIONS=1
-export SCEND_LAUNCH_BLOCKING=1
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
