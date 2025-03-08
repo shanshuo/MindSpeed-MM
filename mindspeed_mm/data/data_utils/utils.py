@@ -1622,6 +1622,14 @@ def get_value_from_args(key: str, default_value=None):
 def cal_gradient_accumulation_size():
     args = get_args()
     world_size = torch.distributed.get_world_size()
-    acc = int(args.global_batch_size / world_size / args.micro_batch_size * mpu.get_tensor_model_parallel_world_size() \
-              * mpu.get_context_parallel_world_size() * mpu.get_pipeline_model_parallel_world_size())
+    acc = int(args.global_batch_size / world_size / args.micro_batch_size * mpu.get_tensor_model_parallel_world_size()
+                  * mpu.get_context_parallel_world_size() * mpu.get_pipeline_model_parallel_world_size())
+    if args.dist_train:
+        from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld
+        from mindspeed.multi_modal.dist_train.config.dist_train_config import get_dist_model_config
+        if is_in_subworld("vae"):
+            dit_cfg = get_dist_model_config('dit')
+            acc = int(
+                args.global_batch_size / dit_cfg.world_size / args.micro_batch_size * dit_cfg.tensor_model_parallel_size
+                * dit_cfg.context_parallel_size * dit_cfg.pipeline_model_parallel_size)
     return acc

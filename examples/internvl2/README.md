@@ -107,7 +107,7 @@ pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 # checkout commit from MindSpeed core_r0.8.0
-git checkout 3f09d6736571cf1e30f8ac97de77982d0ab32cc5
+git checkout 59b4e983b7dc1f537f8c6b97a57e54f0316fafb0
 pip install -r requirements.txt
 pip3 install -e .
 cd ..
@@ -186,7 +186,40 @@ mm-convert  InternVLConverter hf_to_mm \
 # vit_pp_layers: vit在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
 # trust_remote_code: 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
 ```
+#### 3. DistTrain模型分离部署权重转换
 
+提供了MM CKPT与DistTrain CKPT之间的权重转换工具。
+
+MM CKPT转DistTrain CKPT：
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+python examples/internvl2/internvl2_mm_convert_to_dt_ckpt.py \
+  --load-dir pretrained/InternVL2-8B \
+  --save-dir pretrained/InternVL2-8B-DistTrain \
+  --target-vit-tp-size 1 \
+  --target-vit-pp-size 1 \
+  --target-vit-cp-size 1 \
+  --target-vit-pp-layers '[24]' \
+  --target-gpt-tp-size 1 \
+  --target-gpt-pp-size 3 \
+  --target-gpt-cp-size 1 \
+  --target-gpt-pp-layers '[10,12,10]'
+```
+
+DistTrain CKPT转MM CKPT：
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+python examples/internvl2/internvl2_dt_convert_to_mm_ckpt.py \
+  --load-dir pretrained/InternVL2-8B-DistTrain \
+  --save-dir pretrained/InternVL2-8B-DistTrain-to-MM \
+  --target-tp-size 1 \
+  --target-pp-size 4 \
+  --target-cp-size 1 \
+  --target-vit-pp-layers '[24,0,0,0]' \
+  --target-gpt-pp-layers '[6,9,9,8]'
+```
 同步修改`examples/internvl2/finetune_internvl2_*b.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重`raw_ckpt/InternVL2-*B`进行区分。
 
 以`InternVL2-8B`为例

@@ -104,7 +104,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     # 安装加速库
     git clone https://gitee.com/ascend/MindSpeed.git
     cd MindSpeed
-    git checkout 3f09d6736571cf1e30f8ac97de77982d0ab32cc5
+    git checkout 59b4e983b7dc1f537f8c6b97a57e54f0316fafb0
     pip install -r requirements.txt 
     pip3 install -e .
     cd ..
@@ -174,6 +174,39 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
     LOAD_PATH="mm_ckpt/open-sora-plan/pretrained-checkpoint-dit"
 
 ---
+
+#### 3. DistTrain模型分离部署权重转换
+
+提供了MM CKPT与DistTrain CKPT之间的权重转换工具。
+
+MM CKPT转DistTrain CKPT：
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+python examples/opensoraplan1.3/opensoraplan1_3_mm_convert_to_dt_ckpt.py \
+  --load-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit \
+  --save-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train \
+  --target-vae-tp-size 1 \
+  --target-vae-pp-size 1 \
+  --target-vae-cp-size 1 \
+  --target-dit-tp-size 1 \
+  --target-dit-pp-size 3 \
+  --target-dit-cp-size 1 \
+  --target-dit-pp-layers '[10,11,11]'
+```
+
+DistTrain CKPT转MM CKPT：
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+python examples/opensoraplan1.3/opensoraplan1_3_dt_convert_to_mm_ckpt.py \
+  --load-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train \
+  --save-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train-to-mm \
+  --target-tp-size 1 \
+  --target-pp-size 4 \
+  --target-cp-size 1 \
+  --target-dit-pp-layers '[8,8,8,8]'
+```
 
 <a id="jump3"></a>
 

@@ -134,13 +134,18 @@ def merge_by_pp(ckpts, tp_size, pp_size, keys_full_prefix_on_pp_layer: Sequence[
 
 
 def _merge_by_tp(ori_ckpt, new_ckpt, keys_part_on_tp_dim_0, keys_part_on_tp_dim_1):
-    for k, v in ori_ckpt.items():
-        if any(k.startswith(k_) and k in v_ for k_, v_ in keys_part_on_tp_dim_0.items()):
-            new_ckpt[k] = torch.cat((new_ckpt[k], v), dim=0)
-        elif any(k.startswith(k_) and k in v_ for k_, v_ in keys_part_on_tp_dim_1.items()):
-            new_ckpt[k] = torch.cat((new_ckpt[k], v), dim=1)
+    for key, tensor in ori_ckpt.items():
+        v_copy = deepcopy(tensor)
+        if any(key.startswith(start) and key.endswith(end)
+               for start, end_list in keys_part_on_tp_dim_0.items()
+               for end in end_list):
+            new_ckpt[key] = torch.cat((new_ckpt[key], v_copy), dim=0)
+        elif any(key.startswith(start) and key.endswith(end)
+                 for start, end_list in keys_part_on_tp_dim_1.items()
+                 for end in end_list):
+            new_ckpt[key] = torch.cat((new_ckpt[key], v_copy), dim=1)
         else:
-            new_ckpt[k] = v
+            new_ckpt[key] = v_copy
 
 
 def merge_by_tp(ckpts, tp_size, pp_size, keys_part_on_tp_dim_0, keys_part_on_tp_dim_1):
@@ -201,13 +206,17 @@ def merge_to_mm(ckpts_list, tp_size, pp_size):
 
 
 def _split_by_tp(new_ckpt, ori_ckpt, cur_tp_idx, tp_size, keys_part_on_tp_dim_0, keys_part_on_tp_dim_1):
-    for k, v in ori_ckpt.items():
-        if any(k.startswith(k_) and k in v_ for k_, v_ in keys_part_on_tp_dim_0.items()):
-            new_ckpt[k] = torch.chunk(v, tp_size, dim=0)[cur_tp_idx]
-        elif any(k.startswith(k_) and k in v_ for k_, v_ in keys_part_on_tp_dim_1.items()):
-            new_ckpt[k] = torch.chunk(v, tp_size, dim=1)[cur_tp_idx]
+    for key, tensor in ori_ckpt.items():
+        if any(key.startswith(start) and key.endswith(end)
+               for start, end_list in keys_part_on_tp_dim_0.items()
+               for end in end_list):
+            new_ckpt[key] = torch.chunk(tensor, tp_size, dim=0)[cur_tp_idx]
+        elif any(key.startswith(start) and key.endswith(end)
+                 for start, end_list in keys_part_on_tp_dim_1.items()
+                 for end in end_list):
+            new_ckpt[key] = torch.chunk(tensor, tp_size, dim=1)[cur_tp_idx]
         else:
-            new_ckpt[k] = v
+            new_ckpt[key] = tensor
 
 
 def split_by_tp(ckpts, tp_size, pp_size, keys_part_on_tp_dim_0, keys_part_on_tp_dim_1):
