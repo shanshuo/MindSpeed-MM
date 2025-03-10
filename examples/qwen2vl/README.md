@@ -425,6 +425,109 @@ https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
 
 暂不支持image_path与video_path同时存在，不支持img和video混合推理
 
+## Qwen2VL支持DPO算法
+
+**当前仅支持72B Lora场景，且只支持PP切分功能。**
+
+**环境安装、权重下载、权重转换同微调章节。**
+
+### 1.数据集准备以及处理（以RLHF-V为例）
+
+- 下载数据集：[RLHF-V](https://huggingface.co/datasets/llamafactory/RLHF-V)
+
+- 处理数据集：在examples/qwen2vl/rlhfv_2_sharegpt_demo_format.py文件中，修改下方所述的三个路径、然后运行脚本。   
+
+  ```python
+  # 将其设置为图片保存的路径
+  IMAGE_FOLDER = Path("./data/rlhf_v_images/res")
+  # 将其设置为处理好的json路径
+  OUTPUT_JSON_PATH = "./data/rlhf-v.json"
+  # 将其设置为从huggingface下载的数据集路径
+  DATASET_NAME = "./data/datasets/rlhf-v"  
+  ```
+
+### 2.配置参数
+
+- data_72b_dpo.json
+
+  参数含义同微调章节。
+
+  根据实际情况修改`data.json`中的数据集路径，包括`model_name_or_path`、`dataset_dir`、`dataset`等字段。
+
+  例如：将下载好的权重放在`./ckpt/hf_path/Qwen2-VL-72B-Instruct `, 处理好的数据集放在` ./data/rlhf-v.json ` 。
+
+  则data_72b_dpo.json里的参数设置如下：
+
+  ```json
+      ......
+  	"dataset_param": {
+          "dataset_type": "huggingface",
+          "preprocess_parameters": {
+              "model_name_or_path": "./ckpt/hf_path/Qwen2-VL-72B-Instruct",
+              ......
+          },
+          "basic_parameters": {
+              "template": "qwen2vl",
+              "dataset_dir": "./data",
+              "dataset": "./data/rlhf-v.json",
+              ......
+          },
+        ......
+  ......
+  ```
+
+- model_72b.json
+
+  参数含义同微调章节。
+
+  当前只支持PP功能。以单机8卡为例，需要将model_72b.json里面的`vision_encoder`和`text_decoder`的`pipeline_num_layer`参数调整为：
+
+  ```json
+  {
+  ...
+      "image_encoder": {
+          "vision_encoder": {
+              "model_id": "qwen2vit",
+              "num_layers": 32,
+              
+              ...
+              
+              "pipeline_num_layers": [32, 0, 0, 0, 0, 0, 0, 0],
+              
+              ...
+          },
+  	...
+      },
+      "text_decoder": {
+          "model_id": "qwen2lm",
+          "kv_channels": 128,
+          "num_layers": 80,
+          "pipeline_num_layers": [5, 11, 11, 11, 11, 11, 11, 9],
+          ...
+  }
+  ...
+  ```
+
+- finetune_qwen2vl_72b_dpo.sh
+
+  参数含义、配置项同微调章节。
+
+  下面介绍DPO的参数含义：
+
+  | 参数                | 含义                                                         |
+  | ------------------- | ------------------------------------------------------------ |
+  | dpo-beta            | 正则化参数，平衡奖励得分与KL散度，默认0.1                    |
+  | dpo-loss-type       | 指定loss计算方法，目前支持：sigmoid（dpo原始方案），其他方法例如hinge、ipo因为未验证，所以不支持 |
+  | dpo-label-smoothing | 考虑样本噪声，计算loss时的平滑参数，取值范围0到0.5，默认0.0  |
+  | pref-ftx            | dpo loss中加入sft loss时用的乘数，默认0.0                    |
+  | ref-model           | 参考模型的权重路径。当前不支持断点续训。                     |
+
+### 3.启动DPO任务
+
+```shell
+bash examples/qwen2vl/finetune_qwen2vl_72b_dpo.sh
+```
+
 ## 评测
 
 ### 数据集准备
