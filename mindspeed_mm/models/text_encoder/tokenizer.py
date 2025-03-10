@@ -48,7 +48,7 @@ class Tokenizer:
         try:
             from megatron.training import get_args
             config["trust_remote_code"] = get_args().trust_remote_code
-        except (ImportError, AssertionError):
+        except (ImportError, AssertionError, AttributeError):
             config["trust_remote_code"] = False
         tokenizer_cls = getattr(module, tokenizer_name)
         return tokenizer_cls.from_pretrained(**config)
