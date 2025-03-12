@@ -56,6 +56,24 @@ def replace_state_dict(
     return state_dict
 
 
+def split_qkv_mlp_fused_column_linear(
+        state_dict: Dict[str, Any],
+        single_stream_layers: int,
+        hidden_size: int = 3072,
+):
+    """
+    Split qkv_mlp fused linear in single stream blocks into qkv part and mlp part
+    """
+    for index in range(single_stream_layers):
+        weight1 = state_dict.pop(f"single_blocks.{index}.linear1.weight")
+        bias1 = state_dict.pop(f"single_blocks.{index}.linear1.bias")
+        state_dict[f"single_blocks.{index}.linear1_qkv.weight"] = weight1[:hidden_size * 3]
+        state_dict[f"single_blocks.{index}.linear1_mlp.weight"] = weight1[hidden_size * 3:]
+        state_dict[f"single_blocks.{index}.linear1_qkv.bias"] = bias1[:hidden_size * 3]
+        state_dict[f"single_blocks.{index}.linear1_mlp.bias"] = bias1[hidden_size * 3:]
+    return state_dict
+
+
 def get_tp_split_layer_names(
         double_stream_layers: int = 20,
         single_stream_layers: int = 40,
@@ -111,6 +129,8 @@ def get_tp_split_layer_names(
         column_parallel_linears += [
             f"single_blocks.{index}.modulation.linear.weight",
             f"single_blocks.{index}.modulation.linear.bias",
+            f"single_blocks.{index}.linear1_mlp.weight",
+            f"single_blocks.{index}.linear1_mlp.bias"
         ]
 
         # RowParallelLinear
@@ -118,10 +138,10 @@ def get_tp_split_layer_names(
             f"single_blocks.{index}.linear2.weight"
         ]
 
-        # qkv_mlp_fused_projs
-        qkv_mlp_fused_projs += [
-            f"single_blocks.{index}.linear1.weight",
-            f"single_blocks.{index}.linear1.bias",
+        # qkv_fused_proj
+        qkv_fused_projs += [
+            f"single_blocks.{index}.linear1_qkv.weight",
+            f"single_blocks.{index}.linear1_qkv.bias"
         ]
 
     return (
@@ -332,7 +352,11 @@ def get_args():
     parser.add_argument("--source_path", type=str, default="./transformers/mp_rank_00/model_states.pt", help="Source path of checkpoint")
     parser.add_argument("--target_path", type=str, default="./ckpt/hunyuanvideo/", help="Save path of MM checkpoint")
     parser.add_argument("--tp_size", type=int, default=2, help="Tensor model parallel world size")
-    parser.add_argument("--mode", type=str, default="split", choices=["split", "merge"],
+    parser.add_argument("--double_stream_layers", type=int, default=20)
+    parser.add_argument("--single_stream_layers", type=int, default=40)
+    parser.add_argument("--num_heads", type=int, default=24)
+    parser.add_argument("--head_dim", type=int, default=128)
+    parser.add_argument("--mode", type=str, default="split", choices=["split", "merge"], 
         help="Split mode is used to split the pretrained weights according to tp_size before training, \
         and Merge mode is used to merge weights based on tp_size after training is completed")
 
@@ -349,13 +373,18 @@ if __name__ == "__main__":
         if args.mode == "split":
             source_state_dict = torch.load(args.source_path, map_location='cpu')['module']
             state_dict = replace_state_dict(source_state_dict, convert_mapping=DIT_CONVERT_MAPPING)
+            state_dict = split_qkv_mlp_fused_column_linear(
+                state_dict, 
+                single_stream_layers=args.single_stream_layers, 
+                hidden_size=args.num_heads * args.head_dim
+            )
             state_dicts = split_by_tp(
                 state_dict,
                 tp_size=args.tp_size,
-                double_stream_layers=20,
-                single_stream_layers=40,
-                num_heads=24,
-                head_dim=128
+                double_stream_layers=args.double_stream_layers,
+                single_stream_layers=args.single_stream_layers,
+                num_heads=args.num_heads,
+                head_dim=args.head_dim
             )
             save(state_dicts, args.target_path)
         elif args.mode == "merge":
@@ -363,9 +392,9 @@ if __name__ == "__main__":
             merged_state_dict = merge_by_tp(
                 tp_state_dicts,
                 tp_size=args.tp_size,
-                double_stream_layers=20,
-                single_stream_layers=40,
-                num_heads=24,
-                head_dim=128
+                double_stream_layers=args.double_stream_layers,
+                single_stream_layers=args.single_stream_layers,
+                num_heads=args.num_heads,
+                head_dim=args.head_dim
             )
             save([merged_state_dict], args.target_path)

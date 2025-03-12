@@ -11,6 +11,12 @@ from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
 from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embedding
 
+from mindspeed.core.context_parallel.unaligned_cp.mapping import (
+    split_forward_gather_backward,
+    gather_forward_split_backward,
+    all_to_all
+)
+
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.embeddings import (
     PatchEmbed3D,
@@ -22,6 +28,7 @@ from mindspeed_mm.models.common.embeddings import (
 from mindspeed_mm.models.common.blocks import MLP, ModulateDiT
 from mindspeed_mm.models.common.activations import get_activation_layer
 from mindspeed_mm.models.common.normalize import normalize
+from mindspeed_mm.models.common.attention import do_npu_fusion_attention
 
 
 def _get_cu_seqlens(text_mask, img_len):
@@ -62,8 +69,8 @@ class HunyuanVideoDiT(MultiModalModule):
             mlp_act_type: str = "gelu_tanh",
             mm_double_blocks_depth: int = 20,
             mm_single_blocks_depth: int = 40,
-            double_stream_recompute_layers: Optional[int] = None,
-            single_stream_recompute_layers: Optional[int] = None,
+            double_stream_full_recompute_layers: Optional[int] = None,
+            single_stream_full_recompute_layers: Optional[int] = None,
             rope_dim_list: Tuple[int] = (16, 56, 56),
             qkv_bias: bool = True,
             qk_norm: bool = True,
@@ -75,6 +82,7 @@ class HunyuanVideoDiT(MultiModalModule):
             use_attention_mask: bool = True,
             rope_theta: int = 256,
             embeded_guidance_scale: float = 6.016,
+            attention_async_offload: bool = False,
             **kwargs
         ):
         super().__init__(config=None)
@@ -95,13 +103,17 @@ class HunyuanVideoDiT(MultiModalModule):
         self.heads_num = num_heads
         self.embeded_guidance_scale = embeded_guidance_scale
 
+        self.attention_async_offload = attention_async_offload
+        self.h2d_stream = torch_npu.npu.Stream() if attention_async_offload else None
+        self.d2h_stream = torch_npu.npu.Stream() if attention_async_offload else None
+
         args = get_args()
         config = core_transformer_config_from_args(args)
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
-        self.double_stream_recompute_layers = double_stream_recompute_layers if double_stream_recompute_layers is not None else mm_double_blocks_depth
-        self.single_stream_recompute_layers = single_stream_recompute_layers if single_stream_recompute_layers is not None else mm_single_blocks_depth
+        self.double_stream_full_recompute_layers = double_stream_full_recompute_layers if double_stream_full_recompute_layers is not None else mm_double_blocks_depth
+        self.single_stream_full_recompute_layers = single_stream_full_recompute_layers if single_stream_full_recompute_layers is not None else mm_single_blocks_depth
         if self.recompute_granularity == "selective":
             raise ValueError("recompute_granularity does not support selective mode in HunyuanvideoDiT")
         if self.distribute_saved_activations:
@@ -172,9 +184,14 @@ class HunyuanVideoDiT(MultiModalModule):
                 mlp_act_type=mlp_act_type,
                 qk_norm=qk_norm,
                 qk_norm_type=qk_norm_type,
-                qkv_bias=qkv_bias
+                qkv_bias=qkv_bias,
+                layer_index=layer_index,
+                num_layers=mm_double_blocks_depth + mm_single_blocks_depth,
+                attention_async_offload=self.attention_async_offload,
+                h2d_stream=self.h2d_stream,
+                d2h_stream=self.d2h_stream
             )
-            for _ in range(mm_double_blocks_depth)
+            for layer_index in range(mm_double_blocks_depth)
         ])
 
         # single blocks
@@ -185,9 +202,14 @@ class HunyuanVideoDiT(MultiModalModule):
                 mlp_width_ratio=mlp_width_ratio,
                 mlp_act_type=mlp_act_type,
                 qk_norm=qk_norm,
-                qk_norm_type=qk_norm_type
+                qk_norm_type=qk_norm_type,
+                layer_index=layer_index + mm_double_blocks_depth,
+                num_layers=mm_double_blocks_depth + mm_single_blocks_depth,
+                attention_async_offload=self.attention_async_offload,
+                h2d_stream=self.h2d_stream,
+                d2h_stream=self.d2h_stream
             )
-            for _ in range(mm_single_blocks_depth)
+            for layer_index in range(mm_single_blocks_depth)
         ])
 
         if self.enable_tensor_parallel:
@@ -278,10 +300,10 @@ class HunyuanVideoDiT(MultiModalModule):
         "Forward method with activation checkpointing."
         if dit_type == "double_stream":
             num_layers = len(self.double_blocks)
-            recompute_layers = self.double_stream_recompute_layers
+            recompute_layers = self.double_stream_full_recompute_layers
         elif dit_type == "single_stream":
             num_layers = len(self.single_blocks)
-            recompute_layers = self.single_stream_recompute_layers
+            recompute_layers = self.single_stream_full_recompute_layers
         else:
             raise NotImplementedError(f"dit type: {dit_type} is not implemented! ")
         
@@ -321,7 +343,7 @@ class HunyuanVideoDiT(MultiModalModule):
                     )
                 else:
                     block = self._get_block(dit_type, _layer_num)
-                    img_and_txt = block(*img_and_txt, *args)
+                    img_and_txt = block(*img_and_txt, *args, block_full_attention=False)
         else:
             raise ValueError(f"Invalid activation recompute method {self.recompute_method}.")
         
@@ -409,10 +431,6 @@ class HunyuanVideoDiT(MultiModalModule):
 
         # cp split
         if self.context_parallel_algo is not None:
-            from mindspeed.core.context_parallel.unaligned_cp.mapping import (
-                split_forward_gather_backward,
-                gather_forward_split_backward,
-            )
             img = split_forward_gather_backward(
                 img, 
                 mpu.get_context_parallel_group(),
@@ -568,7 +586,12 @@ class MMDoubleStreamBlock(nn.Module):
             mlp_act_type: str = "gelu_tanh",
             qk_norm: bool = True,
             qk_norm_type: str = "rmsnorm",
-            qkv_bias: bool = False
+            qkv_bias: bool = False,
+            layer_index: int = 0,
+            num_layers: int = 60,
+            attention_async_offload: bool = False,
+            h2d_stream: Optional[torch_npu.npu.Stream] = None,
+            d2h_stream: Optional[torch_npu.npu.Stream] = None
     ):
         super().__init__()
 
@@ -577,12 +600,19 @@ class MMDoubleStreamBlock(nn.Module):
         self.head_dim = head_dim
         mlp_hidden_dim = int(hidden_size * mlp_width_ratio)
 
+        self.layer_index = layer_index
+        self.num_layers = num_layers
+        self.attention_async_offload = attention_async_offload
+        self.h2d_stream = h2d_stream
+        self.d2h_stream = d2h_stream
+
         # context parallel setting
         args = get_args()
         config = core_transformer_config_from_args(args)
         self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
         if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
             raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
+        self.distribute_saved_activations = args.distribute_saved_activations
         self.enable_tensor_parallel = mpu.get_tensor_model_parallel_world_size() > 1
         self.sequence_parallel = args.sequence_parallel and self.enable_tensor_parallel
         self.num_attention_heads_per_partition = self.heads_num // mpu.get_tensor_model_parallel_world_size()
@@ -737,6 +767,77 @@ class MMDoubleStreamBlock(nn.Module):
             max_seqlen_q: Optional[torch.Tensor] = None,
             max_seqlen_kv: Optional[torch.Tensor] = None,
             freqs_cos: Optional[torch.Tensor] = None,
+            freqs_sin: Optional[torch.Tensor] = None,
+            block_full_attention: bool = True
+    ):
+        if block_full_attention:
+            (
+                img_q, img_k, img_v,
+                txt_q, txt_k, txt_v,
+                img_mod1_gate, txt_mod1_gate, img_mod2_gate, txt_mod2_gate,
+                img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift
+            ) = self._before_attention(img, txt, vec, freqs_cos, freqs_sin)
+        else:
+            (
+                img_q, img_k, img_v,
+                txt_q, txt_k, txt_v,
+                img_mod1_gate, txt_mod1_gate, img_mod2_gate, txt_mod2_gate,
+                img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift
+            ) = tensor_parallel.checkpoint(
+                self._before_attention,
+                self.distribute_saved_activations,
+                img,
+                txt,
+                vec,
+                freqs_cos,
+                freqs_sin
+            )
+
+        # Run actual attention
+        attn = parallel_attention(
+            (img_q, txt_q),
+            (img_k, txt_k),
+            (img_v, txt_v),
+            heads_num=self.num_attention_heads_per_partition,
+            head_dim=self.head_dim,
+            attn_mask=None,
+            actual_seq_qlen=cu_seqlens_q,
+            actual_seq_kvlen=cu_seqlens_kv,
+            context_parallel_algo=self.context_parallel_algo,
+            h2d_stream=self.h2d_stream,
+            d2h_stream=self.d2h_stream,
+            layer_index=self.layer_index,
+            num_layers=self.num_layers,
+            attention_async_offload=(not block_full_attention) and self.attention_async_offload
+        )
+
+        if block_full_attention:
+            img, txt = self._after_attention(
+                attn, img, txt,
+                img_mod1_gate, txt_mod1_gate,
+                img_mod2_gate, txt_mod2_gate,
+                img_mod2_scale, txt_mod2_scale,
+                img_mod2_shift, txt_mod2_shift
+            )
+        else:
+            img, txt = tensor_parallel.checkpoint(
+                self._after_attention,
+                self.distribute_saved_activations,
+                attn, img, txt,
+                img_mod1_gate, txt_mod1_gate,
+                img_mod2_gate, txt_mod2_gate,
+                img_mod2_scale, txt_mod2_scale,
+                img_mod2_shift, txt_mod2_shift
+            )
+        
+        return img, txt
+        
+    def _before_attention(
+            self,
+            img: torch.Tensor,
+            txt: torch.Tensor,
+            vec: torch.Tensor,
+            freqs_cos: Optional[torch.Tensor] = None,
             freqs_sin: Optional[torch.Tensor] = None
     ):
         (
@@ -793,20 +894,26 @@ class MMDoubleStreamBlock(nn.Module):
 
         txt_q = self.txt_attn_q_norm(txt_q)
         txt_k = self.txt_attn_k_norm(txt_k)
-
-        # Run actual attention
-        attn = parallel_attention(
-            (img_q, txt_q),
-            (img_k, txt_k),
-            (img_v, txt_v),
-            heads_num=self.num_attention_heads_per_partition,
-            head_dim=self.head_dim,
-            attn_mask=None,
-            actual_seq_qlen=cu_seqlens_q,
-            actual_seq_kvlen=cu_seqlens_kv,
-            context_parallel_algo=self.context_parallel_algo,
+    
+        return (
+            img_q, img_k, img_v,
+            txt_q, txt_k, txt_v,
+            img_mod1_gate, txt_mod1_gate, img_mod2_gate, txt_mod2_gate,
+            img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift
         )
 
+    def _after_attention(
+            self, 
+            attn, img, txt,
+            img_mod1_gate, txt_mod1_gate,
+            img_mod2_gate, txt_mod2_gate,
+            img_mod2_scale, txt_mod2_scale,
+            img_mod2_shift, txt_mod2_shift
+    ):
+        if self.sequence_parallel:
+            img_seq_len = img.shape[0] * mpu.get_tensor_model_parallel_world_size()
+        else:
+            img_seq_len = img.shape[1]
         img_attn, txt_attn = attn[:, :img_seq_len], attn[:, img_seq_len:]
 
         # Calculate the img blocks
@@ -823,7 +930,6 @@ class MMDoubleStreamBlock(nn.Module):
             ) * img_mod2_gate
         
         # Calculate the txt blocks
-
         if self.enable_tensor_parallel:
             txt = txt + self.txt_attn_proj(txt_attn)[0] * txt_mod1_gate
         else:
@@ -834,7 +940,7 @@ class MMDoubleStreamBlock(nn.Module):
             ) * txt_mod2_gate
         
         return img, txt
-    
+
 
 class MMSingleStreamBlock(nn.Module):
     """
@@ -848,7 +954,12 @@ class MMSingleStreamBlock(nn.Module):
             mlp_act_type: str = "gelu_tanh",
             qk_norm: bool = True,
             qk_norm_type: str = "rmsnorm",
-            qk_scale: float = None
+            qk_scale: float = None,
+            layer_index: int = 0,
+            num_layers: int = 60,
+            attention_async_offload: bool = False,
+            h2d_stream: Optional[torch_npu.npu.Stream] = None,
+            d2h_stream: Optional[torch_npu.npu.Stream] = None
     ):
         super().__init__()
 
@@ -860,12 +971,19 @@ class MMSingleStreamBlock(nn.Module):
         self.mlp_hidden_dim = mlp_hidden_dim
         self.scale = qk_scale or head_dim ** -0.5
 
+        self.layer_index = layer_index
+        self.num_layers = num_layers
+        self.attention_async_offload = attention_async_offload
+        self.h2d_stream = h2d_stream
+        self.d2h_stream = d2h_stream
+
         # context parallel setting
         args = get_args()
         config = core_transformer_config_from_args(args)
         self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
         if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
             raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
+        self.distribute_saved_activations = args.distribute_saved_activations
         self.enable_tensor_parallel = mpu.get_tensor_model_parallel_world_size() > 1
         self.tp_size = mpu.get_tensor_model_parallel_world_size()
         self.sequence_parallel = args.sequence_parallel and self.enable_tensor_parallel
@@ -882,16 +1000,16 @@ class MMSingleStreamBlock(nn.Module):
         self.pre_norm = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
         
         if self.enable_tensor_parallel:
-            self.linear1 = tensor_parallel.ColumnParallelLinear(
+            self.linear1_qkv = tensor_parallel.ColumnParallelLinear(
                 hidden_size,
-                hidden_size * 3 + mlp_hidden_dim,
+                hidden_size * 3,
                 config=config,
                 init_method=config.init_method,
                 gather_output=False,
                 bias=True
             )
         else:
-            self.linear1 = nn.Linear(hidden_size, hidden_size * 3 + mlp_hidden_dim)
+            self.linear1_qkv = nn.Linear(hidden_size, hidden_size * 3)
         
         self.q_norm = (
             normalize(head_dim, affine=True, eps=1e-6, norm_type=qk_norm_type)
@@ -906,6 +1024,14 @@ class MMSingleStreamBlock(nn.Module):
         )
 
         if self.enable_tensor_parallel:
+            self.linear1_mlp = tensor_parallel.ColumnParallelLinear(
+                hidden_size,
+                mlp_hidden_dim,
+                config=config,
+                init_method=config.init_method,
+                gather_output=False,
+                bias=True
+            )
             self.linear2 = tensor_parallel.RowParallelLinear(
                 hidden_size + mlp_hidden_dim,
                 hidden_size,
@@ -916,6 +1042,7 @@ class MMSingleStreamBlock(nn.Module):
                 bias=True
             )
         else:
+            self.linear1_mlp = nn.Linear(hidden_size, mlp_hidden_dim)
             self.linear2 = nn.Linear(hidden_size + mlp_hidden_dim, hidden_size)
 
         for param in self.q_norm.parameters():
@@ -937,40 +1064,84 @@ class MMSingleStreamBlock(nn.Module):
             max_seqlen_q: Optional[torch.Tensor] = None,
             max_seqlen_kv: Optional[torch.Tensor] = None,
             freqs_cos: Optional[torch.Tensor] = None,
-            freqs_sin: Optional[torch.Tensor] = None
+            freqs_sin: Optional[torch.Tensor] = None,
+            block_full_attention: bool = True
+    ):
+        if block_full_attention:
+            mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v = self._before_attention(
+                x,
+                vec,
+                img_len,
+                freqs_cos,
+                freqs_sin,
+                cu_seqlens_q
+            )
+        else:
+            mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v = tensor_parallel.checkpoint(
+                self._before_attention,
+                self.distribute_saved_activations,
+                x,
+                vec,
+                img_len,
+                freqs_cos,
+                freqs_sin,
+                cu_seqlens_q
+            )
+
+        attn = parallel_attention(
+            (img_q, txt_q),
+            (img_k, txt_k),
+            (img_v, txt_v),
+            heads_num=self.num_attention_heads_per_partition,
+            head_dim=self.head_dim,
+            attn_mask=None,
+            actual_seq_qlen=cu_seqlens_q,
+            actual_seq_kvlen=cu_seqlens_kv,
+            context_parallel_algo=self.context_parallel_algo,
+            h2d_stream=self.h2d_stream,
+            d2h_stream=self.d2h_stream,
+            layer_index=self.layer_index,
+            num_layers=self.num_layers,
+            attention_async_offload=(not block_full_attention) and self.attention_async_offload
+        )
+
+        if block_full_attention:
+            output = self._after_attention(attn, x, x_mod, img_len, mod_gate)
+        else:
+            output = tensor_parallel.checkpoint(
+                self._after_attention,
+                self.distribute_saved_activations,
+                attn,
+                x,
+                x_mod,
+                img_len,
+                mod_gate
+            )
+        
+        return output
+    
+    def _before_attention(
+            self,
+            x,
+            vec,
+            img_len,
+            freqs_cos,
+            freqs_sin,
+            cu_seqlens_q
     ):
         mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
         x_mod = self.pre_norm(x) * (1 + mod_scale) + mod_shift
 
         if self.enable_tensor_parallel:
             if self.sequence_parallel:
-                img_qkv, img_mlp = torch.split(
-                    self.linear1(x_mod[:img_len // self.tp_size])[0],
-                    [3 * self.hidden_size // self.tp_size, self.mlp_hidden_dim // self.tp_size],
-                    dim=-1
-                )
-                # disable txt_seq sp
-                self.linear1.sequence_parallel = False
-                txt_qkv, txt_mlp = torch.split(
-                    self.linear1(x_mod[img_len // self.tp_size:])[0],
-                    [3 * self.hidden_size // self.tp_size, self.mlp_hidden_dim // self.tp_size],
-                    dim=-1
-                )
-                self.linear1.sequence_parallel = self.sequence_parallel
+                img_qkv = self.linear1_qkv(x_mod[:img_len // self.tp_size])[0]
+                self.linear1_qkv.sequence_parallel = False
+                txt_qkv = self.linear1_qkv(x_mod[img_len // self.tp_size:])[0]
+                self.linear1_qkv.sequence_parallel = True
                 qkv = torch.cat([img_qkv, txt_qkv], dim=0)
                 qkv = qkv.transpose(0, 1) # s b h -> b s h
-            else:
-                qkv, mlp = torch.split(
-                    self.linear1(x_mod)[0],
-                    [3 * self.hidden_size // self.tp_size, self.mlp_hidden_dim // self.tp_size],
-                    dim=-1
-                )
         else:
-            qkv, mlp = torch.split(
-                self.linear1(x_mod), 
-                [3 * self.hidden_size, self.mlp_hidden_dim], 
-                dim=-1
-            )
+            qkv = self.linear1_qkv(x_mod)
 
         q, k, v = rearrange(qkv, "B L (K H D) -> K B L H D", K=3, H=self.num_attention_heads_per_partition)
 
@@ -992,23 +1163,31 @@ class MMSingleStreamBlock(nn.Module):
         
         img_v = v[:, :img_len, :, :]
         txt_v = v[:, img_len:, :, :]
-        attn = parallel_attention(
-            (img_q, txt_q),
-            (img_k, txt_k),
-            (img_v, txt_v),
-            heads_num=self.num_attention_heads_per_partition,
-            head_dim=self.head_dim,
-            attn_mask=None,
-            actual_seq_qlen=cu_seqlens_q,
-            actual_seq_kvlen=cu_seqlens_kv,
-            context_parallel_algo=self.context_parallel_algo
-        )
 
+        return mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v
+
+    def _after_attention(
+            self,
+            attn: torch.Tensor,
+            x: torch.Tensor,
+            x_mod: torch.Tensor,
+            img_len: torch.Tensor,
+            mod_gate: torch.Tensor
+    ):
         if self.enable_tensor_parallel:
             if self.sequence_parallel:
                 attn = attn.transpose(0, 1).contiguous() # b s h -> s b h
                 img_attn = attn[:img_len]
                 txt_attn = attn[img_len:]
+                
+                img_mod = x_mod[:img_len // mpu.get_tensor_model_parallel_world_size()] # s b h
+                txt_mod = x_mod[img_len // mpu.get_tensor_model_parallel_world_size():]
+
+                img_mlp = self.linear1_mlp(img_mod)[0]
+                self.linear1_mlp.sequence_parallel = False
+                txt_mlp = self.linear1_mlp(txt_mod)[0]
+                self.linear1_mlp.sequence_parallel = True
+
                 img_output = self.linear2(torch.cat((img_attn, self.mlp_act(img_mlp)), 2))[0]
 
                 # disable txt_seq sequence_parallel
@@ -1016,13 +1195,16 @@ class MMSingleStreamBlock(nn.Module):
                 txt_output = self.linear2(torch.cat((txt_attn, self.mlp_act(txt_mlp)), 2))[0]
                 self.linear2.sequence_parallel = True
 
-                output = torch.cat([img_output, txt_output], 0)
+                output = torch.cat([img_output, txt_output], dim=0)
             else:
+                mlp = self.linear1_mlp(x_mod)[0]
                 output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))[0]
         else:
+            mlp = self.linear1_mlp(x_mod)
             output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
+        
         return (x + output * mod_gate, )
-    
+
 
 def parallel_attention(
     q: Tuple[torch.Tensor, torch.Tensor],
@@ -1034,6 +1216,11 @@ def parallel_attention(
     actual_seq_qlen: Optional[torch.Tensor] = None,
     actual_seq_kvlen: Optional[torch.Tensor] = None,
     context_parallel_algo: str = None,
+    h2d_stream: Optional[torch_npu.npu.Stream] = None,
+    d2h_stream: Optional[torch_npu.npu.Stream] = None,
+    layer_index: int = 0,
+    num_layers: int = 0,
+    attention_async_offload: bool = False
 ):
     img_q, txt_q = q
     img_k, txt_k = k
@@ -1042,11 +1229,6 @@ def parallel_attention(
     # input: b s n d, output: b s h
 
     if context_parallel_algo == "ulysses_cp_algo":
-        from mindspeed.core.context_parallel.unaligned_cp.mapping import (
-            split_forward_gather_backward,
-            gather_forward_split_backward,
-            all_to_all
-        )
         img_q = all_to_all(img_q, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)
         img_k = all_to_all(img_k, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)
         img_v = all_to_all(img_v, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=1)
@@ -1056,15 +1238,21 @@ def parallel_attention(
             return txt
         
         if bs == 1:
-            attn = torch_npu.npu_fusion_attention(
-                torch.cat([img_q, shrink_head(txt_q, 2)], dim=1),
-                torch.cat([img_k, shrink_head(txt_k, 2)], dim=1),
-                torch.cat([img_v, shrink_head(txt_v, 2)], dim=1),
+            attn = do_npu_fusion_attention(
+                q=torch.cat([img_q, shrink_head(txt_q, 2)], dim=1).transpose(1, 2).contiguous(),
+                k=torch.cat([img_k, shrink_head(txt_k, 2)], dim=1).transpose(1, 2).contiguous(),
+                v=torch.cat([img_v, shrink_head(txt_v, 2)], dim=1).transpose(1, 2).contiguous(),
                 head_num=heads_num // mpu.get_context_parallel_world_size(),
-                atten_mask=attn_mask,
-                input_layout="BSND",
-                scale=1 / math.sqrt(head_dim)
-            )[0]
+                attn_mask=attn_mask,
+                layout="BNSD",
+                softmax_scale=1 / math.sqrt(head_dim),
+                async_offload=attention_async_offload,
+                block_idx=layer_index,
+                depth=num_layers,
+                h2d_stream=h2d_stream,
+                d2h_stream=d2h_stream
+            )
+            attn = attn.transpose(1, 2).contiguous()
             img_attn = attn[:, :img_seq_len * mpu.get_context_parallel_world_size()] # b img_seq sub_n d
             txt_attn = attn[:, img_seq_len * mpu.get_context_parallel_world_size():] # b txt_seq sub_n d
         else:
@@ -1079,31 +1267,42 @@ def parallel_attention(
         k = torch.cat((img_k, txt_k), dim=1)
         v = torch.cat((img_v, txt_v), dim=1)
         if bs == 1:
-            attn = torch_npu.npu_fusion_attention(
-                q,
-                k,
-                v,
+            attn = do_npu_fusion_attention(
+                q=q.transpose(1, 2).contiguous(),
+                k=k.transpose(1, 2).contiguous(),
+                v=v.transpose(1, 2).contiguous(),
                 head_num=heads_num,
-                atten_mask=attn_mask,
-                input_layout="BSND",
-                scale=1 / math.sqrt(head_dim),
-            )[0]
+                attn_mask=attn_mask,
+                layout="BNSD",
+                softmax_scale=1 / math.sqrt(head_dim),
+                async_offload=attention_async_offload,
+                block_idx=layer_index,
+                depth=num_layers,
+                h2d_stream=h2d_stream,
+                d2h_stream=d2h_stream
+            )
+            attn = attn.transpose(1, 2).contiguous()
             attn = attn.view(bs, -1, heads_num * head_dim)
         else:
             q = q.view(-1, heads_num * head_dim)
             k = k.view(-1, heads_num * head_dim)
             v = v.view(-1, heads_num * head_dim)
-            attn = torch_npu.npu_fusion_attention(
-                q,
-                k,
-                v,
+            attn = do_npu_fusion_attention(
+                q=q,
+                k=k,
+                v=v,
                 head_num=heads_num,
-                atten_mask=attn_mask,
-                input_layout="TND",
-                scale=1 / math.sqrt(head_dim),
+                attn_mask=attn_mask,
+                layout="TND",
                 actual_seq_qlen=actual_seq_qlen.tolist(),
-                actual_seq_kvlen=actual_seq_kvlen.tolist()
-            )[0]
+                actual_seq_kvlen=actual_seq_kvlen.tolist(),
+                softmax_scale=1 / math.sqrt(head_dim),
+                async_offload=attention_async_offload,
+                block_idx=layer_index,
+                depth=num_layers,
+                h2d_stream=h2d_stream,
+                d2h_stream=d2h_stream
+            )
             attn = attn.view(bs, -1, heads_num * head_dim)
 
     return attn

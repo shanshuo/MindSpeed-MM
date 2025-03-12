@@ -306,6 +306,14 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
     python <your_mindspeed_path>/mindspeed/core/distributed/layerzero/state/scripts/convert_to_megatron.py --input_folder ./save_ckpt/hunyuanvideo/iter_000xxxx/ --output_folder ./save_ckpt/hunyuanvideo_megatron_ckpt/iter_000xxxx/ --prefix predictor
     ```
 
++ 选择性重计算 + FA激活值offload
+  
+  - 如果显存比较充裕，可以开启选择性重计算（FA不进行重计算）以提高吞吐，建议同步开启FA激活值offload，将FA的激活值异步卸载至CPU
+  
+  - 在`examples/hunyuanvideo/model_hunyuanvideo.json`中，`attention_async_offload`表示是否开启FA激活值offload，默认开启
+
+  - 在`examples/hunyuanvideo/model_hunyuanvideo.json`中，`double_stream_full_recompute_layers`和`single_stream_full_recompute_layers`表示该模型的double_stream_block和single_stream_block进行全重计算的层数，可以逐步减小这两个参数，直至显存打满
+
 #### 启动训练
 
 ```bash

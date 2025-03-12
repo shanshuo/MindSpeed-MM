@@ -34,6 +34,7 @@ from mindspeed_mm.models.common.normalize import normalize
 from mindspeed_mm.models.common.embeddings.rope import RoPE3D, PositionGetter3D
 from mindspeed_mm.models.common.conv import CausalConv3d, WfCausalConv3d
 from mindspeed_mm.models.common.linear import MatmulAddLinear
+from mindspeed_mm.utils.async_offload import async_save_on_cpu
 
 # TODO: 使用megatron通信接口替换
 from .communications import (
@@ -72,6 +73,59 @@ def do_ring_context_parallel(q, k, v, head_num, softmax_scale, attn_mask, dropou
 
     output = ringattn_context_parallel(q, k, v, head_num, cp_para, softmax_scale, attn_mask, dropout_p)
 
+    return output
+
+
+def do_npu_fusion_attention(
+        q, k, v, 
+        head_num, 
+        softmax_scale, 
+        layout="BNSD", 
+        attn_mask=None,
+        actual_seq_qlen=None,
+        actual_seq_kvlen=None, 
+        dropout_p=0., 
+        pse=None, 
+        sparse_mode=0,
+        async_offload=False,
+        block_idx=0,
+        depth=0,
+        h2d_stream=None,
+        d2h_stream=None
+    ):
+    if async_offload:
+        with async_save_on_cpu(
+            h2d_stream=h2d_stream,
+            d2h_stream=d2h_stream,
+            block_idx=block_idx,
+            depth=depth,
+            custom_check_fn=lambda x: x.storage().size() >= q.storage().size()
+        ):
+            output = torch_npu.npu_fusion_attention(
+                q, k, v, head_num, layout,
+                pse=pse,
+                padding_mask=None,
+                atten_mask=attn_mask,
+                actual_seq_qlen=actual_seq_qlen,
+                actual_seq_kvlen=actual_seq_kvlen,
+                scale=softmax_scale,
+                keep_prob=1 - dropout_p,
+                inner_precise=0,
+                sparse_mode=sparse_mode
+            )[0]
+    else:
+        output = torch_npu.npu_fusion_attention(
+            q, k, v, head_num, layout,
+            pse=pse,
+            padding_mask=None,
+            atten_mask=attn_mask,
+            actual_seq_qlen=actual_seq_qlen,
+            actual_seq_kvlen=actual_seq_kvlen,
+            scale=softmax_scale,
+            keep_prob=1 - dropout_p,
+            inner_precise=0,
+            sparse_mode=sparse_mode
+        )[0]
     return output
 
 
