@@ -11,4 +11,6 @@ eval_impl_dict = {"mmmu_dev_val": MMMUEvalImpl, "ai2d_test": AI2DEvalImpl, "char
 eval_pipeline_dict = {"llava_v1.5_7b": vlm_pipeline_dict["LlavaPipeline"],
                       "internvl2_8b": vlm_pipeline_dict["InternVLPipeline"],
                       "qwen2_vl_7b": vlm_pipeline_dict["Qwen2VlPipeline"],
-                      "cogvideox-1.5": sora_pipeline_dict["CogVideoXPipeline"]}
+                      "cogvideox-1.5": sora_pipeline_dict["CogVideoXPipeline"],
+                      "OpenSoraPlan-1.3": sora_pipeline_dict["OpenSoraPlanPipeline"],
+                      }

@@ -6,6 +6,7 @@ from megatron.training.initialize import initialize_megatron
 
 from mindspeed_mm import PatchesManager
 from mindspeed_mm import Tokenizer
+from mindspeed_mm.arguments import extra_args_provider_decorator
 from mindspeed_mm.configs.config import merge_mm_args
 from mindspeed_mm.configs.config import mm_extra_args_provider
 from mindspeed_mm.models.ae import AEModel
@@ -42,7 +43,7 @@ def init_eval_pipline(args):
 
 
 def main():
-    initialize_megatron(extra_args_provider=mm_extra_args_provider)
+    initialize_megatron(extra_args_provider=extra_args_provider_decorator(mm_extra_args_provider), args_defaults={})
     PatchesManager.apply_patches_from_config()
     args = get_args()
     merge_mm_args(args)

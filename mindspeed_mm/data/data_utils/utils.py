@@ -108,6 +108,11 @@ class DataFileReader:
         elif data_path.endswith(".parquat"):
             data_out = pd.read_parquat(data_path)
             return data_out.to_dict("records")
+        elif data_path.endswith(".txt"):
+            with open(data_path, 'r') as f:
+                data_out = f.readlines()
+            data_out = [data.strip() for data in data_out]
+            return data_out
         else:
             raise NotImplementedError(f"Unsupported file format: {data_path}")
 

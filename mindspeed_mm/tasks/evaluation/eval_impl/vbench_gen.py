@@ -142,7 +142,7 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
             kwargs = {"sb_clip2clip_feat_extractor": 'dinov2', "bg_clip2clip_feat_extractor": "dreamsim",
                       "clip_length_config": "clip_length_mix.yaml", "w_inclip": 1.0, "w_clip2clip": 0.0,
                       "use_semantic_splitting": False, "slow_fast_eval_config": self.slow_fast_eval_config,
-                      "dev_flag": True, "num_of_samples_per_prompt": 5, "static_filter_flag": False}
+                      "dev_flag": True, "num_of_samples_per_prompt": 5, "static_filter_flag": True}
             self.vbench.evaluate(
                 videos_path=self.videos_path,
                 name=result_file_name,
@@ -225,8 +225,8 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
                 image = safe_load_image(image_path[0].strip())
 
             kwargs = {}
-            if args.pipeline_class == "OpenSoraPlanPipeline":
-                kwargs.update({"conditional_pixel_values_path": image_path,
+            if args.pipeline_class == "OpenSoraPlanPipeline" and image_path:
+                kwargs.update({"conditional_pixel_values_path": [[path] for path in image_path],
                             "mask_type": mask_type,
                             "crop_for_hw": crop_for_hw,
                             "max_hxw": max_hxw})
@@ -246,7 +246,7 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
         os.makedirs(save_path, exist_ok=True)
         if isinstance(videos, (list, tuple)) or videos.ndim == 5:  # [b, t, h, w, c]
             for i, video in enumerate(videos):
-                save_path_i = os.path.join(save_path, f"{save_names[0]}.mp4")
+                save_path_i = os.path.join(save_path, f"{save_names[i]}.mp4")
                 imageio.mimwrite(save_path_i, video, fps=fps, quality=6)
         elif videos.ndim == 4:
             save_path = os.path.join(save_path, f"{save_names[0]}.mp4")
