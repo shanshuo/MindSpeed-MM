@@ -1,10 +1,10 @@
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
 import torch
-
 from megatron.core.transformer.mlp import MLP, MLPSubmodules
 from megatron.core.transformer.spec_utils import build_module
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import make_viewless_tensor
+from mindspeed.core.transformer.custom_layers.transformer_engine import PTNorm
 
 from mindspeed_mm.models.common.module import MultiModalModule
 
@@ -51,7 +51,7 @@ class MultimodalProjector(MultiModalModule):
             )
         elif self.projector_type == "lnmlp":
             self.ffn_hidden_size = config.ffn_hidden_size
-            self.layernorm = torch.nn.LayerNorm(config.input_size, eps=1e-6)
+            self.layernorm = PTNorm(config=config, hidden_size=config.input_size, eps=config.layernorm_epsilon)
             self.encoder = MLP(
                 config=config,
                 submodules=submodules,

@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 
 import jsonargparse
 
-from checkpoint import qwen2vl_hf_to_mm, internvl2_hf_to_mm
+from checkpoint import qwen2vl_hf_to_mm, internvl2_hf_to_mm, qwen2_5_vl_hf_to_mm
 from checkpoint.utils import ConvertHFConfig, ConvertResplitConfig, ConvertMMConfig, ConvertVppMMConfig, ConvertVppHFConfig
 
 # 安全权限，当前用户读写权限，用户组内可读权限，其他用户无权限
@@ -68,6 +68,28 @@ class Qwen2VLConverter(Converter):
         qwen2vl_resplit.main(cfg)
         # 安全管控权限
         os.chmod(cfg.target_dir, SAFE_MODE)
+
+
+class Qwen2_5_VLConverter(Converter):
+    """Qwen2.5VL模型转换工具"""
+
+    @staticmethod
+    def hf_to_mm(cfg: ConvertMMConfig):
+        """huggingface模型转换mindspeed-mm模型权重"""
+        qwen2_5_vl_hf_to_mm.main(cfg)
+        # 安全管控权限
+        os.chmod(cfg.mm_dir, SAFE_MODE)
+
+    @staticmethod
+    def mm_to_hf(cfg: ConvertHFConfig):
+        """mindspeed-mm模型转换huggingface模型权重"""
+        pass
+
+
+    @staticmethod
+    def resplit(cfg: ConvertResplitConfig):
+        """mindspeed-mm模型权重重新切分"""
+        pass
 
 
 class InternVLConverter(Converter):

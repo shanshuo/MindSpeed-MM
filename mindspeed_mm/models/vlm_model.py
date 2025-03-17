@@ -9,7 +9,8 @@ from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
 
-from mindspeed_mm.models.common.module_spec.get_layer_spec import get_vit_layer_spec, get_llm_layer_spec, get_projector_layer_spec
+from mindspeed_mm.models.common.module_spec.get_layer_spec import get_vit_layer_spec, get_llm_layer_spec, \
+    get_projector_layer_spec
 from mindspeed_mm.models.vision.vision_model import VisionModel
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.text_encoder.text_encoder import TextEncoder
@@ -259,7 +260,8 @@ class VLMModel(MultiModalModule):
             rope_deltas: Optional[torch.LongTensor] = None,
             image_flags: Optional[torch.LongTensor] = None,
             target_size: Optional[torch.Size] = None,
-            image_bound: Optional[torch.Tensor] = None
+            image_bound: Optional[torch.Tensor] = None,
+            *args, **kwargs
     ) -> Union[Dict[str, torch.Tensor], torch.Tensor]:
 
         if self.add_image_encoder and pixel_values is not None:
@@ -305,7 +307,12 @@ class VLMModel(MultiModalModule):
                         input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
                         input_embeds = input_embeds.transpose(0, 1).clone()
 
-            attention_mask, position_ids = prepare_positionsids_mask_for_llm(config=self.config, input_ids=input_ids, inference_params=inference_params, attention_mask=attention_mask, position_ids=position_ids)
+            attention_mask, position_ids = prepare_positionsids_mask_for_llm(config=self.config, input_ids=input_ids,
+                                                                             inference_params=inference_params,
+                                                                             attention_mask=attention_mask,
+                                                                             position_ids=position_ids,
+                                                                             image_grid_thw=image_grid_thw,
+                                                                             **kwargs)
 
             output = self.text_decoder(
                 input_ids=input_ids,

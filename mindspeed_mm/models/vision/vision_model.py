@@ -18,6 +18,7 @@ VISION_ENCODER_MAPPINGS = {
     "clip": CLIPViT,
     "InternViT": InternViT,
     "qwen2vit": Qwen2VLViT,
+    "qwen2_5_vit": Qwen2VLViT,
     "MiniCPMViT": MiniCPMViT,
 }
 
@@ -100,16 +101,31 @@ class VisionModel(MultiModalModule):
 
     def forward(self, images: torch.Tensor, image_grid_thw: torch.Tensor = None, *args, **kwargs) -> torch.Tensor:
         if self.add_encoder:
-            image_embeddings = self.encoder(pixel_values=images, grid_thw=image_grid_thw)
+            encoder_out = self.encoder(pixel_values=images, grid_thw=image_grid_thw)
+        if isinstance(encoder_out, tuple):
+            image_embeddings, window_index = encoder_out
+        else:
+            image_embeddings, window_index = encoder_out, None
         if self.add_projector:
             image_embeddings = self.projector(image_embeddings)
+            if window_index is not None:
+                reverse_indices = torch.argsort(window_index)
+                image_embeddings = image_embeddings[reverse_indices, :]
+
         return image_embeddings
     
     
 class Qwen2vlVisionModel(VisionModel):
     def forward(self, images: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
-        image_embeddings = self.encoder(images, image_grid_thw)
+        encoder_out = self.encoder(images, image_grid_thw)
+        if isinstance(encoder_out, tuple):
+            image_embeddings, window_index = encoder_out
+        else:
+            image_embeddings, window_index = encoder_out, None
         if self.add_projector:
             image_embeddings = self.projector(image_embeddings)
+            if window_index is not None:
+                reverse_indices = torch.argsort(window_index)
+                image_embeddings = image_embeddings[reverse_indices, :]
 
-        return image_embeddings 
+        return image_embeddings

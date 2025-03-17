@@ -7,9 +7,9 @@
 """
 from tqdm import tqdm
 
-from checkpoint.qwen2vl_hf_to_mm import split_model_by_pipeline, save_by_pp, merge_pp_index, split_by_tp
+from checkpoint.qwen2vl_hf_to_mm import split_by_tp
 from checkpoint.qwen2vl_mm_to_hf import load_from_mm, merge_by_tp
-from checkpoint.utils import ConvertResplitConfig
+from checkpoint.utils import ConvertResplitConfig, merge_pp_index, split_model_by_pipeline, save_by_pp
 
 
 def main(cfg: ConvertResplitConfig):

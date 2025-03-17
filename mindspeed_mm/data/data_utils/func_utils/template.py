@@ -38,7 +38,6 @@ class Template:
     format_assistant: "Formatter"
     format_system: "Formatter"
     format_observation: "Formatter"
-    format_separator: "Formatter"
     format_prefix: "Formatter"
     default_system: str
     stop_words: List[str]
@@ -95,8 +94,6 @@ class Template:
                 elements += self.format_prefix.apply()
                 if system:
                     elements += self.format_system.apply(content=system)
-            if i > 0 and i % 2 == 0:
-                elements += self.format_separator.apply()
 
             if message["role"] == Role.USER.value:
                 elements += self.format_user.apply(
@@ -153,7 +150,6 @@ class RegisterParams:
     format_assistant: Optional["Formatter"] = None
     format_system: Optional["Formatter"] = None,
     format_observation: Optional["Formatter"] = None
-    format_separator: Optional["Formatter"] = None
     format_prefix: Optional["Formatter"] = None
     default_system: str = ""
     stop_words: Optional[Sequence[str]] = None
@@ -204,7 +200,6 @@ def _register_template(
         format_assistant=params.format_assistant or default_assistant_formatter,
         format_system=params.format_system or default_user_formatter,
         format_observation=params.format_observation or params.format_user or default_user_formatter,
-        format_separator=params.format_separator or default_separator_formatter,
         format_prefix=params.format_prefix or default_prefix_formatter,
         default_system=params.default_system,
         stop_words=[] if params.stop_words is None else params.stop_words,
@@ -219,11 +214,11 @@ _register_template(
     params=RegisterParams(
         format_user=StringFormatter(
             slots=["<|im_start|>user\n{{content}}<|im_end|>\n<|im_start|>assistant\n"]),
+        format_assistant=StringFormatter(slots=["{{content}}<|im_end|>\n"]),
         format_system=StringFormatter(
             slots=["<|im_start|>system\n{{content}}<|im_end|>\n"]),
         format_observation=StringFormatter(
             slots=["<|im_start|>tool\n{{content}}<|im_end|>\n<|im_start|>assistant\n"]),
-        format_separator=EmptyFormatter(slots=["\n"]),
         default_system="You are a helpful assistant.",
         stop_words=["<|im_end|>"],
         replace_eos=True),

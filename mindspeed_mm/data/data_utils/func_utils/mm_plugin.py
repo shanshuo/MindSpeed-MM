@@ -61,6 +61,7 @@ class BasePlugin:
     def __init__(self, image_token: Optional[str], video_token: Optional[str]) -> None:
         self.image_token = image_token
         self.video_token = video_token
+        self.expand_mm_tokens = True
 
     def _validate_input(
             self,
@@ -71,20 +72,24 @@ class BasePlugin:
         Validates if this model accepts the input modalities.
         """
         if len(images) != 0 and self.image_token is None:
-            raise ValueError("This model does not support image input.")
+            raise ValueError(
+                "This model does not support image input. Please check whether the correct `template` is used."
+            )
 
         if len(videos) != 0 and self.video_token is None:
-            raise ValueError("This model does not support video input.")
+            raise ValueError(
+                "This model does not support video input. Please check whether the correct `template` is used."
+            )
 
     def _preprocess_image(self, image: "ImageObject", **kwargs) -> "ImageObject":
         r"""
         Pre-processes a single image.
         """
         image_resolution: int = kwargs.get("image_resolution")
-        if max(image.width, image.height) > image_resolution:
-            resize_factor = image_resolution / max(image.width, image.height)
+        if (image.width * image.height) > image_resolution:
+            resize_factor = math.sqrt(image_resolution / (image.width * image.height))
             width, height = int(image.width * resize_factor), int(image.height * resize_factor)
-            image = image.resize((width, height), resample=Image.NEAREST)
+            image = image.resize((width, height), resample=Image.Resampling.NEAREST)
 
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -110,6 +115,8 @@ class BasePlugin:
         for image in images:
             if isinstance(image, str):
                 image = Image.open(image)
+            elif isinstance(image, bytes):
+                image = Image.open(BytesIO(image))
             elif isinstance(image, dict):
                 if image["bytes"] is not None:
                     image = Image.open(BytesIO(image["bytes"]))
@@ -117,7 +124,7 @@ class BasePlugin:
                     image = Image.open(image["path"])
 
             if not isinstance(image, ImageObject):
-                raise ValueError("Expect input is a list of Images, but got {}.".format(type(image)))
+                raise ValueError(f"Expect input is a list of Images, but got {type(image)}.")
 
             results.append(self._preprocess_image(image, **kwargs))
 
@@ -168,16 +175,16 @@ class BasePlugin:
         if len(images) != 0:
             images = self._regularize_images(
                 images,
-                image_resolution=getattr(processor, "image_resolution", 512),
+                image_resolution=getattr(processor, "image_resolution", 768 * 768),
             )
             input_dict["images"] = images
 
         if len(videos) != 0:
             videos = self._regularize_videos(
                 videos,
-                image_resolution=getattr(processor, "video_resolution", 128),
-                video_fps=getattr(processor, "video_fps", 1.0),
-                video_maxlen=getattr(processor, "video_maxlen", 64),
+                image_resolution=getattr(processor, "video_resolution", 256 * 256),
+                video_fps=getattr(processor, "video_fps", 2.0),
+                video_maxlen=getattr(processor, "video_maxlen", 128),
             )
             input_dict["videos"] = videos
 
@@ -222,11 +229,21 @@ class BasePlugin:
             self,
             images: Sequence["ImageInput"],
             videos: Sequence["VideoInput"],
-            params: LengthParams,
+            imglens: Sequence[int],
+            vidlens: Sequence[int],
+            batch_ids: Sequence[List[int]],
             processor: Optional["ProcessorMixin"],
     ) -> Dict[str, Union[List[int], "torch.Tensor"]]:
         r"""
         Builds batched multimodal inputs for VLMs.
+
+        Arguments:
+            images: a list of image inputs, shape (num_images,)
+            videos: a list of video inputs, shape (num_videos,)
+            imglens: number of images in each sample, shape (batch_size,)
+            vidlens: number of videos in each sample, shape (batch_size,)
+            batch_ids: token ids of input samples, shape (batch_size, seq_len)
+            processor: a processor for pre-processing images and videos
         """
         self._validate_input(images, videos)
         return {}
@@ -238,23 +255,40 @@ class Qwen2vlPlugin(BasePlugin):
         image = super()._preprocess_image(image, **kwargs)
         if min(image.width, image.height) < 28:
             width, height = max(image.width, 28), max(image.height, 28)
-            image = image.resize((width, height), resample=Image.NEAREST)
+            image = image.resize((width, height), resample=Image.Resampling.NEAREST)
 
         if image.width / image.height > 200:
             width, height = image.height * 180, image.height
-            image = image.resize((width, height), resample=Image.NEAREST)
+            image = image.resize((width, height), resample=Image.Resampling.NEAREST)
 
         if image.height / image.width > 200:
             width, height = image.width, image.width * 180
-            image = image.resize((width, height), resample=Image.NEAREST)
+            image = image.resize((width, height), resample=Image.Resampling.NEAREST)
 
         return image
 
     @override
-    def _get_video_sample_frames(self, video_stream: "Stream", **kwargs) -> int:
-        sample_frames = super()._get_video_sample_frames(video_stream, **kwargs)
-        sample_frames = sample_frames // 2 * 2
-        return sample_frames
+    def _regularize_videos(self, videos: Sequence["VideoInput"], **kwargs) -> List[List["ImageObject"]]:
+        results = []
+        for video in videos:
+            container = av.open(video, "r")
+            video_stream = next(stream for stream in container.streams if stream.type == "video")
+            total_frames = video_stream.frames
+            sample_frames = self._get_video_sample_frames(video_stream, **kwargs)
+            sample_indices = np.linspace(0, total_frames - 1, sample_frames).astype(np.int32)
+            frames: List["ImageObject"] = []
+            container.seek(0)
+            for frame_idx, frame in enumerate(container.decode(video_stream)):
+                if frame_idx in sample_indices:
+                    frames.append(frame.to_image())
+
+            if len(frames) % 2 != 0:  # qwen2-vl requires even number of frames
+                frames.append(frames[-1])
+
+            frames = self._regularize_images(frames, **kwargs)
+            results.append(frames)
+
+        return results
 
     @override
     def process_messages(
@@ -277,37 +311,31 @@ class Qwen2vlPlugin(BasePlugin):
             content = message["content"]
             while IMAGE_PLACEHOLDER in content:
                 if num_image_tokens >= len(image_grid_thw):
-                    raise ValueError("`len(images)` is less than the number of {} tokens.".format(IMAGE_PLACEHOLDER))
+                    raise ValueError(f"`len(images)` is less than the number of {IMAGE_PLACEHOLDER} tokens.")
 
+                image_seqlen = image_grid_thw[num_image_tokens].prod() // merge_length if self.expand_mm_tokens else 1
                 content = content.replace(
-                    IMAGE_PLACEHOLDER,
-                    "<|vision_start|>{}<|vision_end|>".format(
-                        self.image_token * (image_grid_thw[num_image_tokens].prod() // merge_length)
-                    ),
-                    1,
+                    IMAGE_PLACEHOLDER, f"<|vision_start|>{self.image_token * image_seqlen}<|vision_end|>", 1
                 )
                 num_image_tokens += 1
 
             while VIDEO_PLACEHOLDER in content:
                 if num_video_tokens >= len(video_grid_thw):
-                    raise ValueError("`len(videos)` is less than the number of {} tokens.".format(VIDEO_PLACEHOLDER))
+                    raise ValueError(f"`len(videos)` is less than the number of {VIDEO_PLACEHOLDER} tokens.")
 
+                video_seqlen = video_grid_thw[num_video_tokens].prod() // merge_length if self.expand_mm_tokens else 1
                 content = content.replace(
-                    VIDEO_PLACEHOLDER,
-                    "<|vision_start|>{}<|vision_end|>".format(
-                        self.video_token * (video_grid_thw[num_video_tokens].prod() // merge_length)
-                    ),
-                    1,
+                    VIDEO_PLACEHOLDER, f"<|vision_start|>{self.video_token * video_seqlen}<|vision_end|>", 1
                 )
                 num_video_tokens += 1
 
             message["content"] = content
 
         if len(images) != num_image_tokens:
-            raise ValueError("The number of images does not match the number of {} tokens".format(IMAGE_PLACEHOLDER))
+            raise ValueError(f"The number of images does not match the number of {IMAGE_PLACEHOLDER} tokens.")
 
         if len(videos) != num_video_tokens:
-            raise ValueError("The number of videos does not match the number of {} tokens".format(VIDEO_PLACEHOLDER))
+            raise ValueError(f"The number of videos does not match the number of {VIDEO_PLACEHOLDER} tokens.")
 
         return messages
 
@@ -320,7 +348,15 @@ class Qwen2vlPlugin(BasePlugin):
             processor: Optional["ProcessorMixin"],
     ) -> Dict[str, Union[List[int], "torch.Tensor"]]:
         self._validate_input(images, videos)
-        return self._get_mm_inputs(images, videos, processor)
+        mm_inputs = self._get_mm_inputs(images, videos, processor)
+        image_processor: "BaseImageProcessor" = getattr(processor, "image_processor")
+        if "second_per_grid_ts" in getattr(image_processor, "model_input_names", []) and "video_grid_thw" in mm_inputs:
+            video_fps = getattr(processor, "video_fps", 2.0)
+            mm_inputs["second_per_grid_ts"] = [image_processor.temporal_patch_size / video_fps] * len(
+                mm_inputs["video_grid_thw"]
+            )
+
+        return mm_inputs
 
 
 PLUGINS = {

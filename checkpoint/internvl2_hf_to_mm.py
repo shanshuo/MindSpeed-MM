@@ -10,13 +10,13 @@ from copy import deepcopy
 import stat
 
 import torch
-from transformers import AutoModelForCausalLM
 
 from checkpoint.utils import ConvertVppMMConfig
 
 
 def load_from_hf(load_dir, trust_remote_code):
     # Load Huggingface model.
+    from transformers import AutoModelForCausalLM
     hf_model = AutoModelForCausalLM.from_pretrained(
         load_dir, device_map='cpu',
         trust_remote_code=trust_remote_code,

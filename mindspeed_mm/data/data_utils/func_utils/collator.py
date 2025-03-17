@@ -19,6 +19,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence, Dict, Any, Literal
 
 import torch
+import torch.nn.functional as F
 from transformers import DataCollatorForSeq2Seq, ProcessorMixin
 
 from mindspeed_mm.data.data_utils.func_utils.mm_plugin import LengthParams
@@ -56,6 +57,17 @@ class MultiModalDataCollatorForSeq2Seq(DataCollatorForSeq2Seq):
                 feature["token_type_ids"] = token_type_ids[i]
 
         features: Dict[str, "torch.Tensor"] = super().__call__(features)
+        if self.model is not None and hasattr(self.model, "get_rope_index"):  # for qwen2vl mrope
+            rope_index_kwargs = {
+                "input_ids": features["input_ids"],
+                "image_grid_thw": mm_inputs.get("image_grid_thw"),
+                "video_grid_thw": mm_inputs.get("video_grid_thw"),
+                "attention_mask": features["attention_mask"],
+            }
+            if "second_per_grid_ts" in mm_inputs:
+                rope_index_kwargs["second_per_grid_ts"] = mm_inputs.get("second_per_grid_ts")
+
+            features["position_ids"], features["rope_deltas"] = self.model.get_rope_index(**rope_index_kwargs)
         features.update(mm_inputs)
         return features
 

@@ -8,12 +8,14 @@
 import os
 import json
 import shutil
+from copy import deepcopy
 from functools import cached_property
 from pathlib import Path
 
 import torch
-from safetensors.torch import save_file
+from safetensors.torch import save_file, load_file
 from pydantic import BaseModel, DirectoryPath, PositiveInt, NonNegativeInt, model_validator, computed_field
+from tqdm import tqdm
 from transformers import PretrainedConfig, AutoConfig
 
 LATEST_TXT = "latest_checkpointed_iteration.txt"
@@ -233,3 +235,97 @@ def copy_files_except_suffix(source_path: Path, target_path: Path, except_suffix
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, destination)
             print(f"Copied: {item} -> {destination}")
+
+
+def load_from_hf(hf_dir: Path) -> dict[str, torch.Tensor]:
+    # 注意AutoModel.from_pretrained转换成模型对象时，存在torch_dtype问题需确认，因此这里直接读取safetensors确保dtype一致
+    files = list(hf_dir.glob("*.safetensors"))
+    state_dict = {}
+    for safe_path in files:
+        state_dict.update(load_file(str(safe_path), device='cpu'))
+    return state_dict
+
+
+def merge_pp_index(vit_pipeline_num_layers: list[int], llm_pipeline_num_layers: list[int]) -> list[tuple[int, int]]:
+    """返回每张卡上vit和llm各自的层数"""
+    split_method = []
+    for vit_num, llm_num in zip(vit_pipeline_num_layers, llm_pipeline_num_layers):
+        split_method.append((vit_num, llm_num))
+    return split_method
+
+
+def split_model_by_pipeline(state_dict: dict[str, torch.Tensor],
+                            pp_split: list[tuple[int, int]]) -> list[dict[str, torch.Tensor]]:
+    if len(pp_split) <= 1:
+        return [state_dict]
+
+    pp_size = len(pp_split)
+    vit_range = [0, 0]
+    llm_range = [pp_size - 1, pp_size - 1]
+    for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
+        if vit_num > 0 and pp_rank > vit_range[1]:
+            vit_range[1] = pp_rank
+        if llm_num > 0 and pp_rank < llm_range[0]:
+            llm_range[0] = pp_rank
+    vit_start_idx = 0
+    llm_start_idx = 0
+    return_dicts = []
+    copy_dict = deepcopy(state_dict)
+    for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
+        vit_end_idx = vit_start_idx + vit_num
+        llm_end_idx = llm_start_idx + llm_num
+        new_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith('image_encoder.encoder.patch_embed.'):
+                if pp_rank == vit_range[0]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('image_encoder.encoder.blocks.layers.'):
+                layer_idx = int(key.split('.')[4])
+                if vit_start_idx <= layer_idx < vit_end_idx and vit_range[0] <= pp_rank <= vit_range[1]:
+                    new_idx = layer_idx - vit_start_idx
+                    new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
+                    new_dict[new_key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('image_encoder.projector.'):
+                if pp_rank == vit_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.embedding.'):
+                if pp_rank == llm_range[0]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.decoder.layers.'):
+                layer_idx = int(key.split('.')[3])
+                if llm_start_idx <= layer_idx < llm_end_idx and llm_range[0] <= pp_rank <= llm_range[1]:
+                    new_idx = layer_idx - llm_start_idx
+                    new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
+                    new_dict[new_key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.decoder.final_layernorm.'):
+                if pp_rank == llm_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.output_layer.'):
+                if pp_rank == llm_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+        vit_start_idx = vit_end_idx
+        llm_start_idx = llm_end_idx
+        return_dicts.append(new_dict)
+    return return_dicts
+
+
+def save_by_pp(state_dicts: list[dict[str, torch.Tensor]],
+               save_root_dir: Path,
+               iteration: str | int = 'release',
+               tp_rank: int = 0):
+    for pp_rank, state_dict in enumerate(tqdm(state_dicts, desc="pp step")):
+        name_parts = ["mp", "rank", f"{tp_rank:02d}"]
+        if len(state_dicts) > 1:
+            name_parts.append(f"{pp_rank:03d}")
+        iter_name = iteration if isinstance(iteration, str) else f"iter_{iteration:07d}"
+        save_path = save_root_dir.joinpath(iter_name, "_".join(name_parts))
+        save_path.mkdir(exist_ok=True, parents=True)
+        torch.save({'model': state_dict}, save_path.joinpath('model_optim_rng.pt'))
+    save_root_dir.joinpath(LATEST_TXT).write_text(str(iteration))
