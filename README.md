@@ -329,7 +329,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> FP16 </td>
       <td> / </td>
       <td> / </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td rowspan="9"> 多模态理解 </td>
@@ -340,7 +340,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 48.27 (SPS) </td>
       <td> 49.94 (SPS) </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
    <tr>
       <td rowspan="4"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/internvl2">InternVL 2.0</a></td>
@@ -426,7 +426,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 93.38 (SPS) </td>
       <td> 109.23 (SPS) </td>
-      <td>【Pass】</td>
+      <td>【Test】</td>
     </tr>
     </tbody>
 </table>
