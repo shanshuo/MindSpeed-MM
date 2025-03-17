@@ -186,6 +186,7 @@
         "evaluation_model":"cogvideox-1.5",
         "evaluation_impl": "vbench_eval",
         "eval_type": "t2v",
+        "long_eval_config": "path_to_long_eval_configs",
         "load_ckpt_from_local": true,
         "dimensions": ["subject_consistency", "background_consistency", "aesthetic_quality", "imaging_quality", "temporal_style", "overall_consistency", "human_action",
          "temporal_flickering", "motion_smoothness", "dynamic_degree", "appearance_style"],

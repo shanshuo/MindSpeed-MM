@@ -72,8 +72,8 @@ class VbenchGenEvalDataset(BaseGenEvalDataset):
                                                      "augmented_prompts/gpt_enhanced_prompts/all_dimension_longer.txt")
         self.captions = []
         self.augmented_captions = []
-        if dimensions is not None and len(dimensions) > 0:
-            prompt_files = [os.path.join("prompts_per_dimension", f"{dim}.txt") for dim in dimensions]
+        if self.dimensions is not None and len(self.dimensions) > 0:
+            prompt_files = [os.path.join("prompts_per_dimension", f"{dim}.txt") for dim in self.dimensions]
             for prompt_file in prompt_files:
                 if not os.path.exists(os.path.join(self.data_folder, prompt_file)):
                     continue
@@ -89,7 +89,11 @@ class VbenchGenEvalDataset(BaseGenEvalDataset):
                 for prompt_file in augmented_prompt_files:
                     if not os.path.exists(os.path.join(self.data_folder, prompt_file)):
                         continue
-                    self.augmented_captions += self.get_data(os.path.join(self.data_folder, prompt_file))
+                    if self.prompts_per_dim > 0:
+                        self.augmented_captions += self.get_data(os.path.join(self.data_folder, prompt_file))[
+                                                   :self.prompts_per_dim]
+                    else:
+                        self.augmented_captions += self.get_data(os.path.join(self.data_folder, prompt_file))
         else:
             self.captions += self.get_data(os.path.join(self.data_folder, self.prompt_file))
             if self.augment:
@@ -120,10 +124,10 @@ class VbenchI2VGenEvalDataset(BaseGenEvalDataset):
             dimensions: list,
     ):
         super().__init__(basic_param)
-        self.filter_by_dimension(dimensions)
         self.ratio = extra_param.get("ratio", "16-9")
         self.prompts_per_dim = extra_param.get("prompts_per_dim", 0)
         self.samples_per_prompt = extra_param.get("samples_per_prompt", 5)
+        self.filter_by_dimension(dimensions)
 
     def prepare_item(self):
         return {
@@ -142,12 +146,9 @@ class VbenchI2VGenEvalDataset(BaseGenEvalDataset):
             if any(dim in dims for dim in sample.get("dimension")):
                 if 0 < self.prompts_per_dim <= cnt.min_count(sample.get("dimension")):
                     continue
-                new_data_samples += sample
+                new_data_samples += [sample]
                 cnt.count(sample.get("dimension"))
-        self.data_samples = [
-            item for item in self.data_samples
-            if any(dim in dims for dim in item.get("dimension"))
-        ]
+        self.data_samples = new_data_samples
 
     def __getitem__(self, index):
         caption_index = index // self.samples_per_prompt

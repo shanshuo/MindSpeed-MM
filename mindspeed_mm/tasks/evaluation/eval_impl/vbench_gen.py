@@ -59,8 +59,8 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
         self.ratio = args.eval_config.dataset.extra_param.ratio if hasattr(args.eval_config.dataset.extra_param, "ratio") else "16-9"
         self.vbench = None
         self.image_path = args.eval_config.image_path if hasattr(args.eval_config, "image_path") else None
-        self.slow_fast_eval_config = args.eval_config.slow_fast_eval_config if hasattr(args.eval_config,
-                                                                                       "slow_fast_eval_config") else None
+        self.long_eval_config = args.eval_config.long_eval_config if hasattr(args.eval_config,
+                                                                             "long_eval_config") else ""
         self.pipeline = inference_pipeline
         self.eval_args = args
         self.dataset = dataset
@@ -141,7 +141,12 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
             # 额外参数
             kwargs = {"sb_clip2clip_feat_extractor": 'dinov2', "bg_clip2clip_feat_extractor": "dreamsim",
                       "clip_length_config": "clip_length_mix.yaml", "w_inclip": 1.0, "w_clip2clip": 0.0,
-                      "use_semantic_splitting": False, "slow_fast_eval_config": self.slow_fast_eval_config,
+                      "use_semantic_splitting": False,
+                      "slow_fast_eval_config": os.path.join(self.long_eval_config, "configs/slow_fast_params.yaml"),
+                      "sb_mapping_file_path": os.path.join(self.long_eval_config,
+                                                            "configs/subject_mapping_table.yaml"),
+                      "bg_mapping_file_path": os.path.join(self.long_eval_config,
+                                                            "configs/background_mapping_table.yaml"),
                       "dev_flag": True, "num_of_samples_per_prompt": 5, "static_filter_flag": True}
             self.vbench.evaluate(
                 videos_path=self.videos_path,
