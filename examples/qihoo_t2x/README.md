@@ -131,8 +131,8 @@ sh examples/qihoo_t2x/inference_qihoo.sh
 ```
 
 ## 环境变量声明 
-ASCEND_RT_VISIBLE_DEVICES： 指定NPU设备的索引值
-CUDA_DEVICE_MAX_CONNECTIONS： 每个设备允许的最大并行硬件连接数
+ASCEND_RT_VISIBLE_DEVICES： 指定NPU设备的索引值  
+CUDA_DEVICE_MAX_CONNECTIONS： 每个设备允许的最大并行硬件连接数  
 NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量
 
 ## 许可证
