@@ -35,6 +35,7 @@ def process_args(parser):
     parser = _add_dummy_optimizer_args(parser)
     parser = _add_logging_args(parser)
     parser = _add_security_args(parser)
+    parser = _add_auto_parallel_mm_args(parser)
     parser = _add_rlfh_args(parser)
     return parser
 
@@ -136,6 +137,16 @@ def _add_security_args(parser):
                        action='store_true',
                        default=False,
                        help='Whether or not to allow for custom models defined on the Hub in their own modeling files.')
+
+    return parser
+
+
+def _add_auto_parallel_mm_args(parser):
+    group = parser.add_argument_group(title='auto_parallel_mm')
+    group.add_argument('--profile-subgraph-seg', action='store_true', default=False, help='model segmentation')
+    group.add_argument('--profile-stage', type=int, default=None, help='model profile stage')
+    group.add_argument('--simulated-nnodes', type=int, default=None, help='the simulated number of node in the cluster')
+    group.add_argument('--simulated-nproc-per-node', type=int, default=None, help='the simulated number of NPU on each node')
 
     return parser
 

@@ -2,6 +2,7 @@
 import gc
 import sys
 import time
+from importlib.metadata import version
 import torch
 import torch_npu
 
@@ -43,13 +44,17 @@ from megatron.training.utils import (
     print_rank_0,
     unwrap_model,
 )
+from megatron.training.arguments import parse_args
+from megatron.training.global_vars import set_args
 
+from mindspeed.arguments import parse_args_wrapper
 from mindspeed_mm.configs.config import merge_mm_args
 from mindspeed_mm.tools.profiler import Profiler
 from mindspeed_mm.tools.mem_profiler import memory_profiler
 from mindspeed_mm.arguments import extra_args_provider_decorator
 from mindspeed_mm.patchs import PatchesManager
 from mindspeed_mm.utils.random import seed_all
+
 
 _TRAIN_START_TIME = time.time()
 
@@ -93,6 +98,15 @@ def pretrain(
             to set already parse arguments.
     """
     extra_args_provider = extra_args_provider_decorator(extra_args_provider)
+    
+    new_parse_args = parse_args_wrapper(parse_args)
+    argument = new_parse_args(extra_args_provider, False)
+    if getattr(argument, "auto_parallel_mm", False):
+        set_args(argument)
+        from mindspeed.core.auto_parallel.mm_search.optimizer import auto_parallel_mm_search_optimal_config
+        auto_parallel_mm_search_optimal_config(argument)
+        return
+
     # Initalize and get arguments, timers, and Tensorboard writer.
     initialize_megatron(
         extra_args_provider=extra_args_provider, args_defaults=args_defaults
@@ -100,6 +114,11 @@ def pretrain(
 
     args = get_args()
     merge_mm_args(args)
+    
+    if hasattr(args, "mm") and getattr(args, "profile_subgraph_seg", False):
+        from mindspeed.core.auto_parallel.mm_search.profiling import set_profile_model_config
+        set_profile_model_config(args)
+
     if not hasattr(args, "dist_train"):
         args.dist_train = False
 
@@ -157,6 +176,12 @@ def pretrain(
     model, optimizer, opt_param_scheduler = setup_model_and_optimizer(
         model_provider, model_type
     )
+
+    if getattr(args, "auto_parallel_profile", False):
+        from mindspeed.core.auto_parallel.mm_search.memory_modeling import count_module_param
+        from mindspeed.core.auto_parallel.mm_search.help import PROFILE_CONTENT
+        module_param_dict = count_module_param(model)
+        PROFILE_CONTENT['module_param'] = module_param_dict
 
     timers("model-and-optimizer-setup").stop()
     print_datetime("after model, optimizer, and learning rate scheduler are built")
@@ -582,6 +607,10 @@ def train(
     # If any exit conditions (signal handler, duration, iterations) have been reached, exit.
     if exit_flag:
         sys.exit()
+
+    if getattr(args, "auto_parallel_profile", False):
+        from mindspeed.core.auto_parallel.mm_search.profiling import save_profile_data
+        save_profile_data(args)
 
     return iteration, num_floating_point_operations_so_far
 
