@@ -1,8 +1,9 @@
 import os
 from functools import partial
 
+import torch
 from datasets import load_dataset
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, IterableDataset
 from transformers.training_args import TrainingArguments
 
 from megatron.training import get_args
@@ -21,6 +22,19 @@ from mindspeed_mm.data.data_utils.func_utils.template import get_template_and_fi
 logger = get_logger(__name__)
 
 
+class DistributedIterableDataset(IterableDataset):
+    def __init__(self, dataset, rank=None):
+        args = get_args()
+        self.data_parallel_size = args.data_parallel_size
+        self.dataset = dataset
+        self.rank = torch.distributed.get_rank() if rank is None else rank
+
+    def __iter__(self):
+        for idx, item in enumerate(self.dataset):
+            if idx % self.data_parallel_size == self.rank % self.data_parallel_size:
+                yield item
+
+
 def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
     if "cutoff_len" in basic_param.keys():
         raise ValueError("`cutoff_len` is deprecated, please use `seq_length` instead.")
@@ -37,7 +51,7 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
         # -----------------load dataset from file-------------------------------------------------------------------------
         dataset = load_dataset(path="json", data_files=data_args.dataset, split="train", cache_dir=data_args.cache_dir,
                                streaming=data_args.streaming)
-        if data_args.max_samples:
+        if data_args.max_samples and not data_args.streaming:
             dataset = dataset.select(range(data_args.max_samples))
         local_process_index = int(os.getenv("LOCAL_RANK", -1))
         if data_args.streaming:
@@ -52,13 +66,21 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
         logger.debug(f'Rank: %s, kwargs: %s', local_process_index, kwargs)
         # -----------------convert to sharegpt ---------------------------------------------------------------------------
         convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, dataset_dir=data_args.dataset_dir)
-        dataset = dataset.map(
-            convert_func,
-            batched=False,
-            remove_columns=(list(next(iter(dataset)).keys())),
-            desc=f"Rank {local_process_index}, Converting format of dataset",
-            **kwargs,
-        )
+        if data_args.streaming:
+            dataset = dataset.map(
+                convert_func,
+                batched=False,
+                remove_columns=(list(next(iter(dataset)).keys())),
+                **kwargs,
+            )
+        else:
+            dataset = dataset.map(
+                convert_func,
+                batched=False,
+                remove_columns=(list(next(iter(dataset)).keys())),
+                desc=f"Rank {local_process_index}, Converting format of dataset",
+                **kwargs,
+            )
         # -----------------convert text to token id ----------------------------------------------------------------------
         if dataset_attr.ranking:
             preprocess_func = partial(
@@ -76,24 +98,22 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
                 processor=processor,
                 data_args=data_args,
             )
-        dataset = dataset.map(
-            preprocess_func,
-            batched=True,
-            batch_size=data_args.preprocessing_batch_size,
-            remove_columns=(list(next(iter(dataset)).keys())),
-            desc=f"Rank {local_process_index}, Running tokenizer on dataset",
-            **kwargs,
-        )
+        if data_args.streaming:
+            dataset = dataset.map(
+                preprocess_func,
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size,
+                remove_columns=(list(next(iter(dataset)).keys())),
+                **kwargs,
+            )
+            dataset = DistributedIterableDataset(dataset)
+        else:
+            dataset = dataset.map(
+                preprocess_func,
+                batched=True,
+                batch_size=data_args.preprocessing_batch_size,
+                remove_columns=(list(next(iter(dataset)).keys())),
+                desc=f"Rank {local_process_index}, Running tokenizer on dataset",
+                **kwargs,
+            )            
         return dataset
-
-
-class Qwen2vlDataset(Dataset):
-    def __init__(self, basic_param, preprocess_param, dataset_param):
-        self.dataset = get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param)
-        super().__init__()
-
-    def __getitem__(self, index):
-        return self.dataset[index]
-
-    def __len__(self):
-        return len(self.dataset)

@@ -128,6 +128,9 @@ def prepare_sampler_dataloader(
     Returns:
         :class:`torch.utils.data.DataLoader`: A DataLoader used for training or testing.
     """
+    if isinstance(dataset, torch.utils.data.dataset.IterableDataset):
+        num_workers = 0
+
     if persistent_workers is None:
         persistent_workers = True if num_workers > 0 else False
 
@@ -136,14 +139,17 @@ def prepare_sampler_dataloader(
         if collate_param:
             data_collate_type = collate_param.pop("model_name")
             collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
-
-        sampler = StatefulDistributedSampler(
-            dataset,
-            num_replicas=process_group.size(),
-            rank=process_group.rank(),
-            shuffle=shuffle,
-            consumed_samples=consumed_samples,
-        )
+            
+        if isinstance(dataset, torch.utils.data.dataset.IterableDataset):
+            sampler = None
+        else:
+            sampler = StatefulDistributedSampler(
+                dataset,
+                num_replicas=process_group.size(),
+                rank=process_group.rank(),
+                shuffle=shuffle,
+                consumed_samples=consumed_samples,
+            )
         return DataLoader(
             dataset,
             batch_size=batch_size,

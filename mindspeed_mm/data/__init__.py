@@ -20,7 +20,7 @@ from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset, DynamicVideoTextD
 from mindspeed_mm.data.datasets.i2v_dataset import I2VDataset
 from mindspeed_mm.data.datasets.video_dataset import VideoDataset
 from mindspeed_mm.data.datasets.audio_dataset import AudioDataset
-from mindspeed_mm.data.datasets.qwen2vl_dataset import Qwen2vlDataset
+from mindspeed_mm.data.datasets.qwen2vl_dataset import get_qwen2vl_dataset
 from mindspeed_mm.data.datasets.ae_dataset import TrainVideoDataset
 from mindspeed_mm.models.ae.training.global_vars import get_ae_args
 
@@ -66,7 +66,7 @@ def build_mm_dataset(dataset_param):
     elif dataset_type == "audio":
         return AudioDataset(basic_param, preprocess_param, **dataset_param)
     elif dataset_type == "huggingface":
-        return Qwen2vlDataset(basic_param, preprocess_param, dataset_param)
+        return get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param)
     else:
         raise NotImplementedError(dataset_type)
 

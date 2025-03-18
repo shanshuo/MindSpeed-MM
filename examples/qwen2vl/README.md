@@ -244,6 +244,28 @@ dataset_param->basic_parameters->dataset
 }
 ```
 
+如果需要加载大批量数据，可使用流式加载，修改`data.json`中的`sampler_type`字段，增加`streaming`字段。（注意：使用流式加载后当前仅支持`num_worker=0`，单进程处理数据，会有性能波动，并且不支持断点续训功能。）
+
+
+```json
+{
+    "dataset_param": {
+        ...
+        "basic_parameters": {
+            ...
+            "streaming": true
+            ...
+        },
+        ...
+    },
+    "dataloader_param": {
+        ...
+        "sampler_type": "stateful_distributed_sampler",
+        ...
+    }
+}
+```
+
 【模型保存加载及日志信息配置】
 
 根据实际情况配置`examples/qwen2vl/finetune_qwen2vl_7b.sh`的参数，包括加载、保存路径以及保存间隔`--save-interval`（注意：分布式优化器保存文件较大耗时较长，请谨慎设置保存间隔）
