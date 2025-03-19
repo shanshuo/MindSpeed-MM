@@ -24,10 +24,12 @@ def float16Module_init(self, module, args):
 
     if args.fp16:
         self.add_module("module", module.half())
+
         def float16_convertor(val):
             return val.half()
     elif args.bf16:
         self.add_module("module", module.bfloat16())
+
         def float16_convertor(val):
             return val.bfloat16()
     else:
@@ -39,6 +41,7 @@ def float16Module_init(self, module, args):
     ae_config = getattr(args.mm.model, "ae", None)
     if ae_config is not None and getattr(ae_config, "dtype", None) == torch.float32:
         module.ae = module.ae.float()
+
 
 def float16Module_forward(self, *inputs, **kwargs):
     args = get_args()

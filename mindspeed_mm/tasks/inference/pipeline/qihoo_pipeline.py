@@ -6,6 +6,7 @@ from mindspeed_mm.tasks.inference.pipeline.pipeline_base import MMPipeline
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MMEncoderMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
 
+
 class QihooPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
     def __init__(self, vae, text_encoder, tokenizer, scheduler, predict_model, config=None):

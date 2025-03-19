@@ -745,7 +745,7 @@ class PTDiTDiffuser(ModelMixin, ConfigMixin):
             encoder_hidden_states = encoder_hidden_states.view(batch_size, -1, hidden_states.shape[-1])
 
 
-        for index, block in enumerate(self.transformer_blocks):
+        for block in self.transformer_blocks:
             if self.training and self.gradient_checkpointing:
 
                 def create_custom_forward(module, return_dict=None):

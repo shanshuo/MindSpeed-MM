@@ -262,7 +262,7 @@ class WhisperEncoder(nn.Module):
             hidden_states, p=self.dropout, training=self.training
         )
 
-        for idx, encoder_layer in enumerate(self.layers):
+        for encoder_layer in self.layers:
             layer_outputs = encoder_layer(
                 hidden_states,
                 attn_mask,

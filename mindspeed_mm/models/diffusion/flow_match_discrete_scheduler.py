@@ -309,7 +309,7 @@ class FlowMatchDiscreteScheduler:
 
         # for loop denoising to get latents
         with tqdm(total=num_inference_steps) as propress_bar:
-            for i, t in enumerate(self.timesteps):
+            for t in self.timesteps:
                 latent_model_input = (
                     torch.cat([latents] * 2)
                     if do_classifier_free_guidance

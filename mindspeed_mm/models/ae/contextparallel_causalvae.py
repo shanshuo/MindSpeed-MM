@@ -596,7 +596,7 @@ class Encoder(nn.Module):
             attn = nn.ModuleList()
             block_in = hidden_size * in_ch_mult[i_level]  # [1,1,2,2,4]
             block_out = hidden_size * hidden_size_mult[i_level]  # [1,2,2,4]
-            for i_block in range(self.num_res_blocks):
+            for _ in range(self.num_res_blocks):
                 block.append(
                     model_name_to_cls(resnet_blocks[i_level])(
                         in_channels=block_in,
@@ -792,7 +792,7 @@ class Decoder(nn.Module):
             block = nn.ModuleList()
             attn = nn.ModuleList()
             block_out = hidden_size * hidden_size_mult[i_level]
-            for i_block in range(self.num_res_blocks + 1):
+            for _ in range(self.num_res_blocks + 1):
                 block.append(
                     model_name_to_cls(resnet_blocks[i_level])(
                         in_channels=block_in,

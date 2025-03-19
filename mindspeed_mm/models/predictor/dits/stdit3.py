@@ -126,7 +126,6 @@ class STDiT3Block(nn.Module):
                     self.scale_shift_table[None] + t0.reshape(B, 6, -1)
             ).chunk(6, dim=1)
 
-        # modulate (attention)
         x_norm1 = self.norm1(x)
         x_m = t2i_modulate(x_norm1, shift_msa, scale_msa)
         if video_mask is not None:
@@ -143,7 +142,6 @@ class STDiT3Block(nn.Module):
             x_m = self.attn(x_m)
             x_m = rearrange(x_m, "(B T) S C -> B (T S) C", T=T, S=S)
 
-        # modulate (attention)
         if video_mask is not None:
             x_m_s = self.t_mask_select(video_mask, gate_msa, gate_msa_zero) * x_m
         else:
@@ -155,7 +153,6 @@ class STDiT3Block(nn.Module):
         # cross attention
         x = x + self.cross_attn(x, y, mask)
 
-        # modulate (MLP)
         x_norm2 = self.norm2(x)
         x_m = t2i_modulate(x_norm2, shift_mlp, scale_mlp)
         if video_mask is not None:
@@ -165,7 +162,6 @@ class STDiT3Block(nn.Module):
         # MLP
         x_m = self.mlp(x_m)
 
-        # modulate (MLP)
         if video_mask is not None:
             x_m_s = self.t_mask_select(video_mask, gate_mlp, gate_mlp_zero) * x_m
         else:

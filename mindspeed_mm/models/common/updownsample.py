@@ -93,7 +93,8 @@ class DownSample3D(nn.Module):
                 if x_rest.shape[-1] > 0:
                     splits = torch.split(x_rest, 32, dim=1)
                     interpolated_splits = [
-                        torch.nn.functional.avg_pool1d(split, kernel_size=2, stride=2) for split in splits
+                        torch.nn.functional.avg_pool1d(split, kernel_size=2, stride=2)
+                        for split in splits
                     ]
                     x_rest = torch.cat(interpolated_splits, dim=1)
                 x = torch.cat([x_first[..., None], x_rest], dim=-1)
@@ -101,7 +102,8 @@ class DownSample3D(nn.Module):
             else:
                 splits = torch.split(x, 32, dim=1)
                 interpolated_splits = [
-                    torch.nn.functional.avg_pool1d(split, kernel_size=2, stride=2) for split in splits
+                    torch.nn.functional.avg_pool1d(split, kernel_size=2, stride=2)
+                    for split in splits
                 ]
                 x = torch.cat(interpolated_splits, dim=1)
                 x = rearrange(x, "(b h w) c t -> b c t h w", h=h, w=w)
@@ -143,7 +145,8 @@ class Upsample3D(nn.Module):
 
                 splits = torch.split(x_rest, 32, dim=1)
                 interpolated_splits = [
-                    torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest") for split in splits
+                    torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest")
+                    for split in splits
                 ]
                 x_rest = torch.cat(interpolated_splits, dim=1)
 
@@ -151,7 +154,8 @@ class Upsample3D(nn.Module):
             else:
                 splits = torch.split(x, 32, dim=1)
                 interpolated_splits = [
-                    torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest") for split in splits
+                    torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest")
+                    for split in splits
                 ]
                 x = torch.cat(interpolated_splits, dim=1)
         else:
@@ -161,7 +165,8 @@ class Upsample3D(nn.Module):
 
             splits = torch.split(x, 32, dim=1)
             interpolated_splits = [
-                torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest") for split in splits
+                torch.nn.functional.interpolate(split, scale_factor=2.0, mode="nearest")
+                for split in splits
             ]
             x = torch.cat(interpolated_splits, dim=1)
 
@@ -241,7 +246,6 @@ class TimeDownsample2x(nn.Module):
         stride: int = 2
     ):
         super().__init__()
-        # ori: self.conv = nn.AvgPool3d((kernel_size, 1, 1), stride=(2, 1, 1))
         # note: when kernel_size=(kernel_size, 1, 1), and stride=(stride, 1, 1), can be replaced by pool1d
         self.avg_pool = nn.AvgPool1d(kernel_size, stride)
 
@@ -280,7 +284,6 @@ class TimeDownsampleRes2x(nn.Module):
         mix_factor: float = 2.0
     ):
         super().__init__()
-        # ori: self.conv = nn.AvgPool3d((kernel_size, 1, 1), stride=(2, 1, 1))
         # note: when kernel_size=(kernel_size, 1, 1), and stride=(stride, 1, 1), can be replaced by pool1d
         self.avg_pool = nn.AvgPool1d(kernel_size, stride[0])
         kernel_size = cast_tuple(kernel_size, 3)

@@ -173,7 +173,7 @@ def pretrain_ae(
         for module in modules_to_train:
             module.train()
         train_dataloader.sampler.set_epoch(epoch)  # Shuffle data at every epoch
-        for batch_idx, batch in enumerate(train_dataloader):
+        for batch in train_dataloader:
             if (
                 current_step % 2 == 1
                 and current_step >= discrim_model.module.discriminator_iter_start

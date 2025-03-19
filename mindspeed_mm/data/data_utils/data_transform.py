@@ -655,7 +655,8 @@ class JpegDegradationSimulator:
         """
         self.qualities = list(range(min_quality, max_quality))
         self.jpeg_degrade_functions = {
-            quality: self._simulate_jpeg_degradation(quality) for quality in self.qualities
+            quality: self._simulate_jpeg_degradation(quality)
+            for quality in self.qualities
         }
 
     def _simulate_jpeg_degradation(self, quality):

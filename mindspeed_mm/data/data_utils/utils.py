@@ -120,7 +120,9 @@ class DataFileReader:
         cap_lists = []
         with open(data_path, "r") as f:
             folder_anno = [
-                i.strip().split(",") for i in f.readlines() if len(i.strip()) > 0
+                i.strip().split(",")
+                for i in f.readlines()
+                if len(i.strip()) > 0
             ]
         for folder, anno in folder_anno:
             sub_list = self.get_datasamples(anno)
@@ -859,7 +861,7 @@ class TextProcesser:
             prompt_mask = text_tokens_and_mask["attention_mask"]
         else:
             prompt_ids, prompt_mask = [], []
-            for i, tokenizer in enumerate(self.tokenizer):
+            for tokenizer in self.tokenizer:
                 text_tokens_and_mask = tokenizer(
                     texts_info,
                     max_length=tokenizer.model_max_length,
@@ -1409,7 +1411,7 @@ def preprocess_internvl2_5(
         for conversation in conversations:
             if conversation['from'] == 'human':
                 image_cnt = conversation['value'].count('<image>')
-                for i in range(image_cnt):
+                for _ in range(image_cnt):
                     if current_image_idx == num_image:
                         break
                     image_tokens = f'{IMG_START_TOKEN_}{IMG_CONTEXT_TOKEN_ * num_image_token_list[current_image_idx]}{IMG_END_TOKEN_}'
@@ -1515,7 +1517,7 @@ def get_formatted_conversations(sources, roles, conv):
     """
     # Apply prompt templates
     conversations = []
-    for i, source in enumerate(sources):
+    for source in sources:
         if roles[source[0]["from"]] != conv.roles[0]:
             # Skip the first one if it is not from human
             source = source[1:]

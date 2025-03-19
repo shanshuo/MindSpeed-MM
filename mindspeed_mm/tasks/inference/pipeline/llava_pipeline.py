@@ -136,8 +136,9 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
     def tokenizer_image_token(self, prompt, image_token_index=MODEL_CONSTANTS["llava"]["IMAGE_TOKEN_INDEX"],
                               return_tensors="pt"):
-        prompt_chunks = [self.tokenizer(chunk).input_ids for chunk in
-                         prompt.split(MODEL_CONSTANTS["llava"]["IMAGE_TOKEN"])]
+        prompt_chunks = [self.tokenizer(chunk).input_ids
+                         for chunk in prompt.split(MODEL_CONSTANTS["llava"]["IMAGE_TOKEN"])
+        ]
 
         def insert_separator(x, sep):
             return [ele for sublist in zip(x, [sep] * len(x)) for ele in sublist][:-1]

@@ -88,7 +88,8 @@ def _all_to_all(
     
     else:
         input_list = [
-            t.contiguous() for t in torch.tensor_split(input_, world_size, scatter_dim)
+            t.contiguous()
+            for t in torch.tensor_split(input_, world_size, scatter_dim)
         ]
         output_list = [torch.empty_like(input_list[0]) for _ in range(world_size)]
 

@@ -1,6 +1,8 @@
 import os
 import json
 import time
+import uuid
+
 from numpy import save
 import torch
 import torch.distributed
@@ -27,7 +29,6 @@ from mindspeed_mm.data.data_utils.constants import (
     PROMPT_MASK_2, 
 )
 
-import uuid
 
 if is_npu_available():
     import torch_npu

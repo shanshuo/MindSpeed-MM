@@ -321,10 +321,15 @@ class VideoDitSparse(MultiModalModule):
             else:
                 for i, block in zip(self.global_layer_idx, self.videodit_sparse_blocks):
                     if i > 1 and i < 30:
-                        video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
+                        try:
+                            video_mask, prompt_mask = sparse_mask[block.self_atten.sparse_n][block.self_atten.sparse_group]
+                        except KeyError:
+                            video_mask, prompt_mask = None, None
                     else:
-                        video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
-
+                        try:
+                            video_mask, prompt_mask = sparse_mask[1][block.self_atten.sparse_group]
+                        except KeyError:
+                            video_mask, prompt_mask = None, None
                     latents = block(
                                 latents,
                                 video_mask=video_mask,
@@ -567,7 +572,6 @@ class VideoDitSparse(MultiModalModule):
             latents = tensor_parallel.gather_from_sequence_parallel_region(latents,
                                                                            tensor_parallel_output_grad=False)
 
-        # To (b, t*h*w, h)
         latents = rearrange(latents, 's b h -> b s h', b=batch_size).contiguous()
         latents = self.proj_out(latents)
         latents = latents.squeeze(1)

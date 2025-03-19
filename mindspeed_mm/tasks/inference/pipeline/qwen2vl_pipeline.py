@@ -66,7 +66,8 @@ class Qwen2VlPipeline(GenerationMixin):
         self.model.inference_params = None
         if return_ids and generated_ids is not None:
             generated_ids = [
-                output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs['input_ids'], generated_ids)
+                output_ids[len(input_ids):]
+                for input_ids, output_ids in zip(inputs['input_ids'], generated_ids)
             ]
             out = self.image_processor.tokenizer.batch_decode(
                 generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
@@ -345,7 +346,8 @@ class Qwen2VlPipeline(GenerationMixin):
         if generated_ids is not None:
             #  把input_ids 截取掉
             generated_ids = [
-                output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
+                output_ids[len(input_ids):]
+                for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
             ]
             out = self.image_processor.tokenizer.batch_decode(
                 generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False

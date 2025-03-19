@@ -66,7 +66,7 @@ def pretrain(
     forward_step_func,
     process_non_loss_data_func=None,
     extra_args_provider=None,
-    args_defaults={},
+    args_defaults=None,
 ):
     """
     Main training program.
@@ -97,6 +97,7 @@ def pretrain(
         args_defaults: a dictionary from argument-name to argument-value. It
             to set already parse arguments.
     """
+    args_defaults = {} if args_defaults is None else args_defaults
     extra_args_provider = extra_args_provider_decorator(extra_args_provider)
     
     new_parse_args = parse_args_wrapper(parse_args)
@@ -339,7 +340,8 @@ def train(
             config.no_sync_func = config.no_sync_func[0]
         if args.delay_grad_reduce:
             config.grad_sync_func = [
-                model_chunk.start_grad_sync for model_chunk in model
+                model_chunk.start_grad_sync
+                for model_chunk in model
             ]
             if len(model) == 1:
                 config.grad_sync_func = config.grad_sync_func[0]

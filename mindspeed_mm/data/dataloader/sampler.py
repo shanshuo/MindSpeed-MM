@@ -60,7 +60,6 @@ def split_data_to_even_chunks(megabatch, lengths, world_size, batch_size):
     """
     Split a list of indices into `chunks` chunks of roughly equal lengths.
     """
-    # batch_size=2, world_size=2
     # [1, 2, 3, 4] -> [[1, 2], [3, 4]]
     # [1, 2, 3] -> [[1, 2], [3]]
     # [1, 2] -> [[1], [2]]
@@ -97,9 +96,9 @@ def group_frame_and_resolution_fun(indices):
 
 def last_group_frame_fun(shuffled_megabatches, lengths):
     re_shuffled_megabatches = []
-    for i_megabatch, megabatch in enumerate(shuffled_megabatches):
+    for megabatch in shuffled_megabatches:
         re_megabatch = []
-        for i_batch, batch in enumerate(megabatch):
+        for batch in megabatch:
             if len(batch) == 0:
                 raise AssertionError("The length of batch is zero")
             len_each_batch = [lengths[i] for i in batch]
@@ -157,7 +156,8 @@ def get_length_grouped_indices(
 
     megabatch_size = world_size * batch_size
     megabatches = [
-        indices[i : i + megabatch_size] for i in range(0, len(lengths), megabatch_size)
+        indices[i: i + megabatch_size]
+        for i in range(0, len(lengths), megabatch_size)
     ]
     megabatches = [
         sorted(megabatch, key=lambda i: lengths[i], reverse=True)

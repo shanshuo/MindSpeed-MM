@@ -28,8 +28,16 @@ def load_from_hf(load_dir, trust_remote_code):
 
 def merge_pp_index(vit_pipeline_num_layers, llm_pipeline_num_layers):
     # Flatten the vit and llm layers for VPP
-    vit_pipeline_num_layers_flat = [item for sublist in vit_pipeline_num_layers for item in sublist]
-    llm_pipeline_num_layers_flat = [item for sublist in llm_pipeline_num_layers for item in sublist]
+    vit_pipeline_num_layers_flat = [
+        item
+        for sublist in vit_pipeline_num_layers
+        for item in sublist
+    ]
+    llm_pipeline_num_layers_flat = [
+        item
+        for sublist in llm_pipeline_num_layers
+        for item in sublist
+    ]
 
     # Generate split method
     split_method = []

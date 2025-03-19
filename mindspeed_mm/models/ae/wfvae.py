@@ -475,7 +475,7 @@ class WFVAE(MultiModalModule):
         return [self.decoder]
 
     def _empty_causal_cached(self, parent):
-        for name, module in parent.named_modules():
+        for _, module in parent.named_modules():
             if hasattr(module, 'causal_cached'):
                 module.causal_cached = deque()
 
@@ -485,7 +485,7 @@ class WFVAE(MultiModalModule):
                 module.is_first_chunk = is_first_chunk
 
     def _set_causal_cached(self, enable_cached=True):
-        for name, module in self.named_modules():
+        for _, module in self.named_modules():
             if hasattr(module, 'enable_cached'):
                 module.enable_cached = enable_cached
 

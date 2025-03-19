@@ -4,7 +4,6 @@ import torch.nn.functional as F
 
 
 class PositionGetter3D:
-    """return positions of patches"""
 
     def __init__(self, atten_layout="BSH"):
         self.cache_positions = {}
@@ -67,7 +66,6 @@ class RoPE3D(nn.Module):
     def apply_rope1d(self, tokens, pos1d, cos, sin):
         if pos1d.ndim != 2:
             raise AssertionError("pos1d.ndim must be 2")
-        # for (batch_size x, ntokens x, nheads x, dim)
         cos = F.embedding(pos1d, cos)[:, :, None, :]
         sin = F.embedding(pos1d, sin)[:, :, None, :]
 

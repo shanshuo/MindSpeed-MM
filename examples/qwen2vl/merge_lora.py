@@ -2,6 +2,7 @@ import os
 import stat
 from pathlib import Path
 import torch
+import torch_npu
 import mindspeed.megatron_adaptor
 
 
@@ -53,16 +54,23 @@ def merge_model(base_dir: str, lora_dir: str, save_dir: str, pp_size, tp_size: i
             print(f"Lora model path: {lora_pt_path}".center(100, '_'))
 
             # 加载模型权重
-            base_state_dict = torch.load(base_pt_path, map_location='cpu')['model']
-            lora_state_dict = torch.load(lora_pt_path, map_location='cpu')['model']
+            if use_npu:
+                base_state_dict = torch.load(base_pt_path, map_location='npu')['model']
+                lora_state_dict = torch.load(lora_pt_path, map_location='npu')['model']
+            else:
+                base_state_dict = torch.load(base_pt_path, map_location='cpu')['model']
+                lora_state_dict = torch.load(lora_pt_path, map_location='cpu')['model']
 
             # 合并权重
             print(f"Merging Base model and Lora model in {rank_info}...")
             merge_state_dict = lora_merge_to_base(base_state_dict, lora_state_dict, lora_target_modules, scaling)
-
+            del base_state_dict, lora_state_dict
             # 保存合并后的权重
             os.makedirs(os.path.dirname(save_pt_path), exist_ok=True)
             torch.save({'model': merge_state_dict}, save_pt_path)
+            del merge_state_dict
+            if use_npu:
+                torch.npu.empty_cache()
 
 
 def lora_merge_to_base(base_state_dict, lora_state_dict, lora_target_modules, scaling):
@@ -90,9 +98,10 @@ if __name__ == '__main__':
     lora_r = 8
     scaling = lora_alpha / lora_r
 
-    # PP parameters: 7B
-    pp_size = 4
-    tp_size = 1
+    # PP parameters: 72B
+    pp_size = 2
+    tp_size = 4
 
+    use_npu = True
     merge_model(base_save_dir, lora_save_dir, merge_save_dir, pp_size, tp_size)
     print('Finished!')

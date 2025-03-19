@@ -133,7 +133,7 @@ class VLModel(MultiModalModule):
     ):
         if self.IGNORE_INDEX is None or self.IMAGE_TOKEN_INDEX is None:
             raise AssertionError("IGNORE_INDEX and IMAGE_TOKEN_INDEX shoule be provided for this model.")
-        if self.add_image_encoder == False or images is None or input_ids.shape[1] == 1:
+        if not self.add_image_encoder or images is None or input_ids.shape[1] == 1:
             return input_ids, position_ids, attention_mask, past_key_values, None, labels
 
         image_features = self.image_encoder(images)
@@ -150,8 +150,9 @@ class VLModel(MultiModalModule):
             labels = torch.full_like(input_ids, self.IGNORE_INDEX)
 
         _input_ids = input_ids
-        input_ids = [cur_input_ids[cur_attention_mask] for cur_input_ids, cur_attention_mask in
-                     zip(input_ids, attention_mask)]
+        input_ids = [cur_input_ids[cur_attention_mask]
+                     for cur_input_ids, cur_attention_mask in zip(input_ids, attention_mask)
+        ]
         labels = [cur_labels[cur_attention_mask] for cur_labels, cur_attention_mask in zip(labels, attention_mask)]
 
         new_input_embeds = []

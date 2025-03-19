@@ -135,7 +135,8 @@ class DataCollatorSpeechSeq2SeqWithPadding:
         # split inputs and labels since they have to be of different lengths and need different padding methods
         # first treat the audio inputs by simply returning torch tensors
         input_features = [
-            {"input_features": feature["input_features"]} for feature in features
+            {"input_features": feature["input_features"]}
+            for feature in features
         ]
         batch = self.processor.feature_extractor.pad(
             input_features, return_tensors="pt"
@@ -363,7 +364,8 @@ class DataCollatorForOpenSoraPlan:
 
                 batch_tubes = [batch_tubes[i] for i in pick_idx]
                 batch_input_size = [
-                    i.shape for i in batch_tubes
+                    i.shape
+                    for i in batch_tubes
                 ]  # [(c t h w), (c t h w)]
                 if not isinstance(input_ids[0], list):
                     input_ids = [input_ids[i] for i in pick_idx]  # b [1, l]

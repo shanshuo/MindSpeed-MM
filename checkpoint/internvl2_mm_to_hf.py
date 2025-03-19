@@ -163,7 +163,6 @@ def convert_mm_to_hf(_mm_state_dict, _llm_num_layers):
         # split w1 和 w3
         if gate_and_up_name in _hf_state_dict.keys():
             gate_and_up_weight = _hf_state_dict[gate_and_up_name]
-            # refer to: torch.cat([gate_proj_weight, up_proj_weight], dim=0)
             gate_weight, up_weight = torch.split(gate_and_up_weight, gate_and_up_weight.size(0) // 2, dim=0)
             _hf_state_dict[gate_name] = gate_weight
             _hf_state_dict[up_name] = up_weight

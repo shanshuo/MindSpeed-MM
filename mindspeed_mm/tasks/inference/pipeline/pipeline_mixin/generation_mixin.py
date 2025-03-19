@@ -62,12 +62,12 @@ from transformers.generation.stopping_criteria import (
     validate_stopping_criteria,
 )
 
-from mindspeed_mm.configs.config import ConfigReader as GenerationConfig
 from megatron.core import mpu
 from megatron.inference.text_generation.communication import (
     copy_from_last_to_first_pipeline_stage,
     broadcast_from_last_pipeline_stage,
 )
+from mindspeed_mm.configs.config import ConfigReader as GenerationConfig
 
 if TYPE_CHECKING:
     from transformers.modeling_utils import PreTrainedModel
@@ -501,12 +501,9 @@ class GenerationMixin:
             generation_mode = GenerationMode.CONSTRAINED_BEAM_SEARCH
         elif generation_config.num_beams == 1:
             if generation_config.do_sample is False:
-                if (
-                        generation_config.top_k is not None
-                        and generation_config.top_k > 1
-                        and generation_config.penalty_alpha is not None
-                        and generation_config.penalty_alpha > 0
-                ):
+                is_top_k_valid = generation_config.top_k is not None and generation_config.top_k > 1
+                is_penalty_alpha_valid = generation_config.penalty_alpha is not None and generation_config.penalty_alpha > 0
+                if is_top_k_valid and is_penalty_alpha_valid:
                     generation_mode = GenerationMode.CONTRASTIVE_SEARCH
                 else:
                     generation_mode = GenerationMode.GREEDY_SEARCH

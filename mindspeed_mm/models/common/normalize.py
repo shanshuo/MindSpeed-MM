@@ -174,7 +174,8 @@ class SpatialNorm3D(nn.Module):
 
             zq_rest_splits = torch.split(zq_rest, 32, dim=1)
             interpolated_splits = [
-                torch.nn.functional.interpolate(split, size=f_rest_size, mode="nearest") for split in zq_rest_splits
+                torch.nn.functional.interpolate(split, size=f_rest_size, mode="nearest")
+                for split in zq_rest_splits
             ]
 
             zq_rest = torch.cat(interpolated_splits, dim=1)
@@ -185,7 +186,8 @@ class SpatialNorm3D(nn.Module):
 
             zq_splits = torch.split(zq, 32, dim=1)
             interpolated_splits = [
-                torch.nn.functional.interpolate(split, size=f_size, mode="nearest") for split in zq_splits
+                torch.nn.functional.interpolate(split, size=f_size, mode="nearest")
+                for split in zq_splits
             ]
             zq = torch.cat(interpolated_splits, dim=1)
 

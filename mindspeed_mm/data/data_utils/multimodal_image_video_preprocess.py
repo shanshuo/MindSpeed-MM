@@ -229,8 +229,8 @@ def dynamic_preprocess_minicpm(image, max_num, image_size, tokenizer, patch_size
     images.append(source_image)
     image_placeholder = default_image_placeholder
     if len(patches) > 0:
-        for i, row in enumerate(patches):
-            for j, patch in enumerate(row):
+        for row in patches:
+            for patch in row:
                 images.append(patch)
         if use_image_id:
             image_placeholder = f'{tokenizer.im_id_start}{image_id_cnt}{tokenizer.im_id_end}' + image_placeholder
@@ -368,9 +368,9 @@ def get_grid_placeholder(tokenizer, grid, query_num, new_schema=False):
     cols = grid[0]
     rows = grid[1]
     slices = []
-    for i in range(rows):
+    for _ in range(rows):
         lines = []
-        for j in range(cols):
+        for _ in range(cols):
             lines.append(image_placeholder)
         slices.append("".join(lines))
     if new_schema:

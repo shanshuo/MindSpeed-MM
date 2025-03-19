@@ -116,7 +116,7 @@ class BaseEvalImpl:
             for x in data['index']:
                 if x not in data_all:
                     raise ValueError(f"{x} not found in data_all")
-            data['prediction'] = [str(data_all[x]) for x in data['index']]
+            data['prediction'] = [str(data_all.get(x, None)) for x in data['index']]
             if 'image' in data:
                 data.pop('image')
 
@@ -177,8 +177,8 @@ class BaseEvalImpl:
                 result = load_pkl(self.prev_file)
                 for k, v in zip(keys, res):
                     result[k] = v
-            data['hit'] = [result[i]['hit'] for i in data['index']]
-            data['log'] = [result[i]['log'] for i in data['index']]
+            data['hit'] = [result.get(i, {}).get('hit', None) for i in data['index']]
+            data['log'] = [result.get(i, {}).get('log', None) for i in data['index']]
             if 'GT' in data:
                 data.pop('GT')
             data.to_excel(self.result_path, index=False, engine='xlsxwriter')

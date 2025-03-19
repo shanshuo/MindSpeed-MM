@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+
 def get_3d_sincos_pos_embed(
     embed_dim: int,
     spatial_size: Union[int, Tuple[int, int]],
@@ -64,6 +65,7 @@ def get_3d_sincos_pos_embed(
 
     pos_embed = np.concatenate([pos_embed_temporal, pos_embed_spatial], axis=-1)  # [T, H*W, D]
     return pos_embed
+
 
 def get_2d_sincos_pos_embed(
     embed_dim, grid_size, cls_token=False, extra_tokens=0, interpolation_scale=1.0, base_size=16
@@ -118,6 +120,7 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
     emb = np.concatenate([emb_sin, emb_cos], axis=1)  # (M, D)
     return emb
+
 
 class PatchEmbed2D_3DsincosPE(nn.Module):
     """3D Image to Patch Embedding with support."""

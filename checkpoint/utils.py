@@ -176,8 +176,16 @@ class ConvertVppMMConfig(BaseModel):
         llm_num_layers = model_config.llm_config.num_hidden_layers
 
         # Flatten the vit and llm layers for VPP
-        vit_pipeline_num_layers_flat = [item for sublist in vit_pipeline_num_layers for item in sublist]
-        llm_pipeline_num_layers_flat = [item for sublist in llm_pipeline_num_layers for item in sublist]
+        vit_pipeline_num_layers_flat = [
+            item
+            for sublist in vit_pipeline_num_layers
+            for item in sublist
+        ]
+        llm_pipeline_num_layers_flat = [
+            item
+            for sublist in llm_pipeline_num_layers
+            for item in sublist
+        ]
 
         # Validation for flattened lists
         expected_length = self.parallel_config.pp_size * self.parallel_config.vpp_size

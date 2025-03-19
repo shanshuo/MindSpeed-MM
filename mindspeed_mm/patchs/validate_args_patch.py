@@ -81,7 +81,7 @@ def validate_args(args, defaults=None):
                             args.pipeline_model_parallel_size))
 
     if args.tp_comm_overlap:
-        ensure_valid(args.sequence_parallel == True, 'Tensor parallel communication/GEMM overlap can happen only when sequence parallelism is enabled')
+        ensure_valid(args.sequence_parallel, 'Tensor parallel communication/GEMM overlap can happen only when sequence parallelism is enabled')
 
     # Deprecated arguments
     ensure_valid(args.batch_size is None, '--batch-size argument is no longer ' \
@@ -454,12 +454,9 @@ def validate_args(args, defaults=None):
     if args.ckpt_fully_parallel_save_deprecated and args.rank == 0:
         print('--ckpt-fully-parallel-save flag is deprecated and has no effect.'
               ' Use --no-ckpt-fully-parallel-save to disable parallel save.')
-    if (
-        args.use_dist_ckpt
-        and not args.ckpt_fully_parallel_save
-        and args.use_distributed_optimizer
-        and args.rank == 0
-    ):
+    use_dist_ckpt_and_not_ckpt_fully_parallel_save = args.use_dist_ckpt and not args.ckpt_fully_parallel_save
+    use_distributed_optimizer_and_rank = args.use_distributed_optimizer and args.rank == 0
+    if use_dist_ckpt_and_not_ckpt_fully_parallel_save and use_distributed_optimizer_and_rank:
         print('Warning: With non-parallel ckpt save and DistributedOptimizer,'
               ' it will be impossible to resume training with different parallelism.'
               ' Consider removing flag --no-ckpt-fully-parallel-save.')

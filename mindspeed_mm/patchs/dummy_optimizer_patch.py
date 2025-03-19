@@ -45,7 +45,8 @@ def backward_step(input_tensor, output_tensor, output_tensor_grad, model_type, c
     with respect to stage's output tensor.
 
     Returns gradient of loss with respect to input tensor (None if first
-    stage)."""
+    stage).
+    """
 
     # NOTE: This code currently can handle at most one skip connection. It
     # needs to be modified slightly to support arbitrary numbers of skip

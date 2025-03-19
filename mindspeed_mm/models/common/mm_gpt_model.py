@@ -230,7 +230,6 @@ class MMGPTModel(LanguageModule):
         logits, _ = self.output_layer(hidden_states, weight=output_weight)
 
         if labels is None:
-            # [s b h] => [b s h]
             return logits.transpose(0, 1).contiguous()
 
         loss = self.compute_language_model_loss(labels, logits)

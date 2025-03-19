@@ -344,13 +344,15 @@ def process_line(line, method='vqa_score'):
         ret['gt'] = [process_answer(x) for x in answers]
         ret['pred'] = process_answer(line['prediction'])
         ret['match'] = []
-        for current_idx, gtAnsDatum in enumerate(ret['gt']):
+        for current_idx, _ in enumerate(ret['gt']):
             other_gt_ans = [
-                item for ret_gt_idx, item in enumerate(ret['gt'])
+                item
+                for ret_gt_idx, item in enumerate(ret['gt'])
                 if ret_gt_idx != current_idx
             ]
             matching_ans = [
-                item for item in other_gt_ans if item == ret['pred']
+                item for item in other_gt_ans
+                if item == ret['pred']
             ]
             acc = min(1, float(len(matching_ans)) / 3)
             ret['match'].append(acc)
