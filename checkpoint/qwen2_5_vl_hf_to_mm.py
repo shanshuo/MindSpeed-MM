@@ -11,7 +11,6 @@ from typing import cast
 
 import torch
 from tqdm import tqdm
-from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 
 from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_model_by_pipeline, save_by_pp
 
@@ -274,6 +273,7 @@ def split_by_tp(_state_dict: dict[str, torch.Tensor], _tp_num: int = 1) -> list[
 
 
 def main(convert_config: ConvertMMConfig):
+    from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
     # qwen2_5_vl获取到的config类型是Qwen2_5_VLConfig
     config = cast(Qwen2_5_VLConfig, convert_config.hf_config.config)
     parallel_config = convert_config.parallel_config
