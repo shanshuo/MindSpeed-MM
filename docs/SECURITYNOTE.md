@@ -69,6 +69,14 @@ MindSpeed-MM 暂时未发布wheel包，无正式对外公开接口，所有功�
 
 [通信矩阵说明](https://gitee.com/ascend/pytorch/blob/master/SECURITYNOTE.md#%E9%80%9A%E4%BF%A1%E7%9F%A9%E9%98%B5%E4%BF%A1%E6%81%AF)
 
+## 特殊场景
+
+| 场景                                                  | 使用方法                                                     | 端口           | 可能的风险                                                   |
+| ----------------------------------------------------- | ------------------------------------------------------------ | -------------- | ------------------------------------------------------------ |
+| 用户下载并使用HuggingFace的开源数据集                 | 调用`load_dataset`函数，并填写目标开源数据集路径             | 随机端口       | 数据集可能包含敏感或不合法内容，导致合规问题。数据集中可能存在质量问题，如标签错误或数据偏差，影响数据预处理。 |
+| 使用`from_pretrained`信任特定代码，使用相关模型的实现 | 调用`from_pretrained`函数，设置`trust_remote_code=True`      | 随机端口       | 如果 trust_remote_code=True，下载的代码可能包含恶意逻辑或后门，威胁系统安全。但同时已设置`local_files_only=True`，程序仅会运行本地的文件来规避风险 |
+| 使用MindSpeed-MM进行训练任务时，新增端口32个          | MindSpeed-MM 调用 Megatron 原生函数 `mpu.initialize_model_parallel` 来初始化模型并行组，并通过使用 PyTorch 分布式训练相关的 API 来启动任意任务。 | [1024,65520]内 | 网络配置错误可能引发端口冲突或连接问题，影响训练效率。       |
+
 ### 公网地址声明
 
 代码涉及公网地址参考 [public_address_statement.md](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/public_address_statement.md)
