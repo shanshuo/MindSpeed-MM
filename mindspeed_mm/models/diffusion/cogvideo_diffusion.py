@@ -179,13 +179,15 @@ class ZeroSNRDDPMDiscretization(Discretization):
 
 
 class EpsWeighting:
-    def __call__(self, sigma):
+    @staticmethod
+    def __call__(sigma):
         return sigma ** -2.0
 
 
 class VideoScaling:  # similar to VScaling
+    @staticmethod
     def __call__(
-            self, alphas_cumprod_sqrt: torch.Tensor, **additional_model_inputs
+            alphas_cumprod_sqrt: torch.Tensor, **additional_model_inputs
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         c_skip = alphas_cumprod_sqrt
         c_out = -((1 - alphas_cumprod_sqrt ** 2) ** 0.5)

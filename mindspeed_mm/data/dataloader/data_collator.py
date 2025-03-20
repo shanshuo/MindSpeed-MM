@@ -216,7 +216,8 @@ class DataCollatorForOpenSoraPlan:
         self.use_video_feature = use_video_feature
         self.use_text_feature = use_text_feature
 
-    def package(self, batch):
+    @staticmethod
+    def package(batch):
         batch_tubes = [i.get(VIDEO, None) for i in batch]  # b [c t h w]
         if not isinstance(batch[0].get(PROMPT_IDS, None), list):
             input_ids = [i.get(PROMPT_IDS, None) for i in batch]  # b [1 l]
@@ -227,7 +228,8 @@ class DataCollatorForOpenSoraPlan:
             cond_mask = list(map(list, zip(*[i[PROMPT_MASK] for i in batch])))
         return batch_tubes, input_ids, cond_mask, file
 
-    def check_prompt_ids_shape(self, prompt_ids, is_list):
+    @staticmethod
+    def check_prompt_ids_shape(prompt_ids, is_list):
         if not is_list:
             if prompt_ids.dim() != 2 and prompt_ids.dim() != 3:
                 raise ValueError(
@@ -469,7 +471,8 @@ class DataCollatorForOpenSoraPlan:
         return processed_res
 
 
-    def pad_to_multiple(self, number, ds_stride):
+    @staticmethod
+    def pad_to_multiple(number, ds_stride):
         remainder = number % ds_stride
         if remainder == 0:
             return number

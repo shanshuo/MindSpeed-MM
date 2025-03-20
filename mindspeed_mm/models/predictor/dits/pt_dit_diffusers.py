@@ -504,8 +504,8 @@ class PTDiTDiffuser(ModelMixin, ConfigMixin):
         attention_type: str = "default", 
         caption_channels: int = None, 
         shift_window: bool = False,
-        compress_ratios : Optional[list] = [1, 8, 8],
-        proxy_compress_ratios : Optional[list] = [1, 4, 4], 
+        compress_ratios: Optional[list] = None,
+        proxy_compress_ratios: Optional[list] = None,
         **kwargs
     ):
         super().__init__()
@@ -514,8 +514,8 @@ class PTDiTDiffuser(ModelMixin, ConfigMixin):
         inner_dim = num_attention_heads * attention_head_dim
         self.norm_type = norm_type
 
-        self.compress_ratios = compress_ratios
-        self.proxy_compress_ratios = proxy_compress_ratios
+        self.compress_ratios = [1, 8, 8] if compress_ratios is None else compress_ratios
+        self.proxy_compress_ratios = [1, 4, 4] if proxy_compress_ratios is None else proxy_compress_ratios
         print(f'compress_ratios: {compress_ratios}')
         print(f'proxy_compress_ratios: {proxy_compress_ratios}')
 
@@ -647,7 +647,10 @@ class PTDiTDiffuser(ModelMixin, ConfigMixin):
 
     def zero_init_shift_window_attention_linear(self):
         for block in self.transformer_blocks:
-            zero_module(block.linear_2)
+            try:
+                zero_module(block.linear_2)
+            except ValueError as e:
+                print(f"An error occurred while zzeroing module: {e}")
 
     def forward(
         self,

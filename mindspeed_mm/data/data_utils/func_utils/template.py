@@ -116,7 +116,8 @@ class Template:
 
         return encoded_messages
 
-    def _convert_elements_to_ids(self, tokenizer: "PreTrainedTokenizer", elements: "SLOTS") -> List[int]:
+    @staticmethod
+    def _convert_elements_to_ids(tokenizer: "PreTrainedTokenizer", elements: "SLOTS") -> List[int]:
         r"""
         Converts elements to token ids.
         """

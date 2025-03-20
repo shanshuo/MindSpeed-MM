@@ -247,8 +247,8 @@ class DDPM:
             "extra": extra,
         }
 
+    @staticmethod
     def condition_mean(
-        self,
         cond_fn: Callable,
         p_mean_var: Tensor,
         x: Tensor,
@@ -297,7 +297,11 @@ class DDPM:
             extract_into_tensor(self.sqrt_recip_alphas_cumprod, t, x.shape) * x
             - extract_into_tensor(self.sqrt_recipm1_alphas_cumprod, t, x.shape) * eps
         )
-        out["mean"], _, _ = self.q_posterior_mean_variance(x_start=out["pred_xstart"], x_t=x, t=t)
+        try:
+            out["mean"], _, _ = self.q_posterior_mean_variance(x_start=out["pred_xstart"], x_t=x, t=t)
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            out["mean"] = None
         return out
 
     def p_sample(

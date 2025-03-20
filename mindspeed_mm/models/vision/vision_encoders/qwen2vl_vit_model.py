@@ -184,7 +184,7 @@ class Qwen2vlSelfAttention(SelfAttention):
 
         if packed_seq_params is not None:
             # reshape to same output shape as unpacked case
-            # (t, np, hn) -> (t, b=1, h=np*hn)
+            # from (t, np, hn) to (t, b=1, h=np*hn)
             # t is the pack size = sum (sq_i)
             # note that batch is a dummy dimension in the packed case
             core_attn_out = core_attn_out.reshape(core_attn_out.size(0), 1, -1)
@@ -291,8 +291,8 @@ class Qwen2vlVitSelfAttention(SelfAttention):
 
         if packed_seq_params is not None:
             # reshape to same output shape as unpacked case
+            # t is the pack size: sum (sq_i)
             # (t, np, hn) -> (t, b=1, h=np*hn)
-            # t is the pack size = sum (sq_i)
             # note that batch is a dummy dimension in the packed case
             core_attn_out = core_attn_out.reshape(core_attn_out.size(0), 1, -1)
 

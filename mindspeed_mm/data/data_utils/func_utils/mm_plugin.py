@@ -81,7 +81,8 @@ class BasePlugin:
                 "This model does not support video input. Please check whether the correct `template` is used."
             )
 
-    def _preprocess_image(self, image: "ImageObject", **kwargs) -> "ImageObject":
+    @staticmethod
+    def _preprocess_image(image: "ImageObject", **kwargs) -> "ImageObject":
         r"""
         Pre-processes a single image.
         """
@@ -96,7 +97,8 @@ class BasePlugin:
 
         return image
 
-    def _get_video_sample_frames(self, video_stream: "Stream", **kwargs) -> int:
+    @staticmethod
+    def _get_video_sample_frames(video_stream: "Stream", **kwargs) -> int:
         r"""
         Computes video sample frames according to fps.
         """

@@ -90,7 +90,11 @@ class STDiT3Block(nn.Module):
         )
         self.cross_attn = mha_cls(hidden_size, num_heads)
         self.norm2 = nn.LayerNorm(hidden_size, eps=1e-6, elementwise_affine=False)
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def create_approx_gelu():
+            return nn.GELU(approximate="tanh")
+
+        approx_gelu = create_approx_gelu
         self.mlp = Mlp(
             in_features=hidden_size, hidden_features=int(hidden_size * mlp_ratio), act_layer=approx_gelu, drop=0
         )
@@ -226,7 +230,11 @@ class STDiT3(MultiModalModule):
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True),
         )
-        approx_gelu = lambda: nn.GELU(approximate="tanh")
+
+        def create_approx_gelu():
+            return nn.GELU(approximate="tanh")
+
+        approx_gelu = create_approx_gelu
         self.y_embedder = CaptionEmbedder(
             in_channels=caption_channels,
             hidden_size=hidden_size,

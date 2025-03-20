@@ -401,8 +401,8 @@ class GenerationMixin:
             return torch.ones((batch_size, 0), dtype=torch.long, device=self.device)
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
+    @staticmethod
     def _prepare_attention_mask_for_generation(
-            self,
             inputs: torch.Tensor,
             pad_token_id: Optional[int],
             eos_token_id: Optional[Union[int, List[int]]],
@@ -446,8 +446,8 @@ class GenerationMixin:
 
         return input_ids, model_kwargs
 
+    @staticmethod
     def _get_logits_warper(
-            self,
             generation_config: GenerationConfig,
     ) -> LogitsProcessorList:
         """
@@ -491,8 +491,9 @@ class GenerationMixin:
             warpers.append(LogitNormalization())
         return warpers
 
+    @staticmethod
     def _get_generation_mode(
-            self, generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
+            generation_config: GenerationConfig, assistant_model: Optional["PreTrainedModel"]
     ) -> GenerationMode:
         """
         Returns the generation mode triggered by a [`GenerationConfig`] instance.
@@ -667,8 +668,8 @@ class GenerationMixin:
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
+    @staticmethod
     def _merge_criteria_processor_list(
-            self,
             default_list: Union[LogitsProcessorList, StoppingCriteriaList],
             custom_list: Union[LogitsProcessorList, StoppingCriteriaList],
     ) -> Union[LogitsProcessorList, StoppingCriteriaList]:

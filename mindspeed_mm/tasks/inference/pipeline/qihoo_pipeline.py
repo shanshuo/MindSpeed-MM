@@ -93,7 +93,7 @@ class QihooPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         try:
             latent_size = self.vae.get_latent_size(input_size)
             shape = (batch_size, self.vae.out_channels, *latent_size)
-        except:
+        except Exception as e:
             latent_size = (
                 (math.ceil((int(self.num_frames) - 1) / self.vae.vae_scale_factor[0]) + 1) if int(
                 self.num_frames) % 2 == 1 else math.ceil(int(self.num_frames) / self.vae.vae_scale_factor[0]),

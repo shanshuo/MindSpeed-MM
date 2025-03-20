@@ -24,6 +24,7 @@ def get_activation_layer(act_type):
     
 
 class Sigmoid:
-    def __call__(self, x):
+    @staticmethod
+    def __call__(x):
         # swish
         return x * torch.sigmoid(x)

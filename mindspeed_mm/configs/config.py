@@ -38,7 +38,10 @@ class ConfigReader:
         return ""
 
     def __str__(self) -> str:
-        self.__repr__()
+        try:
+            self.__repr__()
+        except Exception as e:
+            print(f"An error occurred: {e}")
         return ""
 
     def update_unuse(self, **kwargs):
@@ -66,7 +69,8 @@ class MMConfig:
                 config_dict = self.read_json(real_path)
                 setattr(self, json_name, ConfigReader(config_dict))
     
-    def read_json(self, json_path):
+    @staticmethod
+    def read_json(json_path):
         with open(json_path, mode="r") as f:
             json_file = f.read()
         config_dict = json.loads(json_file)

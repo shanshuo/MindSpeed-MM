@@ -658,9 +658,16 @@ class MultiHeadSparseAttentionSBH(ParallelAttention):
                 k = self._sparse_1d_kv(k)
                 v = self._sparse_1d_kv(v)
             else:
-                k, pad_len = self._sparse_1d(k, total_frames, height, width)
-                v, pad_len = self._sparse_1d(v, total_frames, height, width)
-        
+                try:
+                    k, pad_len = self._sparse_1d(k, total_frames, height, width)
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                    k, pad_len = None, None
+                try:
+                    v, pad_len = self._sparse_1d(v, total_frames, height, width)
+                except Exception as e:
+                    print(f"An error occurred: {e}")
+                    v, pad_len = None, None
         return q, k, v
 
     def function_after_core_attention(

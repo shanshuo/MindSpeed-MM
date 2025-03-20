@@ -9,7 +9,8 @@ class PositionGetter3D:
         self.cache_positions = {}
         self.atten_layout = atten_layout
 
-    def check_type(self, param):
+    @staticmethod
+    def check_type(param):
         if isinstance(param, torch.Tensor):
             param = param.item()
         return param

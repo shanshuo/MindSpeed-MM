@@ -351,7 +351,8 @@ def process_line(line, method='vqa_score'):
                 if ret_gt_idx != current_idx
             ]
             matching_ans = [
-                item for item in other_gt_ans
+                item
+                for item in other_gt_ans
                 if item == ret['pred']
             ]
             acc = min(1, float(len(matching_ans)) / 3)

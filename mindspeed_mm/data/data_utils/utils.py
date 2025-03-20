@@ -92,7 +92,8 @@ class DataFileReader:
         else:
             raise NotImplementedError("Not support now.")
 
-    def get_datasamples(self, data_path, return_type="list"):        
+    @staticmethod
+    def get_datasamples(data_path, return_type="list"):
         if data_path.endswith(".csv"):
             data_out = pd.read_csv(data_path)
             if return_type == "list":

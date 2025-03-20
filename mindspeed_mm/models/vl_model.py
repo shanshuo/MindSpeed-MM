@@ -283,10 +283,13 @@ class VLModel(MultiModalModule):
             output (torch.Tensor): Loss of shape [b, s] if labels are provided, otherwise logits of shape [b, s, vocab_size].
         """
 
-        input_ids, position_ids, attention_mask, past_key_value, combined_embeddings, labels = self.prepare_inputs_labels_for_multimodal(
-            input_ids, position_ids, attention_mask, None, labels, images, None
-        )
-
+        try:
+            input_ids, position_ids, attention_mask, past_key_value, combined_embeddings, labels = self.prepare_inputs_labels_for_multimodal(
+                input_ids, position_ids, attention_mask, None, labels, images, None
+            )
+        except Exception as e:
+            print(f"An error occurred: {e}")
+            input_ids, position_ids, attention_mask, past_key_value, combined_embeddings, labels = None, None, None, None, None, None
         causal_attention_mask = torch.triu(
             torch.ones(combined_embeddings.shape[0], 1, combined_embeddings.shape[1], combined_embeddings.shape[1],
                        device=combined_embeddings.device),

@@ -23,7 +23,8 @@ class CogVideoXI2VProcessor:
         self.noised_image_dropout = config.get("noised_image_dropout", 0.05)
         self.noised_image_input = config.get("noised_image_input", True)
 
-    def add_noise_to_image(self, image):
+    @staticmethod
+    def add_noise_to_image(image):
         sigma = torch.normal(mean=-3.0, std=0.5, size=(image.shape[0],)).to(image.device)
         sigma = torch.exp(sigma).to(image.dtype)
         image_noise = torch.randn_like(image) * sigma[:, None, None, None, None]

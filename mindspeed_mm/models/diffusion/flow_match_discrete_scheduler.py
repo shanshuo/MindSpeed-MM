@@ -132,7 +132,7 @@ class FlowMatchDiscreteScheduler:
             n_tokens (`int`, *optional*):
                 Number of tokens in the input sequence.
         """
-        self.num_inference_steps = num_inference_steps
+        self.num_inference_timesteps = num_inference_steps
 
         sigmas = torch.linspace(1, 0, num_inference_steps + 1)
         sigmas = self.sd3_time_shift(sigmas)
@@ -165,8 +165,9 @@ class FlowMatchDiscreteScheduler:
         else:
             self._step_index = self._begin_index
 
+    @staticmethod
     def scale_model_input(
-        self, sample: torch.Tensor, timestep: Optional[int] = None
+        sample: torch.Tensor, timestep: Optional[int] = None
     ) -> torch.Tensor:
         return sample
 

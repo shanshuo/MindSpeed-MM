@@ -1,5 +1,6 @@
 # Copyright 2024 The HuggingFace Team. All rights reserved.
 # Copyright 2024 The HUAWEI Team. All rights reserved.
+# Copyright 2024 The CogVideoX team, Tsinghua University & ZhipuAI and The HuggingFace Team.
 
 
 import PIL
@@ -81,7 +82,8 @@ class InputsCheckMixin:
         if mask_type is not None and mask_type not in STR_TO_TYPE.keys() and mask_type not in STR_TO_TYPE.values():
             raise ValueError(f"Invalid mask type: {mask_type}")
 
-    def image_prompt_checks(self, image_prompt, ):
+    @staticmethod
+    def image_prompt_checks(image_prompt, ):
         if (
             not isinstance(image_prompt, torch.Tensor)
             and not isinstance(image_prompt, PIL.Image.Image)

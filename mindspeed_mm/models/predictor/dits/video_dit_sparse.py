@@ -195,9 +195,9 @@ class VideoDitSparse(MultiModalModule):
         )
         prompt_mask_sparse_1d_group = prompt_mask_sparse_1d
 
-        if (video_mask_sparse_1d == False).all():
+        if not video_mask_sparse_1d.any():
             video_mask_sparse_1d = None
-        if (video_mask_sparse_1d_group == False).all():
+        if not video_mask_sparse_1d_group.any():
             video_mask_sparse_1d_group = None
         
         args = get_args()

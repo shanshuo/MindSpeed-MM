@@ -295,7 +295,8 @@ class DiffusersScheduler:
                         callback(step_idx, t, latents)
         return latents
 
-    def broadcast_timesteps(self, input_: torch.Tensor):
+    @staticmethod
+    def broadcast_timesteps(input_: torch.Tensor):
         cp_src_rank = list(mpu.get_context_parallel_global_ranks())[0]
         if mpu.get_context_parallel_world_size() > 1:
             dist.broadcast(input_, cp_src_rank, group=mpu.get_context_parallel_group())

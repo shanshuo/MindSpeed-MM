@@ -52,7 +52,10 @@ def to_tensor(clip):
     Return:
         clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W)
     """
-    _is_tensor_video_clip(clip)
+    try:
+        _is_tensor_video_clip(clip)
+    except Exception as e:
+        print(f"An error occurred: {e}")
     if not clip.dtype == torch.uint8:
         raise TypeError(
             "Clip tensor should have data type uint8, but it is %s" % str(clip.dtype)
@@ -69,8 +72,10 @@ def to_tensor_after_resize(clip):
     Return:
         clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W), but in [0, 1]
     """
-    _is_tensor_video_clip(clip)
-
+    try:
+        _is_tensor_video_clip(clip)
+    except Exception as e:
+        print(f"An error occurred: {e}")
     return clip.float() / 255.0
 
 
@@ -252,7 +257,8 @@ class AENorm:
     def __init__(self):
         pass
 
-    def __call__(self, clip):
+    @staticmethod
+    def __call__(clip):
         """
         Apply the center crop to the input video.
 
@@ -342,7 +348,8 @@ class ToTensorVideo:
     def __init__(self):
         pass
 
-    def __call__(self, clip):
+    @staticmethod
+    def __call__(clip):
         """
         Args:
             clip (torch.tensor, dtype=torch.uint8): Size is (T, C, H, W)
@@ -364,7 +371,8 @@ class ToTensorAfterResize:
     def __init__(self):
         pass
 
-    def __call__(self, clip):
+    @staticmethod
+    def __call__(clip):
         """
         Args:
             clip (torch.tensor, dtype=torch.float): Size is (T, C, H, W)
@@ -659,7 +667,8 @@ class JpegDegradationSimulator:
             for quality in self.qualities
         }
 
-    def _simulate_jpeg_degradation(self, quality):
+    @staticmethod
+    def _simulate_jpeg_degradation(quality):
         """
         Create a function to degrade an image based on the JPEG quality.
         """

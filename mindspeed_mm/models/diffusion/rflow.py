@@ -61,7 +61,10 @@ class RFlow:
         self.sample_method = sample_method
         if sample_method == "logit-normal":
             self.distribution = LogisticNormal(torch.tensor([loc]), torch.tensor([scale]))
-            self.sample_t = lambda x: self.distribution.sample((x.shape[0],))[:, 0].to(x.device)
+
+            def sample_t(x):
+                return self.distribution.sample((x.shape[0],))[:, 0].to(x.device)
+            self.sample_t = sample_t
 
         # timestep transform
         self.use_timestep_transform = use_timestep_transform
@@ -176,8 +179,8 @@ class RFlow:
             x_t = torch.where(mask[:, None, :, None, None], x_t, x_t0)
         return x_t, noise, t
 
+    @staticmethod
     def training_losses(
-        self, 
         model_output, 
         x_start, 
         noise=None, 
