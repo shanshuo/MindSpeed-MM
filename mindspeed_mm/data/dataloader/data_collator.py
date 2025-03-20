@@ -23,7 +23,8 @@ from mindspeed_mm.data.data_utils.constants import (
     VIDEO,
     VIDEO_MASK,
     MASKED_VIDEO,
-    INPUT_MASK
+    INPUT_MASK,
+    FILE_INFO
 )
 
 
@@ -220,10 +221,11 @@ class DataCollatorForOpenSoraPlan:
         if not isinstance(batch[0].get(PROMPT_IDS, None), list):
             input_ids = [i.get(PROMPT_IDS, None) for i in batch]  # b [1 l]
             cond_mask = [i.get(PROMPT_MASK, None) for i in batch]  # b [1 l]
+            file = [i.get(FILE_INFO, None) for i in batch]
         else:
             input_ids = list(map(list, zip(*[i[PROMPT_IDS] for i in batch])))
             cond_mask = list(map(list, zip(*[i[PROMPT_MASK] for i in batch])))
-        return batch_tubes, input_ids, cond_mask
+        return batch_tubes, input_ids, cond_mask, file
 
     def check_prompt_ids_shape(self, prompt_ids, is_list):
         if not is_list:
@@ -272,7 +274,7 @@ class DataCollatorForOpenSoraPlan:
 
     def __call__(self, batch):
         if not self.use_video_feature:
-            batch_tubes, input_ids, cond_mask = self.package(batch)
+            batch_tubes, input_ids, cond_mask, file = self.package(batch)
 
             ds_stride = self.ae_stride * self.patch_size
             t_ds_stride = self.ae_stride_t * self.patch_size_t
@@ -295,6 +297,7 @@ class DataCollatorForOpenSoraPlan:
                 PROMPT_MASK: processed_res.cond_mask,
                 MASKED_VIDEO: processed_res.masked_video,
                 INPUT_MASK: processed_res.input_mask,
+                FILE_INFO: file
             }
         else:
             batch_tubes, video_mask, input_ids, cond_mask = self.package_feature(batch)
