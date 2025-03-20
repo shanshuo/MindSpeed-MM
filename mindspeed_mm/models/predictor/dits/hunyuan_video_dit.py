@@ -1140,6 +1140,8 @@ class MMSingleStreamBlock(nn.Module):
                 self.linear1_qkv.sequence_parallel = True
                 qkv = torch.cat([img_qkv, txt_qkv], dim=0)
                 qkv = qkv.transpose(0, 1) # s b h -> b s h
+            else:
+                qkv = self.linear1_qkv(x_mod)[0]
         else:
             qkv = self.linear1_qkv(x_mod)
 
