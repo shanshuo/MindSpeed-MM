@@ -10,6 +10,7 @@
   - [环境搭建](#jump1.2)
 - [权重下载及转换](#jump2)
   - [权重下载](#jump2.1)
+  - [权重转换](#jump2.2)
 - [数据集准备及处理](#jump3)
   - [数据集下载](#jump3.1)
 - [预训练](#jump4)
@@ -144,30 +145,37 @@ pip install decord==0.6.0
 
 #### 2. 权重转换
 
-MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用如下脚本代码对下载的预训练权重进行转换。
+MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt_to_mm.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分与合并。
 
-```python
-import torch
-from safetensors.torch import load_file
+首先修改 examples/opensoraplan1.2/convert_ckpt_to_mm.py 传入参数。
+权重转换脚本的参数说明与默认值如下：
+|参数| 含义 | 默认值 |
+|:------------|:----|:----|
+| --tp_size | tp size | 1 |
+| --dit_hg_weight_path | dit部分原始权重路径 | "./raw_ckpt/open-sora-plan/93x480p/diffusion_pytorch_model.safetensors"
+| --dit_mm_save_path | dit部分转换或切分后权重保存路径 | "./ckpt/open-sora-plan-12/93x480p" |
+| --vae_convert | 是否转换vae权重 | True |
+| --vae_hg_weight_path | vae部分原始权重路径 | "./raw_ckpt/open-sora-plan/vae/checkpoint.ckpt" |
+| --vae_mm_save_path | vae部分转换后权重保存路径 | "./ckpt/vae" |
+| --dit_mm_weight_path | 用于合并操作的，TP切分的dit权重路径 | "./ckpt/open-sora-plan-12/93x480p" |
+| --dit_merge_save_path | 合并后dit权重保存路径 | "./ckpt/open-sora-plan-12/merge" |
+| --mode | split表示按tp size对权重进行切分， merge表示按tp size对权重进行合并 | "split" |
 
-pretrained_checkpoint = torch.load("your pretrained path", map_location="cpu")
-new_checkpoint = {}
-for key in pretrained_checkpoint.keys():
-    model_key = key.replace("transformer_blocks", "videodit_blocks")
-    model_key = model_key.replace("attn1", "self_atten")
-    model_key = model_key.replace("attn2", "cross_atten")
-    model_key = model_key.replace("to_q", "proj_q")
-    model_key = model_key.replace("to_k", "proj_k")
-    model_key = model_key.replace("to_v", "proj_v")
-    model_key = model_key.replace("to_out.0", "proj_out")
-    model_key = model_key.replace("to_out.1", "dropout")
-    new_checkpoint[model_key] = pretrained_checkpoint[key]
 
-torch.save(new_checkpoint, "videodit.pth")
-```
+启动脚本
+
+    # 根据实际情况修改 ascend-toolkit 路径
+
+    source /usr/local/Ascend/ascend-toolkit/set_env.sh
+    python examples/opensoraplan1.2/convert_ckpt_to_mm.py   --mode="split" --tp-size=2
+    
+
+
+同步修改examples/opensoraplan1.2/pretrain_opensoraplan1_2.sh 中的--load参数，该路径为转换后或者切分后的权重，注意--load配置的是转换到MindSpeed-MM后的dit权重路径，vae权重路径在model_opensoraplan1_2.json中配置
+
+    LOAD_PATH="./ckpt/open-sora-plan-12/93x480p"
 
 ---
-
 <a id="jump3"></a>
 
 ## 数据集准备及处理
