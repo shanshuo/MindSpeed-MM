@@ -1,5 +1,5 @@
 __all__ = [
-    "MultiHeadAttentionBSH", "ParallelMultiHeadAttentionSBH", "Attention", "SeqParallelAttention",
+    "ParallelAttention", "ParallelMultiHeadAttentionSBH", "Attention", "SeqParallelAttention",
     "MultiHeadCrossAttention", "SeqParallelMultiHeadCrossAttention", "Conv2dAttnBlock", "CausalConv3dAttnBlock",
     "WfCausalConv3dAttnBlock", "WfCausalConv3dAttnBlockForOpenSoraPlan", "FinalLayer", "T2IFinalLayer", "set_grad_checkpoint", "auto_grad_checkpoint",
     "load_checkpoint", "all_to_all", "all_to_all_SBH", "split_forward_gather_backward", "gather_forward_split_backward",
@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 from mindspeed_mm.models.common.attention import (
-    MultiHeadAttentionBSH,
+    ParallelAttention,
     ParallelMultiHeadAttentionSBH,
     Attention,
     SeqParallelAttention,

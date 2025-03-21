@@ -6,14 +6,17 @@ from torch import nn
 import torch.nn.functional as F
 from diffusers.models.embeddings import SinusoidalPositionalEmbedding, PixArtAlphaTextProjection
 from diffusers.models.normalization import AdaLayerNorm, AdaLayerNormContinuous, AdaLayerNormZero, AdaLayerNormSingle
-from diffusers.models.attention import FeedForward
+
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
+from megatron.legacy.model.enums import AttnType
 
+from mindspeed_mm.models.common.ffn import FeedForward
 from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.embeddings.patch_embeddings import VideoPatchEmbed2D
-from mindspeed_mm.models.common.attention import MultiHeadAttentionBSH, ParallelMultiHeadAttentionSBH
+from mindspeed_mm.models.common.attention import ParallelAttention, ParallelMultiHeadAttentionSBH
+from mindspeed_mm.models.common.embeddings.pos_embeddings import RoPE3DSORA
 
 
 class VideoDiT(MultiModalModule):
@@ -54,6 +57,7 @@ class VideoDiT(MultiModalModule):
         dropout: float = 0.0,
         cross_attention_dim: Optional[int] = None,
         attention_bias: bool = False,
+        fa_layout: str = "sbh",
         input_size: Tuple[int] = None,
         patch_size_thw: Tuple[int] = None,
         activation_fn: str = "geglu",
@@ -85,6 +89,11 @@ class VideoDiT(MultiModalModule):
         inner_dim = num_heads * head_dim
 
         args = get_args()
+        self.sequence_parallel = args.sequence_parallel
+
+        if mpu.get_tensor_model_parallel_world_size() <= 1:
+            self.sequence_parallel = False
+
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
@@ -95,9 +104,9 @@ class VideoDiT(MultiModalModule):
             raise NotImplementedError("distribute_saved_activations is currently not supported")
 
         if mpu.get_context_parallel_world_size() > 1:
-            self.enable_sequence_parallelism = True
+            self.enable_context_parallelism = True
         else:
-            self.enable_sequence_parallelism = False
+            self.enable_context_parallelism = False
 
         # Initialize blocks
         # Init PatchEmbed
@@ -113,6 +122,13 @@ class VideoDiT(MultiModalModule):
             interpolation_scale_t=interpolation_scale[0],
             use_abs_pos=not use_rope,
         )
+
+        # Rotary positional embeddings
+        self.rope = RoPE3DSORA(
+            head_dim=head_dim,
+            interpolation_scale=interpolation_scale
+        )
+
         # Init VideoDiTBlock
         self.videodit_blocks = nn.ModuleList(
             [
@@ -125,12 +141,14 @@ class VideoDiT(MultiModalModule):
                     activation_fn=activation_fn,
                     num_embeds_ada_norm=num_embeds_ada_norm,
                     attention_bias=attention_bias,
+                    fa_layout=fa_layout,
                     norm_type=norm_type,
                     norm_elementwise_affine=norm_elementwise_affine,
                     norm_eps=norm_eps,
-                    use_rope=use_rope,
+                    rope=self.rope,
                     interpolation_scale=interpolation_scale,
-                    enable_sequence_parallelism=self.enable_sequence_parallelism,
+                    enable_context_parallelism=self.enable_context_parallelism,
+                    sequence_parallel=self.sequence_parallel,
                 )
                 for _ in range(num_layers)
             ]
@@ -144,9 +162,16 @@ class VideoDiT(MultiModalModule):
             self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=False, eps=1e-6)
             self.scale_shift_table = nn.Parameter(torch.randn(2, inner_dim) / inner_dim ** 0.5)
             self.proj_out = nn.Linear(inner_dim, self.patch_size_t * self.patch_size_h * self.patch_size_w * self.out_channels)
+            # set label "sequence_parallel", for all_reduce the grad
+            setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
+
         self.adaln_single = None
         if norm_type == "ada_norm_single":
             self.adaln_single = AdaLayerNormSingle(inner_dim, use_additional_conditions=False)
+            # set label "sequence_parallel", for all_reduce the grad
+            for param in self.adaln_single.parameters():
+                setattr(param, "sequence_parallel", self.sequence_parallel)
+
         # Init Projection
         self.caption_projection = None
         if caption_channels is not None:
@@ -175,10 +200,10 @@ class VideoDiT(MultiModalModule):
             class_labels: Used to indicate class labels conditioning.
             use_image_num: The number of images use for trainning.
         """
-        b, _, t, _, _ = latents.shape
+        batch_size, _, t, _, _ = latents.shape
         frames = t - use_image_num
         vid_mask, img_mask = None, None
-        prompt_mask = prompt_mask.view(b, -1, prompt_mask.shape[-1])
+        prompt_mask = prompt_mask.view(batch_size, -1, prompt_mask.shape[-1])
         if video_mask is not None and video_mask.ndim == 4:
             video_mask = video_mask.to(self.dtype)
             vid_mask = video_mask[:, :frames]  # [b, frames, h, w]
@@ -199,7 +224,7 @@ class VideoDiT(MultiModalModule):
             vid_mask = (1 - vid_mask.bool().to(self.dtype)) * -10000.0 if vid_mask.numel() > 0 else None
             img_mask = (1 - img_mask.bool().to(self.dtype)) * -10000.0 if img_mask.numel() > 0 else None
 
-            if frames == 1 and use_image_num == 0 and not self.enable_sequence_parallelism:
+            if frames == 1 and use_image_num == 0 and not self.enable_context_parallelism:
                 img_mask = vid_mask
                 vid_mask = None
         # convert prompt_mask to a bias the same way we do for video_mask
@@ -212,38 +237,59 @@ class VideoDiT(MultiModalModule):
             prompt_img_mask = prompt_mask[:, in_t - use_image_num:]
             prompt_img_mask = rearrange(prompt_img_mask, 'b i l -> (b i) 1 l') if prompt_img_mask.numel() > 0 else None
 
-            if frames == 1 and use_image_num == 0 and not self.enable_sequence_parallelism:
+            if frames == 1 and use_image_num == 0 and not self.enable_context_parallelism:
                 prompt_img_mask = prompt_vid_mask
                 prompt_vid_mask = None
 
         if vid_mask is not None:
             vid_mask = vid_mask.bool().repeat(1, vid_mask.shape[-1], 1)
             prompt_vid_mask = prompt_vid_mask.bool().repeat(1, vid_mask.shape[-2], 1)
+        else:
+            prompt_vid_mask = prompt_vid_mask.bool()
         if img_mask is not None:
             img_mask = img_mask.bool().repeat(1, img_mask.shape[-1], 1)
             prompt_img_mask = prompt_img_mask.bool().repeat(1, img_mask.shape[-2], 1)
-
+ 
         # 1. Input
         frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
         height, width = latents.shape[-2] // self.patch_size_h, latents.shape[-1] // self.patch_size_w
 
         added_cond_kwargs = {"resolution": None, "aspect_ratio": None}
-        latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
-            embedded_timestep_vid, embedded_timestep_img = self._operate_on_patched_inputs(
-            latents, prompt, timestep, added_cond_kwargs, b, frames, use_image_num
-        )
 
-        if self.enable_sequence_parallelism and latents_vid is not None and prompt_vid is not None:
-            latents_vid = rearrange(latents_vid, 'b s h -> s b h', b=b).contiguous()
-            prompt_vid = rearrange(prompt_vid, 'b s h -> s b h', b=b).contiguous()
+        latents_vid, latents_img, prompt_vid, prompt_img, timestep_vid, timestep_img, \
+            embedded_timestep_vid, embedded_timestep_img = \
+                self._operate_on_patched_inputs(
+                    latents=latents,
+                    prompt=prompt, 
+                    timestep=timestep,
+                    added_cond_kwargs=added_cond_kwargs, 
+                    batch_size=batch_size,
+                    frames=frames, 
+                    use_image_num=use_image_num
+                )
+
+        latents_vid = rearrange(latents_vid, 'b s h -> s b h', b=batch_size).contiguous()
+        prompt_vid = rearrange(prompt_vid, 'b s h -> s b h', b=batch_size).contiguous()
+
+        if self.enable_context_parallelism and latents_vid is not None and prompt_vid is not None:
             timestep_vid = timestep_vid.view(latents_vid.shape[1], 6, -1).transpose(0, 1).contiguous()
 
             latents_vid = split_forward_gather_backward(latents_vid, mpu.get_context_parallel_group(), dim=0,
                                                         grad_scale='down')
 
+        if self.sequence_parallel:      
+            latents_vid = tensor_parallel.scatter_to_sequence_parallel_region(latents_vid)
+            prompt_vid = tensor_parallel.scatter_to_sequence_parallel_region(prompt_vid)
+
         frames = torch.tensor(frames)
         height = torch.tensor(height)
         width = torch.tensor(width)
+
+        # Rotary positional embeddings
+        rotary_pos_emb = self.rope(batch_size, frames, height, width, latents.device)# s b 1 d
+        if mpu.get_context_parallel_world_size() > 1:
+            rotary_pos_emb = rotary_pos_emb.chunk(mpu.get_context_parallel_world_size(), dim=0)[mpu.get_context_parallel_rank()]
+
         if self.recompute_granularity == "full":
             if latents_vid is not None:
                 latents_vid = self._checkpointed_forward(
@@ -255,7 +301,8 @@ class VideoDiT(MultiModalModule):
                     class_labels=class_labels,
                     frames=frames,
                     height=height,
-                    width=width
+                    width=width,
+                    rotary_pos_emb=rotary_pos_emb,
                 )
             if latents_img is not None:
                 latents_img = self._checkpointed_forward(
@@ -267,7 +314,8 @@ class VideoDiT(MultiModalModule):
                     class_labels=class_labels,
                     frames=torch.tensor(1),
                     height=height,
-                    width=width
+                    width=width,
+                    rotary_pos_emb=rotary_pos_emb,
                 )
         else:
             for block in self.videodit_blocks:
@@ -296,12 +344,8 @@ class VideoDiT(MultiModalModule):
                         width=width
                     )
 
-        if self.enable_sequence_parallelism and latents_vid is not None:
-            latents_vid = rearrange(latents_vid, 's b h -> b s h', b=b).contiguous()
-            latents_vid = gather_forward_split_backward(latents_vid, mpu.get_context_parallel_group(), dim=1,
-                                                        grad_scale='up')
-
-        # 3. Output
+        # 3. Output     
+        # patch - cp - sp - sp - cp - unpatch
         output_vid, output_img = None, None
         if latents_vid is not None:
             output_vid = self._get_output_for_patched_inputs(
@@ -347,7 +391,8 @@ class VideoDiT(MultiModalModule):
         class_labels,
         frames,
         height,
-        width):
+        width,
+        rotary_pos_emb):
         """Forward method with activation checkpointing."""
 
         def custom(start, end):
@@ -376,7 +421,8 @@ class VideoDiT(MultiModalModule):
                     class_labels,
                     frames,
                     height,
-                    width
+                    width,
+                    rotary_pos_emb
                 )
                 layer_num += self.recompute_num_layers
         elif self.recompute_method == "block":
@@ -393,7 +439,8 @@ class VideoDiT(MultiModalModule):
                         class_labels,
                         frames,
                         height,
-                        width
+                        width,
+                        rotary_pos_emb
                     )
                 else:
                     block = self._get_block(layer_num)
@@ -406,7 +453,8 @@ class VideoDiT(MultiModalModule):
                         class_labels=class_labels,
                         frames=frames,
                         height=height,
-                        width=width
+                        width=width,
+                        rotary_pos_emb=rotary_pos_emb
                     )
         else:
             raise ValueError("Invalid activation recompute method.")
@@ -455,6 +503,17 @@ class VideoDiT(MultiModalModule):
 
     def _get_output_for_patched_inputs(self, latents, timestep, class_labels, embedded_timestep, num_frames,
                                        height=None, width=None):
+        if self.sequence_parallel:
+            latents = tensor_parallel.gather_from_sequence_parallel_region(latents,
+                                                                           tensor_parallel_output_grad=False)
+                                                                           
+        batch_size = latents.shape[1]
+        latents = rearrange(latents, 's b h -> b s h', b=batch_size).contiguous()
+        
+        if self.enable_context_parallelism:
+            latents = gather_forward_split_backward(latents, mpu.get_context_parallel_group(), dim=1,
+                                                        grad_scale='up')
+
         if self.norm_type != "ada_norm_single":
             conditioning = self.videodit_blocks[0].norm1.emb(timestep, class_labels, hidden_dtype=self.dtype)
             shift, scale = self.proj_out_1(F.silu(conditioning)).chunk(2, dim=1)
@@ -491,7 +550,7 @@ class VideoDiTBlock(nn.Module):
         out_channels: The number of channels in the output.
         dropout: The dropout probability to use.
         cross_attention_dim: The number of prompt dimensions to use.
-        attention_bias: Whether to use bias in VideoDiTBlock's attention.
+        attention_bias: Whether to use bias for QKV in VideoDiTBlock's attention.
         activation_fn: The name of activation function use in VideoDiTBlock.
         norm_type: can be 'layer_norm', 'ada_norm', 'ada_norm_zero', 'ada_norm_single', 'ada_norm_continuous', 'layer_norm_i2vgen'.
         num_embeds_ada_norm: The number of diffusion steps used during training. Pass if at least one of the norm_layers is
@@ -513,6 +572,7 @@ class VideoDiTBlock(nn.Module):
         num_embeds_ada_norm: Optional[int] = None,
         attention_bias: bool = False,
         attention_out_bias: bool = True,
+        fa_layout: str = "sbh",
         norm_type: str = "layer_norm",
         norm_elementwise_affine: bool = True,
         norm_eps: float = 1e-5,
@@ -523,9 +583,10 @@ class VideoDiTBlock(nn.Module):
         ada_norm_bias: Optional[int] = None,
         ff_inner_dim: Optional[int] = None,
         ff_bias: bool = True,
-        use_rope: bool = False,
         interpolation_scale: Tuple[float] = None,
-        enable_sequence_parallelism: bool = False,
+        enable_context_parallelism: bool = False,
+        sequence_parallel: bool = False,
+        rope=None,
     ):
         super().__init__()
         if norm_type in ("ada_norm", "ada_norm_zero") and num_embeds_ada_norm is None:
@@ -534,6 +595,7 @@ class VideoDiTBlock(nn.Module):
                 f" define `num_embeds_ada_norm` if setting `norm_type` to {norm_type}."
             )
         self.norm_type = norm_type
+        self.sequence_parallel = sequence_parallel
 
         if positional_embeddings and (num_positional_embeddings is None):
             raise ValueError("If `positional_embedding` type is defined, `num_positition_embeddings` must also be defined.")
@@ -560,22 +622,22 @@ class VideoDiTBlock(nn.Module):
         else:
             self.norm1 = nn.LayerNorm(dim, elementwise_affine=norm_elementwise_affine, eps=norm_eps)
 
-        self.enable_sequence_parallelism = enable_sequence_parallelism
-        if self.enable_sequence_parallelism:
-            attention = ParallelMultiHeadAttentionSBH
-        else:
-            attention = MultiHeadAttentionBSH
+        self.enable_context_parallelism = enable_context_parallelism
 
-        self.self_atten = attention(
+        self.self_atten = ParallelAttention(
             query_dim=dim,
             key_dim=None,
-            num_heads=num_heads,
-            head_dim=head_dim,
-            dropout=dropout,
-            proj_qkv_bias=attention_bias,
+            num_attention_heads=num_heads,
+            hidden_size=head_dim * num_heads,
+            proj_q_bias=attention_bias,
+            proj_k_bias=attention_bias,
+            proj_v_bias=attention_bias,
             proj_out_bias=attention_out_bias,
-            use_rope=use_rope,
-            interpolation_scale=interpolation_scale
+            dropout=dropout,
+            is_qkv_concat=False,
+            attention_type=AttnType.self_attn,
+            fa_layout=fa_layout,
+            rope=rope
         )
 
         # 2. Cross-Attn
@@ -593,7 +655,7 @@ class VideoDiTBlock(nn.Module):
         else:
             self.norm2 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
 
-        self.cross_atten = attention(
+        self.cross_atten = ParallelMultiHeadAttentionSBH(
             query_dim=dim,
             key_dim=cross_attention_dim,
             num_heads=num_heads,
@@ -631,10 +693,13 @@ class VideoDiTBlock(nn.Module):
         # 4. Scale-shift.
         if norm_type == "ada_norm_single":
             self.scale_shift_table = nn.Parameter(torch.randn(6, dim) / dim ** 0.5)
+            # set label "sequence_parallel", for all_reduce the grad
+            setattr(self.scale_shift_table, "sequence_parallel", self.sequence_parallel)
 
         # let chunk size default to None
         self._chunk_size = None
         self._chunk_dim = 0
+
 
     def forward(
         self,
@@ -647,13 +712,14 @@ class VideoDiTBlock(nn.Module):
         frames: torch.int64 = None, 
         height: torch.int64 = None, 
         width: torch.int64 = None, 
+        rotary_pos_emb=None, 
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
     ) -> torch.FloatTensor:
         # 1. Self-Attention
         frames = frames.item()
         height = height.item()
         width = width.item()
-        batch_size = latents.shape[0]
+        batch_size = latents.shape[1]
         if self.norm_type == "ada_norm":
             norm_latents = self.norm1(latents, timestep)
         elif self.norm_type == "ada_norm_zero":
@@ -665,15 +731,11 @@ class VideoDiTBlock(nn.Module):
         elif self.norm_type == "ada_norm_continuous":
             norm_latents = self.norm1(latents, added_cond_kwargs["pooled_text_emb"])
         elif self.norm_type == "ada_norm_single":
-            if self.enable_sequence_parallelism:
-                batch_size = latents.shape[1]
-                shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-                    self.scale_shift_table[:, None] + timestep.reshape(6, batch_size, -1)
-                ).chunk(6, dim=0)
-            else:
-                shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-                    self.scale_shift_table[None] + timestep.reshape(batch_size, 6, -1)
-                ).chunk(6, dim=1)
+            
+            shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
+                self.scale_shift_table[:, None] + timestep.reshape(6, batch_size, -1)
+            ).chunk(6, dim=0)
+            
             norm_latents = self.norm1(latents)
             norm_latents = norm_latents * (1 + scale_msa) + shift_msa
         else:
@@ -682,13 +744,15 @@ class VideoDiTBlock(nn.Module):
         if self.pos_embed is not None:
             norm_latents = self.pos_embed(norm_latents)
 
+        if video_mask is not None:
+            video_mask = video_mask.view(batch_size, 1, -1, video_mask.shape[-1])
+
         attn_output = self.self_atten(
             query=norm_latents,
             key=None,
             mask=video_mask,
-            frames=frames,
-            height=height,
-            width=width
+            input_layout="sbh",
+            rotary_pos_emb=rotary_pos_emb
         )
         if self.norm_type == "ada_norm_zero":
             attn_output = gate_msa.unsqueeze(1) * attn_output
@@ -713,6 +777,9 @@ class VideoDiTBlock(nn.Module):
 
         if self.pos_embed is not None and self.norm_type != "ada_norm_single":
             norm_latents = self.pos_embed(norm_latents)
+
+        if prompt_mask is not None:
+            prompt_mask = prompt_mask.view(batch_size, 1, -1, prompt_mask.shape[-1])
 
         attn_output = self.cross_atten(
             query=norm_latents,
