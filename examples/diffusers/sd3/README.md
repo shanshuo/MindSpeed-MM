@@ -11,6 +11,7 @@
     - [性能](#性能)
   - [推理](#推理)
     - [环境搭建及运行](#环境搭建及运行)
+  - [环境变量声明](#环境变量声明)
 - [引用](#引用)
   - [公网地址说明](#公网地址说明)
 
@@ -387,7 +388,9 @@ vim infer_sd3_img2img.py # 进入运行I2I推理的Python文件
   accelerate launch --num_processes=4 infer_sd3_text2img_distrib.py # 单机四卡进行分布式推理
   ```
 
-## 环境变量声明 
+## 使用基线数据集进行评估
+
+## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
 ASCEND_GLOBAL_EVENT_ENABLE： 设置应用类日志是否开启Event日志，0：关闭Event日志，1：开启Event日志  
@@ -400,8 +403,6 @@ ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条�
 TOKENIZERS_PARALLELISM： 用于控制Hugging Face的transformers库中的分词器（tokenizer）在多线程环境下的行为  
 PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为  
 OMP_NUM_THREADS： 设置执行期间使用的线程数
-
-## 使用基线数据集进行评估
 
 ## 引用
 
