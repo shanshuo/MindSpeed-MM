@@ -246,17 +246,17 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
 
 检查模型权重路径、并行参数配置等是否完成
 
-| 配置文件                                       |      修改字段       | 修改说明                                            |
-| ---------------------------------------------- | :-----------------: | :-------------------------------------------------- |
-| examples/hunyuanvideo/data.txt                 |      文件内容       | 提取后的特征保存路径                                |
-| examples/hunyuanvideo/feature_data.json        |   from_pretrained   | 修改为下载的权重所对应路径（包括VAE、Text Encoder） |
-| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |    NPUS_PER_NODE    | 每个节点的卡数                                      |
-| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |       NNODES        | 节点数量                                            |
-| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |      LOAD_PATH      | 权重转换后的预训练权重路径                          |
-| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |      SAVE_PATH      | 训练过程中保存的权重路径                            |
-| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |         TP          | 训练时的TP size（建议根据训练时设定的分辨率调整）   |
-| examples/hunyuanvideo/pretrain_hunyuanvideo.sh |         CP          | 训练时的CP size（建议根据训练时设定的分辨率调整）   |
-| examples/hunyuanvideo/pretrain_hunyuanvideo.sh | --sequence-parallel | 使能TP-SP，默认开启                                 |
+| 配置文件                                                   |      修改字段       | 修改说明                                            |
+| ---------------------------------------------------------- | :-----------------: | :-------------------------------------------------- |
+| examples/hunyuanvideo/{task_name}/data.txt                 |      文件内容       | 提取后的特征保存路径                                |
+| examples/hunyuanvideo/{task_name}/feature_data.json        |   from_pretrained   | 修改为下载的权重所对应路径（包括VAE、Text Encoder） |
+| examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |    NPUS_PER_NODE    | 每个节点的卡数                                      |
+| examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |       NNODES        | 节点数量                                            |
+| examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |      LOAD_PATH      | 权重转换后的预训练权重路径                          |
+| examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |      SAVE_PATH      | 训练过程中保存的权重路径                            |
+| examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |         TP          | 训练时的TP size（建议根据训练时设定的分辨率调整）   |
+| examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |         CP          | 训练时的CP size（建议根据训练时设定的分辨率调整）   |
+| examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh | --sequence-parallel | 使能TP-SP，默认开启                                 |
 
 【并行化配置参数说明】：
 
@@ -268,7 +268,7 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
   
   - 使能方式：在启动脚本中设置 CP > 1，如：CP=2；
   
-  - 限制条件：head 数量需要能够被TP*CP整除（在`exmaples/hunyuanvideo/model_hunyuanvideo.json`中配置，默认为24）
+  - 限制条件：head 数量需要能够被TP*CP整除（在`exmaples/hunyuanvideo/{task_name}/model_hunyuanvideo.json`中配置，默认为24）
 
 
 + TP: 张量模型并行
@@ -277,7 +277,7 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
 
   - 使能方式：在启动脚本中设置 TP > 1，如：TP=8
 
-  - 限制条件：head 数量需要能够被TP*CP整除（在`exmaples/hunyuanvideo/model_hunyuanvideo.json`中配置，默认为24）
+  - 限制条件：head 数量需要能够被TP*CP整除（在`exmaples/hunyuanvideo/{task_name}/model_hunyuanvideo.json`中配置，默认为24）
 
 
 + TP-SP
@@ -292,7 +292,7 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
 
   - 使用场景：在模型参数规模较大时，单卡上无法承载完整的模型，可以通过开启layerzero降低静态内存。
   
-  - 使能方式：`examples/hunyuanvideo/pretrain_hunyuanvideo.sh`的`GPT_ARGS`中加入`--layerzero`和`--layerzero-config ${layerzero_config}`
+  - 使能方式：`examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh`的`GPT_ARGS`中加入`--layerzero`和`--layerzero-config ${layerzero_config}`
 
   - 使用建议: 该特性和TP只能二选一，使能该特性时，TP必须设置为1，配置文件`examples/hunyuanvideo/zero_config.yaml`中的`zero3_size`推荐设置为单机的卡数
   
@@ -310,14 +310,14 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
   
   - 如果显存比较充裕，可以开启选择性重计算（FA不进行重计算）以提高吞吐，建议同步开启FA激活值offload，将FA的激活值异步卸载至CPU
   
-  - 在`examples/hunyuanvideo/model_hunyuanvideo.json`中，`attention_async_offload`表示是否开启FA激活值offload，默认开启
+  - 在`examples/hunyuanvideo/{task_name}/model_hunyuanvideo.json`中，`attention_async_offload`表示是否开启FA激活值offload，默认开启
 
-  - 在`examples/hunyuanvideo/model_hunyuanvideo.json`中，`double_stream_full_recompute_layers`和`single_stream_full_recompute_layers`表示该模型的double_stream_block和single_stream_block进行全重计算的层数，可以逐步减小这两个参数，直至显存打满
+  - 在`examples/hunyuanvideo/{task_name}/model_hunyuanvideo.json`中，`double_stream_full_recompute_layers`和`single_stream_full_recompute_layers`表示该模型的double_stream_block和single_stream_block进行全重计算的层数，可以逐步减小这两个参数，直至显存打满
 
 #### 启动训练
 
 ```bash
-bash examples/hunyuanvideo/pretrain_hunyuanvideo.sh
+bash examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh
 ```
 
 #### 权重后处理
@@ -340,16 +340,16 @@ python examples/convert_ckpt_to_mm.py --source_path <./save_ckpt/hunyuanvideo> -
 
 | 配置文件                                           |               修改字段               |                修改说明                 |
 |---------------------------------------------------|:--------------------------------:|:-----------------------------------|
-| examples/hunyuanvideo/inference_model.json |         from_pretrained          |            修改为下载的权重所对应路径（包括VAE、Text Encoder）            |
-| examples/hunyuanvideo/samples_prompts.txt            |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
-| examples/hunyuanvideo/inference_model.json    |  input_size |  生成视频的分辨率，格式为 [t, h, w] |
-| examples/hunyuanvideo/inference_model.json    |  save_path |  生成视频的保存路径 |
-| examples/hunyuanvideo/inference_hunyuanvideo.sh   |   LOAD_PATH | 转换之后的transform部分权重路径 |
+| examples/hunyuanvideo/{task_name}/inference_model.json |         from_pretrained          |            修改为下载的权重所对应路径（包括VAE、Text Encoder）            |
+| examples/hunyuanvideo/{task_name}/samples_prompts.txt |               文件内容               |      可自定义自己的prompt，一行为一个prompt      |
+| examples/hunyuanvideo/{task_name}/inference_model.json |  input_size |  生成视频的分辨率，格式为 [t, h, w] |
+| examples/hunyuanvideo/{task_name}/inference_model.json |  save_path |  生成视频的保存路径 |
+| examples/hunyuanvideo/{task_name}/inference_hunyuanvideo.sh |   LOAD_PATH | 转换之后的transform部分权重路径 |
 
 ### 启动推理
 
 ```shell
-bash examples/hunyuanvideo/inference_hunyuanvideo.sh
+bash examples/hunyuanvideo/{task_name}/inference_hunyuanvideo.sh
 ```
 
 ## 环境变量声明

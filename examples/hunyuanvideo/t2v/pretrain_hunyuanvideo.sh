@@ -24,8 +24,8 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_DATA="./examples/hunyuanvideo/feature_data.json"
-MM_MODEL="./examples/hunyuanvideo/model_hunyuanvideo.json"
+MM_DATA="./examples/hunyuanvideo/t2v/feature_data.json"
+MM_MODEL="./examples/hunyuanvideo/t2v/model_hunyuanvideo.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="./ckpt/hunyuanvideo"
 SAVE_PATH="./save_ckpt/hunyuanvideo"

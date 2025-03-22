@@ -14,7 +14,7 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_MODEL="examples/hunyuanvideo/inference_model.json"
+MM_MODEL="examples/hunyuanvideo/t2v/inference_model.json"
 LOAD_PATH="./ckpt/hunyuanvideo"
 
 DISTRIBUTED_ARGS="
