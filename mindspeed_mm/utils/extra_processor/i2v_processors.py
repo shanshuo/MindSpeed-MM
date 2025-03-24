@@ -1,9 +1,11 @@
 from .cogvideox_i2v_processor import CogVideoXI2VProcessor
 from .opensoraplan_i2v_processor import OpenSoraPlanI2VProcessor
+from .wan_i2v_processor import WanVideoI2VProcessor
 
 I2V_PROCESSOR_MAPPINGS = {
     "cogvideox_i2v_processor": CogVideoXI2VProcessor,
-    "opensoraplan_i2v_processor": OpenSoraPlanI2VProcessor
+    "opensoraplan_i2v_processor": OpenSoraPlanI2VProcessor,
+    "wan_i2v_processor": WanVideoI2VProcessor
 }
 
 

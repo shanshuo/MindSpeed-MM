@@ -314,6 +314,7 @@ class VideoProcesser:
             skip_frame_num=0,
             fps=None,
             train_fps=24,
+            auto_interval=True,
             speed_factor=1.0,
             drop_short_ratio=1.0,
             max_height=480,
@@ -341,6 +342,8 @@ class VideoProcesser:
         self.data_process_type = data_process_type
         self.skip_frame_num = skip_frame_num
         self.fps = fps
+        self.auto_interval = auto_interval
+        self.frame_interval = frame_interval        
 
         self.max_height = max_height
         self.max_width = max_width
@@ -474,10 +477,14 @@ class VideoProcesser:
         total_frames = len(vframes) if clip_total_frames == -1 else clip_total_frames
         fps = vframes.get_avg_fps() if vframes.get_avg_fps() > 0 else 30.0
         s_x, e_x, s_y, e_y = resolution_crop
-        # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
-        frame_interval = (
-            1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
-        )
+
+        if self.auto_interval:
+            # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
+            frame_interval = (
+                1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
+            )
+        else:
+            frame_interval = self.frame_interval
         # some special video should be set to a different number
         frame_indices = np.arange(start_frame_idx, start_frame_idx + total_frames, frame_interval).astype(
             int
@@ -626,8 +633,12 @@ class VideoProcesser:
 
                 i["num_frames"] = round(fps * duration) if i.get("num_frames", None) is None else i["num_frames"]
 
-                # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
-                frame_interval = 1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
+                if self.auto_interval:
+                    # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
+                    frame_interval = 1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
+                else:
+                    frame_interval = 1.0
+
                 start_frame_idx = i.get("cut", [0])[0]
                 i["start_frame_idx"] = start_frame_idx
                 frame_indices = np.arange(
@@ -829,6 +840,7 @@ class TextProcesser:
             enable_text_preprocessing=True,
             padding_type="max_length",
             support_chinese=False,
+            text_preprocess_methods=None,
             cfg=0.1,
     ):
         self.padding = padding_type
@@ -837,11 +849,16 @@ class TextProcesser:
         self.support_chinese = support_chinese
         self.cfg = cfg
         self.enable_text_preprocessing = enable_text_preprocessing
+        self.text_preprocess_methods = text_preprocess_methods
 
     def __call__(self, texts):
         if self.enable_text_preprocessing:
             texts_info = [
-                TextProcesser.text_preprocessing(text, self.use_clean_caption)
+                TextProcesser.text_preprocessing(
+                    text,
+                    self.use_clean_caption,
+                    text_preprocess_methods=self.text_preprocess_methods
+                )
                 for text in texts
             ]
             texts_info = texts_info if random.random() > self.cfg else [""]
@@ -877,12 +894,27 @@ class TextProcesser:
         return (prompt_ids, prompt_mask)
 
     @staticmethod
-    def text_preprocessing(text, use_clean_caption=True, support_chinese=False):
-        if use_clean_caption:
-            text = TextProcesser.clean_caption(text, support_chinese=support_chinese)
-            text = TextProcesser.clean_caption(text, support_chinese=support_chinese)
+    def text_preprocessing(text, use_clean_caption=True, support_chinese=False, text_preprocess_methods=None):
+        if text_preprocess_methods:
+            if isinstance(text_preprocess_methods, list):
+                for text_preprocess_method in text_preprocess_methods:
+                    text = TextProcesser.text_preprocessing(text, text_preprocess_methods=text_preprocess_method)
+            else:
+                method_name = text_preprocess_methods["method"]
+                param = text_preprocess_methods.get("param", None)
+                method = getattr(TextProcesser, method_name, None)
+                if method:
+                    if param:
+                        text = method(text, **param)
+                    else:
+                        text = method(text)
+                else:
+                    raise NotImplementedError(f"The text preprocessing method {method_name} is not implemented.")
         else:
-            text = text.lower().strip()
+            if use_clean_caption:
+                text = TextProcesser.clean_caption(text, support_chinese=support_chinese)
+            else:
+                text = text.lower().strip()
         return text
 
     @staticmethod
@@ -890,6 +922,12 @@ class TextProcesser:
         text = ftfy.fix_text(text)
         text = html.unescape(html.unescape(text))
         return text.strip()
+    
+    @staticmethod
+    def whitespace_clean(text):
+        text = re.sub(r'\s+', ' ', text)
+        text = text.strip()
+        return text
 
     @staticmethod
     def clean_caption(caption, support_chinese=False):
@@ -1632,7 +1670,8 @@ def cal_gradient_accumulation_size():
     world_size = torch.distributed.get_world_size()
     acc = int(args.global_batch_size / world_size / args.micro_batch_size * mpu.get_tensor_model_parallel_world_size()
                   * mpu.get_context_parallel_world_size() * mpu.get_pipeline_model_parallel_world_size())
-    if args.dist_train:
+    
+    if getattr(args, "dist_train", False):
         from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld
         from mindspeed.multi_modal.dist_train.config.dist_train_config import get_dist_model_config
         if is_in_subworld("vae"):

@@ -13,6 +13,15 @@ INPUT_MASK = "input_mask"
 FILE_INFO = "file"
 CAPTIONS = "captions"
 IMG_FPS = 120
+SORA_MODEL_PROTECTED_KEYS = [
+    PROMPT_MASK,
+    PROMPT_IDS,
+    PROMPT,
+    TEXT,
+    VIDEO,
+    VIDEO_MASK,
+    LATENTS,
+]
 MODEL_CONSTANTS = {
     'llava': {
         "IMAGE_TOKEN": "<image>",

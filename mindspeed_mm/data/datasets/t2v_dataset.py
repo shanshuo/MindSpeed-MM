@@ -20,7 +20,8 @@ from mindspeed_mm.data.data_utils.constants import (
     TEXT,
     VIDEO,
     IMG_FPS,
-    VIDEO_MASK
+    VIDEO_MASK,
+    SORA_MODEL_PROTECTED_KEYS
 )
 from mindspeed_mm.data.data_utils.utils import (
     VID_EXTENSIONS,
@@ -69,6 +70,7 @@ class T2VDataset(MMBaseDataset):
         vid_img_process: dict,
         use_text_processer: bool = False,
         enable_text_preprocessing: bool = True,
+        text_preprocess_methods: Optional[Union[dict, List[dict]]] = None,
         use_clean_caption: bool = True,
         support_chinese: bool = False,
         tokenizer_config: Optional[Union[dict, List[dict]]] = None,
@@ -88,6 +90,7 @@ class T2VDataset(MMBaseDataset):
 
         self.num_frames = vid_img_process.get("num_frames", 16)
         self.frame_interval = vid_img_process.get("frame_interval", 1)
+        self.auto_interval = vid_img_process.get("auto_interval", True)
         self.resolution = vid_img_process.get("resolution", (256, 256))
 
         self.max_height = vid_img_process.get("max_height", 480)
@@ -139,6 +142,7 @@ class T2VDataset(MMBaseDataset):
         self.video_processer = VideoProcesser(
             num_frames=self.num_frames,
             frame_interval=self.frame_interval,
+            auto_interval=self.auto_interval,
             train_pipeline=self.train_pipeline,
             data_storage_mode=self.data_storage_mode,
             data_process_type=self.data_process_type,
@@ -175,6 +179,7 @@ class T2VDataset(MMBaseDataset):
             self.text_processer = TextProcesser(
                 tokenizer=self.tokenizer,
                 enable_text_preprocessing=self.enable_text_preprocessing,
+                text_preprocess_methods=text_preprocess_methods,
                 use_clean_caption=use_clean_caption,
                 support_chinese=support_chinese,
                 cfg=self.cfg,
@@ -264,6 +269,12 @@ class T2VDataset(MMBaseDataset):
                 examples[VIDEO] = video_value['latents']
                 if 'video_mask' in video_value.keys():
                     examples[VIDEO_MASK] = video_value['video_mask']
+                
+                # update extra info, and avoid critical key values from being overwritten
+                for key in SORA_MODEL_PROTECTED_KEYS:
+                    video_value.pop(key, None)
+                examples.update(video_value)
+                
                 file_type = 'video' 
             else:
                 examples, file_type = self.get_video_data(examples, index)

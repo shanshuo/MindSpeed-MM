@@ -370,6 +370,11 @@ def change_tensor_layout(tensor, src_layout, dst_layout, batch_size=None):
     }
 
     if key in layout_mappings:
-        return layout_mappings[key](tensor)
+        if isinstance(tensor, torch.Tensor):
+            return layout_mappings[key](tensor)
+        elif isinstance(tensor, (list, tuple)):
+            return [layout_mappings[key](t) for t in tensor]
+        else:
+            raise ValueError(f"Unsupported input type {type(tensor)}")
     else:
         raise ValueError(f"Unsupported layout conversion from {src_layout} to {dst_layout}!")

@@ -210,6 +210,19 @@ def longsideresize(h, w, size, skip_low_resolution):
     return h, w
 
 
+def shortsideresize(h, w, size, skip_low_resolution):
+    if h <= size[0] and w <= size[1] and skip_low_resolution:
+        return h, w
+    
+    if h / w < size[0] / size[1]:
+        w = int(size[0] / h * w)
+        h = size[0]
+    else:
+        h = int(size[1] / w * h)
+        w = size[1]
+    return h, w
+
+
 def calculate_statistics(data):
     if len(data) == 0:
         return None
@@ -568,7 +581,62 @@ class CenterCropResizeVideo:
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(size={self.size}, interpolation_mode={self.interpolation_mode}"
+    
 
+class ResizeVideo:
+    def __init__(
+        self,
+        transform_size="auto",
+        interpolation_mode="bilinear",
+        skip_low_resolution=False,
+        align_corners=False, 
+        antialias=False,
+        mode="resize" # resize / longside / shortside / hxw
+    ):  
+        self.mode = mode
+        if mode == 'hxw':
+            self.transform_size = transform_size["max_hxw"] if isinstance(transform_size, dict) else transform_size
+        elif mode in ["resize", "longside", "shortside"]:
+            self.transform_size = (transform_size["max_height"], transform_size["max_width"]) if isinstance(transform_size, dict) else transform_size
+        else:
+            raise NotImplementedError(f"ResizeVideo only support mode `resize` / `longside` / `shortside` / `hxw`, {mode} is not implemented.")
+        
+        self.interpolation_mode = interpolation_mode
+        self.align_corners = align_corners
+        self.antialias = antialias
+        self.skip_low_resolution = skip_low_resolution
+
+    def __call__(self, clip):
+        """
+        Args:
+            clip (torch.tensor): Video clip to be cropped. Size is (T, C, H, W)
+        Returns:
+            torch.tensor: scale resized video clip.
+        """
+        h, w = clip.shape[-2:]
+        if self.mode == "hxw":
+            tr_h, tr_w = maxhwresize(h, w, self.transform_size)
+        elif self.mode == "resize":
+            tr_h, tr_w = self.transform_size
+        elif self.mode == "longside":
+            tr_h, tr_w = longsideresize(h, w, self.transform_size, skip_low_resolution=self.skip_low_resolution)
+        elif self.mode == "shortside":
+            tr_h, tr_w = shortsideresize(h, w, self.transform_size, skip_low_resolution=self.skip_low_resolution)
+        
+        if h == tr_h and w == tr_w:
+            return clip
+        resize_clip = resize(
+            clip, 
+            target_size=(tr_h, tr_w),
+            interpolation_mode=self.interpolation_mode,
+            align_corners=self.align_corners,
+            antialias=self.antialias
+        )
+        return resize_clip
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(size={self.transform_size}, interpolation_mode={self.interpolation_mode})"
+        
 
 class UCFCenterCropVideo:
     """

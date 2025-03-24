@@ -75,6 +75,8 @@ class DiffusersScheduler:
         if model_id in DIFFUSERS_SCHEDULE_MAPPINGS:
             model_cls = DIFFUSERS_SCHEDULE_MAPPINGS[model_id]
             self.diffusion = model_cls(**config)
+        else:
+            raise NotImplementedError(f"Diffuser Schedule {model_id} is not implemented.")
 
         # Prepare timesteps for inference
         if self.num_inference_steps:
