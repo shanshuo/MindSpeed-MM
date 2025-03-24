@@ -8,6 +8,7 @@ from mindspeed_mm.utils.utils import get_dtype
 TEXT_ENCODER_MAPPING = {
     "T5": "T5EncoderModel",
     "MT5": "MT5EncoderModel",
+    "UMT5": "UMT5EncoderModel",
     "CLIP": "CLIPTextModel",
     "Auto": "AutoModel"
 }

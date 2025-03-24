@@ -16,19 +16,24 @@
 import torch.nn as nn
 
 from mindspeed_mm.utils.extra_processor import I2VProcessor
+from mindspeed_mm.models.ae.diffusers_ae_model import DiffusersAEModel
 from mindspeed_mm.models.ae.vae import VideoAutoencoderKL, VideoAutoencoder3D
 from mindspeed_mm.models.ae.casualvae import CausalVAE
 from mindspeed_mm.models.ae.wfvae import WFVAE
 from mindspeed_mm.models.ae.contextparallel_causalvae import ContextParallelCasualVAE
 from mindspeed_mm.models.ae.autoencoder_kl_hunyuanvideo import AutoencoderKLHunyuanVideo
+from mindspeed_mm.models.ae.wan_video_vae import WanVideoVAE
 
 
-AE_MODEL_MAPPINGS = {"vae": VideoAutoencoderKL,
-                     "vae3D": VideoAutoencoder3D,
-                     "casualvae": CausalVAE,
-                     "wfvae": WFVAE,
-                     "contextparallelcasualvae": ContextParallelCasualVAE,
-                     "autoencoder_kl_hunyuanvideo": AutoencoderKLHunyuanVideo}
+AE_MODEL_MAPPINGS = {
+    "vae": VideoAutoencoderKL,
+    "vae3D": VideoAutoencoder3D,
+    "casualvae": CausalVAE,
+    "wfvae": WFVAE,
+    "contextparallelcasualvae": ContextParallelCasualVAE,
+    "autoencoder_kl_hunyuanvideo": AutoencoderKLHunyuanVideo,
+    "wan_video_vae": WanVideoVAE
+}
 
 
 class AEModel(nn.Module):
@@ -43,7 +48,13 @@ class AEModel(nn.Module):
         else:
             self.i2v_processor = None
 
-        self.model = AE_MODEL_MAPPINGS[config.model_id](**self.config)
+        if config.model_id in AE_MODEL_MAPPINGS:
+            self.model = AE_MODEL_MAPPINGS[config.model_id](**self.config)
+        else:
+            # import auto encoder from diffusers
+            self.model = DiffusersAEModel(
+                model_name=config.model_id, config=self.config
+            )
 
     def get_model(self):
         return self.model
@@ -53,7 +64,10 @@ class AEModel(nn.Module):
         if self.i2v_processor is None:
             return video_latents, None
         else:
-            return video_latents, self.i2v_processor(self.model, x, video_latents, **kwargs)
+            i2v_results = self.i2v_processor(
+                vae_model=self.model, videos=x, video_latents=video_latents, **kwargs
+            )
+            return video_latents, i2v_results
 
     def decode(self, x):
         return self.model.decode(x)
