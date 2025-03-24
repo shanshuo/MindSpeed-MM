@@ -1,0 +1,60 @@
+{
+    "pipeline_class": "WanPipeline",
+    "micro_batch_size": 1,
+    "prompt": "examples/wan2.1/samples_t2v_prompts.txt",
+    "save_path": "examples/wan2.1/samples/1.3b/t2v/",
+    "use_prompt_preprocess": false,
+    "dtype": "bf16",
+    "device": "npu",
+    "frame_interval": 1,
+    "fps": 15,
+    "pipeline_config": {
+        "input_size": [81, 480, 832]
+    },
+    "ae": {
+        "model_id": "wan_video_vae",
+        "from_pretrained": "./weights/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/vae/",
+        "dtype": "float32"
+    },
+    "tokenizer":{
+        "autotokenizer_name": "AutoTokenizer",
+        "hub_backend": "hf",
+        "from_pretrained": "./weights/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/tokenizer/"
+    },
+    "text_encoder": {
+        "model_id": "UMT5",
+        "hub_backend": "hf",
+        "from_pretrained": "./weights/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/text_encoder/",
+        "dtype": "bf16"
+    },
+    "predictor": {
+        "model_id": "wandit",
+        "from_pretrained": "./weights/Wan-AI/1.3b/converted_t2v.pth",
+        "dtype": "bf16",
+        "model_type": "t2v",
+        "patch_size": [1, 2, 2],
+        "text_len": 512,
+        "in_dim": 16,
+        "hidden_size": 1536,
+        "ffn_dim": 8960,
+        "freq_dim": 256,
+        "text_dim": 4096,
+        "img_dim": 1280,
+        "out_dim": 16,
+        "num_heads": 12,
+        "num_layers": 30,
+        "qk_norm": true,
+        "qk_norm_type": "rmsnorm",
+        "cross_attn_norm": true,
+        "eps": 1e-6,
+        "max_seq_len": 1024
+    },
+    "diffusion": {
+        "model_id": "wan_flow_match_scheduler",
+        "num_inference_timesteps": 50,
+        "shift": 1,
+        "sigma_min": 0.001,
+        "extra_one_step": false,
+        "guidance_scale": 5.0
+    }
+}
