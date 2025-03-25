@@ -293,7 +293,7 @@ python examples/opensoraplan1.3/opensoraplan1_3_dt_convert_to_mm_ckpt.py \
   - 限制条件：前置必要条件为开启TP
 
 
-+ PP：流水线并行（在研）
++ PP：流水线并行
 
   目前支持将predictor模型切分流水线。在data.json文件中新增字段"pipeline_num_layers", 类型为list。该list的长度即为 pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
 
@@ -311,6 +311,7 @@ python examples/opensoraplan1.3/opensoraplan1_3_dt_convert_to_mm_ckpt.py \
     # 同时pretrain_xx_model.json中修改相应配置 
     "pipeline_num_layers": [8, 8, 8, 8],
   ```
+
 
 + VP: 虚拟流水线并行
 
@@ -334,6 +335,57 @@ python examples/opensoraplan1.3/opensoraplan1_3_dt_convert_to_mm_ckpt.py \
   - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成vae的encode计算，需要开启VAE-CP
   - 使能方式：在xxx_model.json中设置vae_cp_size, vae_cp_size为大于1的整数时生效, 建议设置等于Dit部分cp_size
   - 限制条件：暂不兼容PP
+  
+
++ Encoder-DP：Encoder数据并行
+  - 使用场景：在开启TP、CP时，DP较小，存在vae和text_encoder的冗余encode计算。开启以减小冗余计算，但会增加通信，需要按场景开启
+  - 使能方式：在xxx_model.json中设置"enable_encoder_dp": true
+  - 限制条件：暂不兼容PP、VAE-CP
+
+
++ DiT-RingAttention：DiT RingAttention序列并行
+
+  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention
+  - 使能方式：在启动脚本 pretrain_xxx.sh 中修改如下变量
+
+  ```shell
+  CP=8
+  
+  GPT_ARGS="
+    --context-parallel-size ${CP} \
+    --context-parallel-algo megatron_cp_algo \
+    --cp-attention-mask-type general \
+    --use-cp-send-recv-overlap \
+    --cp-window-size 1
+  ...
+  ```
+
+  - ```--use-cp-send-recv-overlap```为可选参数，建议开启，开启后支持send receive overlap功能
+  - ```--cp-window-size [int]```为可选参数，设置算法中双层Ring Attention的内层窗口大小，需要确保cp_size能被该参数整除
+    - 缺省值为1，即使用原始的Ring Attention算法
+    - 大于1时，即使用Double Ring Attention算法，优化原始Ring Attention性能
+
+
++ DiT-USP: DiT USP混合序列并行（Ulysses + RingAttention）
+  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention
+  - 使能方式：在启动脚本pretrain_xxx.sh中修改如下变量
+
+  ```shell
+  CP=8
+  
+  GPT_ARGS="
+    --context-parallel-size ${CP} \
+    --context-parallel-algo hybrid_cp_algo \
+    --cp-attention-mask-type general \
+    --use-cp-send-recv-overlap \
+    --ulysses-degree-in-cp [int]
+  ...
+  ```
+
+  - 需要确保```--context-parallel-size```可以被```--ulysses-degree-in-cp```整除且大于1
+    - 例如当设置```--context-parallel-size```为8时，可以设置```--ulysses-degree-in-cp```为2或```--ulysses-degree-in-cp```为4
+    - 同时需要确保```--ulysses-degree-in-cp```可以被num-attention-heads数整除
+  - RingAttention相关参数解析见DiT-RingAttention部分
 
 【动态/固定分辨率】
 - 支持使用动态分辨率或固定分辨率进行训练，默认为动态分辨率训练，如切换需修改启动脚本pretrain_xxx.sh
