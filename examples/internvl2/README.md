@@ -24,8 +24,10 @@
   - [数据集准备](#jump6.1)
   - [配置参数](#jump6.2)
   - [启动评测](#jump6.3)
-- [环境变量声明](#jump7)
-- [注意事项](#jump8)
+- [特性使用介绍](#jump7)
+  - [DistTrain](#jump7.1)
+- [环境变量声明](#jump8)
+- [注意事项](#jump9)
 
 ---
 <a id="jump1"></a>
@@ -186,46 +188,6 @@ mm-convert  InternVLConverter hf_to_mm \
 # llm_pp_layers: llm在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
 # vit_pp_layers: vit在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
 # trust_remote_code: 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
-```
-#### 3. DistTrain模型分离部署权重转换
-
-提供了MM CKPT与DistTrain CKPT之间的权重转换工具。
-
-MM CKPT转DistTrain CKPT：
-
-```shell
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-python examples/internvl2/internvl2_mm_convert_to_dt_ckpt.py \
-  --load-dir pretrained/InternVL2-8B \
-  --save-dir pretrained/InternVL2-8B-DistTrain \
-  --target-vit-tp-size 1 \
-  --target-vit-pp-size 1 \
-  --target-vit-cp-size 1 \
-  --target-vit-pp-layers '[24]' \
-  --target-gpt-tp-size 1 \
-  --target-gpt-pp-size 3 \
-  --target-gpt-cp-size 1 \
-  --target-gpt-pp-layers '[10,12,10]'
-```
-
-DistTrain CKPT转MM CKPT：
-
-```shell
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-python examples/internvl2/internvl2_dt_convert_to_mm_ckpt.py \
-  --load-dir pretrained/InternVL2-8B-DistTrain \
-  --save-dir pretrained/InternVL2-8B-DistTrain-to-MM \
-  --target-tp-size 1 \
-  --target-pp-size 4 \
-  --target-cp-size 1 \
-  --target-vit-pp-layers '[24,0,0,0]' \
-  --target-gpt-pp-layers '[6,9,9,8]'
-```
-同步修改`examples/internvl2/finetune_internvl2_*b.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重`raw_ckpt/InternVL2-*B`进行区分。
-
-以`InternVL2-8B`为例
-```shell
-LOAD_PATH="pretrained/InternVL2-8B"
 ```
 
 ---
@@ -547,7 +509,112 @@ bash examples/internvl2/evaluate_internvl2_8B.sh
 
 - *.xlsx文件，这个文件会输出每道题的预测结果和答案等详细信息。
 - *.csv文件，这个文件会输出统计准确率等数据。
+
 <a id="jump7"></a>
+## 特性使用介绍
+
+<a id="jump7.1"></a>
+### DistTrain(分离部署)
+
+#### 1. 特性介绍
+DistTrain特性详细介绍参考文档[分离部署特性](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/dist-train.md)
+
+#### 2. 模型分离部署权重转换
+
+提供了MM CKPT与DistTrain CKPT之间的权重转换工具。
+
+MM CKPT转DistTrain CKPT：
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+python examples/internvl2/internvl2_mm_convert_to_dt_ckpt.py \
+  --load-dir pretrained/InternVL2-8B \
+  --save-dir pretrained/InternVL2-8B-DistTrain \
+  --target-vit-tp-size 1 \
+  --target-vit-pp-size 1 \
+  --target-vit-cp-size 1 \
+  --target-vit-pp-layers '[24]' \
+  --target-gpt-tp-size 1 \
+  --target-gpt-pp-size 3 \
+  --target-gpt-cp-size 1 \
+  --target-gpt-pp-layers '[10,12,10]'
+```
+
+DistTrain CKPT转MM CKPT：
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+python examples/internvl2/internvl2_dt_convert_to_mm_ckpt.py \
+  --load-dir pretrained/InternVL2-8B-DistTrain \
+  --save-dir pretrained/InternVL2-8B-DistTrain-to-MM \
+  --target-tp-size 1 \
+  --target-pp-size 4 \
+  --target-cp-size 1 \
+  --target-vit-pp-layers '[24,0,0,0]' \
+  --target-gpt-pp-layers '[6,9,9,8]'
+```
+同步修改`examples/internvl2/finetune_internvl2_*b.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重`raw_ckpt/InternVL2-*B`进行区分。
+
+以`InternVL2-8B`为例
+```shell
+LOAD_PATH="pretrained/InternVL2-8B"
+```
+
+#### 3. 使用方法
+以`InternVL2-8B`为例
+
+在启动脚本中添加参数`--dist-train`。
+```shell
+GPT_ARGS="
+    ...
+    --dist-train \
+"
+```
+需要在MindSpeed-MM仓库中，对应模型目录下的`model.json`中添加`dist_config`字段，具体配置示例如下：
+```json
+{
+  "dist_config": {
+    "model_name": "internvl2",  // 多模态模型名称
+    "use_multiparam_send_recv": false,  // 模型间是否传递tensor列表
+    "model_config": [
+      {
+        "name": "vit",  // 内部模型名称
+        "model_index": 0,  // 模型位于流水线中的序号
+        "world_size": 1,  // 模型使用卡数
+        "tensor_model_parallel_size": 1,
+        "pipeline_model_parallel_size": 1,
+        "context_parallel_size": 1,
+        "forward_only": false // 是否不做反向计算
+      },
+      {
+        "name": "gpt",
+        "model_index": 1,
+        "world_size": 3,
+        "tensor_model_parallel_size": 1,
+        "pipeline_model_parallel_size": 3,
+        "context_parallel_size": 1,
+        "forward_only": false,
+      }
+    ]
+  }
+}
+```
+
+修改model.json中text_decoder中的pipeline_num_layers参数（跟上述dist_config中的pipeline_model_parallel_size参数对应）
+
+```json
+    "text_decoder": {
+        "model_id": "internllm",
+        "num_layers": 32,
+        "pipeline_num_layers": [10, 12, 10],
+        "hidden_size": 4096,
+        ......
+    }
+```
+
+---
+
+<a id="jump8"></a>
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
@@ -560,4 +627,4 @@ PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为
 ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条目个数  
 TOKENIZERS_PARALLELISM： 用于控制Hugging Face的transformers库中的分词器（tokenizer）在多线程环境下的行为  
 NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量
-<a id="jump8"></a>
+<a id="jump9"></a>

@@ -23,7 +23,9 @@
   - [准备工作](#jump5.1)
   - [配置参数](#jump5.2)
   - [启动推理](#jump5.3)
-- [环境变量声明](#jump6)
+- [特性使用介绍](#jump6)
+  - [DistTrain](#jump6.1)
+- [环境变量声明](#jump7)
 
 ---
 <a id="jump1"></a>
@@ -175,39 +177,6 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
     LOAD_PATH="mm_ckpt/open-sora-plan/pretrained-checkpoint-dit"
 
 ---
-
-#### 3. DistTrain模型分离部署权重转换
-
-提供了MM CKPT与DistTrain CKPT之间的权重转换工具。
-
-MM CKPT转DistTrain CKPT：
-
-```shell
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-python examples/opensoraplan1.3/opensoraplan1_3_mm_convert_to_dt_ckpt.py \
-  --load-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit \
-  --save-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train \
-  --target-vae-tp-size 1 \
-  --target-vae-pp-size 1 \
-  --target-vae-cp-size 1 \
-  --target-dit-tp-size 1 \
-  --target-dit-pp-size 3 \
-  --target-dit-cp-size 1 \
-  --target-dit-pp-layers '[10,11,11]'
-```
-
-DistTrain CKPT转MM CKPT：
-
-```shell
-source /usr/local/Ascend/ascend-toolkit/set_env.sh
-python examples/opensoraplan1.3/opensoraplan1_3_dt_convert_to_mm_ckpt.py \
-  --load-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train \
-  --save-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train-to-mm \
-  --target-tp-size 1 \
-  --target-pp-size 4 \
-  --target-cp-size 1 \
-  --target-dit-pp-layers '[8,8,8,8]'
-```
 
 <a id="jump3"></a>
 
@@ -476,9 +445,129 @@ i2v 启动推理脚本
 ```shell
 bash examples/opensoraplan1.3/i2v/inference_i2v.sh
 ```
-
 ---
 <a id="jump6"></a>
+## 特性使用介绍
+
+<a id="jump6.1"></a>
+### DistTrain(分离部署)
+
+#### 1. 特性介绍
+DistTrain特性详细介绍参考文档[分离部署特性](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/dist-train.md)
+
+#### 2. 模型分离部署权重转换
+
+提供了MM CKPT与DistTrain CKPT之间的权重转换工具。
+
+MM CKPT转DistTrain CKPT：
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+python examples/opensoraplan1.3/opensoraplan1_3_mm_convert_to_dt_ckpt.py \
+  --load-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit \
+  --save-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train \
+  --target-vae-tp-size 1 \
+  --target-vae-pp-size 1 \
+  --target-vae-cp-size 1 \
+  --target-dit-tp-size 1 \
+  --target-dit-pp-size 3 \
+  --target-dit-cp-size 1 \
+  --target-dit-pp-layers '[10,11,11]'
+```
+
+DistTrain CKPT转MM CKPT：
+
+```shell
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+python examples/opensoraplan1.3/opensoraplan1_3_dt_convert_to_mm_ckpt.py \
+  --load-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train \
+  --save-dir mm_ckpt/open-sora-plan/pretrained-checkpoint-dit-dist-train-to-mm \
+  --target-tp-size 1 \
+  --target-pp-size 4 \
+  --target-cp-size 1 \
+  --target-dit-pp-layers '[8,8,8,8]'
+```
+
+同步修改`examples/opensoraplan1.3/t2v/pretrain_t2v.sh`中的`LOAD_PATH`参数，该路径为转换后或者切分后的权重，注意与原始权重进行区分。
+
+#### 3. 使用方法
+以`opensoraplan1.3-t2v`为例
+
+在启动脚本中添加参数`--dist-train`。
+```shell
+GPT_ARGS="
+    ...
+    --dist-train \
+"
+```
+
+需要在MindSpeed-MM仓库中，对应模型目录下的`pretrain_t2v_model.json`中添加`dist_config`字段，具体配置示例如下：
+```json
+{
+  "dist_config": {
+    "model_name": "opensoraplan1.3",  // 多模态模型名称
+    "use_multiparam_send_recv": true,  // 模型间是否传递tensor列表
+    "model_config": [
+      {
+        "name": "vae",  // 内部模型名称
+        "model_index": 0,  // 模型位于流水线中的序号
+        "world_size": 1,  // 模型使用卡数
+        "tensor_model_parallel_size": 1,
+        "pipeline_model_parallel_size": 1,
+        "context_parallel_size": 1,
+        "forward_only": true // 是否不做反向计算
+      },
+      {
+        "name": "dit",
+        "model_index": 1,
+        "world_size": 8,
+        "tensor_model_parallel_size": 2,
+        "pipeline_model_parallel_size": 1,
+        "context_parallel_size": 4,
+        "forward_only": false,
+      }
+    ]
+  }
+}
+```
+
+当前的测试配置中最少需要9张卡，对于单机8卡设备需要配置双机运行，以单机8卡设备双机为例：
+需要在`examples/opensoraplan1.3/t2v/pretrain_t2v.sh`中做如下类似修改：
+```shell
+IPs=('xxx' 'xxx')
+LOCAL_HOST=$(ifconfig enp189s0f0 | grep 'inet ' | awk '{print $2}')
+if [ "$LOCAL_HOST" = "${IPs[0]}" ]; then
+    export ASCEND_RT_VISIBLE_DEVICES="0"
+elif [ "$LOCAL_HOST" = "${IPs[1]}" ]; then
+   export ASCEND_RT_VISIBLE_DEVICES="0,1,2,3,4,5,6,7"
+else
+   echo "[Error] check IPs and LOCAL_HOST"
+   exit 1
+fi
+MASTER_ADDR=${IPs[0]}
+MASTER_PORT=6000
+NNODES=${#IPs[@]}
+NODE_RANK=""
+for i in "${!IPs[@]}";
+do 
+  echo "${IPs[$i]}"
+  echo "$LOCAL_HOST"
+  if [ "$LOCAL_HOST" == "${IPs[$i]}"];
+  then 
+    NODE_RANK=$i
+    break
+  fi
+done
+if [[ $NODE_RANK == "" ]]; then
+  echo "[Error] para \"NODE_RANK\" must be error"
+  exit 1
+fi
+GPUS_PER_NODE=$(echo $ASCEND_RT_VISIBLE_DEVICES | tr ',' '\n' | grep -c '^[0-9]')  
+
+```
+
+---
+<a id="jump7"></a>
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
