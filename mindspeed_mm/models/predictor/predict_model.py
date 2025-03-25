@@ -42,7 +42,7 @@ class PredictModel(nn.Module):
         model_cls = PREDICTOR_MODEL_MAPPINGS[config.model_id]
         config = self._build_predictor_layers_config(config)
         self.predictor = model_cls(**config.to_dict())
-        if config.from_pretrained is not None:
+        if hasattr(config, "from_pretrained") and config.from_pretrained is not None:
             load_checkpoint(self.predictor, config.from_pretrained)
             print_rank_0("load predictor's checkpoint sucessfully")
 
