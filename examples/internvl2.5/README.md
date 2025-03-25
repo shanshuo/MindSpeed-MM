@@ -16,7 +16,8 @@
   - [准备工作](#jump4.1)
   - [配置参数](#jump4.2)
   - [启动预训练](#jump4.3)
-- [注意事项](#jump7)
+- [环境变量声明](#jump5)
+- [注意事项](#jump6)
 
 ---
 <a id="jump1"></a>
@@ -280,11 +281,8 @@ $save_dir
 ```shell
 bash examples/internvl2.5/finetune_internvl2.5_78B.sh
 ```
-
-<a id="jump7"></a>
-
+<a id="jump5"></a>
 ## 环境变量声明
-CUDA_DEVICE_MAX_CONNECTIONS： 每个设备允许的最大并行硬件连接数  
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
 TASK_QUEUE_ENABLE： 用于控制开启task_queue算子下发队列优化的等级，0：关闭，1：开启Level 1优化，2：开启Level 2优化  
@@ -294,6 +292,8 @@ HCCL_CONNECT_TIMEOUT:  用于限制不同设备之间socket建链过程的超时
 PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为  
 ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条目个数  
 NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量
+
+<a id="jump6"></a>
 
 ## 注意事项
 1. 在使用流水线并行策略进行多机训练可能会出现卡住现象，可参考[此处](https://gitee.com/ascend/MindSpeed/pulls/1627/files)修改。

@@ -28,7 +28,7 @@
   - [预训练模型扩参示例(15B)](#预训练模型扩参示例15b)
       - [模型参数修改](#模型参数修改)
       - [启动脚本修改](#启动脚本修改)
-
+  - [环境变量声明](#环境变量声明)
 ---
 <a id="jump1"></a>
 ## 支持任务列表
@@ -485,9 +485,8 @@ GPT_ARGS="
     ...
 "
 ```
-
-## 环境变量声明  
-CUDA_DEVICE_MAX_CONNECTIONS： 每个设备允许的最大并行硬件连接数  
+<a id="jump8"></a>
+## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
 TASK_QUEUE_ENABLE： 用于控制开启task_queue算子下发队列优化的等级，0：关闭，1：开启Level 1优化，2：开启Level 2优化  

@@ -566,7 +566,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </tr>
 </table>
 
-## 理解模型：InvernVL2 & Qwen2VL
+## 理解模型：InternVL2 & Qwen2VL
 
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
