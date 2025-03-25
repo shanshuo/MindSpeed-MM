@@ -1,7 +1,7 @@
 import math
 from contextlib import nullcontext
 from functools import partial
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -10,9 +10,14 @@ from megatron.core import mpu, tensor_parallel
 from megatron.legacy.model.enums import AttnType
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
+from mindspeed.core.context_parallel.unaligned_cp.mapping import (
+    all_to_all,
+    gather_forward_split_backward,
+    split_forward_gather_backward,
+)
 
 from mindspeed_mm.models.common import MultiModalModule
-from mindspeed_mm.models.common.attention import ParallelAttention
+from mindspeed_mm.models.common.attention import FlashAttention, ParallelAttention
 from mindspeed_mm.models.common.embeddings import TextProjection
 from mindspeed_mm.models.common.normalize import normalize
 
@@ -40,6 +45,7 @@ class WanDiT(MultiModalModule):
         eps: float = 1e-6,
         max_seq_len: int = 1024,
         fa_layout: str = "bsnd",
+        clip_token_len: int = 257,
         **kwargs,
     ):
         super().__init__(config=None)
@@ -70,6 +76,7 @@ class WanDiT(MultiModalModule):
         self.eps = eps
         self.max_seq_len = max_seq_len
         self.fa_layout = fa_layout
+        self.clip_token_len = clip_token_len
 
         self.head_dim = hidden_size // num_heads
 
@@ -94,6 +101,20 @@ class WanDiT(MultiModalModule):
 
         self.enable_tensor_parallel = mpu.get_tensor_model_parallel_world_size() > 1
         self.sequence_parallel = args.sequence_parallel and self.enable_tensor_parallel
+
+        # context parallel setting
+        self.context_parallel_algo = (
+            args.context_parallel_algo
+            if mpu.get_context_parallel_world_size() > 1
+            else None
+        )
+        if (
+            self.context_parallel_algo is not None
+            and self.context_parallel_algo not in ["ulysses_cp_algo"]
+        ):
+            raise NotImplementedError(
+                f"Context_parallel_algo {self.context_parallel_algo} is not implemented"
+            )
 
         # rope
         self.rope = RoPE3DWan(head_dim=self.head_dim, max_seq_len=self.max_seq_len)
@@ -120,11 +141,10 @@ class WanDiT(MultiModalModule):
         )
 
         # attention blocks
-        cross_attn_type = "t2v_cross_attn" if model_type == "t2v" else "i2v_cross_attn"
         self.blocks = nn.ModuleList(
             [
                 WanDiTBlock(
-                    cross_attn_type,
+                    model_type,
                     self.hidden_size,
                     self.ffn_dim,
                     self.num_heads,
@@ -134,6 +154,7 @@ class WanDiT(MultiModalModule):
                     self.eps,
                     rope=self.rope,
                     fa_layout=self.fa_layout,
+                    clip_token_len=clip_token_len,
                 )
                 for _ in range(self.num_layers)
             ]
@@ -235,9 +256,10 @@ class WanDiT(MultiModalModule):
         self,
         x: torch.Tensor,
         timestep: torch.Tensor,
-        prompt: List[torch.Tensor],
-        clip_feature: torch.Tensor = None,
-        y: torch.Tensor = None,
+        prompt: torch.Tensor,
+        prompt_mask: torch.Tensor = None,
+        i2v_clip_feature: torch.Tensor = None,
+        i2v_vae_feature: torch.Tensor = None,
         **kwargs,
     ):
 
@@ -248,12 +270,16 @@ class WanDiT(MultiModalModule):
         time_emb = self.time_projection(times).unflatten(1, (6, self.hidden_size))
 
         # prompt embeddings
+        bs = prompt.size(0)
+        prompt = prompt.view(bs, -1, prompt.size(-1))
         prompt_emb = self.text_embedding(prompt)
 
         # cat i2v
         if self.model_type == "i2v":
-            x = torch.cat([x, y], dim=1)  # (b, c[x+y], f, h, w)
-            clip_embedding = self.img_emb(clip_feature)
+            i2v_clip_feature = i2v_clip_feature.to(x)
+            i2v_vae_feature = i2v_vae_feature.to(x)
+            x = torch.cat([x, i2v_vae_feature], dim=1)  # (b, c[x+y], f, h, w)
+            clip_embedding = self.img_emb(i2v_clip_feature.to(time_emb.dtype))
             prompt_emb = torch.cat([clip_embedding, prompt_emb], dim=1)
 
         # patch embedding
@@ -276,14 +302,21 @@ class WanDiT(MultiModalModule):
         else:
             rng_context = nullcontext()
 
-        if mpu.get_context_parallel_world_size() > 1:
-            rotary_pos_emb = rotary_pos_emb.chunk(
-                mpu.get_context_parallel_world_size(), dim=0
-            )[mpu.get_context_parallel_rank()]
+        # cp split
+        if self.context_parallel_algo is not None:
+            embs = split_forward_gather_backward(
+                embs, mpu.get_context_parallel_group(), dim=1, grad_scale="down"
+            )  # b s h
+            rotary_pos_emb = split_forward_gather_backward(
+                rotary_pos_emb,
+                mpu.get_context_parallel_group(),
+                dim=0,
+                grad_scale="down",
+            )
 
         with rng_context:
             if self.recompute_granularity == "full":
-                latents_out = self._checkpointed_forward(
+                embs = self._checkpointed_forward(
                     self.blocks,
                     embs,
                     prompt_emb,
@@ -292,9 +325,14 @@ class WanDiT(MultiModalModule):
                 )
             else:
                 for block in self.blocks:
-                    latents_out = block(embs, prompt_emb, time_emb, rotary_pos_emb)
+                    embs = block(embs, prompt_emb, time_emb, rotary_pos_emb)
 
-        embs_out = self.head(latents_out, times)
+        if self.context_parallel_algo is not None:
+            embs = gather_forward_split_backward(
+                embs, mpu.get_context_parallel_group(), dim=1, grad_scale="up"
+            )
+
+        embs_out = self.head(embs, times)
 
         out = self.unpatchify(embs_out, frames, height, width)
 
@@ -305,7 +343,7 @@ class WanDiTBlock(nn.Module):
 
     def __init__(
         self,
-        cross_attn_type: str,
+        model_type: "t2v",
         hidden_size: int,
         ffn_dim: int,
         num_heads: int,
@@ -318,14 +356,16 @@ class WanDiTBlock(nn.Module):
         dropout: float = 0.0,
         rope=None,
         fa_layout=None,
+        clip_token_len: int = 257,
     ):
         super().__init__()
 
-        self.cross_attn_type = cross_attn_type
+        self.model_type = model_type
         self.rope = rope
         self.hidden_size = hidden_size
         self.ffn_dim = ffn_dim
         self.num_heads = num_heads
+        self.clip_token_len = clip_token_len
 
         self.self_attn = WanVideoParallelAttention(
             query_dim=hidden_size,
@@ -341,7 +381,8 @@ class WanDiTBlock(nn.Module):
             norm_type=qk_norm_type,
             norm_eps=eps,
             rope=rope,
-            is_qkv_concat=False,
+            attention_type=AttnType.self_attn,
+            has_img_input=False,
             fa_layout=fa_layout,
         )
 
@@ -358,7 +399,8 @@ class WanDiTBlock(nn.Module):
             use_qk_norm=qk_norm,
             norm_type=qk_norm_type,
             norm_eps=eps,
-            is_qkv_concat=False,
+            attention_type=AttnType.cross_attn,
+            has_img_input=model_type == "i2v",
             fa_layout=fa_layout,
         )
 
@@ -406,23 +448,17 @@ class WanDiTBlock(nn.Module):
         crs_input = self.norm3(self_attn_out)
 
         # i2v
-        if self.cross_attn_type == "i2v_cross_attn":
-            img = prompt.squeeze(0)[:, :257]
-            txt = prompt.squeeze(0)[:, 257:]
-            i2v_out = self.cross_attn(
-                query=crs_input,
-                key=img,
-                input_layout="bsh",
-            )
+        if self.model_type == "i2v":
+            img = prompt[:, :self.clip_token_len]
+            txt = prompt[:, self.clip_token_len:]
             crs_attn_out = self.cross_attn(
                 query=crs_input,
-                key=txt,
+                key=(img, txt),
                 input_layout="bsh",
             )
-            crs_attn_out = crs_attn_out + i2v_out
         # t2v
         else:
-            txt = prompt.squeeze(0)
+            txt = prompt
             crs_attn_out = self.cross_attn(
                 query=crs_input,
                 key=txt,
@@ -510,6 +546,50 @@ class RoPE3DWan(nn.Module):
         return freqs
 
 
+class WanFlashAttention(FlashAttention):
+    def __init__(
+        self,
+        softmax_scale=None,
+        attention_dropout=0.0,
+        fa_layout="sbh",
+        attention_type=AttnType.self_attn,
+    ):
+        super().__init__(
+            softmax_scale=softmax_scale,
+            attention_dropout=attention_dropout,
+            fa_layout=fa_layout,
+        )
+        self.attention_type = attention_type
+
+    def _split_head(self, x, dim=2):
+        return split_forward_gather_backward(
+            x, mpu.get_context_parallel_group(), dim=dim
+        )
+
+    def forward(self, query, key, value, attention_mask=None):
+        if self.attention_type == AttnType.self_attn:
+            query = all_to_all(
+                query, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=0
+            )
+            key = all_to_all(
+                key, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=0
+            )
+            value = all_to_all(
+                value, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=0
+            )
+        else:
+            query = all_to_all(
+                query, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=0
+            )
+            key = self._split_head(key, dim=2)
+            value = self._split_head(value, dim=2)
+        attn_out = super().forward(query, key, value, attention_mask)
+        attn_out = all_to_all(
+            attn_out, mpu.get_context_parallel_group(), scatter_dim=0, gather_dim=2
+        )
+        return attn_out
+
+
 class WanVideoParallelAttention(ParallelAttention):
 
     def __init__(
@@ -527,33 +607,39 @@ class WanVideoParallelAttention(ParallelAttention):
         norm_type: str = None,
         norm_elementwise_affine: bool = True,
         norm_eps: float = 1e-5,
-        is_qkv_concat: bool = False,
         attention_type: int = AttnType.self_attn,
-        is_kv_concat: bool = False,
+        has_img_input: bool = False,
         fa_layout: str = "sbh",
         rope=None,
         **kwargs,
     ):
         super().__init__(
-            query_dim,
-            key_dim,
-            num_attention_heads,
-            hidden_size,
-            proj_q_bias,
-            proj_k_bias,
-            proj_v_bias,
-            proj_out_bias,
-            dropout,
-            use_qk_norm,
-            norm_type,
-            norm_elementwise_affine,
-            norm_eps,
-            is_qkv_concat,
-            attention_type,
-            is_kv_concat,
-            fa_layout,
-            rope,
+            query_dim=query_dim,
+            key_dim=key_dim,
+            num_attention_heads=num_attention_heads,
+            hidden_size=hidden_size,
+            proj_q_bias=proj_q_bias,
+            proj_k_bias=proj_k_bias,
+            proj_v_bias=proj_v_bias,
+            proj_out_bias=proj_out_bias,
+            dropout=dropout,
+            use_qk_norm=use_qk_norm,
+            norm_type=norm_type,
+            norm_elementwise_affine=norm_elementwise_affine,
+            norm_eps=norm_eps,
+            is_qkv_concat=False,
+            attention_type=attention_type,
+            is_kv_concat=False,
+            fa_layout=fa_layout,
+            rope=rope,
             **kwargs,
+        )
+
+        self.core_attention_flash = WanFlashAttention(
+            attention_dropout=dropout,
+            fa_layout=fa_layout,
+            softmax_scale=1 / math.sqrt(self.head_dim),
+            attention_type=attention_type,
         )
 
         # Normalize
@@ -579,25 +665,48 @@ class WanVideoParallelAttention(ParallelAttention):
                 for param in self.k_norm.parameters():
                     setattr(param, "sequence_parallel", self.sequence_parallel)
 
+        self.has_img_input = has_img_input
+        if self.has_img_input:
+            args = get_args()
+            config = core_transformer_config_from_args(args)
+
+            self.k_img = tensor_parallel.ColumnParallelLinear(
+                query_dim,
+                hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_q_bias,
+                gather_output=False,
+            )
+            self.v_img = tensor_parallel.ColumnParallelLinear(
+                query_dim,
+                hidden_size,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_q_bias,
+                gather_output=False,
+            )
+            self.k_norm_img = normalize(
+                norm_type=norm_type,
+                in_channels=hidden_size,
+                eps=norm_eps,
+                affine=norm_elementwise_affine,
+                **kwargs,
+            )
+
     def get_query_key_value_tensors(self, hidden_states, key_value_states):
         """
         Derives `query` tensor from `hidden_states`, and `key`/`value` tensor
         from `hidden_states` or `key_value_states`.
         """
-        if self.attention_type == AttnType.self_attn and self.is_qkv_concat:
-            # Attention heads [s, b, h] --> [s, b, 3*h]
-            mixed_qkv = self.proj_qkv(hidden_states)[0]
-            # [s, b, 3*h] --> [s, b, h], [s, b, h], [s, b, h]
-            (query, key, value) = tensor_parallel.split_tensor_along_last_dim(
-                mixed_qkv, 3
-            )
-        elif self.attention_type == AttnType.cross_attn and self.is_kv_concat:
+        if self.has_img_input:
+            img_key_value_states, context_key_value_states = key_value_states
             # Attention heads [s, b, h] --> [s, b, h]
             query = self.proj_q(hidden_states)[0]
-            # Attention heads [s, b, h] --> [s, b, 2*h]
-            mixed_kv = self.proj_kv(key_value_states)[0]
-            # [s, b, 2*h] --> [s, b, h], [s, b, h]
-            (key, value) = tensor_parallel.split_tensor_along_last_dim(mixed_kv, 2)
+            img_key = self.k_img(img_key_value_states)[0]
+            img_value = self.v_img(img_key_value_states)[0]
+            key = self.proj_k(context_key_value_states)[0]
+            value = self.proj_v(context_key_value_states)[0]
         else:
             # Attention heads [s, b, h] --> [s, b, h]
             query = self.proj_q(hidden_states)[0]
@@ -607,6 +716,8 @@ class WanVideoParallelAttention(ParallelAttention):
         if self.use_qk_norm:
             query = self.q_norm(query)
             key = self.k_norm(key)
+            if self.has_img_input:
+                img_key = self.k_norm_img(img_key)
 
         # [s, b, h] --> [s, b, n, d]
         batch_size = query.shape[1]
@@ -620,7 +731,36 @@ class WanVideoParallelAttention(ParallelAttention):
             -1, batch_size, self.num_attention_heads_per_partition, self.head_dim
         )
 
+        if self.has_img_input:
+            img_key = img_key.view(
+                -1, batch_size, self.num_attention_heads_per_partition, self.head_dim
+            )
+            img_value = img_value.view(
+                -1, batch_size, self.num_attention_heads_per_partition, self.head_dim
+            )
+            key = [img_key, key]
+            value = [img_value, value]
         return query, key, value
+
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: Optional[Union[torch.Tensor, Tuple[torch.Tensor]]] = None,
+        mask: Optional[torch.Tensor] = None,
+        input_layout: str = "sbh",
+        rotary_pos_emb: Optional[torch.Tensor] = None,
+    ):
+        if self.has_img_input:
+            query, key, value = self.function_before_core_attention(
+                query, key, input_layout, rotary_pos_emb
+            )
+            img_core_attn_out = self.core_attention_flash(query, key[0], value[0], mask)
+            core_attn_out = self.core_attention_flash(query, key[1], value[1], mask)
+            core_attn_out = img_core_attn_out + core_attn_out
+            out = self.function_after_core_attention(core_attn_out, input_layout)
+            return out
+        else:
+            return super().forward(query, key, mask, input_layout, rotary_pos_emb)
 
 
 class Head(nn.Module):
