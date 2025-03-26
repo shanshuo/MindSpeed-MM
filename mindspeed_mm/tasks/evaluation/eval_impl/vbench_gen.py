@@ -21,7 +21,6 @@ from typing import Optional
 import imageio
 import pandas as pd
 import torch
-import vbench2_beta_i2v
 from huggingface_hub import hf_hub_download
 from megatron.core import mpu
 from megatron.training.utils import print_rank_0
@@ -30,11 +29,6 @@ from peft.mapping import PEFT_TYPE_TO_CONFIG_MAPPING
 from peft.utils import CONFIG_NAME
 from torch.nn.parallel.distributed import DistributedDataParallel as ddp
 from transformers.utils import PushToHubMixin
-from vbench import VBench
-from vbench.third_party.RAFT.core.raft import RAFT
-from vbench2_beta_i2v import VBenchI2V
-from vbench2_beta_long import VBenchLong
-from vbench2_beta_long.static_filter import StaticFilter
 
 from mindspeed_mm.data import build_mm_dataloader
 from mindspeed_mm.data.data_utils.utils import build_iterations
@@ -55,18 +49,19 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
         self.videos_path = args.save_path
         self.load_ckpt_from_local = args.eval_config.load_ckpt_from_local
         self.full_json_dir = args.eval_config.dataset.basic_param.data_path
-        self.prompt = args.eval_config.prompt if hasattr(args.eval_config, "prompt") else []
-        self.ratio = args.eval_config.dataset.extra_param.ratio if hasattr(args.eval_config.dataset.extra_param, "ratio") else "16-9"
+        self.prompt = getattr(args.eval_config, "prompt", [])
+        self.ratio = getattr(args.eval_config.dataset.extra_param, "ratio", "16-9")
         self.vbench = None
-        self.image_path = args.eval_config.image_path if hasattr(args.eval_config, "image_path") else None
-        self.long_eval_config = args.eval_config.long_eval_config if hasattr(args.eval_config,
-                                                                             "long_eval_config") else ""
+        self.image_path = getattr(args.eval_config, "image_path", None)
+        self.long_eval_config = getattr(args.eval_config, "long_eval_config", "")
+        self.need_inference = getattr(args.eval_config, "need_inference", True)
         self.pipeline = inference_pipeline
         self.eval_args = args
         self.dataset = dataset
 
     def __call__(self):
-        self.inference_video()
+        if self.need_inference:
+            self.inference_video()
         self.analyze_result()
 
     def check_dimension_list(self):
@@ -99,6 +94,12 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
         print_rank_0(f"Save excel to {excel_res_path}.")
 
     def analyze_result(self):
+        import vbench2_beta_i2v
+        from vbench import VBench
+        from vbench2_beta_i2v import VBenchI2V
+        from vbench2_beta_long import VBenchLong
+        from vbench2_beta_long.static_filter import StaticFilter
+
         device = torch.device("npu")
         result_file_name = f'{self.eval_type}'
 
@@ -261,6 +262,8 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
 
 
 def patch_static_filter_load_model(self):
+    from vbench.third_party.RAFT.core.raft import RAFT
+
     self.model = ddp(RAFT(self.args).to(self.device))
     self.model.load_state_dict(torch.load(self.args.model))
 

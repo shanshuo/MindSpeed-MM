@@ -188,6 +188,7 @@
         "eval_type": "t2v",
         "long_eval_config": "path_to_long_eval_configs",
         "load_ckpt_from_local": true,
+        "need_inference": true,
         "dimensions": ["subject_consistency", "background_consistency", "aesthetic_quality", "imaging_quality", "temporal_style", "overall_consistency", "human_action",
          "temporal_flickering", "motion_smoothness", "dynamic_degree", "appearance_style"],
         "eval_result_path": "./eval_result"
