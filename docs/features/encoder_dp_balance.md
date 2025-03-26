@@ -11,7 +11,7 @@ Alltoall通信，多patch的DP传给少patch的DP，实现encoder的负载均衡
 
 ## 使用方法
 
-1. 在模型启动 shell 中添加参数（InternVL 已支持）；
+1. 在模型启动 shell 中添加参数（当前仅支持InternVL）；
 
    ```shell
    GPT_ARGS="
