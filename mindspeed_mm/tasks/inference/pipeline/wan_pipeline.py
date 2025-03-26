@@ -62,7 +62,7 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.patch_size = self.predict_model.patch_size if getattr(self, "predict_model", None) else (1, 2, 2)
 
         self.num_frames, self.height, self.width = config.input_size
-        self.generator = None if hasattr(config, "seed") else torch.Generator().manual_seed(config.seed)
+        self.generator = None if not hasattr(config, "seed") else torch.Generator().manual_seed(config.seed)
 
     @torch.no_grad()
     def __call__(
@@ -98,22 +98,18 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             batch_size = prompt_embeds.shape[0]
 
         # 3. Encode input prompt
+        do_classifier_free_guidance = self.scheduler.do_classifier_free_guidance
         prompt_embeds, negative_prompt_embeds = self.encode_texts(
             prompt=prompt,
             negative_prompt=negative_prompt,
-            do_classifier_free_guidance=self.scheduler.do_classifier_free_guidance,
+            do_classifier_free_guidance=do_classifier_free_guidance,
             prompt_embeds=prompt_embeds,
             negative_prompt_embeds=negative_prompt_embeds,
             max_sequence_length=max_sequence_length,
             device=device,
         )
 
-        predictor_dtype = self.predict_model.dtype
-        prompt_embeds = prompt_embeds.to(predictor_dtype)
-        if negative_prompt_embeds is not None:
-            negative_prompt_embeds = negative_prompt_embeds.to(predictor_dtype)
-
-        # 4. Prepare latents
+        # 4. Prepare latents and model_kwargs
         if image is None:
             shape = (
                 batch_size,
@@ -134,20 +130,55 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
                 batch_size, image, device, prompt_embeds.dtype
             )
 
-        # 5. Denoising to get clean latents
         model_kwargs = {
             "prompt_embeds": prompt_embeds,
             "negative_prompt_embeds": negative_prompt_embeds,
             "i2v_clip_feature": clip_features,
             "i2v_vae_feature": vae_features
         }
-        latents = self.scheduler.sample(
-            model=self.predict_model,
-            latents=latents.to(predictor_dtype),
-            device=device,
-            model_kwargs=model_kwargs
-        )
 
+        # 5. Denoising to get clean latents
+        num_inference_steps = self.scheduler.num_inference_steps
+        timesteps = self.scheduler.timesteps
+        num_warmup_steps = self.scheduler.num_warmup_steps
+        guidance_scale = self.scheduler.guidance_scale
+        with self.progress_bar(total=num_inference_steps) as progress_bar:
+            for i, t in enumerate(timesteps):
+                latent_model_input = latents.to(self.predict_model.dtype)
+                timestep = t.expand(latents.shape[0]).to(device=latents.device).float()
+
+                noise_pred = self.predict_model(
+                    latent_model_input,
+                    timestep,
+                    model_kwargs.get('prompt_embeds'),
+                    **model_kwargs
+                )
+
+                if do_classifier_free_guidance:
+                    noise_uncond = self.predict_model(
+                        latent_model_input,
+                        timestep,
+                        model_kwargs.get('negative_prompt_embeds'),
+                        **model_kwargs
+                    )
+                    noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
+
+                # compute the previous noisy sample x_t -> x_t-1
+                latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
+                
+                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps):
+                    progress_bar.update()
+        
+        # 6. Post process latents to get video
+        latents = latents.to(self.vae.model.dtype)
+        latents_mean = (
+                torch.tensor(self.vae.model.config.latents_mean)
+                .view(1, self.vae.model.config.z_dim, 1, 1, 1)
+                .to(latents.device, latents.dtype)
+            )
+        latents_std = 1.0 / torch.tensor(self.vae.model.config.latents_std).view(
+            1, self.vae.model.config.z_dim, 1, 1, 1).to(latents.device, latents.dtype)
+        latents = latents / latents_std + latents_mean
         video = self.decode_latents(latents)
         return video
     
@@ -328,4 +359,4 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         prompt_embeds = prompt_embeds.repeat(1, 1, 1)
         prompt_embeds = prompt_embeds.view(batch_size, seq_len, -1)
 
-        return prompt_embeds
+        return prompt_embeds.to(self.predict_model.dtype)

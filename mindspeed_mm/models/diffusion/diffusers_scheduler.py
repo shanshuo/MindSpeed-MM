@@ -19,7 +19,8 @@ from diffusers.schedulers import (
     KDPM2AncestralDiscreteScheduler,
     CogVideoXDPMScheduler,
     CogVideoXDDIMScheduler,
-    FlowMatchEulerDiscreteScheduler
+    FlowMatchEulerDiscreteScheduler,
+    UniPCMultistepScheduler
 )
 from diffusers.training_utils import compute_snr
 from megatron.core import mpu
@@ -38,7 +39,8 @@ DIFFUSERS_SCHEDULE_MAPPINGS = {
     "DEISMultistep": DEISMultistepScheduler,
     "KDPM2AncestralDiscrete": KDPM2AncestralDiscreteScheduler,
     "cogvideox_5b": CogVideoXDPMScheduler,
-    "cogvideox_2b": CogVideoXDDIMScheduler
+    "cogvideox_2b": CogVideoXDDIMScheduler,
+    "UniPCMultistepScheduler": UniPCMultistepScheduler
 }
 
 
