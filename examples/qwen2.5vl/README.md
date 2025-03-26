@@ -91,7 +91,7 @@ cp examples/qwen2vl/dot_product_attention.py MindSpeed/mindspeed/core/transforme
 pip install -e .
 
 # 安装transformers指定版本
-git clone git@github.com:huggingface/transformers.git
+git clone https://github.com/huggingface/transformers.git
 cd transformers
 git checkout fa56dcc2a
 pip install -e .
@@ -122,6 +122,14 @@ mm-convert  Qwen2_5_VLConverter hf_to_mm \
   --cfg.parallel_config.llm_pp_layers [1,10,10,7] \
   --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
   --cfg.parallel_config.tp_size 1
+
+# 72b
+mm-convert  Qwen2VLConverter hf_to_mm \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-72B-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-72B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [14,23,23,20] \
+  --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
+  --cfg.parallel_config.tp_size 8
 
 # 其中：
 # mm_dir: 转换后保存目录
@@ -306,5 +314,6 @@ CPU_AFFINITY_CONF： 控制CPU端算子任务的处理器亲和性，即设定�
 HCCL_CONNECT_TIMEOUT:  用于限制不同设备之间socket建链过程的超时等待时间，需要配置为整数，取值范围[120,7200]，默认值为120，单位s  
 NPU_ASD_ENABLE： 控制是否开启Ascend Extension for PyTorch的特征值检测功能，未设置或0：关闭特征值检测，1：表示开启特征值检测，只打印异常日志，不告警，2：开启特征值检测，并告警，3：开启特征值检测，并告警，同时会在device侧info级别日志中记录过程数据  
 ASCEND_LAUNCH_BLOCKING： 控制算子执行时是否启动同步模式，0：采用异步方式执行，1：强制算子采用同步模式运行  
-ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条目个数  
+ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条目个数 
+PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为 
 NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量
