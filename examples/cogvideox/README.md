@@ -299,13 +299,14 @@ CogvideoX训练阶段的启动文件为shell脚本，主要分为如下4个：
 
 * 当PP开启时，在启动脚本文件中添加`--optimization-level 2 --use-multiparameter-pipeline-model-parallel`参数，并且在模型参数配置文件中的将`pipeline_num_layers`参数的值由`null`改为实际切分情况，例如PP=4，num_layers=42时，`"pipeline_num_layers":[11, 10, 11, 10]`,具体值根据实际的PP切分策略确定。
 
-* 当开启VAE CP时，修改模型参数配置文件中的`ae`字典内的关键字`cp_size`的值为所需要的值。
+* 当开启VAE CP时，修改模型参数配置文件中的`ae`字典内的关键字`cp_size`的值为所需要的值，不兼容Encoder-DP、未验证与分层Zero效果。
 
 * 当开启SP时，在启动脚本文件中添加`--sequence-parallel`参数。
 
-* 当开启Encoder-DP时，需要将[model_cogvideox_i2v_1.5.json](i2v_1.5/model_cogvideox_i2v_1.5.json) 或者[model_cogvideox_t2v_1.5.json](t2v_1.5/model_cogvideox_t2v_1.5.json)中的`enable_encoder_dp`选项改为`true`。注意:需要在开启CP/TP，并且`load_video_features`为`false`及`load_text_features`为`false`才能启用。
+* 当开启Encoder-DP时，需要将[model_cogvideox_i2v_1.5.json](i2v_1.5/model_cogvideox_i2v_1.5.json) 或者[model_cogvideox_t2v_1.5.json](t2v_1.5/model_cogvideox_t2v_1.5.json)中的`enable_encoder_dp`选项改为`true`。注意:需要在开启CP/TP，并且`load_video_features`为`false`及`load_text_features`为`false`才能启用，不兼容PP场景、VAE-CP、分层Zero。
 
-* 当开启分层Zero时，需要在[pretrain_cogvideox_t2v_1.5.sh](t2v_1.5/pretrain_cogvideox_t2v_1.5.sh)或者[pretrain_cogvideox_i2v_1.5.sh](i2v_1.5/pretrain_cogvideox_i2v_1.5.sh)里面添加下面的参数，
+* 当开启分层Zero时，需要在[pretrain_cogvideox_t2v_1.5.sh](t2v_1.5/pretrain_cogvideox_t2v_1.5.sh)或者[pretrain_cogvideox_i2v_1.5.sh](i2v_1.5/pretrain_cogvideox_i2v_1.5.sh)里面添加下面的参数。
+  注意：不兼容Encoder-DP特性、TP场景、PP场景，与VAE-CP效果未验证。
   ```shell
   --layerzero \
   --layerzero-config ./zero_config.yaml \
