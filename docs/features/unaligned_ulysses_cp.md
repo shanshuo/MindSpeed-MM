@@ -16,14 +16,14 @@ Ulysses CP算法基于All2All算子，对All2All算子的Input List与Output Lis
 
 2. examples/qwen2vl/model_72b.json中的text_decoder添加context-parallel-size选项，并设置CP大小；
 
-3.examples/qwen2vl/finetune_qwen2vl_72b.sh中的GPT_ARGS添加  
+3. examples/qwen2vl/finetune_qwen2vl_72b.sh中的GPT_ARGS添加  
 ```shell
     --context-parallel-size ${CP} 
 ```
 
 上述三处的CP大小保持一致
 
-4.3.examples/qwen2vl/finetune_qwen2vl_72b.sh中的GPT_ARGS添加  
+4. examples/qwen2vl/finetune_qwen2vl_72b.sh中的GPT_ARGS添加  
 ```shell
     --context-parallel-algo ulysses_cp_algo
 ```
