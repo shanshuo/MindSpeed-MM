@@ -337,3 +337,47 @@ def save_by_pp(state_dicts: list[dict[str, torch.Tensor]],
         save_path.mkdir(exist_ok=True, parents=True)
         torch.save({'model': state_dict}, save_path.joinpath('model_optim_rng.pt'))
     save_root_dir.joinpath(LATEST_TXT).write_text(str(iteration))
+
+
+def rename_pp_parameter(param_name: str,
+                        vit_pp_list: list[int],
+                        llm_pp_list: list[int],
+                        pp_index: int = 0) -> str:
+    index = pp_index
+    llm_pp_list = [sum(llm_pp_list[:i + 1]) for i in range(len(llm_pp_list))]
+    vit_pp_list = [sum(vit_pp_list[:i + 1]) for i in range(len(vit_pp_list))]
+    llm_pp_list = [0] + llm_pp_list[0:-1]
+    vit_pp_list = [0] + vit_pp_list[0:-1]
+    if param_name.startswith('image_encoder.encoder.blocks.layers'):
+        index = vit_pp_list[index]
+        name_li = param_name.split('.')
+        name_li[4] = str(index + int(name_li[4]))
+        param_name = '.'.join(name_li)
+    elif param_name.startswith('text_decoder.decoder.layers'):
+        index = llm_pp_list[index]
+        name_li = param_name.split('.')
+        name_li[3] = str(index + int(name_li[3]))
+        param_name = '.'.join(name_li)
+    return param_name
+
+
+def load_from_mm(load_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int], tp_size: int = 1) -> list[dict]:
+    save_iteration = load_dir.joinpath(LATEST_TXT).read_text()
+    save_dir = load_dir.joinpath(f"iter_{int(save_iteration):07}" if save_iteration != "release" else save_iteration)
+    state_dicts = []
+    for tp_rank in range(tp_size):
+        pp_state_dict = {}
+        for pp_rank in range(len(vit_pp_list)):
+            if len(vit_pp_list) > 1:
+                current_path = save_dir.joinpath(f"mp_rank_{int(tp_rank):02}_{int(pp_rank):03}")
+            else:
+                current_path = save_dir.joinpath(f"mp_rank_{int(tp_rank):02}")
+            pt_path = current_path.joinpath("model_optim_rng.pt")
+            print(str(pt_path).center(100, '_'))
+            # 注意output_layer存在_extra_state其值为None
+            pp_state_dict.update(
+                {rename_pp_parameter(param, vit_pp_list, llm_pp_list, pp_rank): tensor
+                 for param, tensor in torch.load(pt_path, map_location='cpu')['model'].items() if tensor is not None})
+        state_dicts.append(pp_state_dict)
+
+    return state_dicts

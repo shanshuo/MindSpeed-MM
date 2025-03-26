@@ -305,6 +305,27 @@ WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 bash examples/qwen2.5vl/finetune_qwen2_5_vl_7b.sh
 ```
 
+## 训练后权重转回huggingface格式
+
+MindSpeed-MM修改了部分原始网络的结构名称，在微调后，如果需要将权重转回huggingface格式，可使用`mm-convert`权重转换工具对微调后的权重进行转换，将权重名称修改为与原始网络一致。
+
+```bash
+mm-convert  Qwen2_5_VLConverter mm_to_hf \
+  --cfg.save_hf_dir "ckpt/mm_to_hf/Qwen2.5-VL-7B-Instruct" \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2.5-VL-7B-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2.5-VL-7B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [1,10,10,7] \
+  --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
+  --cfg.parallel_config.tp_size 1
+# 其中：
+# save_hf_dir: mm微调后转换回hf模型格式的目录
+# mm_dir: 微调后保存的权重目录
+# hf_dir: huggingface权重目录
+# llm_pp_layers: llm在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
+# vit_pp_layers: vit在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
+# tp_size: tp并行数量，注意要和微调启动脚本中的配置一致
+```
+
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  

@@ -83,7 +83,11 @@ class Qwen2_5_VLConverter(Converter):
     @staticmethod
     def mm_to_hf(cfg: ConvertHFConfig):
         """mindspeed-mm模型转换huggingface模型权重"""
-        pass
+        # qwen2_5_vl_mm_to_hf会用到mindspeed.megatron_adaptor模块，提前import会引入问题，故在此import
+        from checkpoint import qwen2_5_vl_mm_to_hf
+        qwen2_5_vl_mm_to_hf.main(cfg)
+        # 安全管控权限
+        os.chmod(cfg.save_hf_dir, SAFE_MODE)
 
 
     @staticmethod
