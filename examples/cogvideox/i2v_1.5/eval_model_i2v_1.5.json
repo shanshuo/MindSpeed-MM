@@ -187,6 +187,7 @@
         "evaluation_impl": "vbench_eval",
         "eval_type": "i2v",
         "load_ckpt_from_local": true,
+        "need_inference": true,
         "dimensions": ["subject_consistency"],
         "eval_result_path": "./eval_result",
         "image_path": "vbench2_i2v/data/crop"

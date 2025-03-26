@@ -53,7 +53,10 @@ def main():
     torch.set_grad_enabled(False)
 
     eval_dataset_class = eval_dataset_dict[args.eval_config.dataset.type]
-    eval_impl_class = eval_impl_dict[args.eval_config.evaluation_impl]
+    if args.eval_config.evaluation_impl in eval_impl_dict:
+        eval_impl_class = eval_impl_dict[args.eval_config.evaluation_impl]
+    else:
+        raise NotImplementedError(f"eval impl {args.eval_config.evaluation_impl} not found")
 
     inference_pipeline = init_eval_pipline(args)
 
