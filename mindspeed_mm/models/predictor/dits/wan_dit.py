@@ -166,6 +166,26 @@ class WanDiT(MultiModalModule):
         if model_type == "i2v":
             self.img_emb = MLPProj(self.img_dim, self.hidden_size)
 
+    @property
+    def dtype(self) -> torch.dtype:
+        """The dtype of the module (assuming that all the module parameters have the same dtype)."""
+        params = tuple(self.parameters())
+        if len(params) > 0:
+            return params[0].dtype
+        else:
+            buffers = tuple(self.buffers())
+            return buffers[0].dtype
+
+    @property
+    def device(self) -> torch.device:
+        """The device of the module (assuming that all the module parameters are in the same device)."""
+        params = tuple(self.parameters())
+        if len(params) > 0:
+            return params[0].device
+        else:
+            buffers = tuple(self.buffers())
+            return buffers[0].device
+
     def sinusoidal_embedding_1d(self, dim, position, theta=10000):
         sinusoid = torch.outer(
             position.type(torch.float64),
@@ -422,7 +442,7 @@ class WanDiTBlock(nn.Module):
 
     def forward(
         self,
-        txt_emb,
+        latents,
         prompt,
         time_emb,
         rotary_pos_emb,
@@ -433,26 +453,27 @@ class WanDiTBlock(nn.Module):
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.modulation.to(dtype=dtype, device=device) + time_emb
         ).chunk(6, dim=1)
-        self_input = self.modulate(
-            self.norm1(txt_emb.to(torch.float32)), shift_msa, scale_msa
+        self_attn_input = self.modulate(
+            self.norm1(latents.to(torch.float32)), shift_msa, scale_msa
         )
 
         # self attention
-        self_attn_out = txt_emb + gate_msa * self.self_attn(
-            self_input.to(dtype),
+        self_attn_out = self.self_attn(
+            self_attn_input.to(dtype),
             rotary_pos_emb=rotary_pos_emb.to(device),
             input_layout="bsh",
         )
+        latents = latents + gate_msa * self_attn_out
 
         # cross attention
-        crs_input = self.norm3(self_attn_out)
+        crs_attn_input = self.norm3(latents)
 
         # i2v
         if self.model_type == "i2v":
             img = prompt[:, :self.clip_token_len]
             txt = prompt[:, self.clip_token_len:]
             crs_attn_out = self.cross_attn(
-                query=crs_input,
+                query=crs_attn_input,
                 key=(img, txt),
                 input_layout="bsh",
             )
@@ -460,18 +481,18 @@ class WanDiTBlock(nn.Module):
         else:
             txt = prompt
             crs_attn_out = self.cross_attn(
-                query=crs_input,
+                query=crs_attn_input,
                 key=txt,
                 input_layout="bsh",
             )
 
-        attn_out = self_attn_out + crs_attn_out
-        modu_out = self.modulate(self.norm2(attn_out), shift_mlp, scale_mlp)
+        latents = latents + crs_attn_out
+        modu_out = self.modulate(self.norm2(latents), shift_mlp, scale_mlp)
 
         # ffn
-        out = attn_out + gate_mlp * self.ffn(modu_out)
+        latents = latents + gate_mlp * self.ffn(modu_out)
 
-        return out
+        return latents
 
 
 class RoPE3DWan(nn.Module):
@@ -509,23 +530,19 @@ class RoPE3DWan(nn.Module):
 
     def apply_rotary_pos_emb(self, tokens, freqs):
         dtype = tokens.dtype
+        cos, sin = torch.chunk(torch.view_as_real(freqs.to(torch.complex64)), 2, dim=-1)
 
-        seq_len, batch_size, num_head, head_dim = (
-            tokens.shape[0],
-            tokens.shape[1],
-            tokens.shape[2],
-            tokens.shape[3],
-        )
+        B, S, N, D = tokens.shape
 
-        # precompute multipliers
-        multipliers = torch.view_as_complex(
-            tokens.to(torch.float64).reshape(seq_len, batch_size, num_head, -1, 2)
-        )
+        def rotate_half(x):
+            half_1, half_2 = torch.chunk(x.reshape((B, S, N, D // 2, 2)), 2, dim=-1)
+            return torch.cat((-half_2, half_1), dim=-1).reshape((B, S, N, D))
 
-        # apply rotary embeddings
-        embs = torch.view_as_real(multipliers * freqs.to(torch.complex64)).flatten(3)
+        cos = cos.expand(-1, -1, -1, -1, 2).flatten(-2)
+        sin = sin.expand(-1, -1, -1, -1, 2).flatten(-2)
+        res = tokens * cos + rotate_half(tokens) * sin
 
-        return embs.to(dtype)
+        return res.to(dtype)
 
     def forward(self, b, f, h, w):
         seq_len = f * h * w
