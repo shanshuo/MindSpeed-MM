@@ -25,8 +25,8 @@ GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 MM_DATA="./examples/wan2.1/1.3b/i2v/feature_data.json"
 MM_MODEL="./examples/wan2.1/1.3b/i2v/pretrain_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="./ckpt/wan2.1"
-SAVE_PATH="./save_ckpt/wan2.1"
+LOAD_PATH="path to load your wandit weight"
+SAVE_PATH="path to save your wandit weight"
 layerzero_config="examples/wan2.1/zero_config.yaml"
 
 DISTRIBUTED_ARGS="

@@ -15,7 +15,7 @@ MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
 MM_MODEL="examples/wan2.1/1.3b/i2v/inference_model.json"
-LOAD_PATH="./ckpt/wan2.1/1.3b/i2v/"
+LOAD_PATH="path to load your trained wandit weight"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
