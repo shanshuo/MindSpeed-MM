@@ -19,7 +19,8 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
-* [Mar. 26, 2025]: 🚀🚀 MindSpeed-MM支持Qwen2.5VL-7B/72B模型 【Prototype】
+* [Mar. 27, 2025]: 🚀 MindSpeed-MM支持Wan2.1-1.3B/14B模型 【Prototype】
+* [Mar. 26, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-7B/72B模型 【Prototype】
 * [Feb. 20, 2025]: 🚀 MindSpeed-MM支持InternVL2.5-78B模型 【Prototype】
 * [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型
 * [Feb. 17, 2025]: 🔥 MindSpeed-MM支持Mindspeed-Core & Megatron 0.8.0版本
@@ -49,6 +50,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 |       模型 \ 特性       | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
 |:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
+|    Wan2.1     |  |  |  |  | CP (Ulysses) | ✔ | ✔ |  |
 |    HunyuanVideo     | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 |   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 |   CogVideoX系列-I2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
@@ -83,7 +85,6 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 ## 研发中的特性与模型
 
 * 【新模型】  JanusPro
-* 【新模型】 [Qwen2.5VL](https://github.com/QwenLM/Qwen2.5-VL)
 * 【模型特性】 CogVideoX: PP
 * 【模型特性】 OpensoraPlan1.3: CP (Ring Attention)
 * 【模型特性】 Qwen2VL: VPP, CP (Ulysses & Ring Attention)
@@ -148,7 +149,46 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="19"> 多模态生成 </td>
+      <td rowspan="24"> 多模态生成 </td>
+      </tr>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-T2V</a></td>
+      <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers">1.3B</a></td>
+      <td> 预训练 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.770 (SPS) </td>
+      <td> 0.960 (SPS) </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
+      <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers">14B</a></td>
+      <td> 预训练 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.160 (SPS) </td>
+      <td> 0.160 (SPS) </td>
+      <td>【Test】</td>
+    </tr>
+    </tr>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-I2V</a></td>
+      <td>1.3B</td>
+      <td> 预训练 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.76 (SPS) </td>
+      <td>  / </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
+      <td><a href="https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-720P-Diffusers">14B</a></td>
+      <td> 预训练 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.160 (SPS) </td>
+      <td> 0.160 (SPS) </td>
+      <td>【Test】</td>
+    </tr>
+    </tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/hunyuanvideo">HunyuanVideo</a></td>
       <td><a href="https://huggingface.co/tencent/HunyuanVideo">13B</a></td>
       <td> 预训练 </td>
