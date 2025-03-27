@@ -104,7 +104,9 @@ pip install -e .
 
 从Huggingface库下载对应的模型权重:
 
+- 模型地址: [Qwen2.5-VL-3B](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/tree/main)；
 - 模型地址: [Qwen2.5-VL-7B](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/tree/main)；
+- 模型地址: [Qwen2.5-VL-72B](https://huggingface.co/Qwen/Qwen2.5-VL-72B-Instruct/tree/main)；
 
 
  将下载的模型权重保存到本地的`ckpt/hf_path/Qwen2.5-VL-7B-Instruct`目录下。
@@ -115,6 +117,14 @@ pip install -e .
 MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工具对原始预训练权重进行转换。该工具实现了huggingface权重和MindSpeed-MM权重的互相转换以及PP（Pipeline Parallel）权重的重切分。参考[权重转换工具](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/权重转换工具.md)
 
 ```bash
+# 3b
+mm-convert  Qwen2_5_VLConverter hf_to_mm \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2.5-VL-3B-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2.5-VL-3B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [36] \
+  --cfg.parallel_config.vit_pp_layers [32] \
+  --cfg.parallel_config.tp_size 1
+  
 # 7b
 mm-convert  Qwen2_5_VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2.5-VL-7B-Instruct" \
@@ -338,3 +348,8 @@ ASCEND_LAUNCH_BLOCKING： 控制算子执行时是否启动同步模式，0：�
 ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条目个数 
 PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为 
 NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量
+
+## 注意事项
+
+1. 在 `finetune_xx.sh`里，与模型结构相关的参数并不生效，以`examples/qwen2.5vl/model_xb.json`里同名参数配置为准，非模型结构的训练相关参数在 `finetune_xx.sh`修改。
+2. 在使用单卡进行3B模型训练时，如果出现Out Of Memory，可以使用多卡并开启分布式优化器进行训练。
