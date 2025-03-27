@@ -39,6 +39,7 @@
 - [特性使用介绍](#jump9)
   - [lora微调](#jump9.1)
   - [非均匀CP](#jump9.2)
+  - [非均匀SP](#jump9.3)
 - [环境变量声明](#jump10)
 - [注意事项](#jump11)
 
@@ -701,6 +702,10 @@ LoRA为框架通用能力，当前功能已支持，可参考[LoRA特性文档](
 <a id="jump9.2"></a>
 ### 非均匀CP切分
 非均匀CP的介绍和使能方式，可参考[unaligned_ulysses_cp](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/unaligned_ulysses_cp.md)。
+
+<a id="jump9.3"></a>
+### 非均匀SP切分
+非均匀SP的介绍和使能方式，可参考[unaligned_sequence_parallel](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/unaligned_sequence_parallel.md)。
 
 <a id="jump10"></a>
 ## 环境变量声明

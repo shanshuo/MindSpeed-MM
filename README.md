@@ -19,6 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
+* [Mar. 26, 2025]: 🚀🚀 MindSpeed-MM支持Qwen2.5VL-7B/72B模型 【Prototype】
 * [Feb. 20, 2025]: 🚀 MindSpeed-MM支持InternVL2.5-78B模型 【Prototype】
 * [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型
 * [Feb. 17, 2025]: 🔥 MindSpeed-MM支持Mindspeed-Core & Megatron 0.8.0版本
@@ -61,6 +62,8 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 |     Qwen2VL-2B      | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
 |     Qwen2VL-7B      | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
 |     Qwen2VL-72B     | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
+|     Qwen2.5VL-7B      | ✔ |  |  |                                            ✔                                            |  | ✔ |  |  |
+|     Qwen2.5VL-72B     | ✔ |  |  |                                            ✔                                            |  | ✔ |  |  |
 
 备注：
 
@@ -79,6 +82,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 研发中的特性与模型
 
+* 【新模型】  JanusPro
 * 【新模型】 [Qwen2.5VL](https://github.com/QwenLM/Qwen2.5-VL)
 * 【模型特性】 CogVideoX: PP
 * 【模型特性】 OpensoraPlan1.3: CP (Ring Attention)
@@ -333,7 +337,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Test】</td>
     </tr>
     <tr>
-      <td rowspan="9"> 多模态理解 </td>
+      <td rowspan="11"> 多模态理解 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/llava1.5">LLaVA 1.5</a></td>
       <td><a href="https://github.com/haotian-liu/LLaVA">7B</a></td>
       <td> 全参微调 </td>
@@ -417,6 +421,25 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 261.25 (TPS) </td>
       <td> 257.63 (TPS) </td>
       <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2.5vl">Qwen2.5-VL</a></td>
+      <td><a href="https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct">7B</a></td>
+      <td> 微调 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> / </td>
+      <td> / </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
+      <td><a href="https://huggingface.co/Qwen/Qwen2.5-VL-72B-Instruct">72B</a></td>
+      <td> 微调 </td>
+      <td> 4x8 </td>
+      <td> BF16 </td>
+      <td> / </td>
+      <td> / </td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td> 语音识别 </td>
