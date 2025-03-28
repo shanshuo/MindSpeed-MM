@@ -11,7 +11,7 @@ Ulysses CP算法基于All2All算子，对All2All算子的Input List与Output Lis
 
 
 ## 使用方法
-
+(当前仅支持qwen2vl)
 1. examples/qwen2vl/model_72b.json中的image_encoder.vision_encoder添加context-parallel-size选项，并设置CP大小；
 
 2. examples/qwen2vl/model_72b.json中的text_decoder添加context-parallel-size选项，并设置CP大小；

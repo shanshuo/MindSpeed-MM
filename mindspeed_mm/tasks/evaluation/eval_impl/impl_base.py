@@ -17,7 +17,7 @@ from mindspeed_mm.tasks.evaluation.eval_datasets.datasets_base import BaseEvalDa
 
 class BaseEvalImpl:
 
-    def __init__(self, dataset: BaseEvalDataset, inference_pipeline, args, model_prompt_template=None):
+    def __init__(self, dataset: BaseEvalDataset, inference_pipeline, args, model_prompt_template=None, drop_last=False):
 
         self.rank = mpu.get_data_parallel_group().rank()
         self.world_size = mpu.get_data_parallel_world_size()
@@ -38,7 +38,16 @@ class BaseEvalImpl:
         self.out_file = self._out_file(self.rank)
         self.report_file = self.result_path.replace('.xlsx', '_acc.csv')
 
-        sheet_indices = list(range(self.rank, len(dataset), self.world_size))  # 对数据进行分块，后面涉及到多卡评估
+        is_divisive = len(dataset) // self.world_size == 0
+        remainder = len(dataset) % self.world_size
+        if is_divisive:
+            data_len_total = len(dataset)
+        elif drop_last and not is_divisive:
+            raise ValueError("drop_last must be false now")
+        elif not drop_last and not is_divisive:
+            print(f"the length of dataset: {len(dataset)}, world_size: {self.world_size}, remainder: {remainder}")
+            raise ValueError(f'The length of the dataset must be divided evenly by the world_size.')
+        sheet_indices = list(range(self.rank, data_len_total, self.world_size))  # 对数据进行分块，后面涉及到多卡评估
         print(f"Rank {self.rank} of the data parallel group has {len(sheet_indices)} evaluation data ")
         self.data = dataset.data.iloc[sheet_indices]
         self.data_indices = [i for i in self.data['index']]  # 每个卡处理自己的index
