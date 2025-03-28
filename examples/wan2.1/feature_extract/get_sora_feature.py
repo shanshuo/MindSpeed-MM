@@ -247,50 +247,49 @@ def extract_feature():
         else:
             prompt = prompt_ids
         
-        if mpu.get_data_parallel_rank() == 0:
-            if data_storage_mode == 'standard':
-                for i in range(bs):
-                    pt_name = get_pt_name(file_names[i])
-                    latent = latents[i].cpu()
-                    torch.save(latent, os.path.join(save_path, 'videos', pt_name))
-                    if isinstance(prompt, list) or isinstance(prompt, tuple):
-                        prompt = [_prompt[i].cpu() for _prompt in prompt]
-                    else:
-                        prompt = prompt[i].cpu()
-                    torch.save(prompt, os.path.join(save_path, "labels", pt_name))
-                    data_to_save = {
-                        "file": os.path.join('videos', pt_name),
-                        "captions": os.path.join('labels', pt_name)
-                    }
-                    if latents_dict is not None:
-                        for k in latents_dict:
-                            latents_dict[k] = latents_dict[k][i]
-                        torch.save(latents_dict, os.path.join(save_path, 'images', pt_name))
-                print_rank_0(f"consumed sample {counter} | elapsed time {(time.time() - start_time):.2f} | file {pt_name}")
-            
-            elif data_storage_mode == 'sorafeatured':
-                for i in range(bs):
-                    latent_i = latents[i].cpu()
-                    if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
-                        prompts_i = [_prompt[i].cpu() for _prompt in prompt]
-                        prompt_masks_i = [_prompt_mask[i].cpu() for _prompt_mask in prompt_mask]
-                    else:
-                        prompts_i = prompt[i].cpu()
-                        prompt_masks_i = prompt_mask[i]
-                    
-                    data_to_save = {
-                        "latents": latent_i,
-                        "prompt": prompts_i,
-                        "prompt_mask": prompt_masks_i
-                    }
+        if data_storage_mode == 'standard':
+            for i in range(bs):
+                pt_name = get_pt_name(file_names[i])
+                latent = latents[i].cpu()
+                torch.save(latent, os.path.join(save_path, 'videos', pt_name))
+                if isinstance(prompt, list) or isinstance(prompt, tuple):
+                    prompt = [_prompt[i].cpu() for _prompt in prompt]
+                else:
+                    prompt = prompt[i].cpu()
+                torch.save(prompt, os.path.join(save_path, "labels", pt_name))
+                data_to_save = {
+                    "file": os.path.join('videos', pt_name),
+                    "captions": os.path.join('labels', pt_name)
+                }
+                if latents_dict is not None:
+                    for k in latents_dict:
+                        latents_dict[k] = latents_dict[k][i]
+                    torch.save(latents_dict, os.path.join(save_path, 'images', pt_name))
+            print_rank_0(f"consumed sample {counter} | elapsed time {(time.time() - start_time):.2f} | file {pt_name}")
+        
+        elif data_storage_mode == 'sorafeatured':
+            for i in range(bs):
+                latent_i = latents[i].cpu()
+                if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
+                    prompts_i = [_prompt[i].cpu() for _prompt in prompt]
+                    prompt_masks_i = [_prompt_mask[i].cpu() for _prompt_mask in prompt_mask]
+                else:
+                    prompts_i = prompt[i].cpu()
+                    prompt_masks_i = prompt_mask[i]
+                
+                data_to_save = {
+                    "latents": latent_i,
+                    "prompt": prompts_i,
+                    "prompt_mask": prompt_masks_i
+                }
 
-                    if latents_dict:
-                        for key in latents_dict.keys():
-                            data_to_save[key] = latents_dict[key][i].cpu()
+                if latents_dict:
+                    for key in latents_dict.keys():
+                        data_to_save[key] = latents_dict[key][i].cpu()
 
-                    pt_name = get_pt_name(file_names[i])
-                    torch.save(data_to_save, os.path.join(save_path, "features", pt_name))
-                print_rank_0(f"consumed sample {counter} | elapsed time {(time.time() - start_time):.2f} | file {pt_name}")
+                pt_name = get_pt_name(file_names[i])
+                torch.save(data_to_save, os.path.join(save_path, "features", pt_name))
+            print_rank_0(f"consumed sample {counter} | elapsed time {(time.time() - start_time):.2f} | file {pt_name}")
         
         if hasattr(args.mm.tool, "profile"):
             prof.step()

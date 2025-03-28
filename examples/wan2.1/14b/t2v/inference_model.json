@@ -9,7 +9,8 @@
     "frame_interval": 1,
     "fps": 16,
     "pipeline_config": {
-        "input_size": [81, 480, 720]
+        "input_size": [81, 480, 720],
+        "offload_modules": ["text_encoder", "predict_model"]
     },    
     "ae": {
         "model_id": "wan_video_vae",

@@ -38,7 +38,6 @@
     },
     "predictor": {
         "model_id": "wandit",
-        "from_pretrained": "./weights/Wan-AI/1.3b/converted_i2v.pth",
         "dtype": "bf16",
         "model_type": "i2v",
         "patch_size": [1, 2, 2],
@@ -59,11 +58,32 @@
         "max_seq_len": 1024
     },
     "diffusion": {
-        "model_id": "wan_flow_match_scheduler",
-        "num_inference_timesteps": 50,
-        "shift": 1,
-        "sigma_min": 0.001,
-        "extra_one_step": false,
-        "guidance_scale": 5.0
+        "model_id": "UniPCMultistepScheduler",
+        "num_train_steps": 1000,
+        "num_inference_steps": 50,
+        "guidance_scale": 5.0,
+        "beta_end": 0.02,
+        "beta_schedule": "linear",
+        "beta_start": 0.0001,
+        "disable_corrector": [],
+        "dynamic_thresholding_ratio": 0.995,
+        "final_sigmas_type": "zero",
+        "flow_shift": 3.0,
+        "lower_order_final": true,
+        "predict_x0": true,
+        "prediction_type": "flow_prediction",
+        "rescale_betas_zero_snr": false,
+        "sample_max_value": 1.0,
+        "solver_order": 2,
+        "solver_p": null,
+        "solver_type": "bh2",
+        "steps_offset": 0,
+        "thresholding": false,
+        "timestep_spacing": "linspace",
+        "trained_betas": null,
+        "use_beta_sigmas": false,
+        "use_exponential_sigmas": false,
+        "use_flow_sigmas": true,
+        "use_karras_sigmas": false
     }
 }
