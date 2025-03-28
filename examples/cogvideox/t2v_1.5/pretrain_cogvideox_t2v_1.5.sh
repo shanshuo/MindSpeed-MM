@@ -95,6 +95,7 @@ OUTPUT_ARGS="
     --save-interval 10000 \
     --eval-interval 10000 \
     --eval-iters 10 \
+    --save $SAVE_PATH \
 "
 
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)
