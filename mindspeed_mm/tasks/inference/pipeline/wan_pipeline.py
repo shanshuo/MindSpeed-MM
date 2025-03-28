@@ -150,6 +150,7 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         timesteps = self.scheduler.timesteps
         num_warmup_steps = self.scheduler.num_warmup_steps
         guidance_scale = self.scheduler.guidance_scale
+        self.scheduler.diffusion.set_timesteps(num_inference_steps)  # reset timesteps
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 latent_model_input = latents.to(self.predict_model.dtype)
