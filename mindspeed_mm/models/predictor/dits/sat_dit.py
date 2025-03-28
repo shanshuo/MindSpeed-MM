@@ -205,7 +205,7 @@ class SatDiT(MultiModalModule):
                 )
             )
             self.norm_out = nn.LayerNorm(inner_dim, elementwise_affine=elementwise_affine, eps=1e-6)
-            self.proj_out = nn.Linear(inner_dim, reduce(mul, self.patch_size) * self.out_channels)
+            self.proj_out_linear = nn.Linear(inner_dim, reduce(mul, self.patch_size) * self.out_channels)
 
             for param in self.norm_final.parameters():
                 setattr(param, "sequence_parallel", self.sequence_parallel)
@@ -531,7 +531,7 @@ class SatDiT(MultiModalModule):
         if self.enable_sequence_parallelism:
             x = gather_forward_split_backward(x, mpu.get_context_parallel_group(), dim=1, grad_scale="up")
         x = x[:, self.rope.text_length:, :]
-        x = self.proj_out(x)
+        x = self.proj_out_linear(x)
         latents = x
 
         # unpatchify

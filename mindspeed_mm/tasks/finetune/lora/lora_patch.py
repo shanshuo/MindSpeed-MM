@@ -81,13 +81,19 @@ def model_provider_func_wrapper(model_provider_func):
                         if _name in layer:
                             module.register_forward_hook(_hook)
 
-            vis_config = args.mm.model.image_encoder.vision_encoder
-            text_config = args.mm.model.text_decoder
-            vis_recompute_granularity = getattr(vis_config, 'recompute_granularity', None)
-            text_recompute_granularity = getattr(text_config, 'recompute_granularity', None)
-            if vis_recompute_granularity == 'selective' or text_recompute_granularity == 'selective':
-                raise NotImplementedError("Only support recompute_granularity='full' for vision_encoder or text_encoder.")
-            elif vis_recompute_granularity == 'full' or text_recompute_granularity == 'full':
+            mm_model = getattr(args.mm, 'model', None)
+            image_encoder = getattr(mm_model, 'image_encoder', None) if mm_model else None
+            text_config = getattr(mm_model, 'text_decoder', None) if mm_model else None
+            vis_config = getattr(image_encoder, 'vision_encoder', None) if image_encoder else None
+
+            if text_config and vis_config:
+                vis_recompute_granularity = getattr(vis_config, 'recompute_granularity', None)
+                text_recompute_granularity = getattr(text_config, 'recompute_granularity', None)
+                if vis_recompute_granularity == 'selective' or text_recompute_granularity == 'selective':
+                    raise NotImplementedError("Only support recompute_granularity='full' for vision_encoder or text_encoder.")
+                elif vis_recompute_granularity == 'full' or text_recompute_granularity == 'full':
+                    _create_hooks(model, args.lora_register_forward_hook)
+            else:
                 _create_hooks(model, args.lora_register_forward_hook)
 
             model.print_trainable_parameters()

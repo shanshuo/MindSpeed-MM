@@ -25,6 +25,10 @@
       - [准备工作](#准备工作-1)
       - [配置参数](#配置参数-1)
       - [启动推理](#启动推理)
+  - [lora微调](#lora微调)
+      - [准备工作](#准备工作-2)
+      - [配置参数](#配置参数-2)
+      - [启动lora微调](#启动lora微调)
   - [预训练模型扩参示例(15B)](#预训练模型扩参示例15b)
       - [模型参数修改](#模型参数修改)
       - [启动脚本修改](#启动脚本修改)
@@ -186,7 +190,7 @@ pip install decord==0.6.0
 #### 权重转换
 权重转换source_path参数请配置transformer权重文件的路径：
 ```bash
-python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 10 11 11 10 --num_layers 42 --mode split
+python examples/cogvideox/cogvideox_sat_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 10 11 11 10 --num_layers 42 --mode split
 ```
 其中--tp_size 后为实际的tp切分策略， --task 的值为t2v或i2v，
 当开启PP时，--pp_size 后参数值个数与PP的数值相等，并且参数之和与--num_layers 参数相等，举例：当PP=4, --num_layers 4, --pp_size 1 1 1 1; 当PP=4, --num_layers 42, --pp_size 10 11 11 10 
@@ -415,7 +419,7 @@ CogvideoX推理启动文件为shell脚本，主要分为如下4个：
 
 如果使用训练后保存的权重进行推理，需要使用脚本进行转换，权重转换source_path参数请配置训练时的保存路径
 ```bash
-python examples/cogvideox/cogvideox_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 42  --num_layers 42 --mode merge
+python examples/cogvideox/cogvideox_sat_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 42  --num_layers 42 --mode merge
 ```
 
 <a id="jump6.3"></a>
@@ -442,11 +446,87 @@ bash examples/cogvideox/i2v_1.5/inference_cogvideox_i2v_1.5.sh
 ```
 ---
 
-
 <a id="jump7"></a>
-## 预训练模型扩参示例(15B)
+## lora微调
 
 <a id="jump7.1"></a>
+#### 准备工作
+配置脚本前请确认环境准备已完成。
+
+1. 权重下载及转换
+
+ 权重下载链接(链接下包含VAE及T5模型):
+
+ + [t2v下载链接](https://huggingface.co/THUDM/CogVideoX1.5-5B/tree/main)
+ + [i2v下载链接](https://huggingface.co/THUDM/CogVideoX1.5-5B-I2V/tree/main)
+  
+  lora微调功能的权重转换使用`cogvideox_hf_convert_to_mm_ckpt.py`脚本，使用方法参考前面`权重下载及转换`章节。
+```bash
+python examples/cogvideox/cogvideox_hf_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 42 --num_layers 42 --mode split
+```
+2. 数据集准备及处理
+
+[lora数据集下载链接](https://huggingface.co/datasets/Wild-Heart/Disney-VideoGeneration-Dataset)
+  
+原始数据集不包含MM套件所需的data.jsonl文件形式，需要将原始数据集中prompt.txt和videos.txt合并生成data.jsonl文件。
+  
+推荐使用提供的`cogvideox_lora_dataset_convert.py`脚本完成转换:
+```bash
+python examples/cogvideox/cogvideox_lora_dataset_convert.py --video_path '/data_path/videos.txt' --prompt_path '/data_path/prompt.txt' --output_path '/data_path/data.jsonl'
+```
+
+<a id="jump7.2"></a>
+#### 配置参数
+CogvideoX lora微调阶段的启动文件为shell脚本，主要分为如下2个：
+|            | I2V | T2V |
+|:------------:|:----:|:----:|
+| 1.5 | finetune_cogvideox_lora_i2v_1.5.sh |finetune_cogvideox_lora_t2v_1.5.sh |
+
+模型参数的配置文件如下：
+|            | I2V | T2V |
+|:------------:|:----:|:----:|
+| 1.5 | model_cogvideox_i2v_1.5.json |model_cogvideox_t2v_1.5.json |
+
+以及涉及训练数据集的`data.json`文件
+
+默认的配置已经经过测试，用户可按照自身环境修改如下内容：
+
+1. 权重配置
+
+  权重转换完成后根据实际任务情况在启动脚本文件（如`finetune_cogvideox_lora_i2v_1.5.sh`）中的`LOAD_PATH="your_converted_dit_ckpt_dir"`变量中添加转换后的权重的实际路径，如`LOAD_PATH="./CogVideoX-5B-Converted"`,其中`./CogVideoX-5B-Converted`为转换后的权重的实际路径，其文件夹内容结构如权重转换一节所示。`LOAD_PATH`变量中填写的完整路径一定要正确，填写错误的话会导致权重无法加载但运行并不会提示报错。
+  根据需要填写`SAVE_PATH`变量中的路径，用以保存训练后的权重。
+
+2. 数据集路径配置
+  
+  准备好数据集后，根据实际情况修改`data.json`中的数据集路径，分别为`"data_path":"/data_path/data.jsonl"`、`"data_folder":"/data_path/"`，替换`"/data_path/"`为实际的数据集路径。
+
+3. VAE及T5模型路径配置
+
+  请参考预训练相同章节
+  
+4. 切分策略配置
+
+  请参考预训练相同章节
+
+<a id="jump7.3"></a>
+#### 启动lora微调
+
+
+t2v 1.5版本任务启动微调
+```shell
+bash examples/cogvideox/t2v_1.5/finetune_cogvideox_lora_t2v_1.5.sh
+```
+
+i2v 1.5版本任务启动微调
+```shell
+bash examples/cogvideox/i2v_1.5/finetune_cogvideox_lora_i2v_1.5.sh
+```
+---
+
+<a id="jump8"></a>
+## 预训练模型扩参示例(15B)
+
+<a id="jump8.1"></a>
 #### 模型参数修改
 通过增加扩散模型层数等配置可以模拟15B参数量，如下所示，修改模型参数配置文件（`model_cogvideox_i2v.json`）中`"predictor"`下的`"num_layers"`、`"num_heads"`和`"head_dim"`的值
 
@@ -459,7 +539,7 @@ bash examples/cogvideox/i2v_1.5/inference_cogvideox_i2v_1.5.sh
 }
 ```
 
-<a id="jump7.2"></a>
+<a id="jump8.2"></a>
 #### 启动脚本修改
 
 修改GPT_ARGS参数如下，根据实际分辨率、帧数调整启动脚本中的分布式配置（单机16卡CP4效果较佳）：
@@ -486,7 +566,7 @@ GPT_ARGS="
     ...
 "
 ```
-<a id="jump8"></a>
+<a id="jump9"></a>
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
