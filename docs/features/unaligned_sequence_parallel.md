@@ -11,7 +11,7 @@ Sequence Parallel主要作用与TransformerLayer中的Dropout和LayerNorm模块�
 
 
 ## 使用方法
-
+(当前仅支持qwen2vl)
 1. examples/qwen2vl/model_72b.json中的image_encoder.vision_encoder添加sequence_parallel,tensor_parallel,variable_seq_lengths三个选项，并设置为true，添加tensor_model_parallel_size选项，设置为实际的tp值；
 
 2. examples/qwen2vl/model_72b.json中的text_decoder添加的选项和上一条相同；
