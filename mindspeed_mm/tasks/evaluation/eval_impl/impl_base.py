@@ -37,7 +37,7 @@ class BaseEvalImpl:
         # 保存每个卡上的结果
         self.out_file = self._out_file(self.rank)
         self.report_file = self.result_path.replace('.xlsx', '_acc.csv')
-        is_divisive = len(dataset) // self.world_size == 0
+        is_divisive = len(dataset) % self.world_size == 0
         remainder = len(dataset) % self.world_size
         if is_divisive:
             data_len_total = len(dataset)
