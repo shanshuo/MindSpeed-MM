@@ -3,14 +3,20 @@ import torch
 import torch.nn as nn
 
 from mindspeed_mm.utils.utils import get_dtype
+from mindspeed_mm.models.text_encoder.stepllm_text_encoder import StepLLmModel
 
 
-TEXT_ENCODER_MAPPING = {
+TRANSFORMERS_TEXT_ENCODER_MAPPING = {
     "T5": "T5EncoderModel",
     "MT5": "MT5EncoderModel",
     "UMT5": "UMT5EncoderModel",
     "CLIP": "CLIPTextModel",
-    "Auto": "AutoModel"
+    "Auto": "AutoModel",
+    "BertModel": "BertModel"
+}
+
+CUSTOM_TEXT_ENCODER_MAPPING = {
+    "StepLLmModel": StepLLmModel,
 }
 
 
@@ -111,11 +117,7 @@ class TextEncoder(nn.Module):
         ucg_rate = config.pop("ucg_rate", None)
         output_key = config.pop("output_key", "last_hidden_state")
         hidden_state_skip_layer = config.pop("hidden_state_skip_layer", None)
-        model_id = config.pop("model_id")
-        if model_id not in TEXT_ENCODER_MAPPING:
-            raise ValueError(f"Model ID {model_id} is not supported for text encoder")
-        else:
-            self.automodel_name = TEXT_ENCODER_MAPPING[model_id]
+
         config["pretrained_model_name_or_path"] = config.pop("from_pretrained")
         config["torch_dtype"] = get_dtype(config.pop("dtype"))
         config["local_files_only"] = True
@@ -126,9 +128,18 @@ class TextEncoder(nn.Module):
             config["trust_remote_code"] = False
 
         # Only huggingface backend is supported, OpenMind backend will be supported soon.
-        module = importlib.import_module("transformers")
-        automodel = getattr(module, self.automodel_name)
-        text_encoder = automodel.from_pretrained(**config)
+        model_id = config.pop("model_id")
+        if model_id in TRANSFORMERS_TEXT_ENCODER_MAPPING:
+            module = importlib.import_module("transformers")
+            self.automodel_name = TRANSFORMERS_TEXT_ENCODER_MAPPING[model_id]
+            automodel = getattr(module, self.automodel_name)
+            text_encoder = automodel.from_pretrained(**config)
+        elif model_id in CUSTOM_TEXT_ENCODER_MAPPING:
+            automodel = CUSTOM_TEXT_ENCODER_MAPPING[model_id]
+            text_encoder = automodel.from_pretrained(**config)
+        else:
+            raise ValueError(f"Model ID {model_id} is not supported for text encoder")
+
         setattr(text_encoder, "ucg_rate", ucg_rate)
         setattr(text_encoder, "use_attention_mask", use_attention_mask)
         setattr(text_encoder, "output_key", output_key)

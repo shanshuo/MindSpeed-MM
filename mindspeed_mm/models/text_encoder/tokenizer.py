@@ -1,5 +1,11 @@
 import importlib
 
+from mindspeed_mm.models.text_encoder.stepllm_tokenizer import WrappedStepChatTokenizer
+
+TOKENIZER_MODEL_MAPPINGS = {
+    "stepchat": WrappedStepChatTokenizer
+}
+
 
 class Tokenizer:
     """
@@ -50,5 +56,10 @@ class Tokenizer:
             config["trust_remote_code"] = get_args().trust_remote_code
         except (ImportError, AssertionError, AttributeError):
             config["trust_remote_code"] = False
-        tokenizer_cls = getattr(module, tokenizer_name)
-        return tokenizer_cls.from_pretrained(**config)
+
+        if tokenizer_name in TOKENIZER_MODEL_MAPPINGS:
+            tokenizer_cls = TOKENIZER_MODEL_MAPPINGS[tokenizer_name]
+            return tokenizer_cls(**config)
+        else:
+            tokenizer_cls = getattr(module, tokenizer_name)
+            return tokenizer_cls.from_pretrained(**config)
