@@ -593,7 +593,7 @@ GPT_ARGS="
         "tensor_model_parallel_size": 1,
         "pipeline_model_parallel_size": 3,
         "context_parallel_size": 1,
-        "forward_only": false,
+        "forward_only": false
       }
     ]
   }
@@ -610,6 +610,11 @@ GPT_ARGS="
         "hidden_size": 4096,
         ......
     }
+```
+
+修改启动脚本中的NPUS_PER_NODE参数，总的world_size为上述model.json中两个world_size之和，以单机上述配置为例：
+```shell
+NPUS_PER_NODE=4
 ```
 
 ---
