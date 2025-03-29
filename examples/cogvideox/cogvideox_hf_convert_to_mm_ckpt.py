@@ -115,9 +115,9 @@ def get_layer_mapping_from_hf(i: int) -> Dict:
     layer_mapping[f"transformer_blocks.{i}.norm1.norm.bias"] = f"videodit_blocks.{i}.norm1.bias"
     layer_mapping[f"transformer_blocks.{i}.norm1.norm.weight"] = f"videodit_blocks.{i}.norm1.weight"
     layer_mapping[
-        f"transformer_blocks.{i}.attn1.to_out.0.bias"] = f"videodit_blocks.{i}.self_atten.proj_out.base_layer.bias"
+        f"transformer_blocks.{i}.attn1.to_out.0.bias"] = f"videodit_blocks.{i}.self_atten.proj_out.bias"
     layer_mapping[
-        f"transformer_blocks.{i}.attn1.to_out.0.weight"] = f"videodit_blocks.{i}.self_atten.proj_out.base_layer.weight"
+        f"transformer_blocks.{i}.attn1.to_out.0.weight"] = f"videodit_blocks.{i}.self_atten.proj_out.weight"
 
     layer_mapping[f"transformer_blocks.{i}.norm2.norm.bias"] = f"videodit_blocks.{i}.norm2.bias"
     layer_mapping[f"transformer_blocks.{i}.norm2.norm.weight"] = f"videodit_blocks.{i}.norm2.weight"
@@ -127,17 +127,17 @@ def get_layer_mapping_from_hf(i: int) -> Dict:
     layer_mapping[f"transformer_blocks.{i}.ff.net.2.bias"] = f"videodit_blocks.{i}.ff.net.2.bias"
     layer_mapping[f"transformer_blocks.{i}.ff.net.2.weight"] = f"videodit_blocks.{i}.ff.net.2.weight"
     layer_mapping[
-        f"transformer_blocks.{i}.attn1.to_q.bias"] = f"videodit_blocks.{i}.self_atten.proj_qkv.base_layer.bias"
+        f"transformer_blocks.{i}.attn1.to_q.bias"] = f"videodit_blocks.{i}.self_atten.proj_qkv.bias"
     layer_mapping[
-        f"transformer_blocks.{i}.attn1.to_k.bias"] = f"videodit_blocks.{i}.self_atten.proj_qkv.base_layer.bias"
+        f"transformer_blocks.{i}.attn1.to_k.bias"] = f"videodit_blocks.{i}.self_atten.proj_qkv.bias"
     layer_mapping[
-        f"transformer_blocks.{i}.attn1.to_v.bias"] = f"videodit_blocks.{i}.self_atten.proj_qkv.base_layer.bias"
+        f"transformer_blocks.{i}.attn1.to_v.bias"] = f"videodit_blocks.{i}.self_atten.proj_qkv.bias"
     layer_mapping[
-        f"transformer_blocks.{i}.attn1.to_q.weight"] = f"videodit_blocks.{i}.self_atten.proj_qkv.base_layer.weight"
+        f"transformer_blocks.{i}.attn1.to_q.weight"] = f"videodit_blocks.{i}.self_atten.proj_qkv.weight"
     layer_mapping[
-        f"transformer_blocks.{i}.attn1.to_k.weight"] = f"videodit_blocks.{i}.self_atten.proj_qkv.base_layer.weight"
+        f"transformer_blocks.{i}.attn1.to_k.weight"] = f"videodit_blocks.{i}.self_atten.proj_qkv.weight"
     layer_mapping[
-        f"transformer_blocks.{i}.attn1.to_v.weight"] = f"videodit_blocks.{i}.self_atten.proj_qkv.base_layer.weight"
+        f"transformer_blocks.{i}.attn1.to_v.weight"] = f"videodit_blocks.{i}.self_atten.proj_qkv.weight"
 
     return layer_mapping
 

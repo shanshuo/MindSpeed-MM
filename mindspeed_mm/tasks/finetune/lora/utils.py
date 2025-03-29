@@ -40,8 +40,8 @@ def modify_keys_with_dict(dictionary, exclude_words):
     for key, value in dictionary.items():
         key_str = str(key)
         not_exclude_word = not any(exclude_word in key_str for exclude_word in exclude_words)
-        is_target_module_bias = any(target_module + '.bias' in key_str for target_module in args.lora_trainable_target_modules)
-        is_target_module_weight = any(target_module + '.weight' in key_str for target_module in args.lora_trainable_target_modules)
+        is_target_module_bias = any(key_str in target_module + '.bias' for target_module in args.lora_trainable_target_modules)
+        is_target_module_weight = any(key_str in target_module + '.weight' for target_module in args.lora_trainable_target_modules)
 
         new_key = key_str
         if not_exclude_word and (is_target_module_bias or is_target_module_weight):

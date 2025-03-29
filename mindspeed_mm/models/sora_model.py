@@ -74,6 +74,7 @@ class SoRAModel(nn.Module):
         self.input_tensor = None
         # to avoid grad all-reduce and reduce-scatter in megatron, since SoRAModel has no embedding layer.
         self.share_embeddings_and_output_weights = False
+        self.is_enable_lora = True if hasattr(args, "lora_target_modules") and args.lora_target_modules else False
 
         if mpu.get_pipeline_model_parallel_rank() == 0:
             self.load_video_features = config.load_video_features
@@ -209,10 +210,20 @@ class SoRAModel(nn.Module):
         if hasattr(self, "predictor"):
             self.predictor.train()
 
+    def state_dict_for_save_lora_checkpoint(self, state_dict):
+        state_dict_ = dict()
+        for key in state_dict:
+            if 'lora' in key:
+                state_dict_[key] = state_dict[key]
+        return state_dict_
+
     def state_dict_for_save_checkpoint(self, prefix="", keep_vars=False):
         """Customized state_dict"""
         if not get_args().dist_train:
-            return self.predictor.state_dict(prefix=prefix, keep_vars=keep_vars)
+            state_dict = self.predictor.state_dict(prefix=prefix, keep_vars=keep_vars)
+            if self.is_enable_lora:
+                state_dict = self.state_dict_for_save_lora_checkpoint(state_dict)
+            return state_dict
         from mindspeed.multi_modal.dist_train.parallel_state import is_in_subworld
         if is_in_subworld('dit'):
             return self.predictor.state_dict(prefix=prefix, keep_vars=keep_vars)

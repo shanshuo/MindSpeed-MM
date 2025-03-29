@@ -17,11 +17,26 @@
       - [准备工作](#准备工作-1)
       - [参数配置](#参数配置-1)
       - [启动训练](#启动训练)
-  - [推理](#推理)
+  - [lora微调](#lora-微调)
     - [准备工作](#准备工作-2)
     - [参数配置](#参数配置-2)
+    - [启动微调](#启动微调)
+  - [推理](#推理)
+    - [准备工作](#准备工作-3)
+    - [参数配置](#参数配置-3)
     - [启动推理](#启动推理)
   - [环境变量声明](#环境变量声明)
+
+
+## 任务支持列表
+
+| 模型大小 | 任务类型 | 预训练 | lora微调 | 在线推理 |
+|------|:----:|:----|:-------|:-----| 
+| 1.3B | t2v  | ✔   | ✔      | ✔    |
+| 1.3B | i2v  | ✔   |        | ✔    |
+| 14B  | t2v  | ✔   |        | ✔    |
+| 14B  | i2v  | ✔   |        | ✔    |
+
 
 ## 环境安装
 
@@ -275,6 +290,27 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 ```bash
 bash examples/wan2.1/{model_size}/{task}/pretrain.sh
 ```
+
+## lora 微调
+### 准备工作
+数据处理、特征提取、权重下载及转换同预训练章节
+
+### 参数配置
+参数配置同训练章节，除此之外，中涉及lora微调特有参数：
+
+| 配置文件                                             |        修改字段         | 修改说明                         |
+|--------------------------------------------------|:-------------------:|:-----------------------------|
+| examples/wan2.1/{model_size}/{task}/finetune_lora.sh |      lora-load      | 微调权重路径，加载以继续微调               |
+| examples/wan2.1/{model_size}/{task}/finetune_lora.sh |       lora-r        | lora更新矩阵的维度                  |
+| examples/wan2.1/{model_size}/{task}/finetune_lora.sh |     lora-alpha      | lora-alpha 调节分解后的矩阵对原矩阵的影响程度 |
+| examples/wan2.1/{model_size}/{task}/finetune_lora.sh | lora-target-modules | 应用lora的模块列表                  |
+
+### 启动微调
+
+```bash
+bash examples/wan2.1/{model_size}/{task}/finetune_lora.sh
+```
+
 
 ## 推理
 

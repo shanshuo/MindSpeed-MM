@@ -82,7 +82,6 @@ GPT_ARGS="
     --overlap-param-gather \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
-    --sequence-parallel \
     --layerzero \
     --layerzero-config ${layerzero_config} \
 "
