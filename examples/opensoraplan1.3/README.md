@@ -524,7 +524,7 @@ GPT_ARGS="
         "tensor_model_parallel_size": 2,
         "pipeline_model_parallel_size": 1,
         "context_parallel_size": 4,
-        "forward_only": false,
+        "forward_only": false
       }
     ]
   }
@@ -552,7 +552,7 @@ for i in "${!IPs[@]}";
 do 
   echo "${IPs[$i]}"
   echo "$LOCAL_HOST"
-  if [ "$LOCAL_HOST" == "${IPs[$i]}"];
+  if [ "$LOCAL_HOST" == "${IPs[$i]}" ];
   then 
     NODE_RANK=$i
     break
@@ -565,6 +565,14 @@ fi
 GPUS_PER_NODE=$(echo $ASCEND_RT_VISIBLE_DEVICES | tr ',' '\n' | grep -c '^[0-9]')  
 
 ```
+
+由于该模型vae是冻结不训练的，使能分离部署时，还需要打开dummy_optimizer，使能方式参考[dummy_optimizer](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/dummy_optimizer.md)
+   ```shell
+   GPT_ARGS="
+       ...
+       --enable-dummy-optimizer \
+   "
+   ```
 
 ---
 <a id="jump7"></a>
