@@ -2,20 +2,23 @@ from typing import Iterator, List, Optional
 import math
 import logging
 import random
+import time
 from collections import Counter, OrderedDict, defaultdict
 from pprint import pformat
-from pandarallel import pandarallel
 
 import torch
 import torch.distributed as dist
 from torch.utils.data import DataLoader, Dataset, Sampler
 from torch.utils.data.distributed import DistributedSampler
 from megatron.legacy.data.data_samplers import RandomSeedDataset
+from pandarallel import pandarallel
+from transformers import AutoProcessor
 
 from mindspeed_mm.data.datasets.t2v_dataset import DynamicVideoTextDataset
 from mindspeed_mm.data.data_utils.bucket import Bucket
 from mindspeed_mm.data.data_utils.aspect_ratio import get_num_pixels
 from mindspeed_mm.data.data_utils.utils import format_numel_str
+from mindspeed_mm.data.dataloader.bucket_manager import BucketManager_qwen2vl, BucketManager_internvl2
 
 
 def split_to_even_chunks(indices, lengths, num_chunks, batch_size):
@@ -437,6 +440,148 @@ class BaseRandomBatchSampler(DistributedSampler):
             idx_range_active = idx_range_total[full_bucket_offset:]
             idx_range = idx_range_active[self.rank::self.num_replicas]
 
+        batch = []
+        # Last batch if not complete will be dropped.
+        for idx in idx_range:
+            batch.append(idx)
+            if len(batch) == self.micro_batch_size:
+                self.consumed_samples += self.micro_batch_times_data_parallel_size
+                yield batch
+                batch = []
+
+
+class BucketBatchSampler(BaseRandomBatchSampler):
+    """
+    Args:
+        dataset (Dataset): The dataset used for sampling. This should be a `torch.utils.data.Dataset` object
+                            containing the data to be sampled from.
+        batch_size (int, optional): The size of each batch. Default is 1.
+        num_replicas (int, optional): The number of processes (replicas) participating in distributed training.
+                                      By default, the world size is retrieved from the current distributed group.
+        rank (int, optional): The rank of the current process within the `num_replicas`. By default, the rank is 
+                               retrieved from the current distributed group.
+        shuffle (bool, optional): Whether to shuffle the indices of the dataset. If `True` (default), the sampler
+                                  will shuffle the indices before sampling. This is important for training as it 
+                                  helps to reduce model overfitting by providing randomization.
+        seed (int, optional): The random seed used to shuffle the sampler if `shuffle=True`. This seed should be 
+                              the same across all processes in the distributed group to ensure consistent results.
+                              Default is 0.
+        drop_last (bool, optional): If `True`, the sampler will drop the last batch if it is smaller than 
+                                    `batch_size` to ensure that each batch is fully utilized. Default is `True`.
+                                    (Note: Drop last is not implemented when set to False.)
+        consumed_samples (int, optional): The number of samples that have been consumed so far. Default is 0.
+        data_sharding (bool, optional): Whether to enable data sharding. If `True`, the data is split across 
+                                        multiple replicas to ensure that each replica gets a distinct subset of 
+                                        the dataset. Default is `False`.
+    """
+    def __init__(
+        self,
+        dataset,
+        data_config,
+        batch_size: int = 1,
+        num_replicas: Optional[int] = None,
+        rank: Optional[int] = None,
+        shuffle: bool = True,
+        seed: int = 0,
+        drop_last: bool = True,
+        consumed_samples: int = 0,
+        data_sharding: bool = False,
+    ):
+        self.data_config = data_config
+        super().__init__(dataset, batch_size, num_replicas, rank, shuffle, seed, drop_last, consumed_samples, data_sharding)
+        self.bucket_manager = None
+
+    def __len__(self):
+        """Total number of returned samples"""
+        return self.total_samples
+
+    def __iter__(self) -> Iterator:
+        """Iterator, which generates the index of each batch."""
+        active_total_samples = self.total_samples - self.last_batch_size
+        self.epoch = self.consumed_samples // active_total_samples
+        current_epoch_samples = self.consumed_samples % active_total_samples
+
+        if isinstance(self.dataset, RandomSeedDataset):
+            self.dataset.set_epoch(self.epoch)
+
+        bucket_manager = None
+        if self.bucket_manager is None:
+            start_time = time.time()
+            dataset_param = self.data_config.dataset_param
+            dataloader_param = self.data_config.dataloader_param
+            model_name = dataloader_param.collate_param.model_name
+            preprocess_parameters = self.data_config.dataset_param.preprocess_parameters
+            if model_name == "qwen2vl":
+                image_resolution = preprocess_parameters.image_resolution
+                image_size = int(math.sqrt(image_resolution))
+                processor = AutoProcessor.from_pretrained(preprocess_parameters.model_name_or_path, local_files_only=True)
+                attributes = ["patch_size", "merge_size", "min_pixels", "max_pixels"]
+                values = {}
+                for attr in attributes:
+                    values[attr] = getattr(processor.image_processor, attr, -1)
+                    if values[attr] == -1:
+                        raise AttributeError(f"Error: '{attr}' not found in processor.image_processor. Please check your configuration.")
+                patch_size = values.get("patch_size", None)
+                merge_size = values.get("merge_size", None)
+                min_pixels = values.get("min_pixels", None)
+                max_pixels = values.get("max_pixels", None)
+
+                if any(v is None for v in [patch_size, merge_size, min_pixels, max_pixels]):
+                    raise KeyError("One or more required keys are missing from the 'values' dictionary.")
+
+                bucket_manager = BucketManager_qwen2vl(
+                image_size=image_size,
+                patch_size=patch_size,
+                merge_size=merge_size,
+                min_pixels=min_pixels,
+                max_pixels=max_pixels,
+                batch_size=self.micro_batch_size,
+                is_sharding=self.data_sharding,
+                num_groups=self.num_replicas,
+                keep_remainder=True,
+                rank=self.rank
+            )
+            elif model_name == "internvl":
+                min_dynamic_patch = dataset_param.min_dynamic_patch
+                max_dynamic_patch = dataset_param.max_dynamic_patch
+                image_size = dataset_param.image_size
+                bucket_manager = BucketManager_internvl2(
+                image_size=image_size,
+                min_num=min_dynamic_patch,
+                max_num=max_dynamic_patch,
+                batch_size=self.micro_batch_size,
+                is_sharding=self.data_sharding,
+                num_groups=self.num_replicas,
+                keep_remainder=True,
+                rank=self.rank
+            )
+            bucket_manager.group_by_bucket(self.dataset)
+            end_time = time.time()
+            print(f"create BucketManager & group_by_bucket cost: {end_time - start_time} seconds")
+            self.bucket_manager = bucket_manager
+            bucket_manager.print_buckets()
+        else:
+            bucket_manager = self.bucket_manager
+
+        # data sharding and random sampling
+        if self.data_sharding:
+            if self.shuffle:
+                idx_range_total = bucket_manager.generate_index(is_shuffle=True, seed=self.seed + self.epoch)
+            else:
+                idx_range_total = bucket_manager.generate_index(is_shuffle=False)
+            bucket_size = (len(idx_range_total) // self.micro_batch_times_data_parallel_size) * self.micro_batch_size
+            bucket_offset = current_epoch_samples // self.num_replicas
+            start_idx = self.rank * bucket_size
+            idx_range_bucket = idx_range_total[start_idx:start_idx + bucket_size]
+            idx_range = [x for x in idx_range_bucket[bucket_offset:]]
+        else:
+            full_bucket_offset = current_epoch_samples
+            if self.shuffle:
+                idx_range_total = bucket_manager.generate_index(is_shuffle=True, seed=self.seed + self.epoch)
+            else:
+                idx_range_total = bucket_manager.generate_index(is_shuffle=False)
+            idx_range_active = idx_range_total[full_bucket_offset:]
+            idx_range = idx_range_active[self.rank::self.num_replicas]
         batch = []
         # Last batch if not complete will be dropped.
         for idx in idx_range:

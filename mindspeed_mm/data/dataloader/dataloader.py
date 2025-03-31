@@ -32,6 +32,7 @@ from mindspeed_mm.data.dataloader.sampler import (
     StatefulDistributedSampler,
     VariableVideoBatchSampler,
     BaseRandomBatchSampler,
+    BucketBatchSampler,
     AESampler
 )
 from mindspeed_mm.data.dataloader.data_collator import DATA_COLLATOR
@@ -248,7 +249,6 @@ def prepare_sampler_dataloader(
 
         if collate_param is None or "model_name" not in collate_param:
             raise ValueError("collate_param with model_name must be provided.")
-        collate_fn = None
         data_collate_type = collate_param.pop("model_name")
         collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
 
@@ -262,6 +262,38 @@ def prepare_sampler_dataloader(
             prefetch_factor=prefetch_factor,
             persistent_workers=persistent_workers
         )
+
+    elif sampler_type == "BucketBatchSampler":
+        args = get_args()
+        data_config = args.mm.data
+        batch_sampler = BucketBatchSampler(
+            dataset,
+            data_config=data_config,
+            batch_size=batch_size,
+            num_replicas=process_group.size(),
+            rank=process_group.rank(),
+            shuffle=shuffle,
+            drop_last=drop_last,
+            consumed_samples=consumed_samples,
+            data_sharding=data_sharding,
+        )
+
+        if collate_param is None or "model_name" not in collate_param:
+            raise ValueError("collate_param with model_name must be provided.")
+        data_collate_type = collate_param.pop("model_name")
+        collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
+
+        return DataLoader(
+            dataset,
+            pin_memory=pin_memory,
+            collate_fn=collate_fn,
+            worker_init_fn=get_seed_worker(seed),
+            num_workers=num_workers,
+            batch_sampler=batch_sampler,
+            prefetch_factor=prefetch_factor,
+            persistent_workers=persistent_workers
+        )
+
     elif sampler_type == "SequentialSampler":
         return build_sequential_loader(DataLoaderArgs(dataset,
                                                       batch_size,
