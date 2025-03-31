@@ -34,3 +34,5 @@
 | 	开源引入	 | https://github.com/hiyouga/LLaMA-Factory/blob/main/src/llamafactory/model/loader.py | mindspeed_mm/data/data_utils/func_utils/convert.py |	https://github.com/huggingface/transformers/blob/v4.40.0/src/transformers/models/auto/processing_auto.py#L324 |   开源代码参考指引   |
 | 	开源引入	 | https://github.com/hiyouga/LLaMA-Factory/blob/main/src/llamafactory/data/collator.py | mindspeed_mm/data/data_utils/func_utils/collator.py |	https://github.com/OpenAccess-AI-Collective/axolotl/blob/main/src/axolotl/monkeypatch/utils.py |   开源代码参考指引   |
 | 	开发引入	 |  | examples/qwen2vl/README.md |	https://www.hiascend.com/document/detail/zh/Pytorch/60RC3/configandinstg/instg/insg_0001.html |     文档说明     |
+|  开源引入  | https://github.com/huggingface/diffusers/blob/main/examples/dreambooth/train_dreambooth_lora_sana.py | MindSpeed-MM/sana/MindSpeed-MM/examples/diffusers/sana/patch_sana.py |  https://github.com/huggingface/diffusers | 开源代码参考指引 |
+|  开源引入  | https://github.com/huggingface/diffusers/pull/6514#discussion_r1449796804 | MindSpeed-MM/sana/MindSpeed-MM/examples/diffusers/sana/patch_sana.py |  https://github.com/huggingface/diffusers | 开源代码参考指引 |
