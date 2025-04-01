@@ -35,7 +35,7 @@ NEGATIVE_PROMOPT = "Bright tones, overexposed, static, blurred details, subtitle
 
 class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
-    def __init__(self, vae, tokenizer, text_encoder, scheduler, predict_model, config=None):
+    def __init__(self, vae, tokenizer, text_encoder, scheduler, predict_model, image_encoder=None, config=None):
         super().__init__()
 
         args = get_args()
@@ -45,8 +45,10 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             image_encoder_config = args.image_encoder.to_dict()
             image_encoder = CLIPVisionModel.from_pretrained(image_encoder_config["from_pretrained"])
             image_encoder.to(dtype=image_encoder_config["dtype"], device=get_device(args.device)).eval()
+            self.model_cpu_offload_seq = "text_encoder->image_encoder->predict_model->vae"
         else:
             image_encoder = None
+            self.model_cpu_offload_seq = "text_encoder->predict_model->vae"
 
         self.register_modules(
             vae=vae,
@@ -64,8 +66,9 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.num_frames, self.height, self.width = config.input_size
         self.generator = None if not hasattr(config, "seed") else torch.Generator().manual_seed(config.seed)
 
-        self.offload_module_names = getattr(config, "offload_modules", [])
-        self.pipeline_device = get_device(args.device)
+        self.cpu_offload = getattr(config, "cpu_offload", False)
+        if self.cpu_offload:
+            self.enable_model_cpu_offload()
 
     @torch.no_grad()
     def __call__(
@@ -101,7 +104,6 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             batch_size = prompt_embeds.shape[0]
 
         # 3. Encode input prompt
-        self._load_modules("text_encoder")
         do_classifier_free_guidance = self.scheduler.do_classifier_free_guidance
         prompt_embeds, negative_prompt_embeds = self.encode_texts(
             prompt=prompt,
@@ -112,7 +114,6 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             max_sequence_length=max_sequence_length,
             device=device,
         )
-        self._offload_modules("text_encoder")
 
         # 4. Prepare latents and model_kwargs
         if image is None:
@@ -131,11 +132,9 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             )
             clip_features, vae_features = None, None
         else:
-            self._load_modules(["vae", "image_encoder"])
             latents, clip_features, vae_features = self.prepare_image_latents(
                 batch_size, image, device, prompt_embeds.dtype
             )
-            self._offload_modules(["vae", "image_encoder"])
 
         model_kwargs = {
             "prompt_embeds": prompt_embeds,
@@ -145,7 +144,6 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         }
 
         # 5. Denoising to get clean latents
-        self._load_modules("predict_model")
         num_inference_steps = self.scheduler.num_inference_steps
         timesteps = self.scheduler.timesteps
         num_warmup_steps = self.scheduler.num_warmup_steps
@@ -177,10 +175,8 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
                 
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps):
                     progress_bar.update()
-        self._offload_modules("predict_model")
         
         # 6. Post process latents to get video
-        self._load_modules("vae")
         latents = latents.to(self.vae.model.dtype)
         latents_mean = (
                 torch.tensor(self.vae.model.config.latents_mean)
@@ -191,7 +187,6 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             1, self.vae.model.config.z_dim, 1, 1, 1).to(latents.device, latents.dtype)
         latents = latents / latents_std + latents_mean
         video = self.decode_latents(latents)
-        self._offload_modules("vae")
         return video
     
     def encode_texts(
@@ -372,28 +367,3 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         prompt_embeds = prompt_embeds.view(batch_size, seq_len, -1)
 
         return prompt_embeds.to(self.predict_model.dtype)
-    
-    def _offload_modules(self, module_name):
-        if isinstance(module_name, (list, tuple)):
-            for name in module_name:
-                self._offload_modules(name)
-        else:
-            if module_name in self.offload_module_names:
-                module = getattr(self, module_name, None)
-                if module is None:
-                    raise ValueError(f"Unknown module name: {module_name}")
-                else:
-                    module.cpu()
-                    torch.cuda.empty_cache()
-
-    def _load_modules(self, module_name):
-        if isinstance(module_name, (list, tuple)):
-            for name in module_name:
-                self._load_modules(name)
-        else:
-            if module_name in self.offload_module_names:
-                module = getattr(self, module_name, None)
-                if module is None:
-                    raise ValueError(f"Unknown module name: {module_name}")
-                else:
-                    module.to(self.pipeline_device)

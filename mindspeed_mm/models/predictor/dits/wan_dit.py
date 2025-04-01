@@ -292,6 +292,10 @@ class WanDiT(MultiModalModule):
         # prompt embeddings
         bs = prompt.size(0)
         prompt = prompt.view(bs, -1, prompt.size(-1))
+        if prompt_mask is not None:
+            seq_lens = prompt_mask.view(bs, -1).sum(dim=-1)
+            for i, seq_len in enumerate(seq_lens):
+                prompt[i, seq_len:] = 0
         prompt_emb = self.text_embedding(prompt)
 
         # cat i2v

@@ -10,7 +10,7 @@
     "fps": 16,
     "pipeline_config": {
         "input_size": [81, 480, 720],
-        "offload_modules": ["text_encoder", "predict_model"]
+        "cpu_offload": true
     },    
     "ae": {
         "model_id": "wan_video_vae",

@@ -4,6 +4,7 @@ from abc import abstractmethod
 
 import torch
 import torch.nn as nn
+from diffusers.utils.accelerate_utils import apply_forward_hook
 
 
 class DiffusersAEModel(nn.Module):
@@ -55,6 +56,7 @@ class DiffusersAEModel(nn.Module):
         else:
             self._tiling = False
 
+    @apply_forward_hook
     def encode(self, x, **kwargs):
         if self._tiling:
             output = self.tiled_encode(x, **kwargs)
@@ -96,6 +98,7 @@ class DiffusersAEModel(nn.Module):
             )
         return output
 
+    @apply_forward_hook
     def decode(self, x, **kwargs):
         if self._tiling:
             return self.model.tiled_decode(x).sample
