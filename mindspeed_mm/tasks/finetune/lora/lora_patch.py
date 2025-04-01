@@ -22,6 +22,7 @@ import megatron.core.transformer
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
 
+import mindspeed_mm.models.sora_model
 from .utils import is_enable_lora, merge_dicts, modify_keys_with_dict
 
 
@@ -80,6 +81,12 @@ def model_provider_func_wrapper(model_provider_func):
                         _name = name.split('.')[-1]
                         if _name in layer:
                             module.register_forward_hook(_hook)
+                    elif isinstance(module, mindspeed_mm.models.sora_model.SoRAModel):
+                        if hasattr(module, "predictor"):
+                            for sub_name, sub_module in module.predictor.named_modules():
+                                _sub_name = sub_name.split(".")[-1]
+                                if _sub_name in layer:
+                                    sub_module.register_forward_hook(_hook)
 
             mm_model = getattr(args.mm, 'model', None)
             image_encoder = getattr(mm_model, 'image_encoder', None) if mm_model else None

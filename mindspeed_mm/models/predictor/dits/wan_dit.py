@@ -38,7 +38,6 @@ class WanDiT(MultiModalModule):
         out_dim: int = 16,
         num_heads: int = 16,
         num_layers: int = 32,
-        recompute_layers: Optional[int] = None,
         qk_norm: bool = True,
         qk_norm_type: str = "rmsnorm",
         cross_attn_norm: bool = False,
@@ -87,7 +86,7 @@ class WanDiT(MultiModalModule):
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
         self.recompute_layers = (
-            recompute_layers if recompute_layers is not None else num_layers
+            args.recompute_num_layers if args.recompute_num_layers is not None else num_layers
         )
 
         if self.recompute_granularity == "selective":

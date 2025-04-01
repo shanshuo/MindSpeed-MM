@@ -18,7 +18,7 @@ WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 TP=1
 PP=1
-CP=2
+CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
@@ -28,7 +28,6 @@ MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="./weights/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/transformer/"
 LORA_PATH="./weights/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/lora_weight/"
 SAVE_PATH="path to save your wandit weight path"
-layerzero_config="examples/wan2.1/zero_config.yaml"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -75,9 +74,13 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --bf16 \
+    --recompute-granularity full \
+    --recompute-method block \
+    --recompute-num-layers 12 \
     --use-distributed-optimizer \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
+    --lora-register-forward-hook patch_embedding \
 "
 
 LORA_ARGS="

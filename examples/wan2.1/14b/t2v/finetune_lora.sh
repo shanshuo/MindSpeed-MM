@@ -22,12 +22,12 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_DATA="./examples/wan2.1/14b/t2v/feature_data.json"
-MM_MODEL="./examples/wan2.1/14b/t2v/pretrain_model.json"
+MM_DATA="./examples/wan2.1/14b/i2v/feature_data.json"
+MM_MODEL="./examples/wan2.1/14b/i2v/pretrain_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="./weights/Wan-AI/Wan2.1-T2V-14B-Diffusers/transformer/"  # ensure the wandit weight be converted
+LORA_PATH="./weights/Wan-AI/Wan2.1-T2V-14B-Diffusers/lora_weight/"
 SAVE_PATH="path to save your wandit weight"
-layerzero_config="./examples/wan2.1/zero_config.yaml"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -78,12 +78,16 @@ GPT_ARGS="
     --recompute-method block \
     --recompute-num-layers 40 \
     --use-distributed-optimizer \
-    --overlap-grad-reduce \
-    --overlap-param-gather \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
-    --layerzero \
-    --layerzero-config ${layerzero_config} \
+    --lora-register-forward-hook patch_embedding \
+"
+
+LORA_ARGS="
+    --lora-load $LORA_PATH \
+    --lora-r 16 \
+    --lora-alpha 16 \
+    --lora-target-modules ffn.2 ffn.0 proj_q proj_k proj_v proj_out \
 "
 
 MM_ARGS="
@@ -105,6 +109,7 @@ logfile=$(date +%Y%m%d)_$(date +%H%M%S)
 mkdir -p logs
 torchrun $DISTRIBUTED_ARGS pretrain_sora.py \
     $GPT_ARGS \
+    $LORA_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
     --distributed-backend nccl \
