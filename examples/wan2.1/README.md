@@ -1,4 +1,5 @@
 # Wan2.1 使用指南
+
 - [Wan2.1 使用指南](#Wan2.1使用指南)
   - [环境安装](#环境安装)
     - [仓库拉取](#仓库拉取)
@@ -27,16 +28,14 @@
     - [启动推理](#启动推理)
   - [环境变量声明](#环境变量声明)
 
-
 ## 任务支持列表
 
 | 模型大小 | 任务类型 | 预训练 | lora微调 | 在线推理 |
-|------|:----:|:----|:-------|:-----| 
+|------|:----:|:----|:-------|:-----|
 | 1.3B | t2v  | ✔   | ✔      | ✔    |
 | 1.3B | i2v  | ✔   |        | ✔    |
 | 14B  | t2v  | ✔   |        | ✔    |
 | 14B  | i2v  | ✔   |        | ✔    |
-
 
 ## 环境安装
 
@@ -90,7 +89,6 @@ cd ../MindSpeed-MM
 
 ### 环境搭建
 
-
 torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
 ```bash
@@ -122,7 +120,9 @@ pip install -e .
 # 源码安装Diffusers
 git clone https://github.com/huggingface/diffusers.git
 cd diffusers
+git checkout 20e4b6a628c7e433f5805de49afc28f991c185c0
 pip install -e .
+cd ..
 ```
 
 ### Decord搭建
@@ -147,20 +147,21 @@ pip install decord==0.6.0
 
 |   模型   |   Huggingface下载链接   |
 | ---- | ---- |
-|   T2V-1.3B   |   https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers   |
-|  T2V-14B    |  https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers    |
-|  I2V-14B-480P  |   https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P-Diffusers   |
-|  I2V-14B-720P  |   https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-720P-Diffusers   |
-
+|   T2V-1.3B   |   <https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers>   |
+|  T2V-14B    |  <https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers>    |
+|  I2V-14B-480P  |   <https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P-Diffusers>   |
+|  I2V-14B-720P  |   <https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-720P-Diffusers>   |
 
 ### 权重转换
 
 需要对下载后的Wan2.1模型权重`transformer`部分进行权重转换，运行权重转换脚本：
+
 ```shell
 python examples/wan2.1/convert_ckpt_to_mm.py --source_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> --target_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/>
 ```
 
 权重转换脚本的参数说明如下：
+
 |参数| 含义 | 默认值 |
 |:------------|:----|:----|
 | --source_path | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
@@ -169,6 +170,7 @@ python examples/wan2.1/convert_ckpt_to_mm.py --source_path <./weights/Wan-AI/Wan
 ---
 
 ## 预训练
+
 ### 数据预处理
 
 将数据处理成如下格式
@@ -256,12 +258,11 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 | examples/wan2.1/{model_size}/{task}/pretrain.sh |      SAVE_PATH      | 训练过程中保存的权重路径                            |
 | examples/wan2.1/{model_size}/{task}/pretrain.sh |         CP          | 训练时的CP size（建议根据训练时设定的分辨率调整）   |
 
-
 【并行化配置参数说明】：
 
 当调整模型参数或者视频序列长度时，需要根据实际情况启用以下并行策略，并通过调试确定最优并行策略。
 
-+ CP: 序列并行，当前支持Ulysess序列并行。
+- CP: 序列并行，当前支持Ulysess序列并行。
 
   - 使用场景：在视频序列（分辨率X帧数）较大时，可以开启来降低内存占用。
   
@@ -269,13 +270,14 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
   
   - 限制条件：head 数量需要能够被CP整除（在`exmaples/wan2.1/{model_size}/{task}/pretrain_model.json`中配置，参数为`num_heads`）
 
-+ layer_zero
+- layer_zero
 
   - 使用场景：在模型参数规模较大时，单卡上无法承载完整的模型，可以通过开启layerzero降低静态内存。
   
   - 使能方式：`examples/wan2.1/{task}/pretrain_wan2.1.sh`的`GPT_ARGS`中加入`--layerzero`和`--layerzero-config ${layerzero_config}`
   
   - 训练权重后处理：使用该特性训练时，保存的权重需要使用下面的转换脚本进行后处理才能用于推理：
+
     ```bash
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
     # your_mindspeed_path和your_megatron_path分别替换为之前下载的mindspeed和megatron的路径
@@ -292,10 +294,13 @@ bash examples/wan2.1/{model_size}/{task}/pretrain.sh
 ```
 
 ## lora 微调
+
 ### 准备工作
+
 数据处理、特征提取、权重下载及转换同预训练章节
 
 ### 参数配置
+
 参数配置同训练章节，除此之外，中涉及lora微调特有参数：
 
 | 配置文件                                             |        修改字段         | 修改说明                         |
@@ -310,7 +315,6 @@ bash examples/wan2.1/{model_size}/{task}/pretrain.sh
 ```bash
 bash examples/wan2.1/{model_size}/{task}/finetune_lora.sh
 ```
-
 
 ## 推理
 
@@ -340,6 +344,7 @@ bash examples/wan2.1/{model_size}/{task}/inference.sh
 ```
 
 ## 环境变量声明
+
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
 TASK_QUEUE_ENABLE： 用于控制开启task_queue算子下发队列优化的等级，0：关闭，1：开启Level 1优化，2：开启Level 2优化  
