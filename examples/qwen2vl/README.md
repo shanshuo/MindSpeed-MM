@@ -366,6 +366,28 @@ dataset_param->basic_parameters->dataset
     }
 }
 ```
+如果需要计算validation loss，需要在shell脚本中修改`eval-interval`参数和`eval-iters`参数；需要在`data.json`中的`basic_parameters`内增加字段：
+对于非流式数据有两种方式：①根据实际情况增加`val_dataset`验证集路径，②增加`val_rate`字段对训练集进行切分；对于流式数据，仅支持增加`val_dataset`字段进行计算。
+
+
+```json
+{
+    "dataset_param": {
+        ...
+        "basic_parameters": {
+            ...
+            "val_dataset": "./data/val_dataset.json",
+			"val_max_samples": null,
+			"val_rate": 0.1，
+            ...
+        },
+        ...
+    },
+   ...
+    }
+}
+```
+
 
 【模型保存加载及日志信息配置】
 

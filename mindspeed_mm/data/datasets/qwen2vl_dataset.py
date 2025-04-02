@@ -1,4 +1,5 @@
 import os
+import warnings
 from functools import partial
 
 import torch
@@ -49,10 +50,25 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
     # 确保主进程进行数据处理，其他进程复用缓存避免重复计算，该策略和llamafactory对数据处理策略一致
     with TrainingArguments(output_dir='./').main_process_first(desc="pre-process dataset"):
         # -----------------load dataset from file-------------------------------------------------------------------------
-        dataset = load_dataset(path="json", data_files=data_args.dataset, split="train", cache_dir=data_args.cache_dir,
+        train_dataset = load_dataset(path="json", data_files=data_args.dataset, split="train", cache_dir=data_args.cache_dir,
                                streaming=data_args.streaming)
         if data_args.max_samples and not data_args.streaming:
-            dataset = dataset.select(range(data_args.max_samples))
+            train_dataset = train_dataset.select(range(data_args.max_samples))
+
+        val_dataset = None
+        if data_args.val_dataset:
+            val_dataset = load_dataset(
+                path="json",
+                data_files=data_args.val_dataset,
+                split="train",
+                cache_dir=data_args.cache_dir,
+                streaming=data_args.streaming
+            )
+            if data_args.val_max_samples:
+                val_dataset = val_dataset.select(range(data_args.val_max_samples))
+            if data_args.val_rate is not None and data_args.val_rate > 0.0:
+                warnings.warn("Warning: Both val_dataset and val_rate have been provided. The val_dataset will take priority, and the val_rate will be ignored.", UserWarning)
+
         local_process_index = int(os.getenv("LOCAL_RANK", -1))
         if data_args.streaming:
             kwargs = {}
@@ -67,20 +83,36 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
         # -----------------convert to sharegpt ---------------------------------------------------------------------------
         convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, dataset_dir=data_args.dataset_dir)
         if data_args.streaming:
-            dataset = dataset.map(
+            train_dataset = train_dataset.map(
                 convert_func,
                 batched=False,
-                remove_columns=(list(next(iter(dataset)).keys())),
+                remove_columns=(list(next(iter(train_dataset)).keys())),
                 **kwargs,
             )
+            if val_dataset:
+                val_dataset = val_dataset.map(
+                    convert_func,
+                    batched=False,
+                    remove_columns=(list(next(iter(val_dataset)).keys())),
+                    **kwargs,
+                )
         else:
-            dataset = dataset.map(
+            train_dataset = train_dataset.map(
                 convert_func,
                 batched=False,
-                remove_columns=(list(next(iter(dataset)).keys())),
-                desc=f"Rank {local_process_index}, Converting format of dataset",
+                remove_columns=(list(next(iter(train_dataset)).keys())),
+                desc=f"Rank {local_process_index}, converting format of train_dataset",
                 **kwargs,
             )
+            if val_dataset:
+                val_dataset = val_dataset.map(
+                    convert_func,
+                    batched=False,
+                    remove_columns=(list(next(iter(val_dataset)).keys())),
+                    desc=f"Rank {local_process_index}, converting format of val_dataset",
+                    **kwargs,
+                )
+
         # -----------------convert text to token id ----------------------------------------------------------------------
         if dataset_attr.ranking:
             preprocess_func = partial(
@@ -98,22 +130,43 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
                 processor=processor,
                 data_args=data_args,
             )
+
         if data_args.streaming:
-            dataset = dataset.map(
+            train_dataset = train_dataset.map(
                 preprocess_func,
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
-                remove_columns=(list(next(iter(dataset)).keys())),
+                remove_columns=(list(next(iter(train_dataset)).keys())),
                 **kwargs,
             )
-            dataset = DistributedIterableDataset(dataset)
+            train_dataset = DistributedIterableDataset(train_dataset)
+            if val_dataset:
+                val_dataset = val_dataset.map(
+                    preprocess_func,
+                    batched=True,
+                    batch_size=data_args.preprocessing_batch_size,
+                    remove_columns=(list(next(iter(val_dataset)).keys())),
+                    **kwargs,
+                )
+                val_dataset = DistributedIterableDataset(val_dataset)
+                return train_dataset, val_dataset
         else:
-            dataset = dataset.map(
+            train_dataset = train_dataset.map(
                 preprocess_func,
                 batched=True,
                 batch_size=data_args.preprocessing_batch_size,
-                remove_columns=(list(next(iter(dataset)).keys())),
-                desc=f"Rank {local_process_index}, Running tokenizer on dataset",
+                remove_columns=(list(next(iter(train_dataset)).keys())),
+                desc=f"Rank {local_process_index}, running tokenizer on train_dataset",
                 **kwargs,
-            )            
-        return dataset
+            )
+            if val_dataset:
+                val_dataset = val_dataset.map(
+                    preprocess_func,
+                    batched=True,
+                    batch_size=data_args.preprocessing_batch_size,
+                    remove_columns=(list(next(iter(val_dataset)).keys())),
+                    desc=f"Rank {local_process_index}, running tokenizer on val_dataset",
+                    **kwargs,
+                )
+                return train_dataset, val_dataset   
+        return train_dataset

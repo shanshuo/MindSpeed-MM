@@ -265,6 +265,20 @@ class DataArguments:
         metadata={
             "help": "Tool format to use for constructing function calling examples."},
     )
+    val_dataset: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": "Name of the validation dataset."},
+    )
+    val_max_samples: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": "For debugging purposes, truncate the number of examples for each validation dataset."},
+    )
+    val_rate: Optional[float] = field(
+        default=None,
+        metadata={"help": "The proportion of the dataset to be used for validation."},
+    )
 
     def __post_init__(self):
         self.dataset = self.dataset.split(",")

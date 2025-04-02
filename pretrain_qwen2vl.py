@@ -1,9 +1,12 @@
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
 """Pretrain QWEN2VL."""
 from copy import deepcopy
+from functools import partial
 
 import mindspeed.megatron_adaptor  # noqa
 import torch
+
+from datasets import Dataset
 from megatron.core import mpu
 from megatron.core.enums import ModelType
 from megatron.training import get_args, print_rank_0
@@ -106,12 +109,30 @@ def train_valid_test_datasets_provider(train_val_test_num_samples):
     """Build train, valid, and test datasets."""
     args = get_args()
     data_config = args.mm.data
-    train_dataset = build_mm_dataset(data_config.dataset_param)
-    train_dataloader = build_mm_dataloader(train_dataset, data_config.dataloader_param,
-                                           process_group=mpu.get_data_parallel_group(),
-                                           dataset_param=data_config.dataset_param,
-                                           consumed_samples=args.consumed_train_samples,)
-    train_dataloader, val_dataloader, test_dataloader = build_iterations(train_dataloader)
+    datasets = build_mm_dataset(data_config.dataset_param)
+    build_dataloader = partial(build_mm_dataloader,
+                                        dataloader_param=data_config.dataloader_param,
+                                        process_group=mpu.get_data_parallel_group(),
+                                        dataset_param=data_config.dataset_param,
+                                        consumed_samples=args.consumed_train_samples)
+
+    if isinstance(datasets, tuple) and len(datasets) == 2:
+        train_dataset, val_dataset = datasets
+        train_dataloader = build_dataloader(train_dataset)
+        valid_dataloader = build_dataloader(val_dataset)
+        train_dataloader, val_dataloader, test_dataloader = build_iterations(train_dataloader, valid_dataloader)
+    else:
+        train_dataset = datasets
+        val_rate = getattr(data_config.dataset_param.basic_parameters, 'val_rate', 0.0)
+        if isinstance(train_dataset, Dataset) and val_rate > 0:
+            dataset = train_dataset.train_test_split(test_size=val_rate, seed=args.seed)
+            train_dataset, val_dataset = dataset['train'], dataset['test']
+            train_dataloader = build_dataloader(train_dataset)
+            valid_dataloader = build_dataloader(val_dataset)
+            train_dataloader, val_dataloader, test_dataloader = build_iterations(train_dataloader, valid_dataloader)
+        else:
+            train_dataloader = build_dataloader(train_dataset)
+            train_dataloader, val_dataloader, test_dataloader = build_iterations(train_dataloader)
     return train_dataloader, val_dataloader, test_dataloader
 
 
