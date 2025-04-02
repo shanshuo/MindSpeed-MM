@@ -75,7 +75,7 @@ GPT_ARGS="
     --no-save-rng \
     --bf16 \
     --allow-tf32 \
-    --num-workers 0 \
+    --num-workers 8 \
     --lora-r 128 \
     --lora-alpha 64 \
     --lora-dropout 0 \
