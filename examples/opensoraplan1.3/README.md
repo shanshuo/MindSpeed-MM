@@ -370,7 +370,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 
 ```shell
     GPUS_PER_NODE=8
-    MASTER_ADDR=locahost
+    MASTER_ADDR=localhost
     MASTER_PORT=29501
     NNODES=1  
     NODE_RANK=0  

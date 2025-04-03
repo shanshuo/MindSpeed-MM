@@ -346,7 +346,7 @@ CogvideoX训练阶段的启动文件为shell脚本，主要分为如下4个：
 在sh启动脚本中可以修改运行卡数(NNODES为节点数，GPUS_PER_NODE为每个节点的卡数，相乘即为总运行卡数)：
 ```shell
 GPUS_PER_NODE=8
-MASTER_ADDR=locahost
+MASTER_ADDR=localhost
 MASTER_PORT=29501
 NNODES=1  
 NODE_RANK=0  

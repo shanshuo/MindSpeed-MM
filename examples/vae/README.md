@@ -184,7 +184,7 @@ pip install decord==0.6.0
 
 ```shell
     GPUS_PER_NODE=8
-    MASTER_ADDR=locahost
+    MASTER_ADDR=localhost
     MASTER_PORT=29505
     NNODES=1  
     NODE_RANK=0  

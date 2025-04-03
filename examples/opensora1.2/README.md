@@ -175,7 +175,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
 
 ```shell
     GPUS_PER_NODE=8
-    MASTER_ADDR=locahost
+    MASTER_ADDR=localhost
     MASTER_PORT=29501
     NNODES=1  
     NODE_RANK=0  

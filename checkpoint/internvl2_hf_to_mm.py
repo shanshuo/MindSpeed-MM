@@ -62,7 +62,7 @@ def merge_qkv(wq, wk, wv, hn=64, ng=8):
     return qkv
 
 
-def convert_hf_to_mm(_state_dict, _num_layers, _llm_arch):
+def convert_hf_to_mm(_state_dict, _num_layers, _llm_arch, _num_key_value_heads):
     new_dict = {}
     for key, value in _state_dict.items():
         new_key = None
@@ -106,6 +106,21 @@ def convert_hf_to_mm(_state_dict, _num_layers, _llm_arch):
                 new_key = new_key.replace('ffn_norm', 'pre_mlp_layernorm')
                 new_key = new_key.replace('model.norm', 'decoder.final_layernorm')
                 new_key = new_key.replace('output', 'output_layer')
+            elif _llm_arch == 'Qwen2ForCausalLM':
+                new_key = key.replace('language_model', 'text_decoder')
+                new_key = new_key.replace('lm_head', 'output_layer')
+                new_key = new_key.replace('model.layers', 'decoder.layers')
+                new_key = new_key.replace('self_attn.q_proj', 'self_attention.linear_q')
+                new_key = new_key.replace('self_attn.k_proj', 'self_attention.linear_k')
+                new_key = new_key.replace('self_attn.v_proj', 'self_attention.linear_v')
+                new_key = new_key.replace('self_attn.o_proj', 'self_attention.linear_proj')
+                new_key = new_key.replace('post_attention_layernorm', 'pre_mlp_layernorm')
+                new_key = new_key.replace('gate_proj', 'linear_fc1_gate')
+                new_key = new_key.replace('up_proj', 'linear_fc1_up')
+                new_key = new_key.replace('down_proj', 'linear_fc2')
+                new_key = new_key.replace('model.norm', 'decoder.final_layernorm')
+                new_key = new_key.replace('model.embed_tokens', 'embedding.word_embeddings')
+
         elif key.startswith('mlp1'):
             new_key = key.replace('mlp1', 'image_encoder.projector')
             new_key = new_key.replace('0', 'norm')
@@ -143,6 +158,82 @@ def convert_hf_to_mm(_state_dict, _num_layers, _llm_arch):
             new_dict.pop(v_name)
 
             print(f'merge {q_name}, {k_name}, {v_name} to {qkv_name}')
+
+    elif _llm_arch == 'Qwen2ForCausalLM':
+        # merge qkv weight
+        for i in range(_num_layers):
+            q_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_q.weight'
+            k_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_k.weight'
+            v_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_v.weight'
+            qkv_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_qkv.weight'
+
+            if q_name in new_dict.keys():
+                wq = new_dict[q_name]
+            else:
+                raise AssertionError(f'Missing key {q_name}')
+            if k_name in new_dict.keys():
+                wk = new_dict[k_name]
+            else:
+                raise AssertionError(f'Missing key {k_name}')
+            if v_name in new_dict.keys():
+                wv = new_dict[v_name]
+            else:
+                raise AssertionError(f'Missing key {v_name}')
+
+            q_chunks = torch.chunk(wq, _num_key_value_heads, dim=0)
+            k_chunks = torch.chunk(wk, _num_key_value_heads, dim=0)
+            v_chunks = torch.chunk(wv, _num_key_value_heads, dim=0)
+            all_chunks = []
+            for j in range(_num_key_value_heads):
+                all_chunks.append(q_chunks[j])
+                all_chunks.append(k_chunks[j])
+                all_chunks.append(v_chunks[j])
+            concatenated_tensor = torch.cat(all_chunks, dim=0)
+            new_dict[qkv_name] = concatenated_tensor
+            if q_name in new_dict:
+                new_dict.pop(q_name)
+            if k_name in new_dict:
+                new_dict.pop(k_name)
+            if v_name in new_dict:
+                new_dict.pop(v_name)
+
+
+        # merge qkv bias
+        for i in range(_num_layers):
+            q_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_q.bias'
+            k_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_k.bias'
+            v_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_v.bias'
+            qkv_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_qkv.bias'
+
+            if q_name in new_dict.keys():
+                wq = new_dict[q_name]
+            else:
+                raise AssertionError(f'Missing key {q_name}')
+            if k_name in new_dict.keys():
+                wk = new_dict[k_name]
+            else:
+                raise AssertionError(f'Missing key {k_name}')
+            if v_name in new_dict.keys():
+                wv = new_dict[v_name]
+            else:
+                raise AssertionError(f'Missing key {v_name}')
+
+            q_chunks = torch.chunk(wq, _num_key_value_heads, dim=0)
+            k_chunks = torch.chunk(wk, _num_key_value_heads, dim=0)
+            v_chunks = torch.chunk(wv, _num_key_value_heads, dim=0)
+            all_chunks = []
+            for j in range(_num_key_value_heads):
+                all_chunks.append(q_chunks[j])
+                all_chunks.append(k_chunks[j])
+                all_chunks.append(v_chunks[j])
+            concatenated_tensor = torch.cat(all_chunks, dim=0)
+            new_dict[qkv_name] = concatenated_tensor
+            if q_name in new_dict:
+                new_dict.pop(q_name)
+            if k_name in new_dict:
+                new_dict.pop(k_name)
+            if v_name in new_dict:
+                new_dict.pop(v_name)
 
     # 合并mlp的gate和up权重
     for i in range(_num_layers):
@@ -185,49 +276,46 @@ def split_model_by_pipeline(state_dict, pp_split):
     vit_start_idx = 0
     llm_start_idx = 0
     return_dicts = []
-    copy_dict = deepcopy(state_dict)
+    copy_dict = state_dict.copy()
     for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
         vit_end_idx = vit_start_idx + vit_num
         llm_end_idx = llm_start_idx + llm_num
         new_dict = {}
+
         for key, value in state_dict.items():
-            if key.startswith('image_encoder.encoder.embeddings.'):
-                if pp_rank == vit_range[0]:
-                    new_dict[key] = value
-                    copy_dict.pop(key)
+            if key.startswith('image_encoder.encoder.embeddings.') and pp_rank == vit_range[0]:
+                new_dict[key] = value
+                copy_dict.pop(key, None)
             elif key.startswith('image_encoder.encoder.encoder.layers.'):
                 layer_idx = int(key.split('.')[4])
                 if vit_start_idx <= layer_idx < vit_end_idx and vit_range[0] <= pp_rank <= vit_range[1]:
                     new_idx = layer_idx - vit_start_idx
                     new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
                     new_dict[new_key] = value
-                    copy_dict.pop(key)
-            elif key.startswith('image_encoder.projector.'):
-                if pp_rank == vit_range[1]:
-                    new_dict[key] = value
-                    copy_dict.pop(key)
-            elif key.startswith('text_decoder.embedding.'):
-                if pp_rank == llm_range[0]:
-                    new_dict[key] = value
-                    copy_dict.pop(key)
+                    copy_dict.pop(key, None)
+            elif key.startswith('image_encoder.projector.') and pp_rank == vit_range[1]:
+                new_dict[key] = value
+                copy_dict.pop(key, None)
+            elif key.startswith('text_decoder.embedding.') and pp_rank == llm_range[0]:
+                new_dict[key] = value
+                copy_dict.pop(key, None)
             elif key.startswith('text_decoder.decoder.layers.'):
                 layer_idx = int(key.split('.')[3])
                 if llm_start_idx <= layer_idx < llm_end_idx and llm_range[0] <= pp_rank <= llm_range[1]:
                     new_idx = layer_idx - llm_start_idx
                     new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
                     new_dict[new_key] = value
-                    copy_dict.pop(key)
-            elif key.startswith('text_decoder.decoder.final_layernorm.'):
-                if pp_rank == llm_range[1]:
-                    new_dict[key] = value
-                    copy_dict.pop(key)
-            elif key.startswith('text_decoder.output_layer.'):
-                if pp_rank == llm_range[1]:
-                    new_dict[key] = value
-                    copy_dict.pop(key)
+                    copy_dict.pop(key, None)
+            elif key.startswith('text_decoder.decoder.final_layernorm.') and pp_rank == llm_range[1]:
+                new_dict[key] = value
+                copy_dict.pop(key)
+            elif key.startswith('text_decoder.output_layer.') and pp_rank == llm_range[1]:
+                new_dict[key] = value
+                copy_dict.pop(key, None)
         vit_start_idx = vit_end_idx
         llm_start_idx = llm_end_idx
         return_dicts.append(new_dict)
+
     return return_dicts, copy_dict
 
 
@@ -292,7 +380,7 @@ def main(convert_config: ConvertVppMMConfig):
     for key, value in state_dict.items():
         print(key, value.shape)
 
-    state_dict = convert_hf_to_mm(state_dict, config.llm_config.num_hidden_layers, config.llm_config.architectures[0])
+    state_dict = convert_hf_to_mm(state_dict, config.llm_config.num_hidden_layers, config.llm_config.architectures[0], config.llm_config.num_key_value_heads)
     pipeline_state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
 
     if len(remains) > 0:

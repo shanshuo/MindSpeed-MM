@@ -435,7 +435,7 @@ $save_dir
 # 根据实际情况修改 ascend-toolkit 路径
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 NPUS_PER_NODE=8
-MASTER_ADDR=locahost
+MASTER_ADDR=localhost
 MASTER_PORT=29501
 NNODES=1
 NODE_RANK=0

@@ -128,7 +128,9 @@ InternVL2_5-78B](https://huggingface.co/OpenGVLab/InternVL2_5-78B)；
 
 #### 2. 权重转换
 
-MindSpeed-MM修改了部分原始网络的结构名称，使用`examples/internvl2.5/internvl2.5_convert_to_mm_ckpt.py`权重转换脚本对原始预训练权重进行转换。该脚本实现了huggingface权重和MindSpeed-MM权重的转换。
+MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工具对原始预训练权重进行转换。该工具实现了huggingface权重和MindSpeed-MM权重的转换以及PP（Pipeline Parallel）的权重切分。
+
+`mm-convert`工具详细用法参考[权重转换工具](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/权重转换工具.md)。
 
 以InternVL2_5-78B为例，使用命令如下
 
@@ -137,15 +139,18 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用`examples/internv
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 
 # 78B
-python examples/internvl2.5/internvl2.5_convert_to_mm_ckpt.py \
-  --model-size 78B \
-  --load-dir raw_ckpt/InternVL2_5-78B \
-  --save-dir pretrained/InternVL2_5-78B \
-  --trust-remote-code True
+mm-convert InternVLConverter hf_to_mm \
+  --cfg.mm_dir "pretrained/InternVL2_5-78B" \
+  --cfg.hf_config.hf_dir "raw_ckpt/InternVL2_5-78B" \
+  --cfg.parallel_config.llm_pp_layers [[0,3,6,6,6,6,6,6,6,6,6,6,5,5,5,2]] \
+  --cfg.parallel_config.vit_pp_layers [[45,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]] \
+  --cfg.trust_remote_code True
 
 # 其中：
-# save-dir: 转换后保存目录
-# load-dir: huggingface权重目录
+# mm_dir: 转换后保存目录
+# hf_dir: huggingface权重目录
+# llm_pp_layers: llm在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
+# vit_pp_layers: vit在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
 # trust_remote_code: 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
 ```
 
@@ -265,7 +270,7 @@ $save_dir
   # 根据实际情况修改 ascend-toolkit 路径
   source /usr/local/Ascend/ascend-toolkit/set_env.sh
   NPUS_PER_NODE=8
-  MASTER_ADDR=locahost
+  MASTER_ADDR=localhost
   MASTER_PORT=6000
   NNODES=1
   NODE_RANK=0
