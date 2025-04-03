@@ -23,6 +23,7 @@ import torch
 from torchvision.transforms import v2
 from transformers import CLIPVisionModel
 from megatron.training import get_args
+from megatron.core import mpu
 from mindspeed_mm.utils.utils import get_device
 
 from .pipeline_base import MMPipeline
@@ -56,11 +57,16 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             tokenizer=tokenizer,
             scheduler=scheduler,
             predict_model=predict_model,
-            image_encoder=image_encoder
+            image_encoder=image_encoder,
         )
 
-        self.vae_scale_factor_temporal = 2 ** sum(self.vae.model.config.temperal_downsample) if getattr(self, "vae", None) else 4
-        self.vae_scale_factor_spatial = 2 ** len(self.vae.model.config.temperal_downsample) if getattr(self, "vae", None) else 8
+        self.cp_size = mpu.get_context_parallel_world_size()
+        self.vae_scale_factor_temporal = (
+            2 ** sum(self.vae.model.config.temperal_downsample) if getattr(self, "vae", None) else 4
+        )
+        self.vae_scale_factor_spatial = (
+            2 ** len(self.vae.model.config.temperal_downsample) if getattr(self, "vae", None) else 8
+        )
         self.patch_size = self.predict_model.patch_size if getattr(self, "predict_model", None) else (1, 2, 2)
 
         self.num_frames, self.height, self.width = config.input_size
@@ -68,7 +74,7 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         self.cpu_offload = getattr(config, "cpu_offload", False)
         if self.cpu_offload:
-            self.enable_model_cpu_offload()
+            self.enable_model_cpu_offload(torch.distributed.get_rank())
 
     @torch.no_grad()
     def __call__(
@@ -81,7 +87,7 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         negative_prompt_embeds: Optional[torch.Tensor] = None,
         device: torch.device = get_device("npu"),
         max_sequence_length: int = 512,
-        **kwargs
+        **kwargs,
     ):
         # 1. Check inputs. Raise error if not correct
         if negative_prompt is None or negative_prompt == "":
@@ -121,15 +127,10 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
                 batch_size,
                 self.predict_model.in_dim,
                 (self.num_frames - 1) // self.vae_scale_factor_temporal + 1,
-                self.height // self.vae_scale_factor_spatial, 
-                self.width // self.vae_scale_factor_spatial
+                self.height // self.vae_scale_factor_spatial,
+                self.width // self.vae_scale_factor_spatial,
             )
-            latents = self.prepare_latents(
-                shape,
-                generator=self.generator,
-                device=device,
-                dtype=prompt_embeds.dtype
-            )
+            latents = self.prepare_latents(shape, generator=self.generator, device=device, dtype=prompt_embeds.dtype)
             clip_features, vae_features = None, None
         else:
             latents, clip_features, vae_features = self.prepare_image_latents(
@@ -140,7 +141,7 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             "prompt_embeds": prompt_embeds,
             "negative_prompt_embeds": negative_prompt_embeds,
             "i2v_clip_feature": clip_features,
-            "i2v_vae_feature": vae_features
+            "i2v_vae_feature": vae_features,
         }
 
         # 5. Denoising to get clean latents
@@ -155,40 +156,35 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
                 timestep = t.expand(latents.shape[0]).to(device=latents.device).float()
 
                 noise_pred = self.predict_model(
-                    latent_model_input,
-                    timestep,
-                    model_kwargs.get('prompt_embeds'),
-                    **model_kwargs
+                    latent_model_input, timestep, model_kwargs.get("prompt_embeds"), **model_kwargs
                 )
 
                 if do_classifier_free_guidance:
                     noise_uncond = self.predict_model(
-                        latent_model_input,
-                        timestep,
-                        model_kwargs.get('negative_prompt_embeds'),
-                        **model_kwargs
+                        latent_model_input, timestep, model_kwargs.get("negative_prompt_embeds"), **model_kwargs
                     )
                     noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
 
                 # compute the previous noisy sample x_t -> x_t-1
                 latents = self.scheduler.step(noise_pred, t, latents, return_dict=False)[0]
-                
+
                 if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps):
                     progress_bar.update()
-        
+
         # 6. Post process latents to get video
         latents = latents.to(self.vae.model.dtype)
         latents_mean = (
-                torch.tensor(self.vae.model.config.latents_mean)
-                .view(1, self.vae.model.config.z_dim, 1, 1, 1)
-                .to(latents.device, latents.dtype)
-            )
+            torch.tensor(self.vae.model.config.latents_mean)
+            .view(1, self.vae.model.config.z_dim, 1, 1, 1)
+            .to(latents.device, latents.dtype)
+        )
         latents_std = 1.0 / torch.tensor(self.vae.model.config.latents_std).view(
-            1, self.vae.model.config.z_dim, 1, 1, 1).to(latents.device, latents.dtype)
+            1, self.vae.model.config.z_dim, 1, 1, 1
+        ).to(latents.device, latents.dtype)
         latents = latents / latents_std + latents_mean
         video = self.decode_latents(latents)
         return video
-    
+
     def encode_texts(
         self,
         prompt: Union[str, List[str]],
@@ -267,7 +263,7 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             return text
 
         return whitespace_clean(basic_clean(prompt))
-    
+
     def prepare_image_latents(self, batch_size, image, device, dtype):
         to_tensor = v2.ToTensor()
         image = torch.stack(to_tensor(image), dim=0)
@@ -276,10 +272,20 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         max_area = self.height * self.width
         aspect_ratio = h / w
         latent_h = round(
-            math.sqrt(max_area * aspect_ratio) // self.vae_scale_factor_spatial // self.patch_size[1] * self.patch_size[1]
+            math.sqrt(max_area * aspect_ratio)
+            // self.vae_scale_factor_spatial
+            // self.patch_size[1]
+            // self.cp_size
+            * self.patch_size[1]
+            * self.cp_size
         )
         latent_w = round(
-            math.sqrt(max_area / aspect_ratio) // self.vae_scale_factor_spatial // self.patch_size[2] * self.patch_size[1]
+            math.sqrt(max_area / aspect_ratio)
+            // self.vae_scale_factor_spatial
+            // self.patch_size[2]
+            // self.cp_size
+            * self.patch_size[2]
+            * self.cp_size
         )
 
         h = latent_h * self.vae_scale_factor_spatial
@@ -290,40 +296,27 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             self.vae.model.config.z_dim,
             (self.num_frames - 1) // self.vae_scale_factor_temporal + 1,
             latent_h,
-            latent_w
+            latent_w,
         )
 
-        noise = self.prepare_latents(
-            shape,
-            generator=self.generator,
-            device=device,
-            dtype=dtype
-        )
-        msk = torch.ones(
-            batch_size,
-            self.num_frames,
-            latent_h,
-            latent_w
-        ).to(dtype=dtype, device=device)
+        noise = self.prepare_latents(shape, generator=self.generator, device=device, dtype=dtype)
+        msk = torch.ones(batch_size, self.num_frames, latent_h, latent_w).to(dtype=dtype, device=device)
         msk[:, 1:] = 0
-        msk = torch.concat([
-            torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]
-        ], dim=1)
+        msk = torch.concat([torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1)
         msk = msk.view(-1, msk.shape[1] // 4, 4, latent_h, latent_w).transpose(1, 2)
 
         # clip encode
-        clip_transform = v2.Compose([
-            v2.Resize(size=[224, 224]),
-            v2.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])
-        ])
+        clip_transform = v2.Compose(
+            [
+                v2.Resize(size=[224, 224]),
+                v2.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711]),
+            ]
+        )
         clip_input = clip_transform(image).to(device=device, dtype=dtype)
         clip_feature = self.image_encoder(clip_input, output_hidden_states=True).hidden_states[-2]
 
         # vae encode
-        vae_transform = v2.Compose([
-            v2.Resize(size=[h, w]),
-            v2.Normalize(mean=[0.5], std=[0.5])
-        ])
+        vae_transform = v2.Compose([v2.Resize(size=[h, w]), v2.Normalize(mean=[0.5], std=[0.5])])
         vae_input = vae_transform(image)
         vae_input = torch.concat(
             [vae_input.unsqueeze(2), torch.zeros(batch_size, 3, self.num_frames - 1, h, w)], dim=2

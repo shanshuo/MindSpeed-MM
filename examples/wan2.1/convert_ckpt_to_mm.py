@@ -17,6 +17,14 @@ DIT_CONVERSION_MAPPING = {
     "condition_embedder.time_embedder.linear_2.weight": "time_embedding.2.weight",
     "condition_embedder.time_proj.bias": "time_projection.1.bias",
     "condition_embedder.time_proj.weight": "time_projection.1.weight",
+    "condition_embedder.image_embedder.ff.net.0.proj.weight": "img_emb.proj.1.weight",
+    "condition_embedder.image_embedder.ff.net.0.proj.bias": "img_emb.proj.1.bias",
+    "condition_embedder.image_embedder.ff.net.2.weight": "img_emb.proj.3.weight",
+    "condition_embedder.image_embedder.ff.net.2.bias": "img_emb.proj.3.bias",
+    "condition_embedder.image_embedder.norm1.weight": "img_emb.proj.0.weight",
+    "condition_embedder.image_embedder.norm1.bias": "img_emb.proj.0.bias",
+    "condition_embedder.image_embedder.norm2.weight": "img_emb.proj.4.weight",
+    "condition_embedder.image_embedder.norm2.bias": "img_emb.proj.4.bias",
     "scale_shift_table": "head.modulation",
     "proj_out.bias": "head.head.bias",
     "proj_out.weight": "head.head.weight"
@@ -55,7 +63,8 @@ def replace_state_dict(
     conversion_mapping: Dict,
 ):
     for ori_key, mm_key in conversion_mapping.items():
-        state_dict[mm_key] = state_dict.pop(ori_key)
+        if ori_key in state_dict.keys():
+            state_dict[mm_key] = state_dict.pop(ori_key)
     return state_dict
 
 
@@ -64,6 +73,8 @@ def convert_attn_to_mm(state_dict):
     state_dict = state_dict.get("blocks", state_dict)
 
     for key, value in state_dict.items():
+        if "norm_added_q" in key: # keys to ignore
+            continue
         new_key = key.replace("attn1.norm_q", "self_attn.q_norm")
         new_key = new_key.replace("attn1.norm_k", "self_attn.k_norm")
         new_key = new_key.replace("attn2.norm_q", "cross_attn.q_norm")
@@ -75,6 +86,9 @@ def convert_attn_to_mm(state_dict):
         new_key = new_key.replace("attn2.to_q.", "cross_attn.proj_q.")
         new_key = new_key.replace("attn2.to_k.", "cross_attn.proj_k.")
         new_key = new_key.replace("attn2.to_v.", "cross_attn.proj_v.")
+        new_key = new_key.replace("attn2.add_k_proj", "cross_attn.k_img")
+        new_key = new_key.replace("attn2.add_v_proj", "cross_attn.v_img")
+        new_key = new_key.replace("attn2.norm_added_k", "cross_attn.k_norm_img")
         new_key = new_key.replace("attn2.to_out.0.", "cross_attn.proj_out.")
         new_key = new_key.replace(".ffn.net.0.proj.", ".ffn.0.")
         new_key = new_key.replace(".ffn.net.2.", ".ffn.2.")
