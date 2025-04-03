@@ -147,11 +147,15 @@ class FlashAttention(nn.Module):
         fa_layout="sbh"
     ):
         super().__init__()
+        args = get_args()
         self.softmax_scale = softmax_scale
         self.attention_dropout = attention_dropout
         self.fa_layout = fa_layout
         self.pse = None
         self.pse_type = 1
+        self.sparse_mode = args.sparse_mode
+        self.context_parallel_algo = args.context_parallel_algo
+        self.context_parallel_size = args.context_parallel_size
 
     def forward(self, query, key, value, attention_mask):
         """Implements the multihead softmax attention.
@@ -159,10 +163,9 @@ class FlashAttention(nn.Module):
         ---------
             q, k, v: The tensor containing the query, key, and value. (S, B, N, D)
         """
-        args = get_args()
         seq_length, batch_size, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
 
-        if args.context_parallel_size > 1 and args.context_parallel_algo in ["megatron_cp_algo", "hybrid_cp_algo"]:
+        if self.context_parallel_size > 1 and self.context_parallel_algo in ["megatron_cp_algo", "hybrid_cp_algo"]:
             if self.fa_layout.lower() != "sbh":
                 raise ValueError(f"Flash attention layout mulst be `sbh` when using Ring Attention, but got {self.fa_layout}!")
             query, key, value = [rearrange(x, "s b n d -> s b (n d)") for x in [query, key, value]]
@@ -177,8 +180,8 @@ class FlashAttention(nn.Module):
                 pse_type=self.pse_type
             )
         else:
-            if args.context_parallel_algo != "ulysses_cp_algo":
-                raise ValueError(f"context_parallel_algo should be one of the [megatron_cp_algo, hybrid_cp_algo, ulysses_cp_algo], but got {args.context_parallel_algo}")
+            if self.context_parallel_algo != "ulysses_cp_algo":
+                raise ValueError(f"context_parallel_algo should be one of the [megatron_cp_algo, hybrid_cp_algo, ulysses_cp_algo], but got {self.context_parallel_algo}")
             query, key, value = [change_tensor_layout(x, "sbnd", self.fa_layout, batch_size=batch_size) for x in [query, key, value]]
 
             actual_seq_qlen = []
@@ -207,7 +210,7 @@ class FlashAttention(nn.Module):
                 scale=self.softmax_scale,
                 keep_prob=1 - self.attention_dropout,
                 inner_precise=0,
-                sparse_mode=args.sparse_mode
+                sparse_mode=self.sparse_mode
             )[0]
 
         output = change_tensor_layout(output, self.fa_layout, "sbh", batch_size=batch_size)

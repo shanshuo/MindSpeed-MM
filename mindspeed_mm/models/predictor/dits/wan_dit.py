@@ -15,6 +15,7 @@ from mindspeed.core.context_parallel.unaligned_cp.mapping import (
     gather_forward_split_backward,
     split_forward_gather_backward,
 )
+from mindspeed.core.parallel_state import get_context_parallel_group_for_hybrid_ulysses
 
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.attention import FlashAttention, ParallelAttention
@@ -43,7 +44,7 @@ class WanDiT(MultiModalModule):
         cross_attn_norm: bool = False,
         eps: float = 1e-6,
         max_seq_len: int = 1024,
-        fa_layout: str = "bsnd",
+        fa_layout: str = "sbh",
         clip_token_len: int = 257,
         **kwargs,
     ):
@@ -109,7 +110,8 @@ class WanDiT(MultiModalModule):
         )
         if (
             self.context_parallel_algo is not None
-            and self.context_parallel_algo not in ["ulysses_cp_algo"]
+            and self.context_parallel_algo
+            not in ["ulysses_cp_algo", "hybrid_cp_algo", "megatron_cp_algo"]
         ):
             raise NotImplementedError(
                 f"Context_parallel_algo {self.context_parallel_algo} is not implemented"
@@ -580,33 +582,46 @@ class WanFlashAttention(FlashAttention):
             fa_layout=fa_layout,
         )
         self.attention_type = attention_type
+        # context parallel setting
+        args = get_args()
+        self.context_parallel_algo = args.context_parallel_algo
+
+        if self.context_parallel_algo == "hybrid_cp_algo":
+            self.ulysses_cp_group = get_context_parallel_group_for_hybrid_ulysses()
+        elif self.context_parallel_algo == "ulysses_cp_algo":
+            self.ulysses_cp_group = mpu.get_context_parallel_group()
+        else:
+            self.ulysses_cp_group = None
+
+        if attention_type == AttnType.cross_attn:
+            self.context_parallel_algo = "ulysses_cp_algo"
 
     def _split_head(self, x, dim=2):
-        return split_forward_gather_backward(
-            x, mpu.get_context_parallel_group(), dim=dim
+        if self.ulysses_cp_group is None:
+            return x
+        return split_forward_gather_backward(x, self.ulysses_cp_group, dim=dim)
+
+    def _all_to_all(self, x, scatter_dim=2, gather_dim=0):
+        if self.ulysses_cp_group is None:
+            return x
+        return all_to_all(
+            x, self.ulysses_cp_group, scatter_dim=scatter_dim, gather_dim=gather_dim
         )
 
     def forward(self, query, key, value, attention_mask=None):
+
         if self.attention_type == AttnType.self_attn:
-            query = all_to_all(
-                query, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=0
-            )
-            key = all_to_all(
-                key, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=0
-            )
-            value = all_to_all(
-                value, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=0
-            )
+            query = self._all_to_all(query, scatter_dim=2, gather_dim=0)
+            key = self._all_to_all(key, scatter_dim=2, gather_dim=0)
+            value = self._all_to_all(value, scatter_dim=2, gather_dim=0)
+
         else:
-            query = all_to_all(
-                query, mpu.get_context_parallel_group(), scatter_dim=2, gather_dim=0
-            )
+            query = self._all_to_all(query, scatter_dim=2, gather_dim=0)
             key = self._split_head(key, dim=2)
             value = self._split_head(value, dim=2)
         attn_out = super().forward(query, key, value, attention_mask)
-        attn_out = all_to_all(
-            attn_out, mpu.get_context_parallel_group(), scatter_dim=0, gather_dim=2
-        )
+
+        attn_out = self._all_to_all(attn_out, scatter_dim=0, gather_dim=2)
         return attn_out
 
 

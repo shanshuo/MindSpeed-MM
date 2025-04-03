@@ -287,6 +287,47 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
     # input_folder为layerzero训练保存权重的路径，output_folder为输出的megatron格式权重的路径
     python <your_mindspeed_path>/mindspeed/core/distributed/layerzero/state/scripts/convert_to_megatron.py --input_folder ./save_ckpt/wan2.1/iter_000xxxx/ --output_folder ./save_ckpt/wan2.1_megatron_ckpt/iter_000xxxx/ --prefix predictor
     ```
+  
+- DiT-RingAttention：DiT RingAttention序列并行
+
+  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention
+  - 使能方式：在启动脚本 pretrain.sh 中修改如下变量
+
+  ```shell
+  CP=8
+  
+  GPT_ARGS="
+    --context-parallel-size ${CP} \
+    --context-parallel-algo megatron_cp_algo \
+    --use-cp-send-recv-overlap \
+    --cp-window-size 1
+  ...
+  ```
+
+  - ```--use-cp-send-recv-overlap```为可选参数，建议开启，开启后支持send receive overlap功能
+  - ```--cp-window-size [int]```为可选参数，设置算法中双层Ring Attention的内层窗口大小，需要确保cp_size能被该参数整除
+    - 缺省值为1，即使用原始的Ring Attention算法
+    - 大于1时，即使用Double Ring Attention算法，优化原始Ring Attention性能
+
+- DiT-USP: DiT USP混合序列并行（Ulysses + RingAttention）
+  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention
+  - 使能方式：在启动脚本pretrain.sh中修改如下变量
+
+  ```shell
+  CP=8
+  
+  GPT_ARGS="
+    --context-parallel-size ${CP} \
+    --context-parallel-algo hybrid_cp_algo \
+    --use-cp-send-recv-overlap \
+    --ulysses-degree-in-cp [int]
+  ...
+  ```
+
+  - 需要确保```--context-parallel-size```可以被```--ulysses-degree-in-cp```整除且大于1
+    - 例如当设置```--context-parallel-size```为8时，可以设置```--ulysses-degree-in-cp```为2或```--ulysses-degree-in-cp```为4
+    - 同时需要确保```--ulysses-degree-in-cp```可以被num-attention-heads数整除
+  - RingAttention相关参数解析见DiT-RingAttention部分
 
 #### 启动训练
 
