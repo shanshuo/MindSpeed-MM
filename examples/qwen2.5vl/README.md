@@ -106,6 +106,7 @@ pip install -e .
 
 - 模型地址: [Qwen2.5-VL-3B](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/tree/main)；
 - 模型地址: [Qwen2.5-VL-7B](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct/tree/main)；
+- 模型地址: [Qwen2.5-VL-32B](https://huggingface.co/Qwen/Qwen2.5-VL-32B-Instruct/tree/main)；
 - 模型地址: [Qwen2.5-VL-72B](https://huggingface.co/Qwen/Qwen2.5-VL-72B-Instruct/tree/main)；
 
 
@@ -133,13 +134,21 @@ mm-convert  Qwen2_5_VLConverter hf_to_mm \
   --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
   --cfg.parallel_config.tp_size 1
 
+# 32b
+mm-convert  Qwen2_5_VLConverter hf_to_mm \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2.5-VL-32B-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2.5-VL-32B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [4,9,9,9,9,9,9,6] \
+  --cfg.parallel_config.vit_pp_layers [32,0,0,0,0,0,0,0] \
+  --cfg.parallel_config.tp_size 2
+
 # 72b
 mm-convert  Qwen2_5_VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2.5-VL-72B-Instruct" \
   --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2.5-VL-72B-Instruct" \
-  --cfg.parallel_config.llm_pp_layers [14,23,23,20] \
-  --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
-  --cfg.parallel_config.tp_size 8
+  --cfg.parallel_config.llm_pp_layers [6,11,11,11,11,11,11,8] \
+  --cfg.parallel_config.vit_pp_layers [32,0,0,0,0,0,0,0] \
+  --cfg.parallel_config.tp_size 2
 
 # 其中：
 # mm_dir: 转换后保存目录

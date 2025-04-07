@@ -28,10 +28,10 @@ echo $NODE_RANK
 echo $NNODES
 
 
-MM_DATA="./examples/qwen2.5vl/data_72b.json"
-MM_MODEL="./examples/qwen2.5vl/model_72b.json"
+MM_DATA="./examples/qwen2.5vl/data_32b.json"
+MM_MODEL="./examples/qwen2.5vl/model_32b.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="ckpt/mm_path/Qwen2.5-VL-72B-Instruct"
+LOAD_PATH="ckpt/mm_path/Qwen2.5-VL-32B-Instruct"
 SAVE_PATH="save_dir"
 
 TP=2
@@ -50,7 +50,7 @@ DISTRIBUTED_ARGS="
     --master_port $MASTER_PORT
 "
 
-# GPT_ARGS中模型相关参数具体配置在example/qwen2.5vl/model_72b.json中，训练相关参数配置在这里
+# GPT_ARGS中模型相关参数具体配置在example/qwen2.5vl/model_32b.json中，训练相关参数配置在这里
 GPT_ARGS="
     --use-mcore-models \
     --tensor-model-parallel-size ${TP} \

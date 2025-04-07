@@ -236,14 +236,14 @@ def split_by_tp(_state_dict: dict[str, torch.Tensor], _tp_num: int = 1) -> list[
     for tp_rank in range(_tp_num):
         new_state_dict = {}
         for key, value in _state_dict.items():
-            if 'linear_fc1.weight' in key:
+            if 'projector' not in key and 'linear_fc1.weight' in key:
                 value_shape = value.shape
                 size_per_tp = value_shape[0] // _tp_num // 2
                 values = torch.chunk(value, 2, dim=0)
                 gate_tp = values[0][tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
                 up_tp = values[1][tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
                 new_state_dict[key] = torch.cat((gate_tp, up_tp), dim=0)
-            elif 'linear_fc1.bias' in key:
+            elif 'projector' not in key and 'linear_fc1.bias' in key:
                 value_shape = value.shape
                 size_per_tp = value_shape[0] // _tp_num // 2
                 values = torch.chunk(value, 2, dim=0)
@@ -254,7 +254,7 @@ def split_by_tp(_state_dict: dict[str, torch.Tensor], _tp_num: int = 1) -> list[
                 value_shape = value.shape
                 size_per_tp = value_shape[0] // _tp_num
                 new_state_dict[key] = value[tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
-            elif 'linear_qkv.bias' in key:
+            elif 'linear_qkv.bias' in key or 'linear_fc1.bias' in key:
                 value_shape = value.shape
                 size_per_tp = value_shape[0] // _tp_num
                 new_state_dict[key] = value[tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp]

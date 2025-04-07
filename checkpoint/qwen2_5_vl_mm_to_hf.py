@@ -40,7 +40,7 @@ def merge_by_tp(_state_dicts: list[dict[str, torch.Tensor]], _tp_size: int) -> d
         return _state_dicts[0]
     return_state_dict = {}
     for key, value in _state_dicts[0].items():
-        if 'linear_fc1' in key:
+        if 'projector' not in key and 'linear_fc1' in key:
             chunks_0 = [torch.chunk(_state_dicts[i][key], 2, dim=0) for i in range(_tp_size)]
             flattened_tensors = [
                 pair[i]
@@ -48,7 +48,7 @@ def merge_by_tp(_state_dicts: list[dict[str, torch.Tensor]], _tp_size: int) -> d
                 for pair in chunks_0
             ]
             return_state_dict[key] = torch.cat(flattened_tensors, dim=0)
-        elif 'linear_qkv' in key or 'output_layer' in key or 'word_embeddings' in key:
+        elif 'linear_qkv' in key or 'linear_fc1' in key or 'output_layer' in key or 'word_embeddings' in key:
             return_state_dict[key] = torch.cat([_state_dicts[i][key] for i in range(_tp_size)], dim=0)
         elif 'linear_proj.weight' in key or 'linear_fc2.weight' in key:
             return_state_dict[key] = torch.cat([_state_dicts[i][key] for i in range(_tp_size)], dim=1)
