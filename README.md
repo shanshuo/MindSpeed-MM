@@ -713,6 +713,7 @@ MindSpeed-MM 生态贡献方：
 
 * 360 AI Research
 * 北大OpenSoraPlan团队
+* 微信技术架构部基础架构中心
 
 感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
 

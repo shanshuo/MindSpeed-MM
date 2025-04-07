@@ -90,7 +90,6 @@ class VideoDiT(MultiModalModule):
 
         args = get_args()
         self.sequence_parallel = args.sequence_parallel
-
         if mpu.get_tensor_model_parallel_world_size() <= 1:
             self.sequence_parallel = False
 
@@ -98,6 +97,9 @@ class VideoDiT(MultiModalModule):
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
         self.recompute_num_layers = args.recompute_num_layers
+    
+        self.task = getattr(args.mm.model, "task", "t2v") 
+
         if self.recompute_granularity == "selective":
             raise ValueError("recompute_granularity does not support selective mode in VideoDiT")
         if self.distribute_saved_activations:
@@ -249,7 +251,11 @@ class VideoDiT(MultiModalModule):
         if img_mask is not None:
             img_mask = img_mask.bool().repeat(1, img_mask.shape[-1], 1)
             prompt_img_mask = prompt_img_mask.bool().repeat(1, img_mask.shape[-2], 1)
- 
+
+        # omit_attn_mask is used with empty mask in self_attention of t2v.
+        if self.task == "t2v" and not torch.any(vid_mask.bool()):
+            vid_mask = None
+
         # 1. Input
         frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
         height, width = latents.shape[-2] // self.patch_size_h, latents.shape[-1] // self.patch_size_w

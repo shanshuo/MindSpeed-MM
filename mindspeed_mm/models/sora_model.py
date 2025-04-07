@@ -17,6 +17,7 @@ from logging import getLogger
 from typing import Any, Mapping
 
 import torch
+import torch_npu
 from megatron.core import mpu
 from megatron.training import get_args, print_rank_0
 from megatron.training.arguments import core_transformer_config_from_args
@@ -63,6 +64,17 @@ class SoRAModel(nn.Module):
         self.enable_encoder_dp = config.enable_encoder_dp if hasattr(config, "enable_encoder_dp") else False
         if self.enable_encoder_dp and mpu.get_pipeline_model_parallel_world_size() > 1:
             raise AssertionError("Encoder DP cannot be used with PP")
+        
+        # Encoder inference interleaves with DIT training
+        self.interleaved = getattr(config, "interleaved", False)
+        self.interleaved_steps = getattr(config, "interleaved_steps", 1)
+        
+        # Interleaved_steps is disabled when encoder DP is enabled 
+        # Interleaved_steps is only used in t2v task
+        if hasattr(config, "enable_encoder_dp") and self.enable_encoder_dp or self.task == "i2v": 
+            self.interleaved = False
+            self.interleaved_steps = 1
+
         # Track the current index to save or fetch the encoder cache when encoder dp is enabled
         self.cache = {}
         self.index = 0
@@ -115,39 +127,86 @@ class SoRAModel(nn.Module):
         args = get_args()
         if self.pre_process:
             with torch.no_grad():
-                i2v_results = None
-                if video is not None:
-                    self.index = 0
-                    # Visual Encode
-                    if self.load_video_features:
-                        latents = video
-                    else:
-                        if self.task == "t2v":
-                            latents, _ = self.ae.encode(video)
-                        elif self.task == "i2v":
-                            latents, i2v_results = self.ae.encode(video, **kwargs)
-                            kwargs.update(i2v_results)
-                        else:
-                            raise NotImplementedError(f"Task {self.task} if not Implemented!")
+                if self.interleaved:
+                    i2v_results = None
+                    if video is not None:
+                        print_rank_0(f"Encoding with interleaved_steps: {self.interleaved_steps}")
 
-                    # Text Encode
-                    if self.load_text_features:
-                        prompt = prompt_ids
-                        if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
-                            prompt = [p.npu() for p in prompt]
-                    else:
-                        prompt = self.text_encoder.encode(prompt_ids, prompt_mask)
+                        # The offload of text_encoder is recommanded to be used with interleaved_steps greater than 10
+                        self.text_encoder.to(torch_npu.npu.current_device())
+
+                        self.interleaved_cache = []
+                        self.interleaved_index = 0
+                        interleaved_length = len(video)
+
+                        for batch_index in range(interleaved_length):
+                            # Text encoder and vae, return tensors in cpu.
+                            latents, prompt, video_mask_batch, prompt_mask_batch = self.interleaved_encode(
+                                video[batch_index], 
+                                prompt_ids[batch_index], 
+                                video_mask[batch_index], 
+                                prompt_mask[batch_index]
+                            )
+                            
+                            self.interleaved_cache.append((latents, prompt, video_mask_batch, 
+                                                        prompt_mask_batch, i2v_results))
+                        print_rank_0(f"Encoding done")
+                else:
+                    i2v_results = None
+                    if video is not None:
+                        self.index = 0
+
+                        # Visual Encode
+                        if self.load_video_features:
+                            latents = video
+                        else:
+                            if self.task == "t2v":
+                                latents, _ = self.ae.encode(video)
+                            elif self.task == "i2v":
+                                latents, i2v_results = self.ae.encode(video, **kwargs)
+                                kwargs.update(i2v_results)
+                            else:
+                                raise NotImplementedError(f"Task {self.task} is not Implemented!")
+
+                        # Text Encode
+                        if self.load_text_features:
+                            prompt = prompt_ids
+                            if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
+                                prompt = [p.npu() for p in prompt]
+                        else:
+                            prompt = self.text_encoder.encode(prompt_ids, prompt_mask)
+            
+            if self.interleaved:
+                # The offload of text_encoder is recommanded to be used with interleaved_steps greater than 10
+                if self.interleaved_index == 0:
+                    self.text_encoder.to(torch.device('cpu'))
+                    torch_npu.npu.empty_cache()
+
+                latents, prompt, video_mask, prompt_mask, i2v_results = \
+                                    self.interleaved_cache[self.interleaved_index]
+
+                cur_device = torch_npu.npu.current_device()
+                latents, prompt, video_mask, prompt_mask = self.interleaved_to_device(
+                    latents, 
+                    prompt, 
+                    video_mask, 
+                    prompt_mask, 
+                    cur_device
+                )
+                
+                self.interleaved_index += 1
+
             # Gather the results after encoding of ae and text_encoder
             if self.enable_encoder_dp:
                 if self.index == 0:
                     self.init_cache(latents, prompt, video_mask, prompt_mask, i2v_results)
                 latents, prompt, video_mask, prompt_mask, i2v_results = self.get_feature_from_cache()
-
             if self.task == "i2v" and i2v_results is not None:
                 kwargs.update(i2v_results)
             noised_latents, noise, timesteps = self.diffusion.q_sample(latents, model_kwargs=kwargs, mask=video_mask)
             predictor_input_latent, predictor_timesteps, predictor_prompt = noised_latents, timesteps, prompt
             predictor_video_mask, predictor_prompt_mask = video_mask, prompt_mask
+
             if args.dist_train:
                 return [predictor_input_latent, predictor_timesteps, predictor_prompt, predictor_video_mask,
                         predictor_prompt_mask,
@@ -277,3 +336,57 @@ class SoRAModel(nn.Module):
 
         self.index += 1
         return latents, prompt, video_mask, prompt_mask, i2v_results
+
+    def interleaved_encode(self, video_batch, prompt_ids_batch, video_mask_batch, prompt_mask_batch):
+        """Text_Encoder and AE with interleaved steps"""
+
+        cur_device = torch_npu.npu.current_device()
+        video_batch, prompt_ids_batch, video_mask_batch, prompt_mask_batch = self.interleaved_to_device(
+            video_batch, 
+            prompt_ids_batch, 
+            video_mask_batch, 
+            prompt_mask_batch, 
+            cur_device
+        )
+
+        # Visual Encode
+        if self.load_video_features:
+            latents = video_batch
+        else:
+            if self.task == "t2v":
+                latents, _ = self.ae.encode(video_batch)
+            else:
+                raise NotImplementedError(f"Task {self.task} is not Implemented with Interleaved!")
+        
+        # Text Encode
+        if self.load_text_features:
+            prompt = prompt_ids_batch
+        else:
+            prompt = self.text_encoder.encode(prompt_ids_batch, prompt_mask_batch)
+
+        cur_device = torch.device('cpu')
+        latents, prompt, video_mask_batch, prompt_mask_batch = self.interleaved_to_device(
+            latents, 
+            prompt, 
+            video_mask_batch, 
+            prompt_mask_batch, 
+            cur_device
+        )
+
+        return latents, prompt, video_mask_batch, prompt_mask_batch
+
+    def interleaved_to_device(
+        self, video_batch, prompt_ids_batch, video_mask_batch, prompt_mask_batch, cur_device
+    ):
+        """torch_npu.npu.current_device() or torch.device('cpu') for cur_device"""
+
+        video_batch = video_batch.to(cur_device)
+        if isinstance(prompt_ids_batch, list) or isinstance(prompt_ids_batch, tuple):
+            prompt_ids_batch = [p.to(cur_device) for p in prompt_ids_batch]
+        else:
+            prompt_ids_batch = prompt_ids_batch.to(cur_device)
+
+        video_mask_batch = video_mask_batch.to(cur_device)
+        prompt_mask_batch = prompt_mask_batch.to(cur_device)
+
+        return video_batch, prompt_ids_batch, video_mask_batch, prompt_mask_batch

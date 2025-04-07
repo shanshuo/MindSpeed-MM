@@ -2,6 +2,7 @@
 """Pretrain SoRA."""
 
 import torch
+import torch_npu
 
 import mindspeed.megatron_adaptor
 
@@ -43,13 +44,18 @@ def model_provider(pre_process=True, post_process=True):
 
 
 def get_batch_on_this_tp_rank(data_iterator):
+    args = get_args()
+    interleaved = args.mm.model.interleaved \
+        if hasattr(args.mm.model, "interleaved") else False
     if data_iterator is not None:
-        batch = next(data_iterator)
+        batch = next(data_iterator, None)
     else:
         return None
-    for k, v in batch.items():
-        if isinstance(v, torch.Tensor):
-            batch[k] = v.to(torch.cuda.current_device())
+    # data is loaded in cpu for interleaved.
+    if batch is not None and not interleaved:
+        for k, v in batch.items():
+            if isinstance(v, torch.Tensor):
+                batch[k] = v.to(torch_npu.npu.current_device())
     return batch
 
 
@@ -87,16 +93,61 @@ def get_batch_for_step(data_iterator):
     return batch
 
 
+def get_interleaved_batch_for_step(data_iterator):
+    """Generate batches with interleaved steps."""
+    args = get_args()
+    args.curr_forward_iteration += 1
+    interleaved_steps = args.mm.model.interleaved_steps \
+        if hasattr(args.mm.model, "interleaved_steps") else 1
+    if interleaved_steps < 1 or not isinstance(interleaved_steps, int):
+        raise AssertionError("interleaved_steps should be an integer greater than or equal to 1.")
+
+    batches = []
+    if interleaved_steps == 1:
+        batch = get_batch(data_iterator)
+        batches.append(batch)
+
+    elif args.curr_forward_iteration % interleaved_steps == 1:
+        # When interleaved is enabled, the get_batch needs to be obtained for every interleaving step.
+        for _ in range(interleaved_steps):
+            batch = get_batch(data_iterator)
+            # When the length of dataiter is not divided by interleaved_steps,  dataiter return None 
+            if batch is not None:
+                batches.append(batch)
+
+    return batches
+
+
 def forward_step(data_iterator, model):
     """Forward step."""
+    args = get_args()
+    interleaved = args.mm.model.interleaved \
+        if hasattr(args.mm.model, "interleaved") else False
+
+    batch, video, prompt_ids, video_mask, prompt_mask = {}, None, None, None, None
     if mpu.is_pipeline_first_stage():
-        batch = get_batch_for_step(data_iterator)
-        video = batch.pop(VIDEO, None)
-        prompt_ids = batch.pop(PROMPT_IDS, None)
-        video_mask = batch.pop(VIDEO_MASK, None)
-        prompt_mask = batch.pop(PROMPT_MASK, None)
-    else:
-        batch, video, prompt_ids, video_mask, prompt_mask = {}, None, None, None, None
+        if not interleaved:        
+            batch = get_batch_for_step(data_iterator)
+            video = batch.pop(VIDEO, None)
+            prompt_ids = batch.pop(PROMPT_IDS, None)
+            video_mask = batch.pop(VIDEO_MASK, None)
+            prompt_mask = batch.pop(PROMPT_MASK, None)
+        else:
+            batches = get_interleaved_batch_for_step(data_iterator)
+            
+            if len(batches) > 0:
+                video, prompt_ids, video_mask, prompt_mask = [], [], [], []
+                # List for these params when interleaved is enabled.
+                for batch in batches:
+                    video_batch = batch.pop(VIDEO, None)
+                    prompt_ids_batch = batch.pop(PROMPT_IDS, None)
+                    video_mask_batch = batch.pop(VIDEO_MASK, None)
+                    prompt_mask_batch = batch.pop(PROMPT_MASK, None)
+                    
+                    video.append(video_batch)
+                    prompt_ids.append(prompt_ids_batch)
+                    video_mask.append(video_mask_batch)
+                    prompt_mask.append(prompt_mask_batch)
 
     output_tensor_list = model(video, prompt_ids, video_mask, prompt_mask=prompt_mask, **batch)
     return output_tensor_list, loss_func
