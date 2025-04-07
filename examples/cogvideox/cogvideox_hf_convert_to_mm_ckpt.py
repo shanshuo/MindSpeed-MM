@@ -2,7 +2,9 @@ import os
 import stat
 import copy
 import argparse
+from pathlib import Path
 from typing import Any, Dict, List
+from safetensors.torch import load_file
 import torch
 
 CONVERT_MAPPING_HF = {
@@ -71,33 +73,6 @@ def update_state_dict_inplace(
         new_keys.append(new_key)
 
     print(count)
-
-
-def get_layer_mapping(i: int) -> Dict:
-    layer_mapping = {}
-    layer_mapping[f"mixins.adaln_layer.adaLN_modulations.{i}.1.bias"] = f"videodit_blocks.{i}.scale_shift_table.1.bias"
-    layer_mapping[
-        f"mixins.adaln_layer.adaLN_modulations.{i}.1.weight"] = f"videodit_blocks.{i}.scale_shift_table.1.weight"
-    layer_mapping[f"mixins.adaln_layer.query_layernorm_list.{i}.bias"] = f"videodit_blocks.{i}.self_atten.q_norm.bias"
-    layer_mapping[
-        f"mixins.adaln_layer.query_layernorm_list.{i}.weight"] = f"videodit_blocks.{i}.self_atten.q_norm.weight"
-    layer_mapping[f"mixins.adaln_layer.key_layernorm_list.{i}.bias"] = f"videodit_blocks.{i}.self_atten.k_norm.bias"
-    layer_mapping[f"mixins.adaln_layer.key_layernorm_list.{i}.weight"] = f"videodit_blocks.{i}.self_atten.k_norm.weight"
-    layer_mapping[f"transformer.layers.{i}.input_layernorm.bias"] = f"videodit_blocks.{i}.norm1.bias"
-    layer_mapping[f"transformer.layers.{i}.input_layernorm.weight"] = f"videodit_blocks.{i}.norm1.weight"
-    layer_mapping[f"transformer.layers.{i}.attention.dense.bias"] = f"videodit_blocks.{i}.self_atten.proj_out.bias"
-    layer_mapping[f"transformer.layers.{i}.attention.dense.weight"] = f"videodit_blocks.{i}.self_atten.proj_out.weight"
-    layer_mapping[f"transformer.layers.{i}.post_attention_layernorm.bias"] = f"videodit_blocks.{i}.norm2.bias"
-    layer_mapping[f"transformer.layers.{i}.post_attention_layernorm.weight"] = f"videodit_blocks.{i}.norm2.weight"
-    layer_mapping[f"transformer.layers.{i}.mlp.dense_h_to_4h.bias"] = f"videodit_blocks.{i}.ff.net.0.proj.bias"
-    layer_mapping[f"transformer.layers.{i}.mlp.dense_h_to_4h.weight"] = f"videodit_blocks.{i}.ff.net.0.proj.weight"
-    layer_mapping[f"transformer.layers.{i}.mlp.dense_4h_to_h.bias"] = f"videodit_blocks.{i}.ff.net.2.bias"
-    layer_mapping[f"transformer.layers.{i}.mlp.dense_4h_to_h.weight"] = f"videodit_blocks.{i}.ff.net.2.weight"
-    layer_mapping[
-        f"transformer.layers.{i}.attention.query_key_value.weight"] = f"videodit_blocks.{i}.self_atten.proj_qkv.weight"
-    layer_mapping[
-        f"transformer.layers.{i}.attention.query_key_value.bias"] = f"videodit_blocks.{i}.self_atten.proj_qkv.bias"
-    return layer_mapping
 
 
 def get_layer_mapping_from_hf(i: int) -> Dict:
@@ -220,8 +195,8 @@ def split_by_pp(state_dicts: List[Dict[str, Any]], pp_sizes: List, remove_pos_em
             pp_tp_param = dict()
 
             for i in range(start_layer_index, end_layer_index):
-                layer_names = get_layer_mapping(i).values()
-                pp_layer_names = get_layer_mapping(i - start_layer_index).values()
+                layer_names = get_layer_mapping_from_hf(i).values()
+                pp_layer_names = get_layer_mapping_from_hf(i - start_layer_index).values()
 
                 for pp_layer_name, layer_name in zip(pp_layer_names, layer_names):
                     if layer_name in state_dict:
@@ -337,8 +312,8 @@ def merge_by_pp(state_dicts: Dict[str, Any], pp_sizes: list):
             print(f"Warning: missing pp first stage key {key}")
     for i, pp_size in enumerate(pp_sizes):
         for layer_index in range(pp_size):
-            pp_layer_names = get_layer_mapping(layer_index).values()
-            layer_names = get_layer_mapping(layer_index + sum(pp_sizes[:i])).values()
+            pp_layer_names = get_layer_mapping_from_hf(layer_index).values()
+            layer_names = get_layer_mapping_from_hf(layer_index + sum(pp_sizes[:i])).values()
             for pp_layer_name, layer_name in zip(pp_layer_names, layer_names):
                 if pp_layer_name in state_dicts[i]:
                     merged_state_dict[layer_name] = state_dicts[i][pp_layer_name]
@@ -389,8 +364,7 @@ def get_args():
     parser.add_argument("--tp_size", type=int, default=2, help="Tensor model parallel world size")
     parser.add_argument("--pp_sizes", type=int, nargs='+', help="Pipeline parallel model split sizes")
     parser.add_argument("--num_layers", type=int, default=42, help="Layer numbers of video_dit")
-    parser.add_argument("--source_path", type=str, default="./transformer/1/mp_rank_00_model_states.pt",
-                        help="Source path of checkpoint")
+    parser.add_argument("--source_path", type=str, default="./model_name/transformer/", help="Source path of checkpoint")
     parser.add_argument("--target_path", type=str, default="./ckpt/sat_dit/", help="Save path of MM checkpoint")
     parser.add_argument("--task", type=str, default="t2v", choices=["t2v", "i2v"], help="Task type")
     parser.add_argument("--remove_pos_emb", action="store_true", help="remove_pos_emb")
@@ -402,10 +376,19 @@ def get_args():
     return args
 
 
+def load_from_shf(src_dir: Path) -> dict[str, torch.Tensor]:
+    files = list(src_dir.glob("*.safetensors"))
+    state_dict = {}
+    for safe_path in files:
+        state_dict.update(load_file(str(safe_path), device='cpu'))
+    return state_dict
+
+
 if __name__ == "__main__":
     args = get_args()
+
     if args.mode == 'split':
-        source_state_dict = torch.load(args.source_path, map_location='cpu')
+        source_state_dict = load_from_shf(Path(args.source_path))
 
         if args.task == "i2v":
             CONVERT_MAPPING_HF.update({"ofs_embedding.linear_1.bias": "ofs_embed.0.bias"})

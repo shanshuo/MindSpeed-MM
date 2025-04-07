@@ -460,7 +460,7 @@ bash examples/cogvideox/i2v_1.5/inference_cogvideox_i2v_1.5.sh
  + [t2v下载链接](https://huggingface.co/THUDM/CogVideoX1.5-5B/tree/main)
  + [i2v下载链接](https://huggingface.co/THUDM/CogVideoX1.5-5B-I2V/tree/main)
   
-  lora微调功能的权重转换使用`cogvideox_hf_convert_to_mm_ckpt.py`脚本，使用方法参考前面`权重下载及转换`章节。
+  lora微调功能的权重转换使用`cogvideox_hf_convert_to_mm_ckpt.py`脚本，注意`source_path`为权重所在目录的目录名，非权重本身。
 ```bash
 python examples/cogvideox/cogvideox_hf_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 42 --num_layers 42 --mode split
 ```
