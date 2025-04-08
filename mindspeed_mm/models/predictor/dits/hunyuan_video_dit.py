@@ -14,7 +14,16 @@ from mindspeed.ops.npu_rotary_position_embedding import npu_rotary_position_embe
 from mindspeed.core.context_parallel.unaligned_cp.mapping import (
     split_forward_gather_backward,
     gather_forward_split_backward,
-    all_to_all
+    all_to_all,
+    cal_split_sizes
+)
+from mindspeed.core.parallel_state import (
+    get_context_parallel_group_for_hybrid_ulysses,
+    get_context_parallel_group_for_hybrid_ring,
+    get_context_parallel_for_hybrid_ring_world_size,
+    get_context_parallel_for_hybrid_ulysses_world_size,
+    get_context_parallel_next_rank,
+    get_context_parallel_for_hybrid_ring_global_ranks
 )
 
 from mindspeed_mm.models.common import MultiModalModule
@@ -55,6 +64,40 @@ def _get_cu_seqlens(text_mask, img_len):
         cu_seqlens[2 * i + 2] = seq_len2
 
     return cu_seqlens
+
+
+def do_ring_context_parallel(q, k, v, head_num, softmax_scale, attn_mask, dropout_p=0., pse=None, pse_type=None, shapes=None):
+    args = get_args()
+    in_hybrid_mode = get_context_parallel_group_for_hybrid_ring(check_initialized=False) is not None
+    if in_hybrid_mode:
+        cp_group = get_context_parallel_group_for_hybrid_ring()
+        cp_size = get_context_parallel_for_hybrid_ring_world_size()
+        rank = get_context_parallel_for_hybrid_ring_rank()
+        cp_global_ranks = get_context_parallel_for_hybrid_ring_global_ranks()
+    else:
+        cp_group = mpu.get_context_parallel_group()
+        cp_size = mpu.get_context_parallel_world_size()
+        rank = mpu.get_context_parallel_rank()
+        cp_global_ranks = mpu.get_context_parallel_global_ranks()
+
+    cp_para = dict()
+
+    cp_para['causal'] = args.attention_mask_type == 'causal'
+    cp_para['cp_group'] = cp_group
+    cp_para['cp_size'] = cp_size
+    cp_para['rank'] = rank
+
+    cp_para['cp_global_ranks'] = cp_global_ranks
+    cp_para['cp_group_for_send_recv_overlap'] = mpu.get_context_parallel_group_for_send_recv_overlap() \
+        if args.use_cp_send_recv_overlap else None
+    cp_para['pse'] = pse
+    cp_para['pse_type'] = pse_type
+    
+    cp_para['megatron_cp_in_bnsd'] = args.megatron_cp_in_bnsd
+
+    output = ringattn_context_parallel(q, k, v, head_num, cp_para, softmax_scale, attn_mask, dropout_p, shapes=shapes)
+
+    return output
 
 
 class HunyuanVideoDiT(MultiModalModule):
@@ -123,7 +166,7 @@ class HunyuanVideoDiT(MultiModalModule):
         
         # context parallel setting
         self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
-        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
+        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo", "hybrid_cp_algo", "megatron_cp_algo"]:
             raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
         
         if sum(rope_dim_list) != head_dim:
@@ -610,7 +653,7 @@ class MMDoubleStreamBlock(nn.Module):
         args = get_args()
         config = core_transformer_config_from_args(args)
         self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
-        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
+        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo", "hybrid_cp_algo", "megatron_cp_algo"]:
             raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
         self.distribute_saved_activations = args.distribute_saved_activations
         self.enable_tensor_parallel = mpu.get_tensor_model_parallel_world_size() > 1
@@ -981,7 +1024,7 @@ class MMSingleStreamBlock(nn.Module):
         args = get_args()
         config = core_transformer_config_from_args(args)
         self.context_parallel_algo = args.context_parallel_algo if mpu.get_context_parallel_world_size() > 1 else None
-        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo"]:
+        if self.context_parallel_algo is not None and self.context_parallel_algo not in ["ulysses_cp_algo", "hybrid_cp_algo", "megatron_cp_algo"]:
             raise NotImplementedError(f"Context_parallel_algo {self.context_parallel_algo} is not implemented")
         self.distribute_saved_activations = args.distribute_saved_activations
         self.enable_tensor_parallel = mpu.get_tensor_model_parallel_world_size() > 1
@@ -1264,6 +1307,83 @@ def parallel_attention(
         txt_attn = gather_forward_split_backward(txt_attn, mpu.get_context_parallel_group(), dim=2) # b txt_seq n d
         attn = torch.cat([img_attn, txt_attn], dim=1)
         attn = attn.view(bs, -1, heads_num * head_dim)
+    elif context_parallel_algo == "hybrid_cp_algo":
+        img_q = all_to_all(img_q, get_context_parallel_group_for_hybrid_ulysses(), scatter_dim=2, gather_dim=1)
+        img_k = all_to_all(img_k, get_context_parallel_group_for_hybrid_ulysses(), scatter_dim=2, gather_dim=1)
+        img_v = all_to_all(img_v, get_context_parallel_group_for_hybrid_ulysses(), scatter_dim=2, gather_dim=1)
+        split_sizes = cal_split_sizes(txt_q.shape[1], get_context_parallel_for_hybrid_ring_world_size())
+        
+        def shrink_seq_head(txt):
+            split_sizes = cal_split_sizes(txt.shape[1], get_context_parallel_for_hybrid_ring_world_size())
+            txt = split_forward_gather_backward(txt, get_context_parallel_group_for_hybrid_ring(), split_sizes=split_sizes, dim=1)
+            txt = split_forward_gather_backward(txt, get_context_parallel_group_for_hybrid_ulysses(), dim=2)
+            return txt
+        
+        q = torch.cat((img_q, shrink_seq_head(txt_q)), dim=1)
+        k = torch.cat((img_k, shrink_seq_head(txt_k)), dim=1)
+        v = torch.cat((img_v, shrink_seq_head(txt_v)), dim=1)   
+        
+        q = q.view(bs, q.shape[1], -1).transpose(0, 1).contiguous()
+        k = k.view(bs, k.shape[1], -1).transpose(0, 1).contiguous()
+        v = v.view(bs, v.shape[1], -1).transpose(0, 1).contiguous()
+        
+        rank_shape = dict(zip(list(range(get_context_parallel_for_hybrid_ring_world_size())), [split_size + img_q.shape[1] for split_size in split_sizes]))
+
+        attn = do_ring_context_parallel(
+            q,
+            k,
+            v,
+            head_num=heads_num // get_context_parallel_for_hybrid_ulysses_world_size(),
+            softmax_scale=1 / math.sqrt(head_dim),
+            attn_mask=None,
+            shape=rank_shape
+        )
+        
+        attn = attn.transpose(0, 1)
+        img_attn = attn[:, :img_seq_len * get_context_parallel_for_hybrid_ulysses_world_size()]
+        txt_attn = attn[:, img_seq_len * get_context_parallel_for_hybrid_ulysses_world_size():]
+        
+        txt_attn = gather_forward_split_backward(txt_attn, get_context_parallel_group_for_hybrid_ring(), gather_sizes=split_sizes, dim=1)
+        txt_attn = gather_forward_split_backward(txt_attn, get_context_parallel_group_for_hybrid_ulysses(), dim=2)
+        
+        img_attn = all_to_all(img_attn, get_context_parallel_group_for_hybrid_ulysses(), scatter_dim=1, gather_dim=2)
+        
+        attn = torch.cat([img_attn, txt_attn], dim=1).contiguous()
+    elif context_parallel_algo == "megatron_cp_algo":
+        split_sizes = cal_split_sizes(txt_q.shape[1], mpu.get_context_parallel_world_size())
+        
+        def shrink_seq_head(txt):
+            split_sizes = cal_split_sizes(txt.shape[1], mpu.get_context_parallel_world_size())
+            txt = split_forward_gather_backward(txt, mpu.get_context_parallel_group(), split_sizes=split_sizes, dim=1)
+            return txt
+        
+        q = torch.cat((img_q, shrink_seq_head(txt_q)), dim=1)
+        k = torch.cat((img_k, shrink_seq_head(txt_k)), dim=1)
+        v = torch.cat((img_v, shrink_seq_head(txt_v)), dim=1) 
+        
+        q = q.view(bs, q.shape[1], -1).transpose(0, 1).contiguous()
+        k = k.view(bs, k.shape[1], -1).transpose(0, 1).contiguous()
+        v = v.view(bs, v.shape[1], -1).transpose(0, 1).contiguous()
+        
+        rank_shape = dict(zip(list(range(mpu.get_context_parallel_world_size())), [split_size + img_q.shape[1] for split_size in split_sizes]))
+
+        attn = do_ring_context_parallel(
+            q,
+            k,
+            v,
+            head_num=heads_num,
+            softmax_scale=1 / math.sqrt(head_dim),
+            attn_mask=None,
+            shape=rank_shape
+        )
+        
+        attn = attn.transpose(0, 1)
+        img_attn = attn[:, :img_seq_len]
+        txt_attn = attn[:, img_seq_len:]
+        
+        txt_attn = gather_forward_split_backward(txt_attn, mpu.get_context_parallel_group(), gather_sizes=split_sizes, dim=1)
+        
+        attn = torch.cat([img_attn, txt_attn], dim=1).contiguous()
     else:
         q = torch.cat((img_q, txt_q), dim=1)
         k = torch.cat((img_k, txt_k), dim=1)
