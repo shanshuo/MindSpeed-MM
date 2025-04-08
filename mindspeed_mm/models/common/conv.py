@@ -364,3 +364,44 @@ class TimePaddingCausalConv3d(nn.Module):
         dtype_org = x.dtype
         x = F.pad(x.float(), self.time_causal_padding, mode=self.pad_mode).to(dtype_org)
         return self.conv(x)
+
+
+class CausalConv3dBase(nn.Module):
+    def __init__(self,
+        chan_in,
+        chan_out,
+        kernel_size: Union[int, Tuple[int, int, int]],
+        stride: Union[int, Tuple[int, int, int]] = 1,
+        dilation: Union[int, Tuple[int, int, int]] = 1,
+        padding: Union[int, Tuple[int, int, int]] = 0,
+        bias=True,
+        **kwargs
+    ):
+        super().__init__()
+
+        self.kernel_size = cast_tuple(kernel_size, 3)
+        self.time_kernel_size, self.height_kernel_size, self.width_kernel_size = self.kernel_size
+
+        self.dilation = dilation
+        self.stride = cast_tuple(stride, 3)
+        self.padding = list(cast_tuple(padding, 3))
+        self.padding[0] = 0
+        self.bias = bias
+
+        time_pad = self.dilation * (self.time_kernel_size - 1) + max((1 - self.stride[0]), 0)
+        self.time_pad = time_pad
+        self.height_pad = self.height_kernel_size // 2
+        self.width_pad = self.width_kernel_size // 2
+
+        self.time_causal_padding = (self.width_pad, self.width_pad, self.height_pad, self.height_pad, self.time_pad, 0)
+        self.time_uncausal_padding = (self.width_pad, self.width_pad, self.height_pad, self.height_pad, 0, 0)
+
+        self.conv = nn.Conv3d(chan_in, chan_out, self.kernel_size, stride=self.stride, dilation=self.dilation,
+                              padding=self.padding, bias=self.bias, **kwargs)
+
+    def forward(self, x, is_init=True, residual=None):
+        x = F.pad(x, self.time_causal_padding if is_init else self.time_uncausal_padding)
+        x = self.conv(x)
+        if residual is not None:
+            x.add_(residual)
+        return x
