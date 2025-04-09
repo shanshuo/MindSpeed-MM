@@ -15,12 +15,16 @@ from megatron.core import mpu
 from mindspeed_mm.data.data_utils.constants import (
     CAPTIONS,
     FILE_INFO,
+    FILE_REJECTED_INFO,
     PROMPT_IDS,
     PROMPT_MASK,
     TEXT,
     VIDEO,
+    VIDEO_REJECTED,
     IMG_FPS,
     VIDEO_MASK,
+    SCORE,
+    SCORE_REJECTED,
     SORA_MODEL_PROTECTED_KEYS
 )
 from mindspeed_mm.data.data_utils.utils import (
@@ -249,6 +253,16 @@ class T2VDataset(MMBaseDataset):
                     else self.get_value_from_vid_or_img(path)
                 )
                 examples[VIDEO] = video_value
+                if FILE_REJECTED_INFO in sample.keys():
+                    video_rejected_path = os.path.join(self.data_folder, sample[FILE_REJECTED_INFO])
+                    video_rejected_value = (
+                        self.get_vid_img_fusion(video_rejected_path)
+                        if self.vid_img_fusion_by_splicing
+                        else self.get_value_from_vid_or_img(video_rejected_path)
+                    )
+                    examples[VIDEO_REJECTED] = video_rejected_value
+                    examples[SCORE] = sample[SCORE]
+                    examples[SCORE_REJECTED] = sample[SCORE_REJECTED]
                 if self.use_text_processer:
                     prompt_ids, prompt_mask = self.get_text_processer(texts)
                     examples[PROMPT_IDS], examples[PROMPT_MASK] = (

@@ -62,6 +62,15 @@ def main():
     device = get_device(args.device)
 
     prompts = load_prompts(args.prompt)
+
+    # Generate args.num_inference_videos_per_sample inference videos for the same prompt.
+    if hasattr(args, "num_inference_videos_per_sample") and args.num_inference_videos_per_sample > 1:
+        prompts = [
+            item
+            for item in prompts
+            for _ in range(args.num_inference_videos_per_sample)
+        ]
+
     images = load_images(args.image) if hasattr(args, "image") else None
     conditional_pixel_values_path = load_conditional_pixel_values(args.conditional_pixel_values_path) if hasattr(args, "conditional_pixel_values_path") else None
     mask_type = args.mask_type if hasattr(args, "mask_type") else None

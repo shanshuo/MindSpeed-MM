@@ -278,16 +278,6 @@ class DPOTrainer(ABC):
         """
         raise NotImplementedError("Subclasses must implement this method")
 
-    @abstractmethod
-    def _init_reference_model(self):
-        """
-        Initializes the reference model frozen.
-
-        Returns:
-            The initialized reference model.
-        """
-        raise NotImplementedError("Subclasses must implement this method")
-
     def loss_func(self, input_tensor: torch.Tensor, output_tensor: torch.Tensor):
         """DPO Loss function.
 
@@ -337,23 +327,23 @@ class DPOTrainer(ABC):
 
     def dpo_loss(
             self,
-            policy_chosen_log_probs: torch.Tensor,
-            policy_rejected_log_probs: torch.Tensor,
-            reference_chosen_log_probs: torch.Tensor,
-            reference_rejected_log_probs: torch.Tensor,
+            policy_chosen_loss: torch.Tensor,
+            policy_rejected_loss: torch.Tensor,
+            reference_chosen_loss: torch.Tensor,
+            reference_rejected_loss: torch.Tensor,
     ) -> Tuple[torch.Tensor, ...]:
         """
         Compute the DPO loss for a batch of policy and reference model log probabilities.
 
         Args:
-            policy_chosen_log_probs:
-            Log probabilities of the policy model for the chosen responses. Shape: (batch_size,)
-            policy_rejected_log_probs:
-            Log probabilities of the policy model for the rejected responses. Shape: (batch_size,)
-            reference_chosen_log_probs:
-            Log probabilities of the reference model for the chosen responses. Shape: (batch_size,)
-            reference_rejected_log_probs:
-            Log probabilities of the reference model for the rejected responses. Shape: (batch_size,)
+            policy_chosen_loss:
+            Log probabilities or mean squared error of the policy model for the chosen responses. Shape: (batch_size,)
+            policy_rejected_loss:
+            Log probabilities or mean squared error of the policy model for the rejected responses. Shape: (batch_size,)
+            reference_chosen_loss:
+            Log probabilities or mean squared error of the reference model for the chosen responses. Shape: (batch_size,)
+            reference_rejected_loss:
+            Log probabilities or mean squared error of the reference model for the rejected responses. Shape: (batch_size,)
 
         Returns:
             A tuple of three tensors: (losses, chosen_rewards, rejected_rewards).
@@ -361,17 +351,17 @@ class DPOTrainer(ABC):
             The chosen_rewards and rejected_rewards tensors contain the rewards for the
             chosen and rejected responses, respectively.
         """
-        pi_log_ratios = policy_chosen_log_probs - policy_rejected_log_probs
-        ref_log_ratios = reference_chosen_log_probs - reference_rejected_log_probs
-        logits = pi_log_ratios - ref_log_ratios
+        policy_ratios = policy_chosen_loss - policy_rejected_loss
+        ref_ratios = reference_chosen_loss - reference_rejected_loss
+        loss_diff = policy_ratios - ref_ratios
 
         # The beta is a temperature parameter for the DPO loss, typically something in the range of 0.1 to 0.5.
         # We ignore the reference model as beta -> 0.
         # The label_smoothing parameter encodes our uncertainty about the labels and calculates a conservative DPO loss.
         if self.args.dpo_loss_type == "sigmoid":
             losses = (
-                    -F.logsigmoid(self.args.dpo_beta * logits) * (1 - self.args.dpo_label_smoothing)
-                    - F.logsigmoid(-self.args.dpo_beta * logits) * self.args.dpo_label_smoothing
+                    -F.logsigmoid(self.args.dpo_beta * loss_diff) * (1 - self.args.dpo_label_smoothing)
+                    - F.logsigmoid(-self.args.dpo_beta * loss_diff) * self.args.dpo_label_smoothing
             )
         else:
             raise ValueError(
@@ -382,13 +372,13 @@ class DPOTrainer(ABC):
         chosen_rewards = (
                 self.args.dpo_beta
                 * (
-                        policy_chosen_log_probs - reference_chosen_log_probs
+                        policy_chosen_loss - reference_chosen_loss
                 ).detach()
         )
         rejected_rewards = (
                 self.args.dpo_beta
                 * (
-                        policy_rejected_log_probs - reference_rejected_log_probs
+                        policy_rejected_loss - reference_rejected_loss
                 ).detach()
         )
 
@@ -455,7 +445,7 @@ class DPOTrainer(ABC):
             all_reference_logits,
             label
         )
-
+        # compute DPO loss
         losses, chosen_rewards, rejected_rewards = self.compute_preference_loss(
             policy_chosen_log_probs,
             policy_rejected_log_probs,
@@ -474,7 +464,7 @@ class DPOTrainer(ABC):
 
         return losses.mean(), metrics
 
-    def _compute_log_probs(self, all_logits, label) -> Tuple[torch.Tensor, ...]:
+    def _compute_log_probs(self, all_logits, label=None) -> Tuple[torch.Tensor, ...]:
         """
         Computes the sum log probabilities of the labels under given logits if loss_type.
         Otherwise, the average log probabilities.

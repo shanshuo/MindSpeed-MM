@@ -5,13 +5,17 @@ PROMPT_MASK_2 = "prompt_mask_2"
 PROMPT_IDS_2 = "prompt_ids_2"
 TEXT = "text"
 VIDEO = "video"
+VIDEO_REJECTED = "video_rejected"
 PROMPT = "prompt"
 LATENTS = "latents"
 VIDEO_MASK = "video_mask"
 MASKED_VIDEO = "masked_video"
 INPUT_MASK = "input_mask"
 FILE_INFO = "file"
+FILE_REJECTED_INFO = "file_rejected"
 CAPTIONS = "captions"
+SCORE = "score"
+SCORE_REJECTED = "score_rejected"
 IMG_FPS = 120
 SORA_MODEL_PROTECTED_KEYS = [
     PROMPT_MASK,

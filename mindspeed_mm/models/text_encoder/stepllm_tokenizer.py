@@ -127,6 +127,8 @@ class WrappedStepChatTokenizer(StepChatTokenizer):
         self.PAD = 2
         out_tokens = []
         attn_mask = []
+        if not isinstance(text, list):
+            text = [text]
         if len(text) == 0:
             part_tokens = [self.BOS] + [self.EOS]
             valid_size = len(part_tokens)

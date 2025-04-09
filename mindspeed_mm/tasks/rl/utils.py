@@ -1,9 +1,28 @@
 # Copyright (c) 2024, HUAWEI CORPORATION.  All rights reserved.
 from typing import Tuple
+import json
+import math
 
 import torch
 
 from megatron.core import mpu
+
+
+def read_json_file(filename):
+    """Reade JSON File"""
+    with open(filename, 'r', encoding='utf-8') as file:
+        data = json.load(file)
+    return data
+
+
+def find_probability(score, data):
+    bin_index = math.floor(score / data['bin_width'])
+    lower = bin_index * data['bin_width']
+    upper = lower + data['bin_width']
+    key = f"{lower}-{upper}"
+    if key in data:
+        return data[key] / data['total_num']  # Probability
+    return 0.0  # If score is out of bounds
 
 
 def get_attr_from_wrapped_model(model, target_attr):
