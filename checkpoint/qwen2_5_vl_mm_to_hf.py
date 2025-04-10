@@ -141,6 +141,9 @@ def convert_mm_to_hf(_state_dict: dict[str, torch.Tensor], cfg: Qwen2_5_VLConfig
 
                 new_params[new_key] = value
 
+    if cfg.tie_word_embeddings and "lm_head.weight" in new_params:
+        del new_params["lm_head.weight"]
+
     return new_params
 
 

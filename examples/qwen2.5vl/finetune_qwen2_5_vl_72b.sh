@@ -79,7 +79,6 @@ GPT_ARGS="
     --load $LOAD_PATH \
     --variable-seq-lengths \
     --use-distributed-optimizer \
-    --use-flash-attn \
     --no-load-optim \
     --no-load-rng \
     --no-save-optim \

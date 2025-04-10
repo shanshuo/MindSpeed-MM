@@ -20,7 +20,9 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
                      _llm_num_layers: int,
                      _vit_hidden_size: int,
                      _vit_attention_heads_num: int,
-                     _llm_num_query_groups: int) -> dict[str, torch.Tensor]:
+                     _llm_num_query_groups: int,
+                     _tie_word_embedding: bool,
+                     llm_pipeline_num_layers: list[int]) -> dict[str, torch.Tensor]:
     vit_head_dim = _vit_hidden_size // _vit_attention_heads_num
     new_params = {}
     for key, value in tqdm(_state_dict.items(), desc="convert weights"):
@@ -96,6 +98,10 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
                 new_key = new_key.replace('model.embed_tokens.weight', 'text_decoder.embedding.word_embeddings.weight')
 
             new_params[new_key] = value
+
+    if _tie_word_embedding and len(llm_pipeline_num_layers) > 1:
+        temp_embedding = deepcopy(new_params.get('text_decoder.embedding.word_embeddings.weight'))
+        new_params['text_decoder.output_layer.weight'] = temp_embedding
 
     for i in range(_vit_num_layers):
         # 合并gate up
@@ -285,7 +291,10 @@ def main(convert_config: ConvertMMConfig):
     # hf转换成mm格式，包含重命名、qkv合并、mlp合并等操作
     state_dict = convert_hf_to_mm(state_dict, config.vision_config.depth, config.num_hidden_layers,
                                   config.vision_config.hidden_size,
-                                  config.vision_config.num_heads, config.num_key_value_heads)
+                                  config.vision_config.num_heads,
+                                  config.num_key_value_heads,
+                                  config.tie_word_embeddings,
+                                  parallel_config.llm_pp_layers)
     # 权重字典按tp域切分
     tp_state_dicts = split_by_tp(state_dict, parallel_config.tp_size)
     # pp索引生成

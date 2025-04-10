@@ -78,6 +78,15 @@ class VLMModel(MultiModalModule):
         if self.add_text_decoder:
             self.text_decoder = self._build_text_decoder_model(config.text_decoder)
 
+    def shared_embedding_or_output_weight(self):
+        """
+        This is a convenience method to surface the language model's word embeddings, which is
+        necessary for 'finalize_model_grads._allreduce_word_embedding_grads'.
+        """
+        if self.add_text_decoder:
+            return self.text_decoder.shared_embedding_or_output_weight()
+        return None
+
     def _build_image_encoder_model(self, config):
         vit_layer_spec = get_vit_layer_spec(config.vision_encoder)
         proj_layer_spec = get_projector_layer_spec(config.vision_projector)
