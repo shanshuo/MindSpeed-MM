@@ -494,7 +494,7 @@ CogvideoX lora微调阶段的启动文件为shell脚本，主要分为如下2个
 1. 权重配置
 
   权重转换完成后根据实际任务情况在启动脚本文件（如`finetune_cogvideox_lora_i2v_1.5.sh`）中的`LOAD_PATH="your_converted_dit_ckpt_dir"`变量中添加转换后的权重的实际路径，如`LOAD_PATH="./CogVideoX-5B-Converted"`,其中`./CogVideoX-5B-Converted`为转换后的权重的实际路径，其文件夹内容结构如权重转换一节所示。`LOAD_PATH`变量中填写的完整路径一定要正确，填写错误的话会导致权重无法加载但运行并不会提示报错。
-  根据需要填写`SAVE_PATH`变量中的路径，用以保存训练后的权重。
+  根据需要填写`SAVE_PATH`变量中的路径，用以保存训练后的lora权重。
 
 2. 数据集路径配置
   
@@ -521,6 +521,13 @@ i2v 1.5版本任务启动微调
 ```shell
 bash examples/cogvideox/i2v_1.5/finetune_cogvideox_lora_i2v_1.5.sh
 ```
+
+训练完成后保存的权重仅为lora微调部分，如果需要合并到原始权重中，可以执行以下脚本完成合并（配置仅供参考）：
+
+```shell
+python  checkpoint/merge_base_lora_weight.py --base_save_dir './converted_transformer' --lora_save_dir './my_ckpt' --merge_save_dir './merge_base_lora_target' --lora_target_modules proj_qkv proj_out --lora_alpha 64 --lora_r 128 --pp_size 1 --tp_size 1
+```
+
 ---
 
 <a id="jump8"></a>
