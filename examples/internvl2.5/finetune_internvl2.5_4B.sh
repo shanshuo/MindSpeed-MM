@@ -55,7 +55,7 @@ GPT_ARGS="
     --global-batch-size ${GBS} \
     --seq-length 4096 \
     --tokenizer-type NullTokenizer \
-    --vocab-size 92553 \
+    --vocab-size 151674 \
     --position-embedding-type rope \
     --rotary-base 1000000 \
     --swiglu \
@@ -79,6 +79,7 @@ GPT_ARGS="
     --variable-seq-lengths \
     --normalization RMSNorm \
     --num-workers 4 \
+    --use-flash-attn \
     --trust-remote-code \
 "
 

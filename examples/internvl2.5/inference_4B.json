@@ -46,15 +46,14 @@
         "params_dtype": "bf16",
         "fp16_lm_cross_entropy": false,
         "rotary_percent": 1.0,
-        "position_embedding_type": "mrope",
-        "mrope_section": [16, 24, 24],
+        "rotary_base": 1000000,
+        "position_embedding_type": "rope",
         "use_fused_rotary_pos_emb": false,
         "rope_scaling": null,
         "parallel_output": true,
         "initializer_factor": 1.0,
         "activation_func": "silu",
         "vocab_size": 151674,
-        "rope_theta": 1000000.0,
         "is_encoder_decoder": false
     },
     "image_encoder": {

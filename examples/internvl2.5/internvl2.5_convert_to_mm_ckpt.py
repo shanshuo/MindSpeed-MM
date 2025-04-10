@@ -70,9 +70,9 @@ model_config_dict = {
                               pp_size=16,
                               vpp_size=1,
                               vit_num_layers=45,
-                              vit_pipeline_num_layers=[11, 12, 12, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                              vit_pipeline_num_layers=[45, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                               llm_num_layers=80,
-                              llm_pipeline_num_layers=[0, 0, 0, 1, 5, 6, 7, 7, 7, 7, 7, 7, 7, 7, 6, 6])
+                              llm_pipeline_num_layers=[0, 3, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 5, 5, 5, 2])
 }
 
 

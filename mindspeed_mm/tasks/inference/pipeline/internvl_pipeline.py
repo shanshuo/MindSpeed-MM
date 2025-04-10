@@ -153,15 +153,9 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
     ):
         B, S = input_ids.shape
         attention_mask = torch.ones(B, S).npu()
-        if self.text_decoder_model_id == "Qwen2.5llm":
-            attention_mask = self.infer_model._build_causal_mask(input_ids=input_ids, attention_mask=attention_mask)
-            cache_position = torch.arange(
-                0, S, device=input_ids.device
-            )
-            position_ids = cache_position.view(1, 1, -1).expand(3, input_ids.shape[0], -1)
-        else:
-            attention_mask = self.infer_model._prepare_decoder_attention_mask(attention_mask)
-            position_ids = kwargs.get("position_ids", None)
+        attention_mask = self.infer_model._prepare_decoder_attention_mask(attention_mask)
+        position_ids = kwargs.get("position_ids", None)
+        
         if attention_mask is not None and position_ids is None:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)

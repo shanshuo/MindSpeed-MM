@@ -16,8 +16,12 @@
   - [准备工作](#jump4.1)
   - [配置参数](#jump4.2)
   - [启动预训练](#jump4.3)
-- [环境变量声明](#jump5)
-- [注意事项](#jump6)
+- [推理](#jump5)
+  - [准备工作](#jump5.1)
+  - [配置参数](#jump5.2)
+  - [启动推理](#jump5.3)
+- [环境变量声明](#jump6)
+- [注意事项](#jump7)
 
 ---
 <a id="jump1"></a>
@@ -120,6 +124,9 @@ pip install -e .
 从Huggingface等网站下载开源模型权重
 
 - [
+InternVL2_5-4B](https://huggingface.co/OpenGVLab/InternVL2_5-4B)；
+
+- [
 InternVL2_5-78B](https://huggingface.co/OpenGVLab/InternVL2_5-78B)；
 
 将模型权重保存在`raw_ckpt`目录下，例如`raw_ckpt/InternVL2_5-78B`。
@@ -132,11 +139,18 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工�
 
 `mm-convert`工具详细用法参考[权重转换工具](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/权重转换工具.md)。
 
-以InternVL2_5-78B为例，使用命令如下
 
 ```bash
 # 根据实际情况修改 ascend-toolkit 路径
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
+
+# 4B
+mm-convert InternVLConverter hf_to_mm \
+  --cfg.mm_dir "pretrained/InternVL2_5-4B" \
+  --cfg.hf_config.hf_dir "raw_ckpt/InternVL2_5-4B" \
+  --cfg.parallel_config.llm_pp_layers [[36]] \
+  --cfg.parallel_config.vit_pp_layers [[24]] \
+  --cfg.trust_remote_code True
 
 # 78B
 mm-convert InternVLConverter hf_to_mm \
@@ -287,6 +301,102 @@ $save_dir
 bash examples/internvl2.5/finetune_internvl2.5_78B.sh
 ```
 <a id="jump5"></a>
+
+## 推理
+
+<a id="jump5.1"></a>
+
+#### 1. 准备工作
+
+配置脚本前需要完成前置准备工作，包括：环境安装、权重下载及转换，详情可查看对应章节。（当前仅支持4B单卡推理）
+
+推理权重转换命令如下：
+
+```shell
+# 根据实际情况修改 ascend-toolkit 路径
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+
+# 4B
+mm-convert InternVLConverter hf_to_mm \
+  --cfg.mm_dir "pretrained/InternVL2_5-4B" \
+  --cfg.hf_config.hf_dir "raw_ckpt/InternVL2_5-4B" \
+  --cfg.parallel_config.llm_pp_layers [[36]] \
+  --cfg.parallel_config.vit_pp_layers [[24]] \
+  --cfg.trust_remote_code True
+```
+<a id="jump5.2"></a>
+
+#### 2. 配置参数
+
+【参数配置】
+
+修改inference_*B.json文件，包括`infer_data_type`、`file_path`、`prompts`、`from_pretrained`以及tokenizer的`from_pretrained`等字段。
+
+【单图推理】
+
+以InternVL2_5-4B为例，按实际情况修改inference_4B.json对应参数，注意tokenizer_config的权重路径为转换前的权重路径。
+
+```json
+{
+    "infer_data_type": "image",
+    "file_path": "./examples/internvl2.5/view.jpg",    # 按实际情况输入图片路径
+    "prompts": "Please describe the image shortly.", # 按实际情况输入提示词（支持中英文）
+    "model_id": "InternVLPipeline",
+    "from_pretrained": "./pretrained/InternVL2_5-4B/release/mp_rank_00/model_optim_rng.pt", # 注意路径要到.pt文件
+    ...
+    "tokenizer":{
+        ...
+        "autotokenizer_name": "AutoTokenizer",
+        "from_pretrained": "raw_ckpt/InternVL2_5-4B",
+        ...
+    },
+    ...
+}
+```
+
+【视频推理】
+
+以InternVL2_5-4B为例，按实际情况修改inference_4B.json对应参数，注意tokenizer_config的权重路径为转换前的权重路径。
+
+推理demo视频下载[red-panda](https://huggingface.co/OpenGVLab/InternVL2-8B/blob/main/examples/red-panda.mp4)
+
+```json
+{
+    "infer_data_type": "video",
+    "file_path": "examples/internvl2.5/red-panda.mp4",    # 按实际情况输入视频路径
+    "prompts": "Please describe the video shortly.", # 按实际情况输入提示词（支持中英文）
+    "model_id": "InternVLPipeline",
+    "from_pretrained": "./pretrained/InternVL2_5-4B/release/mp_rank_00/model_optim_rng.pt", # 注意路径要到.pt文件
+    ...
+    "tokenizer":{
+        ...
+        "autotokenizer_name": "AutoTokenizer",
+        "from_pretrained": "raw_ckpt/InternVL2_5-4B",
+        ...
+    },
+    ...
+}
+```
+
+【启动脚本配置】
+按实际情况修改inference_internvl.sh脚本，
+
+```shell
+# 根据实际情况修改 ascend-toolkit 路径
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+...
+MM_MODEL="./examples/internvl2.5/inference_4B.json"
+```
+<a id="jump5.3"></a>
+
+#### 3. 启动推理
+
+```shell
+bash examples/internvl2.5/inference_internvl.sh
+```
+
+<a id="jump6"></a>
+
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
@@ -298,7 +408,7 @@ PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为
 ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条目个数  
 NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量
 
-<a id="jump6"></a>
+<a id="jump7"></a>
 
 ## 注意事项
 1. 在使用流水线并行策略进行多机训练可能会出现卡住现象，可参考[此处](https://gitee.com/ascend/MindSpeed/pulls/1627/files)修改。

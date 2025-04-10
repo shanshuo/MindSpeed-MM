@@ -54,6 +54,7 @@ GPT_ARGS="
     --no-masked-softmax-fusion \
     --use-distributed-optimizer \
     --bf16 \
+    --use-flash-attn \
     --trust-remote-code \
 "
 
