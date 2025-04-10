@@ -1,7 +1,7 @@
 # Wan2.1 使用指南
 
 - [Wan2.1 使用指南](#Wan2.1使用指南)
-  - [任务支持列表](#任务支持列表) 
+  - [任务支持列表](#任务支持列表)
   - [环境安装](#环境安装)
     - [仓库拉取](#仓库拉取)
     - [环境搭建](#环境搭建)
@@ -158,7 +158,7 @@ pip install decord==0.6.0
 需要对下载后的Wan2.1模型权重`transformer`部分进行权重转换，运行权重转换脚本：
 
 ```shell
-python examples/wan2.1/convert_ckpt_to_mm.py --source_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> --target_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/>
+python examples/wan2.1/convert_ckpt.py --source_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> --target_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> --mode convert_to_mm
 ```
 
 权重转换脚本的参数说明如下：
@@ -167,6 +167,24 @@ python examples/wan2.1/convert_ckpt_to_mm.py --source_path <./weights/Wan-AI/Wan
 |:------------|:----|:----|
 | --source_path | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
 | --target_path | 转换后的权重保存路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
+| --mode | 转换模式 | 需选择convert_to_mm |
+
+如需转回Hugging Face格式，需运行权重转换脚本：
+
+**注**： 如进行layer zero进行训练，则需首先进行其[训练权重后处理](#jump1)，在进行如下操作：
+
+```shell
+python examples/wan2.1/convert_ckpt.py --source_path <path for your saved weight/> --ckpt_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> --target_path <path for your saved weight/> --mode convert_to_hf
+```
+
+权重转换脚本的参数说明如下：
+
+|参数| 含义 | 默认值 |
+|:------------|:----|:----|
+| --source_path | 训练权重/layer zero训练后处理权重 | path for your saved weight |
+| --ckpt_path | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
+| --target_path | 转换后的权重保存路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
+| --mode | 转换模式 | 需选择convert_to_hf |
 
 ---
 
@@ -229,7 +247,7 @@ python examples/wan2.1/convert_ckpt_to_mm.py --source_path <./weights/Wan-AI/Wan
 | examples/wan2.1/feature_extract/data.json              |      num_frames       | 最大的帧数，超过则随机选取其中的num_frames帧        |
 | examples/wan2.1/feature_extract/data.json              | max_height, max_width | 最大的长宽，超过则centercrop到最大分辨率            |
 | examples/wan2.1/feature_extract/feature_extraction.sh  |     NPUS_PER_NODE     | 卡数                                                |
-| examples/wan2.1/feature_extract/model_wan2.1.json |    from_pretrained    | 修改为下载的权重所对应路径（包括vae, tokenizer, text_encoder） |
+| examples/wan2.1/feature_extract/model_wan.json |    from_pretrained    | 修改为下载的权重所对应路径（包括vae, tokenizer, text_encoder） |
 | examples/wan2.1/feature_extract/tools.json             |       save_path       | 提取后的特征保存路径                                |
 
 #### 启动特征提取
@@ -277,6 +295,7 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
   
   - 使能方式：`examples/wan2.1/{task}/pretrain_wan2.1.sh`的`GPT_ARGS`中加入`--layerzero`和`--layerzero-config ${layerzero_config}`
   
+  <a id="jump1"></a>
   - 训练权重后处理：使用该特性训练时，保存的权重需要使用下面的转换脚本进行后处理才能用于推理：
 
     ```bash
