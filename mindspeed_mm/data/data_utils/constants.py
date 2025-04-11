@@ -52,5 +52,9 @@ MODEL_CONSTANTS = {
         'BOX_START_TOKEN': '<box>',
         'BOX_END_TOKEN': '</box>',
         "IGNORE_INDEX": -100
+    },
+    "deepseekvl2": {
+        "IGNORE_INDEX": -100,
+        "IMAGE_TOKEN": "<image>"
     }
 }

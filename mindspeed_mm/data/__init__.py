@@ -14,7 +14,7 @@ from mindspeed_mm.data.dataloader.dataloader import (
     prepare_sampler_dataloader,
     prepare_variable_dataloader,
 )
-from mindspeed_mm.data.datasets.multimodal_dataset import MultiModalChatDataset
+from mindspeed_mm.data.datasets.multimodal_dataset import DeepSeekVLDataset, MultiModalChatDataset
 from mindspeed_mm.data.datasets.t2i_dataset import T2IDataset
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset, DynamicVideoTextDataset
 from mindspeed_mm.data.datasets.i2v_dataset import I2VDataset
@@ -67,6 +67,16 @@ def build_mm_dataset(dataset_param):
         return AudioDataset(basic_param, preprocess_param, **dataset_param)
     elif dataset_type == "huggingface":
         return get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param)
+    elif dataset_type == "deepseekvl2":
+        if not isinstance(basic_param, list):
+            basic_param = [basic_param]
+        datasets = []
+        for single_param in basic_param:
+            dataset_param["repeat_time"] = single_param.get("repeat_time", 1)
+            dataset_param_copy = copy.deepcopy(dataset_param)
+            dataset = DeepSeekVLDataset(single_param, **dataset_param_copy)
+            datasets.append(dataset)
+        return ConcatDataset(datasets)
     else:
         raise NotImplementedError(dataset_type)
 

@@ -8,10 +8,12 @@
 import os
 import copy
 import random
-from typing import Union
+from typing import Dict, List, Union
+import PIL.Image
 
 import torch
 from megatron.training import get_args, print_rank_0
+from mindspeed_mm.data.data_utils.processing_deepseek_vl_v2 import DeepseekVLV2Processor
 from mindspeed_mm.data.data_utils.utils import preprocess
 from mindspeed_mm.data.datasets.mm_base_dataset import MMBaseDataset
 from mindspeed_mm.models import Tokenizer
@@ -222,6 +224,98 @@ class MultiModalChatDataset(MMBaseDataset):
                     ret = self.video_get_item(data_item)
                 else:
                     raise AssertionError(f"Inference data type must be image or video.")
+                return ret
+            except Exception as e:
+                try_cnt += 1
+                print_rank_0(f"Error: {e}")
+                index = random.randint(0, len(self.data_samples) - 1)
+
+
+class DeepSeekVLDataset(MMBaseDataset):
+    def __init__(
+        self,
+        basic_param: dict,
+        processor_path: str,
+        repeat_time: float = 1.0,
+        **kwargs
+    ):
+        super().__init__(**basic_param)
+        self.processor = DeepseekVLV2Processor.from_pretrained(processor_path)
+
+        if repeat_time < 1:
+            # If repeat_time is less than 1, select a portion of the data
+            self.data_samples = self.data_samples[:int(len(self.data_samples) * repeat_time)]
+        if repeat_time > 1:
+            # Repeat the list if repeat_time is greater than 1
+            self.data_samples = self.data_samples * repeat_time
+
+    def __getitem__(self, index):
+        return self.getitem(index)
+    
+    def __len__(self):
+        return len(self.data_samples)
+    
+    def load_pil_images(self, conversations: List[Dict[str, str]]):
+        """
+
+        Args:
+            conversations (List[Dict[str, str]]): the conversations with a list of messages. An example is :
+                [
+                    {
+                        "role": "User",
+                        "content": "<image>\nExtract all information from this image and convert them into markdown format.",
+                        "images": ["./examples/table_datasets.png"]
+                    },
+                    {"role": "Assistant", "content": ""},
+                ]
+
+        Returns:
+            pil_images (List[PIL.Image.Image]): the list of PIL images.
+
+        """
+
+        pil_images = []
+
+        for message in conversations:
+            if "images" not in message:
+                continue
+
+            for image_path in message["images"]:
+                image_path = os.path.join(self.data_folder, image_path)
+                with PIL.Image.open(image_path) as pil_img:
+                    pil_img = pil_img.convert("RGB")
+                    pil_images.append(pil_img)
+
+        return pil_images
+    
+    def multi_modal_get_item(self, data_item):
+        conversation = data_item["conversations"]
+        pil_images = self.load_pil_images(conversation)
+
+        rets = self.processor.__call__(
+            conversations=conversation,
+            images=pil_images,
+            force_batchify=False, # must set to False for training
+            system_prompt=""
+        )
+
+        return {
+            "input_ids": rets.input_ids,
+            "labels": rets.target_ids,
+            "images": rets.images,
+            "images_seq_mask": rets.images_seq_mask,
+            "images_spatial_crop": rets.images_spatial_crop
+        }
+    
+    def getitem(self, index):
+        index = index % len(self.data_samples)
+        try_cnt, max_try = 0, 10
+        while True:
+            if try_cnt == max_try:
+                raise InterruptedError(f"MultiModalChatDataset failed to get item after {max_try} times")
+            try:
+                data_item = copy.deepcopy(self.data_samples[index])
+                ret = self.multi_modal_get_item(data_item)
                 return ret
             except Exception as e:
                 try_cnt += 1

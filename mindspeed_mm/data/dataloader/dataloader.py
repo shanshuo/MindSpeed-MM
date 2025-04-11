@@ -246,11 +246,14 @@ def prepare_sampler_dataloader(
             consumed_samples=consumed_samples,
             data_sharding=data_sharding,
         )
-
-        if collate_param is None or "model_name" not in collate_param:
+        if collate_param is None:
+            collate_fn = None
+        elif "model_name" not in collate_param:
             raise ValueError("collate_param with model_name must be provided.")
-        data_collate_type = collate_param.pop("model_name")
-        collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
+        
+        if collate_param:
+            data_collate_type = collate_param.pop("model_name")
+            collate_fn = DATA_COLLATOR[data_collate_type](**collate_param, dataset_param=dataset_param)
 
         return DataLoader(
             dataset,

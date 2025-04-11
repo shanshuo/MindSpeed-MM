@@ -8,6 +8,7 @@ import warnings
 import numpy as np
 import torch
 from torch.nn import functional as F
+from torch.nn.utils.rnn import pad_sequence
 from transformers import WhisperProcessor
 
 from megatron.training import get_args
@@ -118,6 +119,57 @@ class DataCollatorForInternvl(object):
                 else:
                     batch[k] = torch.concat([f[k] for f in features])
         return batch
+
+
+class DataCollatorForDeepSeekVL(object):
+    def __init__(self, pad_id, **kwargs):
+        self.pad_id = pad_id
+        self.ignore_id = MODEL_CONSTANTS["deepseekvl2"]["IGNORE_INDEX"]
+
+    def __call__(self, sample_list):
+        batched_input_ids = [sample["input_ids"] for sample in sample_list]
+        batched_labels = [sample["labels"] for sample in sample_list]
+        batched_images_seq_mask = [sample["images_seq_mask"] for sample in sample_list]
+        seq_lens = [len(sample) for sample in sample_list]
+
+        """padding input_ids and images_seq_mask"""
+        batched_input_ids = pad_sequence(batched_input_ids, batch_first=True, padding_value=self.pad_id)
+        batched_labels = pad_sequence(batched_labels, batch_first=True, padding_value=self.ignore_id)
+        batched_images_seq_mask = pad_sequence(batched_images_seq_mask, batch_first=True, padding_value=0)
+        batched_attention_mask = batched_input_ids != self.pad_id
+
+        """padding images to max_patch_num"""
+        max_n_patches = max(sample["images"].shape[0] for sample in sample_list)
+        batched_images = []
+        for sample in sample_list:
+            images = sample["images"]
+            n_pads = max_n_patches - images.shape[0]
+            if n_pads > 0:
+                pad_images = torch.zeros((n_pads, *images.shape[1:]), dtype=images.dtype)
+                images = torch.cat([images, pad_images], dim=0)
+            batched_images.append(images)
+        batched_images = torch.stack(batched_images, dim=0)
+
+        """padding images_spatial_crop to max_n_images"""
+        max_n_images = max(sample["images_spatial_crop"].shape[0] for sample in sample_list)
+        batched_images_spatial_crop = []
+        for sample in sample_list:
+            images_spatial_crop = sample["images_spatial_crop"]
+            n_pads = max_n_images - sample["images_spatial_crop"].shape[0]
+            if n_pads > 0:
+                pad_images_spatial_crop = torch.full((n_pads, 2), 0, dtype=images_spatial_crop.dtype)
+                images_spatial_crop = torch.cat([images_spatial_crop, pad_images_spatial_crop], dim=0)
+            batched_images_spatial_crop.append(images_spatial_crop)
+        batched_images_spatial_crop = torch.stack(batched_images_spatial_crop, dim=0)
+
+        return {
+            "input_ids": batched_input_ids,
+            "labels": batched_labels,
+            "attention_mask": batched_attention_mask,
+            "images": batched_images,
+            "images_seq_mask": batched_images_seq_mask,
+            "images_spatial_crop": batched_images_spatial_crop
+        }
 
 
 @dataclass
@@ -515,5 +567,6 @@ DATA_COLLATOR = {
     "whisper": DataCollatorSpeechSeq2SeqWithPadding,
     "qwen2vl": DataCollatorForQwen2vl,
     "qwen2vl_dpo": DataCollatorForQwen2vlDPO,
-    "open_sora_plan": DataCollatorForOpenSoraPlan
+    "open_sora_plan": DataCollatorForOpenSoraPlan,
+    "deepseekvl2": DataCollatorForDeepSeekVL
 }
