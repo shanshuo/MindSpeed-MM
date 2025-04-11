@@ -1,9 +1,8 @@
 # Copyright (c) 2024, HUAWEI CORPORATION.  All rights reserved.
 import torch
-from torch import nn
-
 from megatron.training import get_args, print_rank_0
 from megatron.training.arguments import core_transformer_config_from_args
+from torch import nn
 
 from mindspeed_mm.models.ae import AEModel
 from mindspeed_mm.models.diffusion import DiffusionModel
@@ -50,7 +49,7 @@ class StepVideoDPOModel(nn.Module):
         latents, _ = self.ae.encode(video)
         latents_lose, _ = self.ae.encode(video_lose)
         noised_latents, noise, timesteps = self.diffusion.q_sample(torch.cat((latents, latents_lose), dim=0), model_kwargs=kwargs, mask=video_mask)
-        prompts = self.text_encoder.encode(prompt_ids, prompt_mask)
+        prompts, prompt_mask = self.text_encoder.encode(prompt_ids, prompt_mask)
         prompt = [torch.cat((prompt, prompt), dim=0) for prompt in prompts]
 
         with torch.no_grad():

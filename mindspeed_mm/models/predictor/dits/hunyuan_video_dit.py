@@ -126,6 +126,7 @@ class HunyuanVideoDiT(MultiModalModule):
             rope_theta: int = 256,
             embeded_guidance_scale: float = 6.016,
             attention_async_offload: bool = False,
+            i2v_condition_type: str = None,
             **kwargs
         ):
         super().__init__(config=None)
@@ -152,6 +153,7 @@ class HunyuanVideoDiT(MultiModalModule):
 
         args = get_args()
         config = core_transformer_config_from_args(args)
+        self.i2v_condition_type = i2v_condition_type
         self.recompute_granularity = args.recompute_granularity
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
@@ -232,7 +234,8 @@ class HunyuanVideoDiT(MultiModalModule):
                 num_layers=mm_double_blocks_depth + mm_single_blocks_depth,
                 attention_async_offload=self.attention_async_offload,
                 h2d_stream=self.h2d_stream,
-                d2h_stream=self.d2h_stream
+                d2h_stream=self.d2h_stream,
+                condition_type=self.i2v_condition_type
             )
             for layer_index in range(mm_double_blocks_depth)
         ])
@@ -250,7 +253,8 @@ class HunyuanVideoDiT(MultiModalModule):
                 num_layers=mm_double_blocks_depth + mm_single_blocks_depth,
                 attention_async_offload=self.attention_async_offload,
                 h2d_stream=self.h2d_stream,
-                d2h_stream=self.d2h_stream
+                d2h_stream=self.d2h_stream,
+                condition_type=self.i2v_condition_type
             )
             for layer_index in range(mm_single_blocks_depth)
         ])
@@ -419,8 +423,20 @@ class HunyuanVideoDiT(MultiModalModule):
         # Prepare modulation vectors
         vec = self.time_in(timestep)
 
+        if self.i2v_condition_type == "token_replace":
+            token_replace_t = torch.zeros_like(timestep)
+            token_replace_vec = self.time_in(token_replace_t)
+            frist_frame_token_num = th * tw
+            frist_frame_token_num = torch.tensor(frist_frame_token_num)
+        else:
+            token_replace_vec = None
+            frist_frame_token_num = None
+
         # text modulation
-        vec = vec + self.vector_in(prompt[1])
+        vec_2 = self.vector_in(prompt[1])
+        vec = vec + vec_2
+        if self.i2v_condition_type == "token_replace":
+            token_replace_vec = token_replace_vec + vec_2
 
         # guidance modulation
         if self.guidance_embed:
@@ -517,7 +533,9 @@ class HunyuanVideoDiT(MultiModalModule):
                     max_seqlen_q,
                     max_seqlen_kv,
                     freqs_cos,
-                    freqs_sin
+                    freqs_sin,
+                    token_replace_vec,
+                    frist_frame_token_num
                 )
 
                 if self.sequence_parallel:
@@ -537,7 +555,9 @@ class HunyuanVideoDiT(MultiModalModule):
                     max_seqlen_q,
                     max_seqlen_kv,
                     freqs_cos,
-                    freqs_sin
+                    freqs_sin,
+                    token_replace_vec,
+                    frist_frame_token_num
                 )[0]
             
             else:
@@ -551,7 +571,9 @@ class HunyuanVideoDiT(MultiModalModule):
                         max_seqlen_q=max_seqlen_q,
                         max_seqlen_kv=max_seqlen_kv,
                         freqs_cos=freqs_cos,
-                        freqs_sin=freqs_sin
+                        freqs_sin=freqs_sin,
+                        token_replace_vec=token_replace_vec,
+                        frist_frame_token_num=frist_frame_token_num
                     )
                 if self.sequence_parallel:
                     txt = txt.transpose(0, 1).contiguous()
@@ -569,7 +591,9 @@ class HunyuanVideoDiT(MultiModalModule):
                         max_seqlen_q=max_seqlen_q,
                         max_seqlen_kv=max_seqlen_kv,
                         freqs_cos=freqs_cos,
-                        freqs_sin=freqs_sin
+                        freqs_sin=freqs_sin,
+                        token_replace_vec=token_replace_vec,
+                        frist_frame_token_num=frist_frame_token_num
                     )[0]
         
         if self.sequence_parallel:
@@ -634,7 +658,8 @@ class MMDoubleStreamBlock(nn.Module):
             num_layers: int = 60,
             attention_async_offload: bool = False,
             h2d_stream: Optional[torch_npu.npu.Stream] = None,
-            d2h_stream: Optional[torch_npu.npu.Stream] = None
+            d2h_stream: Optional[torch_npu.npu.Stream] = None,
+            condition_type: str = None
     ):
         super().__init__()
 
@@ -648,6 +673,7 @@ class MMDoubleStreamBlock(nn.Module):
         self.attention_async_offload = attention_async_offload
         self.h2d_stream = h2d_stream
         self.d2h_stream = d2h_stream
+        self.i2v_condition_type = condition_type
 
         # context parallel setting
         args = get_args()
@@ -811,6 +837,8 @@ class MMDoubleStreamBlock(nn.Module):
             max_seqlen_kv: Optional[torch.Tensor] = None,
             freqs_cos: Optional[torch.Tensor] = None,
             freqs_sin: Optional[torch.Tensor] = None,
+            token_replace_vec: torch.Tensor = None,
+            frist_frame_token_num: int = None,
             block_full_attention: bool = True
     ):
         if block_full_attention:
@@ -818,14 +846,18 @@ class MMDoubleStreamBlock(nn.Module):
                 img_q, img_k, img_v,
                 txt_q, txt_k, txt_v,
                 img_mod1_gate, txt_mod1_gate, img_mod2_gate, txt_mod2_gate,
-                img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift
-            ) = self._before_attention(img, txt, vec, freqs_cos, freqs_sin)
+                img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift,
+                tr_img_mod1_gate, tr_img_mod1_scale, tr_img_mod1_shift,
+                tr_img_mod2_gate, tr_img_mod2_scale, tr_img_mod2_shift,
+            ) = self._before_attention(img, txt, vec, freqs_cos, freqs_sin, token_replace_vec, frist_frame_token_num)
         else:
             (
                 img_q, img_k, img_v,
                 txt_q, txt_k, txt_v,
                 img_mod1_gate, txt_mod1_gate, img_mod2_gate, txt_mod2_gate,
-                img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift
+                img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift,
+                tr_img_mod1_gate, tr_img_mod1_scale, tr_img_mod1_shift,
+                tr_img_mod2_gate, tr_img_mod2_scale, tr_img_mod2_shift,
             ) = tensor_parallel.checkpoint(
                 self._before_attention,
                 self.distribute_saved_activations,
@@ -833,7 +865,9 @@ class MMDoubleStreamBlock(nn.Module):
                 txt,
                 vec,
                 freqs_cos,
-                freqs_sin
+                freqs_sin,
+                token_replace_vec,
+                frist_frame_token_num
             )
 
         # Run actual attention
@@ -860,7 +894,10 @@ class MMDoubleStreamBlock(nn.Module):
                 img_mod1_gate, txt_mod1_gate,
                 img_mod2_gate, txt_mod2_gate,
                 img_mod2_scale, txt_mod2_scale,
-                img_mod2_shift, txt_mod2_shift
+                img_mod2_shift, txt_mod2_shift,
+                frist_frame_token_num,
+                tr_img_mod1_gate, tr_img_mod1_scale, tr_img_mod1_shift,
+                tr_img_mod2_gate, tr_img_mod2_scale, tr_img_mod2_shift,
             )
         else:
             img, txt = tensor_parallel.checkpoint(
@@ -870,7 +907,10 @@ class MMDoubleStreamBlock(nn.Module):
                 img_mod1_gate, txt_mod1_gate,
                 img_mod2_gate, txt_mod2_gate,
                 img_mod2_scale, txt_mod2_scale,
-                img_mod2_shift, txt_mod2_shift
+                img_mod2_shift, txt_mod2_shift,
+                frist_frame_token_num,
+                tr_img_mod1_gate, tr_img_mod1_scale, tr_img_mod1_shift,
+                tr_img_mod2_gate, tr_img_mod2_scale, tr_img_mod2_shift,
             )
         
         return img, txt
@@ -881,16 +921,39 @@ class MMDoubleStreamBlock(nn.Module):
             txt: torch.Tensor,
             vec: torch.Tensor,
             freqs_cos: Optional[torch.Tensor] = None,
-            freqs_sin: Optional[torch.Tensor] = None
+            freqs_sin: Optional[torch.Tensor] = None,
+            token_replace_vec: torch.Tensor = None,
+            frist_frame_token_num: int = None
     ):
-        (
-            img_mod1_shift,
-            img_mod1_scale,
-            img_mod1_gate,
-            img_mod2_shift,
-            img_mod2_scale,
-            img_mod2_gate
-        ) = self.img_mod(vec).chunk(6, dim=-1)
+        if self.i2v_condition_type == "token_replace":
+            img_mod1 = self.img_mod(vec)
+            token_replace_img_mod1 = self.img_mod(token_replace_vec)
+            (
+                img_mod1_shift,
+                img_mod1_scale,
+                img_mod1_gate,
+                img_mod2_shift,
+                img_mod2_scale,
+                img_mod2_gate
+            ) = img_mod1.chunk(6, dim=-1)
+            (
+                tr_img_mod1_shift,
+                tr_img_mod1_scale,
+                tr_img_mod1_gate,
+                tr_img_mod2_shift,
+                tr_img_mod2_scale,
+                tr_img_mod2_gate
+            ) = token_replace_img_mod1.chunk(6, dim=-1)
+        else:
+            (
+                img_mod1_shift,
+                img_mod1_scale,
+                img_mod1_gate,
+                img_mod2_shift,
+                img_mod2_scale,
+                img_mod2_gate
+            ) = img_mod1.chunk(6, dim=-1)
+
         (
             txt_mod1_shift,
             txt_mod1_scale,
@@ -902,7 +965,12 @@ class MMDoubleStreamBlock(nn.Module):
 
         # Prepare image for attention,
         img_modulated = self.img_norm1(img)
-        img_modulated = img_modulated * (1 + img_mod1_scale) + img_mod1_shift
+        if self.i2v_condition_type == "token_replace":
+            img_zero = img_modulated[:, :frist_frame_token_num] * (1 + tr_img_mod1_scale) + tr_img_mod1_shift
+            img_orig = img_modulated[:, frist_frame_token_num:] * (1 + img_mod1_scale) + img_mod1_shift
+            img_modulated = torch.cat([img_zero, img_orig], dim=1)
+        else:
+            img_modulated = img_modulated * (1 + img_mod1_scale) + img_mod1_shift
 
         if self.enable_tensor_parallel:
             img_qkv = self.img_attn_qkv(img_modulated)[0]
@@ -942,7 +1010,9 @@ class MMDoubleStreamBlock(nn.Module):
             img_q, img_k, img_v,
             txt_q, txt_k, txt_v,
             img_mod1_gate, txt_mod1_gate, img_mod2_gate, txt_mod2_gate,
-            img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift
+            img_mod2_scale, txt_mod2_scale, img_mod2_shift, txt_mod2_shift,
+            tr_img_mod1_gate, tr_img_mod1_scale, tr_img_mod1_shift,
+            tr_img_mod2_gate, tr_img_mod2_scale, tr_img_mod2_shift
         )
 
     def _after_attention(
@@ -951,7 +1021,10 @@ class MMDoubleStreamBlock(nn.Module):
             img_mod1_gate, txt_mod1_gate,
             img_mod2_gate, txt_mod2_gate,
             img_mod2_scale, txt_mod2_scale,
-            img_mod2_shift, txt_mod2_shift
+            img_mod2_shift, txt_mod2_shift,
+            frist_frame_token_num,
+            tr_img_mod1_gate, tr_img_mod1_scale, tr_img_mod1_shift,
+            tr_img_mod2_gate, tr_img_mod2_scale, tr_img_mod2_shift
     ):
         if self.sequence_parallel:
             img_seq_len = img.shape[0] * mpu.get_tensor_model_parallel_world_size()
@@ -963,14 +1036,35 @@ class MMDoubleStreamBlock(nn.Module):
         if self.enable_tensor_parallel:
             if self.sequence_parallel:
                 img_attn = img_attn.transpose(0, 1).contiguous() # b s h -> s b h
-            img = img + self.img_attn_proj(img_attn)[0] * img_mod1_gate
+            if self.i2v_condition_type == "token_replace":
+                x = self.img_attn_proj(img_attn)[0]
+                img_zero = x[:, :frist_frame_token_num] * tr_img_mod1_gate
+                img_orig = x[:, frist_frame_token_num:] * img_mod1_gate
+                img = img + torch.concat((img_zero, img_orig), dim=1)
+            else:
+                img = img + self.img_attn_proj(img_attn)[0] * img_mod1_gate
         else:
-            img = img + self.img_attn_proj(img_attn) * img_mod1_gate
+            if self.i2v_condition_type == "token_replace":
+                x = self.img_attn_proj(img_attn)
+                img_zero = x[:, :frist_frame_token_num] * tr_img_mod1_gate
+                img_orig = x[:, frist_frame_token_num:] * img_mod1_gate
+                img = img + torch.concat((img_zero, img_orig), dim=1)
+            else:
+                img = img + self.img_attn_proj(img_attn) * img_mod1_gate
 
-        img = img + \
-            self.img_mlp(
-                self.img_norm2(img) * (1 + img_mod2_scale) + img_mod2_shift
-            ) * img_mod2_gate
+        if self.i2v_condition_type == "token_replace":
+            x = self.img_norm2(img)
+            img_zero = x[:, :frist_frame_token_num] * (1 + tr_img_mod2_scale) + tr_img_mod2_shift
+            img_orig = x[:, frist_frame_token_num:] * (1 + img_mod2_scale) + img_mod2_shift
+            x = self.img_mlp(torch.concat((img_zero, img_orig), dim=1))
+            img_zero = x[:, :frist_frame_token_num] * tr_img_mod2_gate
+            img_orig = x[:, frist_frame_token_num:] * img_mod2_gate
+            img = img + torch.concat((img_zero, img_orig), dim=1)
+        else:
+            img = img + \
+                self.img_mlp(
+                    self.img_norm2(img) * (1 + img_mod2_scale) + img_mod2_shift
+                ) * img_mod2_gate
         
         # Calculate the txt blocks
         if self.enable_tensor_parallel:
@@ -1002,7 +1096,8 @@ class MMSingleStreamBlock(nn.Module):
             num_layers: int = 60,
             attention_async_offload: bool = False,
             h2d_stream: Optional[torch_npu.npu.Stream] = None,
-            d2h_stream: Optional[torch_npu.npu.Stream] = None
+            d2h_stream: Optional[torch_npu.npu.Stream] = None,
+            condition_type: str = None
     ):
         super().__init__()
 
@@ -1013,6 +1108,7 @@ class MMSingleStreamBlock(nn.Module):
         mlp_hidden_dim = int(hidden_size * mlp_width_ratio)
         self.mlp_hidden_dim = mlp_hidden_dim
         self.scale = qk_scale or head_dim ** -0.5
+        self.i2v_condition_type = condition_type
 
         self.layer_index = layer_index
         self.num_layers = num_layers
@@ -1108,19 +1204,23 @@ class MMSingleStreamBlock(nn.Module):
             max_seqlen_kv: Optional[torch.Tensor] = None,
             freqs_cos: Optional[torch.Tensor] = None,
             freqs_sin: Optional[torch.Tensor] = None,
+            token_replace_vec: torch.Tensor = None,
+            frist_frame_token_num: int = None,
             block_full_attention: bool = True
     ):
         if block_full_attention:
-            mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v = self._before_attention(
+            mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v, tr_mod_gate, tr_mod_scale, tr_mod_shift = self._before_attention(
                 x,
                 vec,
                 img_len,
                 freqs_cos,
                 freqs_sin,
-                cu_seqlens_q
+                cu_seqlens_q,
+                token_replace_vec,
+                frist_frame_token_num
             )
         else:
-            mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v = tensor_parallel.checkpoint(
+            mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v, tr_mod_gate, tr_mod_scale, tr_mod_shift = tensor_parallel.checkpoint(
                 self._before_attention,
                 self.distribute_saved_activations,
                 x,
@@ -1128,7 +1228,9 @@ class MMSingleStreamBlock(nn.Module):
                 img_len,
                 freqs_cos,
                 freqs_sin,
-                cu_seqlens_q
+                cu_seqlens_q,
+                token_replace_vec,
+                frist_frame_token_num
             )
 
         attn = parallel_attention(
@@ -1149,7 +1251,7 @@ class MMSingleStreamBlock(nn.Module):
         )
 
         if block_full_attention:
-            output = self._after_attention(attn, x, x_mod, img_len, mod_gate)
+            output = self._after_attention(attn, x, x_mod, img_len, mod_gate, frist_frame_token_num, tr_mod_gate, tr_mod_scale, tr_mod_shift)
         else:
             output = tensor_parallel.checkpoint(
                 self._after_attention,
@@ -1158,7 +1260,11 @@ class MMSingleStreamBlock(nn.Module):
                 x,
                 x_mod,
                 img_len,
-                mod_gate
+                mod_gate,
+                frist_frame_token_num,
+                tr_mod_gate,
+                tr_mod_scale,
+                tr_mod_shift
             )
         
         return output
@@ -1170,10 +1276,25 @@ class MMSingleStreamBlock(nn.Module):
             img_len,
             freqs_cos,
             freqs_sin,
-            cu_seqlens_q
+            cu_seqlens_q,
+            token_replace_vec,
+            frist_frame_token_num
     ):
-        mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
-        x_mod = self.pre_norm(x) * (1 + mod_scale) + mod_shift
+        if self.i2v_condition_type == "token_replace":
+            mod = self.modulation(vec)
+            tr_mod = self.modulation(token_replace_vec)
+            mod_shift, mod_scale, mod_gate = mod.chunk(3, dim=-1)
+            tr_mod_shift, tr_mod_scale, tr_mod_gate = tr_mod.chunk(3, dim=-1)
+        else:
+            mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
+        
+        if self.i2v_condition_type == "token_replace":
+            x_norm = self.pre_norm(x)
+            x_zero = x_norm[:, :frist_frame_token_num] * (1 + tr_mod_scale) + tr_mod_shift
+            x_orig = x_norm[:, frist_frame_token_num:] * (1 + mod_scale) + mod_shift
+            x_mod = torch.cat([x_zero, x_orig], dim=1)
+        else:
+            x_mod = self.pre_norm(x) * (1 + mod_scale) + mod_shift
 
         if self.enable_tensor_parallel:
             if self.sequence_parallel:
@@ -1209,7 +1330,7 @@ class MMSingleStreamBlock(nn.Module):
         img_v = v[:, :img_len, :, :]
         txt_v = v[:, img_len:, :, :]
 
-        return mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v
+        return mod_gate, x_mod, img_q, img_k, img_v, txt_q, txt_k, txt_v, tr_mod_gate, tr_mod_scale, tr_mod_shift
 
     def _after_attention(
             self,
@@ -1217,7 +1338,11 @@ class MMSingleStreamBlock(nn.Module):
             x: torch.Tensor,
             x_mod: torch.Tensor,
             img_len: torch.Tensor,
-            mod_gate: torch.Tensor
+            mod_gate: torch.Tensor,
+            frist_frame_token_num: int,
+            tr_mod_gate: torch.Tensor,
+            tr_mod_scale: torch.Tensor,
+            tr_mod_shift: torch.Tensor
     ):
         if self.enable_tensor_parallel:
             if self.sequence_parallel:
@@ -1248,7 +1373,13 @@ class MMSingleStreamBlock(nn.Module):
             mlp = self.linear1_mlp(x_mod)
             output = self.linear2(torch.cat((attn, self.mlp_act(mlp)), 2))
         
-        return (x + output * mod_gate, )
+        if self.i2v_condition_type == "token_replace":
+            out_zero = output[:, :frist_frame_token_num] * tr_mod_gate
+            out_orig = output[:, frist_frame_token_num:] * mod_gate
+            output = torch.cat([out_zero, out_orig], dim=1)
+            return (x + output, )
+        else:
+            return (x + output * mod_gate, )
 
 
 def parallel_attention(

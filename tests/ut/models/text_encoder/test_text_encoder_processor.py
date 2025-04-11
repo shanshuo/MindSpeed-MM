@@ -1,11 +1,8 @@
 import pytest
 import transformers
 
-from mindspeed_mm import TextEncoder
-from mindspeed_mm import Tokenizer
-from tests.ut.utils import judge_expression
-from tests.ut.utils import TestConfig
-
+from mindspeed_mm import TextEncoder, Tokenizer
+from tests.ut.utils import TestConfig, judge_expression
 
 T5_MODEL_PATH = "/home/ci_resource/models/t5"
 MT5_MODEL_PATH = "/home/ci_resource/models/mt5"
@@ -44,7 +41,7 @@ class TestTextEncoder:
         t5_tokenizer = tokenizer.get_tokenizer()
         test_text = "This is a T5 example"
         tokenizer_output = t5_tokenizer(test_text, return_tensors='pt')
-        output = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
+        output, att_mask = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
         judge_expression(output.min().item() == T5_TEXT_ENCODER_OUTPUT)
 
     def test_mt5(self):
@@ -72,7 +69,7 @@ class TestTextEncoder:
         mt5_tokenizer = tokenizer.get_tokenizer()
         test_text = "This is a MT5 example"
         tokenizer_output = mt5_tokenizer(test_text, return_tensors='pt')
-        output = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
+        output, att_mask = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
         judge_expression(output.min().item() == MT5_TEXT_ENCODER_OUTPUT)
 
     def test_clip(self):
@@ -102,5 +99,5 @@ class TestTextEncoder:
         clip_tokenizer = tokenizer.get_tokenizer()
         test_text = "This is a CLIP example"
         tokenizer_output = clip_tokenizer(test_text, return_tensors='pt')
-        output = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
+        output, att_mask = text_encoder.encode(input_ids=tokenizer_output["input_ids"], mask=tokenizer_output["attention_mask"])
         judge_expression(output.min().item() == CLIP_TEXT_ENCODER_OUTPUT)

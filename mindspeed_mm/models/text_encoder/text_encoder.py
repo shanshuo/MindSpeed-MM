@@ -1,10 +1,11 @@
 import importlib
+
 import torch
 import torch.nn as nn
 
-from mindspeed_mm.utils.utils import get_dtype
+from mindspeed_mm.models.text_encoder.hunyuan_mllm_text_encoder import HunyuanMLLmModel
 from mindspeed_mm.models.text_encoder.stepllm_text_encoder import StepLLmModel
-
+from mindspeed_mm.utils.utils import get_dtype
 
 TRANSFORMERS_TEXT_ENCODER_MAPPING = {
     "T5": "T5EncoderModel",
@@ -17,6 +18,7 @@ TRANSFORMERS_TEXT_ENCODER_MAPPING = {
 
 CUSTOM_TEXT_ENCODER_MAPPING = {
     "StepLLmModel": StepLLmModel,
+    "HunyuanMLLmModel": HunyuanMLLmModel,
 }
 
 
@@ -59,25 +61,34 @@ class TextEncoder(nn.Module):
     def encode(self, input_ids, mask, **kwargs):
         if isinstance(self.text_encoders, nn.ModuleList):
             outputs = []
+            masks = []
             for i, text_encoder_i in enumerate(self.text_encoders):
                 input_ids_i = input_ids[i]
                 mask_i = mask[i]
-                output = self._single_encode(text_encoder_i, input_ids_i, mask_i)
+                output, att_mask = self._single_encode(text_encoder_i, input_ids_i, mask_i, **kwargs)
                 outputs.append(output)
+                masks.append(att_mask)
         else:
-            outputs = self._single_encode(self.text_encoders, input_ids, mask)
-        return outputs
+            outputs, masks = self._single_encode(self.text_encoders, input_ids, mask)
+        return outputs, masks
 
     def _single_encode(self, text_encoder, input_ids, attention_mask, **kwargs):
         *BN, L = input_ids.shape
         input_ids = input_ids.to(text_encoder.device).view(-1, L)
         attention_mask = attention_mask.to(text_encoder.device).view(-1, L)
-        attention_mask = attention_mask if text_encoder.use_attention_mask else None
+        model_attention_mask = attention_mask if text_encoder.use_attention_mask else None
+        model_kwargs = {}
+        if text_encoder.using_kwargs:
+            for k in text_encoder.using_kwargs:
+                if k in kwargs.keys():
+                    model_kwargs[k] = kwargs[k]
+                else:
+                    raise ValueError(f"{k} is not in kwargs")
         output = text_encoder(
             input_ids=input_ids,
-            attention_mask=attention_mask,
+            attention_mask=model_attention_mask,
             output_hidden_states=text_encoder.hidden_state_skip_layer is not None,
-            **kwargs
+            **model_kwargs
         )
 
         emb = output[text_encoder.output_key]
@@ -100,13 +111,17 @@ class TextEncoder(nn.Module):
             )
 
         if text_encoder.output_key in ["last_hidden_state", "hidden_states"]:
-            emb = emb.view(*BN, L, -1)
+            emb = emb.view(*BN, emb.shape[-2], -1)
         elif text_encoder.output_key in ["pooler_output"]:
             emb = emb.view(*BN, -1)
         else:
             raise NotImplementedError(f"Text encoder output_key: {text_encoder.output_key} is not implenmented! ")
 
-        return emb
+        if text_encoder.use_attention_mask:
+            attention_mask = model_attention_mask
+        attention_mask = attention_mask.view(*BN, -1)
+
+        return emb, attention_mask
 
     def _init_text_encoder(self, config):
         if not isinstance(config, dict):
@@ -117,6 +132,7 @@ class TextEncoder(nn.Module):
         ucg_rate = config.pop("ucg_rate", None)
         output_key = config.pop("output_key", "last_hidden_state")
         hidden_state_skip_layer = config.pop("hidden_state_skip_layer", None)
+        using_kwargs = config.pop("using_kwargs", None)
 
         config["pretrained_model_name_or_path"] = config.pop("from_pretrained")
         config["torch_dtype"] = get_dtype(config.pop("dtype"))
@@ -144,6 +160,7 @@ class TextEncoder(nn.Module):
         setattr(text_encoder, "use_attention_mask", use_attention_mask)
         setattr(text_encoder, "output_key", output_key)
         setattr(text_encoder, "hidden_state_skip_layer", hidden_state_skip_layer)
+        setattr(text_encoder, "using_kwargs", using_kwargs)
 
         if hidden_state_skip_layer and output_key not in ["hidden_states"]:
             raise ValueError("If use hidden_state_skip, the output_keys must in [`hidden_states`]")

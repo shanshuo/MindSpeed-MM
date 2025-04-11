@@ -23,19 +23,19 @@ from megatron.training import get_args, print_rank_0
 from megatron.training.arguments import core_transformer_config_from_args
 from torch import nn
 
+from mindspeed_mm.data.data_utils.constants import (
+    INPUT_MASK,
+    LATENTS,
+    MASKED_VIDEO,
+    PROMPT,
+    PROMPT_MASK,
+    VIDEO_MASK,
+)
 from mindspeed_mm.models.ae import AEModel
 from mindspeed_mm.models.common.communications import collect_tensors_across_ranks
 from mindspeed_mm.models.diffusion import DiffusionModel
 from mindspeed_mm.models.predictor import PredictModel
 from mindspeed_mm.models.text_encoder import TextEncoder
-from mindspeed_mm.data.data_utils.constants import (
-    LATENTS,
-    PROMPT,
-    VIDEO_MASK,
-    PROMPT_MASK,
-    MASKED_VIDEO,
-    INPUT_MASK
-)
 
 logger = getLogger(__name__)
 
@@ -174,7 +174,7 @@ class SoRAModel(nn.Module):
                             if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
                                 prompt = [p.npu() for p in prompt]
                         else:
-                            prompt = self.text_encoder.encode(prompt_ids, prompt_mask)
+                            prompt, prompt_mask = self.text_encoder.encode(prompt_ids, prompt_mask, **kwargs)
             
             if self.interleaved:
                 # The offload of text_encoder is recommanded to be used with interleaved_steps greater than 10
@@ -362,7 +362,7 @@ class SoRAModel(nn.Module):
         if self.load_text_features:
             prompt = prompt_ids_batch
         else:
-            prompt = self.text_encoder.encode(prompt_ids_batch, prompt_mask_batch)
+            prompt, prompt_mask_batch = self.text_encoder.encode(prompt_ids_batch, prompt_mask_batch)
 
         cur_device = torch.device('cpu')
         latents, prompt, video_mask_batch, prompt_mask_batch = self.interleaved_to_device(

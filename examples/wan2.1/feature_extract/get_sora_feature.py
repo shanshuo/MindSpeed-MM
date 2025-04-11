@@ -1,36 +1,33 @@
-import os
-import json
 import copy
-import time
+import json
+import os
 import random
-from typing import Union, List, Optional
-from numpy import save
+import time
+from typing import List, Optional, Union
+
+import mindspeed.megatron_adaptor
 import torch
 import torch.distributed
-import mindspeed.megatron_adaptor
-
 from megatron.core import mpu
-from megatron.training.initialize import initialize_megatron
 from megatron.training import get_args, print_rank_0
-from megatron.training.initialize import set_jit_fusion_options
+from megatron.training.initialize import initialize_megatron, set_jit_fusion_options
+from numpy import save
 
 from mindspeed_mm.configs.config import merge_mm_args, mm_extra_args_provider
+from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
+from mindspeed_mm.data.data_utils.constants import (
+    FILE_INFO,
+    PROMPT_IDS,
+    PROMPT_MASK,
+    VIDEO,
+    VIDEO_MASK,
+)
+from mindspeed_mm.data.data_utils.transform_pipeline import get_transforms
+from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset
 from mindspeed_mm.models.ae import AEModel
 from mindspeed_mm.models.text_encoder import TextEncoder
 from mindspeed_mm.tools.profiler import Profiler
-from mindspeed_mm.utils.utils import get_dtype, get_device, is_npu_available
-from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset
-from mindspeed_mm.data.data_utils.transform_pipeline import get_transforms
-from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
-
-from mindspeed_mm.data.data_utils.constants import (
-    VIDEO, 
-    PROMPT_IDS, 
-    PROMPT_MASK, 
-    VIDEO_MASK,
-    FILE_INFO
-)
-
+from mindspeed_mm.utils.utils import get_device, get_dtype, is_npu_available
 
 if is_npu_available():
     import torch_npu
@@ -243,7 +240,7 @@ def extract_feature():
             latents = video
         
         if extract_text_feature:
-            prompt = text_encoder.encode(prompt_ids, prompt_mask)
+            prompt, prompt_mask = text_encoder.encode(prompt_ids, prompt_mask)
         else:
             prompt = prompt_ids
         

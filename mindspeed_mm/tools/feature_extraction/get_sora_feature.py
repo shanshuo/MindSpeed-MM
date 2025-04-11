@@ -1,34 +1,30 @@
-import os
 import json
+import os
 import time
 import uuid
 
-from numpy import save
+import mindspeed.megatron_adaptor
 import torch
 import torch.distributed
-import mindspeed.megatron_adaptor
-
 from megatron.core import mpu
-from megatron.training.initialize import initialize_megatron
 from megatron.training import get_args, print_rank_0
-from megatron.training.initialize import set_jit_fusion_options
+from megatron.training.initialize import initialize_megatron, set_jit_fusion_options
+from numpy import save
 
 from mindspeed_mm.configs.config import merge_mm_args, mm_extra_args_provider
+from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
+from mindspeed_mm.data.data_utils.constants import (
+    PROMPT_IDS,
+    PROMPT_IDS_2,
+    PROMPT_MASK,
+    PROMPT_MASK_2,
+    VIDEO,
+    VIDEO_MASK,
+)
 from mindspeed_mm.models.ae import AEModel
 from mindspeed_mm.models.text_encoder import TextEncoder
 from mindspeed_mm.tools.profiler import Profiler
-from mindspeed_mm.utils.utils import get_dtype, get_device, is_npu_available
-from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
-
-from mindspeed_mm.data.data_utils.constants import (
-    VIDEO, 
-    PROMPT_IDS, 
-    PROMPT_MASK, 
-    VIDEO_MASK,
-    PROMPT_IDS_2, 
-    PROMPT_MASK_2, 
-)
-
+from mindspeed_mm.utils.utils import get_device, get_dtype, is_npu_available
 
 if is_npu_available():
     import torch_npu
@@ -99,7 +95,7 @@ def extract_feature():
             latents = video
         
         if extract_text_feature:
-            prompt = text_encoder.encode(prompt_ids, prompt_mask)
+            prompt, prompt_mask = text_encoder.encode(prompt_ids, prompt_mask)
         else:
             prompt = prompt_ids
         

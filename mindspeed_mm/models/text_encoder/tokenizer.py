@@ -1,9 +1,11 @@
 import importlib
 
+from mindspeed_mm.models.text_encoder.hunyuan_mllm_tokenizer import HunyuanMllmTokenizer
 from mindspeed_mm.models.text_encoder.stepllm_tokenizer import WrappedStepChatTokenizer
 
 TOKENIZER_MODEL_MAPPINGS = {
-    "stepchat": WrappedStepChatTokenizer
+    "stepchat": WrappedStepChatTokenizer,
+    "hunyuanMLLmTokenizer": HunyuanMllmTokenizer,
 }
 
 

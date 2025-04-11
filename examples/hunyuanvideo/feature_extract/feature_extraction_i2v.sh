@@ -23,8 +23,8 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP))
 
-MM_DATA="./examples/hunyuanvideo/feature_extract/data.json"
-MM_MODEL="./examples/hunyuanvideo/feature_extract/model_hunyuanvideo.json"
+MM_DATA="./examples/hunyuanvideo/feature_extract/data_i2v.json"
+MM_MODEL="./examples/hunyuanvideo/feature_extract/model_hunyuanvideo_i2v.json"
 MM_TOOL="./examples/hunyuanvideo/feature_extract/tools.json"
 
 DISTRIBUTED_ARGS="
