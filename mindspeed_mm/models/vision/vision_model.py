@@ -10,8 +10,10 @@ from .vision_encoders.clip_vit_model import CLIPViT
 from .vision_encoders.internvit_model import InternViT
 from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
 from .vision_encoders.minicpm_vit_model import MiniCPMViT
+from .vision_encoders.siglip_vit_model import create_siglip_vit
 from .projectors.multimodal_projector import MultimodalProjector
 from .projectors.internvl_mlp import InternVLMLP
+from .projectors.deepseekvl2_mlp import create_deepseekvl2_mlp
 
 
 VISION_ENCODER_MAPPINGS = {
@@ -20,12 +22,14 @@ VISION_ENCODER_MAPPINGS = {
     "qwen2vit": Qwen2VLViT,
     "qwen2_5_vit": Qwen2VLViT,
     "MiniCPMViT": MiniCPMViT,
+    "SigLip": create_siglip_vit,
 }
 
 VISION_PROJECTION_MAPPINGS = {
     "mlp": MultimodalProjector,
     "InternVLMLP": InternVLMLP,
     "lnmlp": MultimodalProjector,
+    "DeepSeekVL2MLP": create_deepseekvl2_mlp,
 }
 
 
