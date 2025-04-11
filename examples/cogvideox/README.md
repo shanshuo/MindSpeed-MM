@@ -455,7 +455,7 @@ bash examples/cogvideox/i2v_1.5/inference_cogvideox_i2v_1.5.sh
 
 1. 权重下载及转换
 
- 权重下载链接(链接下包含VAE及T5模型):
+ 模型权重下载链接(链接下包含模型权重以及tokenizer和text_encoder):
 
  + [t2v下载链接](https://huggingface.co/THUDM/CogVideoX1.5-5B/tree/main)
  + [i2v下载链接](https://huggingface.co/THUDM/CogVideoX1.5-5B-I2V/tree/main)
@@ -464,6 +464,11 @@ bash examples/cogvideox/i2v_1.5/inference_cogvideox_i2v_1.5.sh
 ```bash
 python examples/cogvideox/cogvideox_hf_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 42 --num_layers 42 --mode split
 ```
+
+ VAE权重下载
+
++ [VAE下载链接](https://cloud.tsinghua.edu.cn/f/fdba7608a49c463ba754/?dl=1)
+
 2. 数据集准备及处理
 
 [lora数据集下载链接](https://huggingface.co/datasets/Wild-Heart/Disney-VideoGeneration-Dataset)
@@ -524,7 +529,7 @@ bash examples/cogvideox/i2v_1.5/finetune_cogvideox_lora_i2v_1.5.sh
 
 训练完成后保存的权重仅为lora微调部分，如果需要合并到原始权重中，可以执行以下脚本完成合并（配置仅供参考）：
 
-```shell
+```bash
 python  checkpoint/merge_base_lora_weight.py --base_save_dir './converted_transformer' --lora_save_dir './my_ckpt' --merge_save_dir './merge_base_lora_target' --lora_target_modules proj_qkv proj_out --lora_alpha 64 --lora_r 128 --pp_size 1 --tp_size 1
 ```
 

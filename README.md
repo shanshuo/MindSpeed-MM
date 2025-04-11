@@ -274,7 +274,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
   <tr>
-      <td rowspan="1"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX 1.5-T2V</a></td>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX 1.5-T2V</a></td>
       <td><a href="https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT"> 5B </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
@@ -284,7 +284,16 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Pass】</td>
     </tr>
     <tr>
-      <td rowspan="1"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX 1.5-I2V</a></td>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT"> 5B </a></td>
+      <td> Lora微调 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 2.89 (SPS) </td>
+      <td> 3.03 (SPS) </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
+      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX 1.5-I2V</a></td>
       <td><a href="https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT"> 5B </a></td>
       <td> 预训练 </td>
       <td> 1x8 </td>
@@ -292,6 +301,15 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 1.81 (SPS) </td>
       <td> 2.01 (SPS) </td>
       <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td><a href="https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT"> 5B </a></td>
+      <td> Lora微调 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 3.44 (SPS) </td>
+      <td> 3.92 (SPS) </td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qihoo_t2x">Qihoo-T2X</a></td>
