@@ -772,3 +772,44 @@ class RoPE3DSORA(nn.Module):
         freq = torch.cat((freq_t, freq_y, freq_x), dim=-1)
 
         return freq # s, b, 1, d
+
+
+class RoPE3DStepVideo(RoPE3DSORA):
+    def __init__(self, ch_split, freq=10000.0):
+        super().__init__(head_dim=3)
+        self.base = freq
+        self.ch_split = ch_split
+    
+    def apply_rotary_pos_emb(self, tokens, freqs):
+        freqs = freqs.to(tokens.dtype)
+
+        # split features into three along the feature dimension, and apply rope1d on each half
+        out = []
+        for _, (x, freq) in enumerate(zip(torch.split(tokens, self.ch_split, dim=-1), torch.split(freqs, self.ch_split, dim=-1))):
+            x_i = self.apply_rope1d(x, freq)
+            out.append(x_i)
+        
+        tokens = torch.cat(out, dim=-1)
+        return tokens
+
+    def get_freq(self, seq_len, pos1d, dim, device):
+        freqs = None
+        if (dim, seq_len, device) not in self.cache:
+            inv_freq = 1.0 / (self.base ** (torch.arange(0, dim, 2).float().to(device) / dim))
+            t = torch.arange(seq_len, device=device, dtype=inv_freq.dtype)
+            freqs = torch.einsum("i,j->ij", t, inv_freq)
+            freqs = torch.cat((freqs, freqs), dim=-1) # (Seq, Dim)
+            self.cache[dim, seq_len, device] = freqs
+        freqs = self.cache[dim, seq_len, device]
+        return F.embedding(pos1d, freqs)[:, :, None, :] # s, b, 1, d
+
+    def forward(self, b, t, h, w, device):
+        poses, max_poses = self.get_position(b, t, h, w, device) # [3, seq, batch]
+
+        out = []
+        for i, dim in enumerate(self.ch_split):
+            freq_i = self.get_freq(max_poses[i] + 1, poses[i], dim, device)
+            out.append(freq_i)
+        
+        freqs = torch.cat(out, dim=-1)
+        return freqs

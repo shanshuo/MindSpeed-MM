@@ -13,7 +13,8 @@ from .dits import (
     VideoDitSparseI2V, 
     PTDiT,
     HunyuanVideoDiT,
-    WanDiT
+    WanDiT,
+    StepVideoDiT
 )
 
 PREDICTOR_MODEL_MAPPINGS = {
@@ -26,7 +27,8 @@ PREDICTOR_MODEL_MAPPINGS = {
     "satdit": SatDiT,
     "ptdit": PTDiT,
     "hunyuanvideodit": HunyuanVideoDiT,
-    "wandit": WanDiT
+    "wandit": WanDiT,
+    "stepvideodit": StepVideoDiT
 }
 
 

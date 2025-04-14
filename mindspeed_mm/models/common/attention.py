@@ -165,6 +165,9 @@ class FlashAttention(nn.Module):
         """
         seq_length, batch_size, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
 
+        if attention_mask is not None and self.context_parallel_algo not in ["megatron_cp_algo", "hybrid_cp_algo"]:
+            attention_mask = attention_mask.view(batch_size, 1, -1, attention_mask.shape[-1])
+
         if self.context_parallel_size > 1 and self.context_parallel_algo in ["megatron_cp_algo", "hybrid_cp_algo"]:
             if self.fa_layout.lower() != "sbh":
                 raise ValueError(f"Flash attention layout mulst be `sbh` when using Ring Attention, but got {self.fa_layout}!")
@@ -242,6 +245,8 @@ class ParallelAttention(nn.Module):
         is_kv_concat: Whether to concatenate kv in projection.
         fa_layout: The input layout of Flash Attention.
         rope: The Rotary Position Embedding object, default to `None`.
+        split_kv_in_forward: Whether the input kv in the forward function is split or not.
+            This argument is valid only in ["ulysses_cp_algo", "hybrid_cp_algo"].
     """
     def __init__(
         self,
@@ -263,6 +268,7 @@ class ParallelAttention(nn.Module):
         is_kv_concat: bool = False,
         fa_layout: str = "sbh",
         rope=None,
+        split_kv_in_forward: bool = True,
         **kwargs
     ):
         super().__init__()
@@ -369,7 +375,8 @@ class ParallelAttention(nn.Module):
             ulysses_group = mpu.get_context_parallel_group()
             if args.context_parallel_algo == "hybrid_cp_algo":
                 ulysses_group = get_context_parallel_group_for_hybrid_ulysses()
-            self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, ulysses_group)
+            if split_kv_in_forward:
+                self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, ulysses_group)
 
         # Output
         self.proj_out = tensor_parallel.RowParallelLinear(
