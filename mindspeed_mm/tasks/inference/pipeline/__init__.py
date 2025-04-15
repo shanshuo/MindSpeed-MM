@@ -9,13 +9,16 @@ from mindspeed_mm.tasks.inference.pipeline.qihoo_pipeline import QihooPipeline
 from mindspeed_mm.tasks.inference.pipeline.qwen2vl_pipeline import Qwen2VlPipeline
 from mindspeed_mm.tasks.inference.pipeline.hunyuanvideo_pipeline import HunyuanVideoPipeline
 from mindspeed_mm.tasks.inference.pipeline.wan_pipeline import WanPipeline
+from mindspeed_mm.tasks.inference.pipeline.stepvideo_pipeline import StepVideoPipeline
 
 sora_pipeline_dict = {"OpenSoraPlanPipeline": OpenSoraPlanPipeline,
                       "OpenSoraPipeline": OpenSoraPipeline,
                       "QihooPipeline": QihooPipeline,
                       "CogVideoXPipeline": CogVideoXPipeline,
                       "HunyuanVideoPipeline": HunyuanVideoPipeline,
-                      "WanPipeline": WanPipeline}
+                      "WanPipeline": WanPipeline,
+                      "StepVideoPipeline": StepVideoPipeline
+}
 
 vlm_pipeline_dict = {
     "InternVLPipeline": InternVLPipeline,
