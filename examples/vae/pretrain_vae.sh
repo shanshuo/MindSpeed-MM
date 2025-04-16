@@ -16,6 +16,8 @@ NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
+MBS=1
+GBS=$(($WORLD_SIZE*$MBS))
 
 AE_DATA="./examples/vae/data.json"
 AE_MODEL="./examples/vae/model.json"
@@ -49,7 +51,6 @@ AE_ARGS="
 "
 
 OUTPUT_ARGS="
-    --log-interval 1 \
     --save-interval 10000 \
     --save $SAVE_PATH
 "
@@ -63,3 +64,6 @@ torchrun $DISTRIBUTED_ARGS pretrain_ae.py \
     2>&1 | tee logs/train_${logfile}.log
 chmod 440 logs/train_${logfile}.log
 chmod -R 640 $SAVE_PATH
+STEP_TIME=`grep "elapsed time per iteration" logs/train_${logfile}.log | awk -F ':' '{print$4}' | awk -F '|' '{print$1}' | head -n 200 | tail -n 100 | awk '{sum+=$1} END {if (NR != 0) printf("%.5f",sum/NR)}'`
+PERF=`awk 'BEGIN{printf "%.3f\n", '${GBS}'/'${STEP_TIME}'}'`
+echo "Elapsed Time Per iteration: $STEP_TIME, Average Samples per Second: $PERF"
