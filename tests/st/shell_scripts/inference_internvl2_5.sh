@@ -1,5 +1,7 @@
 #!/bin/bash
+set -e
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
+
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
 export TASK_QUEUE_ENABLE=2
@@ -8,11 +10,9 @@ export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
 # 该变量只用于规避megatron对其校验，对npu无效
 export CUDA_DEVICE_MAX_CONNECTIONS=1
-export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 export ACLNN_CACHE_LIMIT=100000
 
-
-NPUS_PER_NODE=8
+NPUS_PER_NODE=1
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
@@ -20,23 +20,31 @@ NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 MBS=1
-GRAD_ACC_STEP=64
+GRAD_ACC_STEP=1
 TP=1
 PP=1
 CP=1
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
-MM_DATA="./examples/internvl2.5/data_4B.json"
-MM_MODEL="./examples/internvl2.5/model_4B.json"
-MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="./ckpt/mm_path/internvl2_5"
-SAVE_PATH="save_dir"
+BASEPATH=$(cd `dirname $0`; cd ../../../; pwd)
+
+LOCATION=$(pip show mindspeed 2>/dev/null | grep "^Location:" | awk '{print $2}')
+
+echo "LOCATION: $LOCATION"
+echo "BASEPATH: $BASEPATH"
+
+mv -f "$LOCATION/mindspeed/core/transformer/dot_product_attention.py"  "$LOCATION/mindspeed/core/transformer/dot_product_attention.py_bak"
+
+cp -rf "$BASEPATH/examples/internvl2.5/dot_product_attention.py"   "$LOCATION/mindspeed/core/transformer/dot_product_attention.py"
+
+cd $BASEPATH
+
+MM_MODEL="$BASEPATH/tests/st/run_configs/inference_internvl2_5/inference_4B.json"
+
 
 MM_ARGS="
-    --mm-data ${MM_DATA} \
     --mm-model ${MM_MODEL} \
-    --mm-tool ${MM_TOOL}
 "
 
 DISTRIBUTED_ARGS="
@@ -60,25 +68,8 @@ GPT_ARGS="
     --rotary-base 1000000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 4e-5 \
-    --min-lr 0.0 \
-    --train-iters 5000 \
-    --lr-decay-style cosine \
-    --weight-decay 0.05 \
-    --clip-grad 1.0 \
-    --adam-beta1 0.9 \
-    --adam-beta2 0.999 \
-    --no-gradient-accumulation-fusion \
-    --no-load-optim \
-    --no-load-rng \
-    --no-save-optim \
-    --no-save-rng \
     --use-distributed-optimizer \
     --bf16 \
-    --load $LOAD_PATH \
-    --variable-seq-lengths \
-    --normalization RMSNorm \
-    --num-workers 4 \
     --use-flash-attn \
     --trust-remote-code \
 "
@@ -88,16 +79,13 @@ OUTPUT_ARGS="
     --save-interval 5000 \
     --eval-interval 5000 \
     --eval-iters 5000 \
-    --save $SAVE_PATH \
 "
 
-logfile=$(date +%Y%m%d)_$(date +%H%M%S)
-mkdir -p logs
 torchrun $DISTRIBUTED_ARGS \
-    pretrain_internvl.py \
+    inference_vlm.py \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
-    --distributed-backend nccl \
-    | tee logs/train_${logfile}.log 2>&1
-chmod 440 logs/train_${logfile}.log
+    --distributed-backend nccl
+
+mv -f "$LOCATION/mindspeed/core/transformer/dot_product_attention.py_bak"  "$LOCATION/mindspeed/core/transformer/dot_product_attention.py"
