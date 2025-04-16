@@ -11,6 +11,7 @@ VBench是当前视频生成领域相对全面的评测框架，支持t2v、i2v�
 vbench==0.1.5
 transformers==4.45.0
 scenedetect==0.6.5.2
+av==13.1.0
 ffmpeg
 moviepy==1.0.3
 dreamsim==0.2.1

@@ -1,40 +1,24 @@
-# coding=utf-8
-# Copyright 2023-present the HuggingFace Inc. team.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-
-import inspect
 import json
 import os
-from typing import Optional
 
 import imageio
 import pandas as pd
 import torch
-from huggingface_hub import hf_hub_download
 from megatron.core import mpu
 from megatron.training.utils import print_rank_0
 from peft.config import PeftConfigMixin
-from peft.mapping import PEFT_TYPE_TO_CONFIG_MAPPING
-from peft.utils import CONFIG_NAME
-from torch.nn.parallel.distributed import DistributedDataParallel as ddp
-from transformers.utils import PushToHubMixin
 
 from mindspeed_mm.data import build_mm_dataloader
 from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.tasks.evaluation.eval_impl.base_gen import BaseGenEvalImpl
 from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import safe_load_image
 from mindspeed_mm.utils.utils import get_dtype, get_device
+from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.compute_score import compute_score
+from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_t2v_patch import patch_t2v
+from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_i2v_patch import PatchPeftConfigMixin
+from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_i2v_patch import evaluate_i2v
+from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_long_patch import (patch_static_filter_load_model,
+                                                                                    evaluate_long)
 
 RATIO = ["1-1", "8-5", "7-4", "16-9"]
 
@@ -58,20 +42,24 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
         self.pipeline = inference_pipeline
         self.eval_args = args
         self.dataset = dataset
+        self.full_dimension_list = []
+        self.res_score = {}
 
     def __call__(self):
         if self.need_inference:
             self.inference_video()
         self.analyze_result()
+        if self.eval_type == "t2v" or self.eval_type == "long":
+            self.compute_t2v_long_score()
 
     def check_dimension_list(self):
-        dimension_list = self.vbench.build_full_dimension_list()
+        self.full_dimension_list = self.vbench.build_full_dimension_list()
 
         if not self.dimensions:
-            self.dimensions = dimension_list
+            self.dimensions = self.full_dimension_list
 
-        if not set(self.dimensions).issubset(set(dimension_list)):
-            raise NotImplementedError("Support dimensions contains:{}".format(dimension_list))
+        if not set(self.dimensions).issubset(set(self.full_dimension_list)):
+            raise NotImplementedError("Support dimensions contains:{}".format(self.full_dimension_list))
 
     def save_result_to_excel(self, data):
         excel_res_path = os.path.join(self.result_output_path, "eval_result.xlsx")
@@ -89,6 +77,8 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
                         "video_results": item["video_results"]
                     }
                     rows.append(row)
+                    # save res to compute total score
+                    self.res_score[key] = score
                 df = pd.DataFrame(rows)
                 df.to_excel(writer, sheet_name=key, index=False)
         print_rank_0(f"Save excel to {excel_res_path}.")
@@ -99,6 +89,7 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
         from vbench2_beta_i2v import VBenchI2V
         from vbench2_beta_long import VBenchLong
         from vbench2_beta_long.static_filter import StaticFilter
+        patch_t2v()
 
         device = torch.device("npu")
         result_file_name = f'{self.eval_type}'
@@ -127,7 +118,8 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
             if self.ratio not in RATIO:
                 raise ValueError(f"Not support this ratio {self.ratio}")
 
-            self.vbench.evaluate(
+            evaluate_i2v(
+                self.vbench,
                 videos_path=self.videos_path,
                 name=result_file_name,
                 dimension_list=self.dimensions,
@@ -149,7 +141,8 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
                       "bg_mapping_file_path": os.path.join(self.long_eval_config,
                                                             "configs/background_mapping_table.yaml"),
                       "dev_flag": True, "num_of_samples_per_prompt": 5, "static_filter_flag": True}
-            self.vbench.evaluate(
+            evaluate_long(
+                self.vbench,
                 videos_path=self.videos_path,
                 name=result_file_name,
                 prompt_list=self.prompt,
@@ -162,11 +155,25 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
         else:
             raise NotImplementedError("Not support evaluate type.")
 
-        result_path = os.path.join(self.result_output_path, result_file_name + '_eval_results.json')
-        with open(result_path, 'r', encoding='utf-8') as f:
-            self.save_result_to_excel(json.load(f))
+        torch.distributed.barrier()
+        if torch.distributed.get_rank() == 0:
+            result_path = os.path.join(self.result_output_path, result_file_name + '_eval_results.json')
+            with open(result_path, 'r', encoding='utf-8') as f:
+                self.save_result_to_excel(json.load(f))
 
         print_rank_0("Evaluation Done.")
+
+    def compute_t2v_long_score(self):
+        if torch.distributed.get_rank() == 0:
+            res_score_replace_key = {}
+            res_dimension_key = []
+            for key, value in self.res_score.items():
+                res_dimension_key.append(key)
+                res_score_replace_key[key.replace("_", " ")] = value
+            if sorted(self.full_dimension_list) != sorted(res_dimension_key):
+                print_rank_0('Not contain full dimension, can not compute total score.')
+            else:
+                compute_score(res_score_replace_key)
 
     def load_i2v_dimension_info(self, json_dir, dimension, lang, resolution):
         video_pair_list = []
@@ -259,76 +266,3 @@ class VbenchGenEvalImpl(BaseGenEvalImpl):
             imageio.mimwrite(save_path, videos, fps=fps, quality=6)
         else:
             raise ValueError("The video must be in either [b, t, h, w, c] or [t, h, w, c] format.")
-
-
-def patch_static_filter_load_model(self):
-    from vbench.third_party.RAFT.core.raft import RAFT
-
-    self.model = ddp(RAFT(self.args).to(self.device))
-    self.model.load_state_dict(torch.load(self.args.model))
-
-    self.model = self.model.module
-    self.model.eval()
-
-
-class PatchPeftConfigMixin(PushToHubMixin):
-    @classmethod
-    def _split_kwargs(cls, kwargs):
-        hf_hub_download_kwargs = {}
-        class_kwargs = {}
-        other_kwargs = {}
-
-        for key, value in kwargs.items():
-            if key in inspect.signature(hf_hub_download).parameters:
-                hf_hub_download_kwargs[key] = value
-            elif key in list(cls.__annotations__):
-                class_kwargs[key] = value
-            else:
-                other_kwargs[key] = value
-
-        return hf_hub_download_kwargs, class_kwargs, other_kwargs
-
-    @classmethod
-    def from_json_file(cls, path_json_file: str):
-        with open(path_json_file, "r") as file:
-            json_object = json.load(file)
-
-        return json_object
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, subfolder: Optional[str] = None, **kwargs):
-        path = (
-            os.path.join(pretrained_model_name_or_path, subfolder)
-            if subfolder is not None
-            else pretrained_model_name_or_path
-        )
-
-        hf_hub_download_kwargs, class_kwargs, _ = cls._split_kwargs(kwargs)
-
-        if os.path.isfile(os.path.join(path, CONFIG_NAME)):
-            config_file = os.path.join(path, CONFIG_NAME)
-        else:
-            try:
-                print_rank_0(f"Warning: download {CONFIG_NAME}")
-                config_file = hf_hub_download(
-                    pretrained_model_name_or_path, CONFIG_NAME, subfolder=subfolder, local_files_only=True,
-                    **hf_hub_download_kwargs
-                )
-            except Exception as e:
-                raise ValueError(f"Can't find '{CONFIG_NAME}' at '{pretrained_model_name_or_path}'") from e
-
-        loaded_attributes = cls.from_json_file(config_file)
-
-        if "peft_type" in loaded_attributes:
-            peft_type = loaded_attributes["peft_type"]
-            config_cls = PEFT_TYPE_TO_CONFIG_MAPPING.get(peft_type, cls)
-        else:
-            config_cls = cls
-
-        kwargs = {**class_kwargs, **loaded_attributes}
-
-        kwargs.pop('layer_replication', None)
-        kwargs.pop('use_dora', None)
-        kwargs.pop('use_rslora', None)
-        config = config_cls(**kwargs)
-        return config
