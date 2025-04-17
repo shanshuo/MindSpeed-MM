@@ -71,6 +71,8 @@ def do_ring_context_parallel(q, k, v, head_num, softmax_scale, attn_mask, dropou
     cp_para['pse'] = pse
     cp_para['pse_type'] = pse_type
 
+    cp_para['megatron_cp_in_bnsd'] = args.megatron_cp_in_bnsd
+
     output = ringattn_context_parallel(q, k, v, head_num, cp_para, softmax_scale, attn_mask, dropout_p)
 
     return output

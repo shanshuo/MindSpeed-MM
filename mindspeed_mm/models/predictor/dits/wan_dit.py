@@ -44,7 +44,7 @@ class WanDiT(MultiModalModule):
         cross_attn_norm: bool = False,
         eps: float = 1e-6,
         max_seq_len: int = 1024,
-        fa_layout: str = "sbh",
+        fa_layout: str = "bnsd",
         clip_token_len: int = 257,
         **kwargs,
     ):
@@ -87,7 +87,9 @@ class WanDiT(MultiModalModule):
         self.distribute_saved_activations = args.distribute_saved_activations
         self.recompute_method = args.recompute_method
         self.recompute_layers = (
-            args.recompute_num_layers if args.recompute_num_layers is not None else num_layers
+            args.recompute_num_layers
+            if args.recompute_num_layers is not None
+            else num_layers
         )
 
         if self.recompute_granularity == "selective":
@@ -573,19 +575,19 @@ class WanFlashAttention(FlashAttention):
         self,
         softmax_scale=None,
         attention_dropout=0.0,
-        fa_layout="sbh",
+        fa_layout="bnsd",
         attention_type=AttnType.self_attn,
     ):
         super().__init__(
             softmax_scale=softmax_scale,
             attention_dropout=attention_dropout,
-            fa_layout=fa_layout,
         )
         self.attention_type = attention_type
         # context parallel setting
         args = get_args()
         self.context_parallel_algo = args.context_parallel_algo
 
+        # Decide cp group
         if self.context_parallel_algo == "hybrid_cp_algo":
             self.ulysses_cp_group = get_context_parallel_group_for_hybrid_ulysses()
         elif self.context_parallel_algo == "ulysses_cp_algo":
@@ -593,8 +595,15 @@ class WanFlashAttention(FlashAttention):
         else:
             self.ulysses_cp_group = None
 
+        # Decide cp algo
         if attention_type == AttnType.cross_attn:
             self.context_parallel_algo = "ulysses_cp_algo"
+
+        # Decide fa layout because USP & ring attention only supports layout of SBH as input
+        if self.context_parallel_algo in ["hybrid_cp_algo", "megatron_cp_algo"]:
+            self.fa_layout = "sbh"
+        else:
+            self.fa_layout = fa_layout
 
     def _split_head(self, x, dim=2):
         if self.ulysses_cp_group is None:
@@ -644,7 +653,7 @@ class WanVideoParallelAttention(ParallelAttention):
         norm_eps: float = 1e-5,
         attention_type: int = AttnType.self_attn,
         has_img_input: bool = False,
-        fa_layout: str = "sbh",
+        fa_layout: str = "bnsd",
         rope=None,
         **kwargs,
     ):

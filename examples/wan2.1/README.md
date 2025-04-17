@@ -110,7 +110,7 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 # checkout commit from MindSpeed core_r0.8.0
-git checkout 9bd51f777820aff70ab7507c8b4da7dde566b37b
+git checkout 1ada966f33d6fab6eff7c95b197aae51f8790926
 pip install -r requirements.txt 
 pip install -e .
 cd ..
@@ -119,11 +119,7 @@ cd ..
 pip install -e .
 
 # 源码安装Diffusers
-git clone https://github.com/huggingface/diffusers.git
-cd diffusers
-git checkout 20e4b6a628c7e433f5805de49afc28f991c185c0
-pip install -e .
-cd ..
+pip install diffusers==0.33.1
 ```
 
 ### Decord搭建
@@ -281,13 +277,19 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 
 当调整模型参数或者视频序列长度时，需要根据实际情况启用以下并行策略，并通过调试确定最优并行策略。
 
-- CP: 序列并行，当前支持Ulysess序列并行。
+- CP: 序列并行。
 
   - 使用场景：在视频序列（分辨率X帧数）较大时，可以开启来降低内存占用。
   
   - 使能方式：在启动脚本中设置 CP > 1，如：CP=2；
   
   - 限制条件：head 数量需要能够被CP整除（在`exmaples/wan2.1/{model_size}/{task}/pretrain_model.json`中配置，参数为`num_heads`）
+
+  - 默认使能方式为Ulysess序列并行。
+
+  - DiT-RingAttention：DiT RingAttention序列并行请[参考文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/dit_ring_attention.md)
+
+  - DiT-USP: DiT USP混合序列并行（Ulysses + RingAttention）请[参考文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/dit_usp.md)
 
 - layer_zero
 
@@ -306,47 +308,6 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
     # input_folder为layerzero训练保存权重的路径，output_folder为输出的megatron格式权重的路径
     python <your_mindspeed_path>/mindspeed/core/distributed/layerzero/state/scripts/convert_to_megatron.py --input_folder ./save_ckpt/wan2.1/iter_000xxxx/ --output_folder ./save_ckpt/wan2.1_megatron_ckpt/iter_000xxxx/ --prefix predictor
     ```
-  
-- DiT-RingAttention：DiT RingAttention序列并行
-
-  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention
-  - 使能方式：在启动脚本 pretrain.sh 中修改如下变量
-
-  ```shell
-  CP=8
-  
-  GPT_ARGS="
-    --context-parallel-size ${CP} \
-    --context-parallel-algo megatron_cp_algo \
-    --use-cp-send-recv-overlap \
-    --cp-window-size 1
-  ...
-  ```
-
-  - ```--use-cp-send-recv-overlap```为可选参数，建议开启，开启后支持send receive overlap功能
-  - ```--cp-window-size [int]```为可选参数，设置算法中双层Ring Attention的内层窗口大小，需要确保cp_size能被该参数整除
-    - 缺省值为1，即使用原始的Ring Attention算法
-    - 大于1时，即使用Double Ring Attention算法，优化原始Ring Attention性能
-
-- DiT-USP: DiT USP混合序列并行（Ulysses + RingAttention）
-  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention
-  - 使能方式：在启动脚本pretrain.sh中修改如下变量
-
-  ```shell
-  CP=8
-  
-  GPT_ARGS="
-    --context-parallel-size ${CP} \
-    --context-parallel-algo hybrid_cp_algo \
-    --use-cp-send-recv-overlap \
-    --ulysses-degree-in-cp [int]
-  ...
-  ```
-
-  - 需要确保```--context-parallel-size```可以被```--ulysses-degree-in-cp```整除且大于1
-    - 例如当设置```--context-parallel-size```为8时，可以设置```--ulysses-degree-in-cp```为2或```--ulysses-degree-in-cp```为4
-    - 同时需要确保```--ulysses-degree-in-cp```可以被num-attention-heads数整除
-  - RingAttention相关参数解析见DiT-RingAttention部分
 
 #### 启动训练
 
