@@ -51,7 +51,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 |       模型 \ 特性       | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
 |:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
-|       Wan2.1        |  |  |  |  | CP (Ulysses) | ✔ | ✔ |  |
+|       Wan2.1        |  |  |  |  | CP (Ulysses) | ✔ | ✔ | Prototype |
 |    HunyuanVideo     | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 |   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | Prototype |
 |   CogVideoX系列-I2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | Prototype |
@@ -154,7 +154,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="24"> 多模态生成 </td>
+      <td rowspan="26"> 多模态生成 </td>
       </tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-T2V</a></td>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers">1.3B</a></td>

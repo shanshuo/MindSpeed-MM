@@ -307,7 +307,7 @@ def split_model_by_pipeline(state_dict, pp_split):
     return return_dicts, copy_dict
 
 
-def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release', _exists_ok=False, _tp_rank=0):
+def save_by_pp(_state_dicts, _save_dir, _latest_checkpointed_iteration='release', _exists_ok=False, _tp_rank=0):
     if os.path.exists(_save_dir):
         if not _exists_ok:
             print(f'save dir: {_save_dir} exists, please check.')
@@ -318,12 +318,12 @@ def save_by_pp(_state_dicts, _save_dir, _lastest_checkpointed_iteration='release
     flags = os.O_WRONLY | os.O_CREAT
     mode = stat.S_IWUSR | stat.S_IRUSR
     with os.fdopen(os.open(os.path.join(_save_dir, 'latest_checkpointed_iteration.txt'), flags, mode), 'w') as fout:
-        fout.write(_lastest_checkpointed_iteration)
+        fout.write(_latest_checkpointed_iteration)
 
-    if _lastest_checkpointed_iteration == 'release':
+    if _latest_checkpointed_iteration == 'release':
         directory = 'release'
     else:
-        directory = 'iter_{:07d}'.format(_lastest_checkpointed_iteration)
+        directory = 'iter_{:07d}'.format(_latest_checkpointed_iteration)
 
     if len(_state_dicts) > 1:
         for pp_rank, _state_dict in enumerate(_state_dicts):
