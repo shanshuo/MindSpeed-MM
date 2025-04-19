@@ -8,28 +8,26 @@ export TASK_QUEUE_ENABLE=1
 export COMBINED_ENABLE=1
 export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
-# 该变量只用于规避megatron对其校验，对npu无效
-export CUDA_DEVICE_MAX_CONNECTIONS=1
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
-NPUS_PER_NODE=8
+NPUS_PER_NODE=16
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
-TP=4
+TP=1
 PP=1
 CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_DATA="./examples/hunyuanvideo/feature_data.json"
-MM_MODEL="./examples/hunyuanvideo/model_hunyuanvideo.json"
+MM_DATA="./examples/hunyuanvideo/t2v_A3/feature_data.json"
+MM_MODEL="./examples/hunyuanvideo/t2v_A3/model_hunyuanvideo.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="./ckpt/hunyuanvideo"
 SAVE_PATH="./save_ckpt/hunyuanvideo"
-layerzero_config="examples/hunyuanvideo/zero_config.yaml"
+layerzero_config="examples/hunyuanvideo/t2v_A3/zero_config.yaml"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -85,6 +83,8 @@ GPT_ARGS="
     --normalization RMSNorm \
     --use-fused-rmsnorm \
     --sequence-parallel \
+    --layerzero \
+    --layerzero-config ${layerzero_config} \
 "
 
 MM_ARGS="

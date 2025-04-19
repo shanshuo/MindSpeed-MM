@@ -100,7 +100,7 @@
     },
     "micro_batch_size": 1,
     "save_path": "./hunyuanvideo_samples/",
-    "prompt": "examples/hunyuanvideo/samples_prompts.txt",
+    "prompt": "examples/hunyuanvideo/t2v/samples_prompts.txt",
     "dtype": "bf16",
     "device": "npu",
     "pipeline_class": "HunyuanVideoPipeline",
