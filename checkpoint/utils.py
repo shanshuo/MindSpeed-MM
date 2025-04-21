@@ -7,6 +7,7 @@
 """
 import os
 import json
+import re
 import shutil
 from copy import deepcopy
 from functools import cached_property
@@ -17,6 +18,8 @@ from safetensors.torch import save_file, load_file
 from pydantic import BaseModel, DirectoryPath, PositiveInt, NonNegativeInt, model_validator, computed_field
 from tqdm import tqdm
 from transformers import PretrainedConfig, AutoConfig
+
+from checkpoint.operator import Operator, TieOp, STATE_DICT_T, TP_PATTERN_T
 
 LATEST_TXT = "latest_checkpointed_iteration.txt"
 
@@ -36,6 +39,9 @@ class ParallelConfig(BaseModel):
     @computed_field
     def pp_size(self) -> PositiveInt:
         return len(self.llm_pp_layers)
+
+    def is_pp(self) -> bool:
+        return self.pp_size > 1
 
     @model_validator(mode='after')
     def validate_pp_layers(self) -> "ParallelConfig":
@@ -191,16 +197,16 @@ class ConvertVppMMConfig(BaseModel):
         expected_length = self.parallel_config.pp_size * self.parallel_config.vpp_size
         if len(vit_pipeline_num_layers_flat) != expected_length:
             raise AssertionError(f'Length of vit_pipeline_num_layers_flat must be equal to pp_size * vp_size, '
-                                f'but got {len(vit_pipeline_num_layers_flat)} and {expected_length}.')
+                                 f'but got {len(vit_pipeline_num_layers_flat)} and {expected_length}.')
         if sum(vit_pipeline_num_layers_flat) != vit_num_layers:
             raise AssertionError(f'Sum of vit_pipeline_num_layers_flat must be equal to vit_num_layers, '
-                                f'but got {sum(vit_pipeline_num_layers_flat)} and {vit_num_layers}.')
+                                 f'but got {sum(vit_pipeline_num_layers_flat)} and {vit_num_layers}.')
         if len(llm_pipeline_num_layers_flat) != expected_length:
             raise AssertionError(f'Length of llm_pipeline_num_layers_flat must be equal to pp_size * vp_size, '
-                                f'but got {len(llm_pipeline_num_layers_flat)} and {expected_length}.')
+                                 f'but got {len(llm_pipeline_num_layers_flat)} and {expected_length}.')
         if sum(llm_pipeline_num_layers_flat) != llm_num_layers:
             raise AssertionError(f'Sum of llm_pipeline_num_layers_flat must be equal to llm_num_layers, '
-                                f'but got {sum(llm_pipeline_num_layers_flat)} and {llm_num_layers}.')
+                                 f'but got {sum(llm_pipeline_num_layers_flat)} and {llm_num_layers}.')
         return self
 
 
@@ -212,14 +218,14 @@ class ConvertVppHFConfig(ConvertVppMMConfig):
 
 def save_by_index_json(_state_dicts, _save_dir):
     metadata = {
-            'format': 'pt'
-            }
+        'format': 'pt'
+    }
     for index, state_dict in enumerate(_state_dicts, start=1):
         name = f'model-{index:05}-of-{len(_state_dicts):05}.safetensors'
         save_file(state_dict, Path(_save_dir).joinpath(name), metadata=metadata)
 
 
-def split_by_index_json(state_dict: dict[str, torch.Tensor], hf_dir: Path) -> list[dict[str, torch.Tensor]]:
+def split_by_index_json(state_dict: STATE_DICT_T, hf_dir: Path) -> list[STATE_DICT_T]:
     index_json_path = hf_dir.joinpath('model.safetensors.index.json')
     if not os.path.exists(index_json_path):
         raise ValueError(f"safetensors.index.json not in {index_json_path}")
@@ -245,7 +251,7 @@ def copy_files_except_suffix(source_path: Path, target_path: Path, except_suffix
             print(f"Copied: {item} -> {destination}")
 
 
-def load_from_hf(hf_dir: Path) -> dict[str, torch.Tensor]:
+def load_from_hf(hf_dir: Path) -> STATE_DICT_T:
     # 注意AutoModel.from_pretrained转换成模型对象时，存在torch_dtype问题需确认，因此这里直接读取safetensors确保dtype一致
     files = list(hf_dir.glob("*.safetensors"))
     state_dict = {}
@@ -262,8 +268,7 @@ def merge_pp_index(vit_pipeline_num_layers: list[int], llm_pipeline_num_layers: 
     return split_method
 
 
-def split_model_by_pipeline(state_dict: dict[str, torch.Tensor],
-                            pp_split: list[tuple[int, int]]) -> list[dict[str, torch.Tensor]]:
+def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, int]]) -> list[STATE_DICT_T]:
     if len(pp_split) <= 1:
         return [state_dict]
 
@@ -381,3 +386,29 @@ def load_from_mm(load_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int],
         state_dicts.append(pp_state_dict)
 
     return state_dicts
+
+
+def split_by_tp(state_dict: STATE_DICT_T, patterns: TP_PATTERN_T, tp_size: int = 1) -> list[STATE_DICT_T]:
+    if tp_size == 1:
+        return [state_dict]
+    return_dicts = []
+    for tp_rank in range(tp_size):
+        new_state_dict = {}
+        for key, value in state_dict.items():
+            for pattern, tp_split_func in patterns.items():
+                if re.match(pattern, key):
+                    value = tp_split_func(tp_size, tp_rank, value)
+                    break
+            new_state_dict[key] = value
+        return_dicts.append(new_state_dict)
+    return return_dicts
+
+
+def convert_hf_to_mm(state_dict: STATE_DICT_T, ops: list[Operator], is_tie: bool, is_pp: bool) -> STATE_DICT_T:
+    if is_tie and is_pp:
+        # pp1时，output_layer从word_embedding处获取共享权重。pp>1时，流水线后面的卡无法获得word_embedding，因此需要加上该权重
+        ops.append(TieOp(raw_name='text_decoder.embedding.word_embeddings.weight',
+                         new_name='text_decoder.output_layer.weight'))
+    for op in ops:
+        op.handle(state_dict)
+    return state_dict
