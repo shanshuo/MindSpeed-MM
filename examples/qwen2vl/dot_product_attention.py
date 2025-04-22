@@ -153,6 +153,7 @@ def dot_product_attention_forward(
         packed_seq_params,
 ):
     is_vit = (getattr(self.config, 'model_id', None) == 'qwen2vit')
+    use_remove_padding = getattr(self.config, 'use_remove_padding', False)
     seq_length, bsz, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
     if not is_vit:
         if attention_mask is not None and 0 not in attention_mask:
@@ -200,6 +201,22 @@ def dot_product_attention_forward(
                 pre_tockens=2147483647,
                 next_tockens=2147483647,
                 sparse_mode=0)[0].reshape(seq_length, bsz, -1)
+        elif use_remove_padding:
+            actual_seq_len = get_actual_seq_len()
+            query, key, value = [rearrange(x, 's b h d -> (b s) h d') for x in [query, key, value]]
+            attention_mask_npu = torch.triu(
+                torch.ones([2048, 2048], dtype=torch.bool, device=query.device), diagonal=1)
+            attn_output = torch_npu.npu_fusion_attention(
+                query, key, value, n_head,
+                pse=None,
+                padding_mask=None,
+                atten_mask=attention_mask_npu,
+                scale=1.0 / math.sqrt(query.shape[-1]),
+                keep_prob=1,
+                input_layout="TND",
+                actual_seq_qlen=actual_seq_len,
+                actual_seq_kvlen=actual_seq_len,
+                sparse_mode=3)[0].reshape(seq_length, bsz, -1)
         elif attention_mask is not None:
             query = query.transpose(0, 1).contiguous()
             key = key.transpose(0, 1).contiguous()

@@ -17,6 +17,7 @@ from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 
 from mindspeed.core.context_parallel.unaligned_cp.mapping import cal_split_sizes, split_forward_gather_backward, gather_forward_split_backward
+from mindspeed.utils import set_actual_seq_len
 from mindspeed_mm.models.vision.vision_encoders.qwen2vl_vit_model import Qwen2VLRotaryEmbedding_llm
 from mindspeed_mm.utils.utils import ensure_valid
 
@@ -205,6 +206,19 @@ class MMGPTModel(LanguageModule):
                 inference_params, self.decoder, decoder_input, self.config
             )
             rotary_pos_emb = self.rotary_pos_emb(rotary_seq_len)
+
+        if getattr(self.config, 'use_remove_padding', False):
+            if position_ids is not None and position_ids.dim() == 3:
+                position_ids_fa = position_ids[0]
+            position_ids_fa = position_ids_fa.flatten()
+            indices_q = torch.arange(position_ids_fa.size(0), device=position_ids_fa.device, dtype=torch.int32)
+            cu_seqlens = torch.cat(
+                (
+                    indices_q[position_ids_fa == 0],
+                    torch.tensor(position_ids_fa.size(), device=position_ids_fa.device, dtype=torch.int32),
+                )
+            )
+            set_actual_seq_len(tuple(cu_seqlens[1:].cpu().numpy().tolist()))
 
         # Run decoder.
         hidden_states = self.decoder(

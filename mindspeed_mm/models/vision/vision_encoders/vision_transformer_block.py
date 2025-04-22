@@ -5,15 +5,13 @@ from typing import Union
 
 import torch
 from torch import Tensor
-
 from megatron.core.transformer.transformer_block import TransformerBlockSubmodules, TransformerBlock
-
 from megatron.core import InferenceParams, parallel_state, tensor_parallel, mpu
 from megatron.core.packed_seq_params import PackedSeqParams
-
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.utils import make_viewless_tensor
+from mindspeed.utils import set_actual_seq_len
 
 
 class VisionTransformerBlock(TransformerBlock):
@@ -155,6 +153,8 @@ class Qwen2VLVisionTransformerBlock(TransformerBlock):
             hidden_states: Tensor,
             attention_mask: Tensor,
             window_mask=None,
+            cu_seqlens=None,
+            cu_window_seqlens=None,
             context: Tensor = None,
             context_mask: Tensor = None,
             rotary_pos_emb: Tensor = None,
@@ -240,8 +240,10 @@ class Qwen2VLVisionTransformerBlock(TransformerBlock):
                         if getattr(self.config, "window_attn_size", None) is not None:
                             if layer_num in fullatt_block_indexes_now:
                                 attention_mask_now = attention_mask
+                                set_actual_seq_len(tuple(cu_seqlens[1:].cpu().numpy().tolist()))
                             else:
                                 attention_mask_now = window_mask
+                                set_actual_seq_len(tuple(cu_window_seqlens[1:].cpu().numpy().tolist()))
                         else:
                             attention_mask_now = attention_mask
                         hidden_states, context = layer(

@@ -489,6 +489,7 @@ class Qwen2VLViT(MultiModalModule):
         seq_len = pixel_values.shape[0]
         window_index = None
         window_mask = None
+        cu_window_seqlens = None
         if getattr(self.config, 'window_attn_size', None) is not None:
             if getattr(self.config, 'fullatt_block_indexes', None) is None:
                 raise ValueError("The 'fullatt_block_indexes' attribute is required when using 'window_attn_size'.")
@@ -559,7 +560,9 @@ class Qwen2VLViT(MultiModalModule):
             hidden_states=hidden_states,
             rotary_pos_emb=rotary_pos_emb,
             attention_mask=attention_mask,
-            window_mask=window_mask
+            window_mask=window_mask,
+            cu_seqlens=cu_seqlens,
+            cu_window_seqlens=cu_window_seqlens
         )
         
         if mpu.get_context_parallel_world_size() > 1:
