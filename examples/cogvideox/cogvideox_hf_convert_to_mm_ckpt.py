@@ -35,7 +35,7 @@ first_pipeline_stage_keys = ["time_embed.time_embed.0.bias", "time_embed.time_em
 
 last_pipeline_stage_keys = ["norm_final.weight", "norm_final.bias",
                             "norm_out.weight", "norm_out.bias",
-                            "proj_out.weight", "proj_out_linear.bias",
+                            "proj_out_linear.weight", "proj_out_linear.bias",
                             "adaLN_modulation.1.weight", "adaLN_modulation.1.bias"]
 
 
