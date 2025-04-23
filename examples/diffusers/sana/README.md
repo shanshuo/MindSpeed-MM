@@ -119,7 +119,7 @@ Sana是由NVIDIA、麻省理工学院和清华大学共同推出的文生图模�
 
     ```shell
     pip install -e .
-    vim examples/dreambooth/requirements_sana.txt #修改版本：torchvision==0.16.0, torch==2.1.0, accelerate==0.33.0, 添加deepspeed==0.15.2
+    vim examples/dreambooth/requirements_sana.txt #修改版本：torchvision==0.16.0, torch==2.1.0, accelerate==0.33.0, transformers==4.47.1 添加deepspeed==0.15.2
     pip install -r examples/dreambooth/requirements_sana.txt # 安装对应依赖
     ```
 
@@ -387,6 +387,7 @@ vim infer_sana_text2img_bf16.py # 进入运行推理的Python文件
   ```
 
 <a id="jump3"></a>
+
 ### 性能
 
 | 芯片 | 卡数 |     任务     |  E2E（it/s）  |  AMP_Type | Torch_Version |
@@ -395,6 +396,7 @@ vim infer_sana_text2img_bf16.py # 进入运行推理的Python文件
 | 竞品A | 8p |  文生图  | 1.04 | bf16 | 2.1 |
 
 ### 环境变量声明
+
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
 ASCEND_GLOBAL_EVENT_ENABLE： 设置应用类日志是否开启Event日志，0：关闭Event日志，1：开启Event日志  

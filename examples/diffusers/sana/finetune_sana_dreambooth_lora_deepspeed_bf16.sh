@@ -68,7 +68,7 @@ accelerate launch --config_file ${config_file} \
   --learning_rate=1e-06 \
   --lr_scheduler="constant" \
   --lr_warmup_steps=0 \
-  --dataloader_num_workers=8 \
+  --dataloader_num_workers=0 \
   --max_train_steps=$max_train_steps \
   --validation_prompt="A photo of pokemon in a bucket" \
   --validation_epochs=2500 \
