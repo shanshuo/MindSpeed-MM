@@ -321,6 +321,9 @@ class VLMModel(MultiModalModule):
                                                                              attention_mask=attention_mask,
                                                                              position_ids=position_ids,
                                                                              image_grid_thw=image_grid_thw,
+                                                                             rope_deltas=rope_deltas,
+                                                                             inputs_embeds=input_embeds,
+                                                                             cache_position=cache_position,
                                                                              **kwargs)
 
             output = self.text_decoder(

@@ -344,6 +344,21 @@ mm-convert  Qwen2_5_VLConverter mm_to_hf \
 # vit_pp_layers: vit在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
 # tp_size: tp并行数量，注意要和微调启动脚本中的配置一致
 ```
+## 推理
+
+#### 1、配置参数
+
+根据实际情况修改examples/qwen2.5vl/inference_qwen2_5_vl_7b.json和examples/qwen2.5vl/inference_qwen2_5_vl_7b.sh中的路径配置，包括tokenizer的加载路径tokenizer_name_or_path、以及图片处理器的路径image_processer_path。需注意
+
+（1）tokenizer_name_or_path配置的路径为从huggingface下载的原始Qwen2.5-VL-7B-Instruct路径。
+
+（2）shell文件中的LOAD_PATH的路径为经过权重转换后的模型路径(可PP切分)。
+
+#### 2、启动推理
+
+```shell
+bash examples/qwen2.5vl/inference_qwen2_5_vl_7b.sh
+```
 
 ## Qwen2.5vl支持视频理解
 
@@ -398,6 +413,87 @@ mm-convert  Qwen2_5_VLConverter mm_to_hf \
 ```shell
 bash examples/qwen2.5vl/finetune_qwen2_5_vl_7b.sh
 ```
+
+---
+## 评测
+
+### 数据集准备
+
+当前模型支持AI2D(test)、ChartQA(test)、Docvqa(val)、MMMU(val)四种数据集的评测。
+数据集参考下载链接：
+
+- [MMMU_DEV_VAL](https://opencompass.openxlab.space/utils/VLMEval/MMMU_DEV_VAL.tsv)
+- [DocVQA_VAL](https://opencompass.openxlab.space/utils/VLMEval/DocVQA_VAL.tsv)
+- [AI2D_TEST](https://opencompass.openxlab.space/utils/VLMEval/AI2D_TEST.tsv)
+- [ChartQA_TEST](https://opencompass.openxlab.space/utils/VLMEval/ChartQA_TEST.tsv)
+
+### 参数配置
+
+如果要进行评测需要将要评测的数据集名称和路径传到examples/qwen2.5vl/evaluate_qwen2_5_vl_7b.json
+需要更改的字段有
+
+- `tokenizer`中的`from_pretrained`为huggingface的Qwen2.5-VL的权重，参考readme上面链接自行下载传入
+- `dataset_path`为上述评测数据集的本地路径
+- `evaluation_dataset`为评测数据集的名称可选的名称有(`ai2d_test`、`mmmu_dev_val`、`docvqa_val`、`chartqa_test`)， **注意**：需要与上面的数据集路径相对应。
+- `result_output_path`为评测结果的输出路径，**注意**：每次评测前需要将之前保存在该路径下评测文件删除。
+
+```json
+    "tokenizer": {
+        "from_pretrained": "./Qwen2.5-VL-7B-Instruct",
+
+    },
+    "dataset_path": "./AI2D_TEST.tsv",
+    "evaluation_dataset":"ai2d_test",
+    "evaluation_model":"qwen2_vl_7b",
+    "result_output_path":"./evaluation_outputs/"
+
+```
+
+examples/qwen2.5vl/evaluate_qwen2_5_vl_7b.json改完后，需要将json文件的路径传入到examples/qwen2.5vl/evaluate_qwen2_5_vl_7b.sh MM_MODEL字段中。
+
+以及需要将上面提到的权重转换后模型传入examples/qwen2.5vl/evaluate_qwen2_5_vl_7b.sh中的LOAD_PATH字段中。
+
+```shell
+MM_MODEL=examples/qwen2.5vl/evaluate_qwen2_5_vl_7b.json
+LOAD_PATH="ckpt/mm_path/Qwen2.5-VL-7B-Instruct"
+
+```
+评测支持多卡DP评测需要更改的配置,为NPU卡数量
+
+```shell
+NPUS_PER_NODE=1
+```
+### 关闭融合算子
+
+注释掉MindSpeed/mindspeed/croe/transformer/custom_layers/transformer_engine.py中的49行
+```python
+instance.use_fused_rmsnorm = True
+```
+
+### 修改模型template
+
+修改Qwen2.5-VL-7B-Instruct目录下的chat_template.json文件
+将`You are a helpful assistant.`修改为`Answer the question using a single word or phrase.`
+
+
+
+### 启动评测
+评测额外依赖一些python包，使用下面命令进行安装
+
+```shell
+pip install -e ".[evaluate]"
+```
+
+启动shell开始评测
+```shell
+bash examples/qwen2.5vl/evaluate_qwen2_5_vl_7b.sh
+```
+
+评测结果会输出到`result_output_path`路径中，会输出结果文件：
+
+- *.xlsx文件，这个文件会输出每道题的预测结果和答案等详细信息。
+- *.csv文件，这个文件会输出统计准确率等数据。
+
 
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  

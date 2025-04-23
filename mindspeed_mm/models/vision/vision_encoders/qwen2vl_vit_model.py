@@ -1,4 +1,5 @@
 # coding=utf-8
+# Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 
 from typing import Optional
@@ -486,7 +487,7 @@ class Qwen2VLViT(MultiModalModule):
             hidden_states = None
 
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
-        seq_len = pixel_values.shape[0]
+        seq_len = hidden_states.shape[0] if hidden_states is not None else pixel_values.shape[-2]
         window_index = None
         window_mask = None
         cu_window_seqlens = None

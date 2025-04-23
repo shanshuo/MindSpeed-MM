@@ -353,9 +353,9 @@ def qwen2_position(config,
                   video_grid_thw=None,
                   attention_mask=None,
                   **kwargs):
-    position_ids, _ = qwen2vl_get_rope_index(config, input_ids, image_grid_thw, video_grid_thw,
+    position_ids, rope_deltas = qwen2vl_get_rope_index(config, input_ids, image_grid_thw, video_grid_thw,
                                      kwargs.get('second_per_grid_ts', None), attention_mask=attention_mask)
-    return position_ids
+    return position_ids, rope_deltas
 
 
 def qwen2_5_position(config,
@@ -364,9 +364,9 @@ def qwen2_5_position(config,
                      video_grid_thw=None,
                      attention_mask=None,
                      **kwargs):
-    position_ids, _ = qwen2_5_vl_get_rope_index(config, input_ids, image_grid_thw, video_grid_thw,
+    position_ids, rope_deltas = qwen2_5_vl_get_rope_index(config, input_ids, image_grid_thw, video_grid_thw,
                                      kwargs.get('second_per_grid_ts', None), attention_mask=attention_mask)
-    return position_ids
+    return position_ids, rope_deltas
 
 
 def _build_attentionmask_positionid_qwenllm(config, input_ids, attention_mask, inference_params, position_ids, pos_func,
@@ -379,18 +379,41 @@ def _build_attentionmask_positionid_qwenllm(config, input_ids, attention_mask, i
     else:
         past_seen_tokens = 0
     if position_ids is None:
-        position_ids = pos_func(config,
-                                input_ids,
-                                attention_mask=attention_mask,
-                                **kwargs)
+        if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
+            rope_deltas = kwargs.get('rope_deltas', None)
+            inputs_embeds = kwargs.get('inputs_embeds', None)
+            cache_position = kwargs.get('cache_position', None)
+            # calculate RoPE index once per generation in the pre-fill stage only
+            if (
+                    (cache_position is not None and cache_position[0] == 0)
+                    or rope_deltas is None
+            ):
+                position_ids, rope_deltas = pos_func(config,
+                                                     input_ids,
+                                                     attention_mask=attention_mask,
+                                                     **kwargs)
+                rope_deltas = rope_deltas
+            # then use the prev pre-calculated rope-deltas to get the correct position ids
+            else:
+                batch_size, seq_length, _ = inputs_embeds.shape
+                delta = (
+                    (cache_position[0] + rope_deltas).to(inputs_embeds.device)
+                    if cache_position is not None
+                    else 0
+                )
+                position_ids = torch.arange(seq_length, device=inputs_embeds.device)
+                position_ids = position_ids.view(1, -1).expand(batch_size, -1)
+                if cache_position is not None:  # otherwise `deltas` is an int `0`
+                    delta = delta.repeat_interleave(batch_size // delta.shape[0], dim=0)
+                position_ids = position_ids.add(delta)
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1)
 
     if get_args().use_flash_attn:
         return attention_mask, position_ids
 
     seq_len = input_ids.shape[1]
     past_seen_token = 0
-    cache_position = torch.arange(
-        past_seen_token, past_seen_token + seq_len, device=input_ids.device)
+    cache_position = kwargs.get('cache_position', None)
     dtype, device = torch.bfloat16, input_ids.device
     min_dtype = torch.finfo(dtype).min
     sequence_length = input_ids.shape[1]
