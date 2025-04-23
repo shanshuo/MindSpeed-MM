@@ -414,6 +414,9 @@ def _build_attentionmask_positionid_qwenllm(config, input_ids, attention_mask, i
     seq_len = input_ids.shape[1]
     past_seen_token = 0
     cache_position = kwargs.get('cache_position', None)
+    if cache_position is None:
+        cache_position = torch.arange(
+            past_seen_token, past_seen_token + seq_len, device=input_ids.device)
     dtype, device = torch.bfloat16, input_ids.device
     min_dtype = torch.finfo(dtype).min
     sequence_length = input_ids.shape[1]
