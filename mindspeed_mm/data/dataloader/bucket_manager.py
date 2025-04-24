@@ -47,11 +47,11 @@ class BucketManager:
             self.samples[group_id].append(sample_idx)
             self.lengths[group_id] += 1
 
-        def refresh_index(self, is_shuffle: bool = True, seed: int = None):
+        def refresh_index(self, shuffle: bool = True, seed: int = None):
             self.seed = seed if seed is not None else self.seed
             for group_id in range(self.num_groups):
                 self.index_lists[group_id] = list(range(self.lengths[group_id]))
-                if is_shuffle:
+                if shuffle:
                     random.seed(self.seed)
                     random.shuffle(self.index_lists[group_id])
 
@@ -71,21 +71,21 @@ class BucketManager:
 
         This class is an abstraction that allows for batching of data, ensuring that each batch either 
         contains data from a single bucket or from a mixture of multiple buckets, depending on whether 
-        the `is_mixed` flag is set. It provides flexibility for data processing and shuffling during training.
+        the `mixed` flag is set. It provides flexibility for data processing and shuffling during training.
         """
-        def __init__(self, is_mixed: bool = False, num_groups: int = 1):
+        def __init__(self, mixed: bool = False, num_groups: int = 1):
             self.samples = []
-            self.is_mixed = is_mixed
+            self.mixed = mixed
             self.num_groups = num_groups
             self.bucket_range = (0, 0)
 
         def __str__(self):
-            return f"Package(is_mixed={self.is_mixed}, bucket_range={self.bucket_range}, number_of_samples={len(self.samples)})"
+            return f"Package(mixed={self.mixed}, bucket_range={self.bucket_range}, number_of_samples={len(self.samples)})"
 
         def add_samples_single_bucket(self, bucket_range: Tuple[int, int], samples: List[Tuple[int, int]]):
-            """Add a single bucket of samples. This parameter is used only when is_mixed is set to False."""
-            if self.is_mixed:
-                raise ValueError("Cannot use this method when is_mixed=True.")
+            """Add a single bucket of samples. This parameter is used only when mixed is set to False."""
+            if self.mixed:
+                raise ValueError("Cannot use this method when mixed=True.")
             if not samples:
                 raise ValueError("Samples cannot be empty.")
             self.bucket_range = bucket_range
@@ -93,23 +93,23 @@ class BucketManager:
                 self.samples.append((bucket_range, sample))
 
         def add_mixed_samples(self, samples: List[Tuple[Tuple[int, int], int, int]]):
-            """Add a sample of mixed packets. This parameter is used only when is_mixed is set to True."""
-            if not self.is_mixed:
-                raise ValueError("Cannot use this method when is_mixed=False.")
+            """Add a sample of mixed packets. This parameter is used only when mixed is set to True."""
+            if not self.mixed:
+                raise ValueError("Cannot use this method when mixed=False.")
             if not samples:
                 raise ValueError("Samples cannot be empty.")
             for sample in samples:
                 if isinstance(sample, tuple) and len(sample) == 3:
                     self.samples.append(sample)
                 else:
-                    raise ValueError(f"Each sample must be a tuple (bucket_range, group_id, idx) when is_mixed=True. sample: {sample} ")
+                    raise ValueError(f"Each sample must be a tuple (bucket_range, group_id, idx) when mixed=True. sample: {sample} ")
 
         def get_samples(self, buckets) -> List[List[int]]:
             """Obtains all samples in the packet based on the bucket information and allocates samples by group."""
             if not self.samples:
                 return []
             sample_data = [[] for _ in range(self.num_groups)]
-            if self.is_mixed:
+            if self.mixed:
                 # Traverse samples to obtain data in the corresponding bucket.
                 for bucket_range, group_id, idx in self.samples:
                     for bucket in buckets:
@@ -128,11 +128,13 @@ class BucketManager:
         self,
         image_size: int = 448,
         batch_size: int = 128,
-        is_sharding: bool = False,
-        num_groups: int = None,
+        sharding: bool = False,
+        num_replicas: int = None,
         keep_remainder: bool = True,
         rank: int = 0,
-        processes_num: int = 8
+        processes_num: int = 8,
+        global_batch_size: int = 128,
+        priority_mode: str = "data_bucketing_img"
     ):
         """
         Initializes the BucketManager class, which is responsible for organizing image samples into 
@@ -142,24 +144,26 @@ class BucketManager:
         This is the entry point for setting up the bucket management system, where it configures how 
         data will be grouped, batched, and potentially distributed across multiple workers.
         """
-        if num_groups is None:
+        if num_replicas is None:
             raise ValueError("num_groups is required.")
         self.image_size = image_size
-        self.is_sharding = is_sharding
+        self.sharding = sharding
         self.keep_remainder = keep_remainder
         self.rank = rank
         self.processes_num = processes_num
-        if is_sharding:
+        self.num_replicas = num_replicas
+        self.global_batch_size = global_batch_size
+        self.priority_mode = priority_mode
+        if sharding:
             self.batch_size = batch_size
-            self.num_groups = num_groups
+            self.num_groups = num_replicas
         else:
-            self.batch_size = batch_size * num_groups
+            self.batch_size = batch_size * num_replicas
             self.num_groups = 1
         self.image_info = {}
         self.bucket_info = {}
         self.total_packages = []
-        buckets = self.create_buckets()
-        self.buckets = buckets
+        self.final_results_dict = {}
 
     @abstractmethod
     def create_buckets(self) -> List[Bucket]:
@@ -177,9 +181,78 @@ class BucketManager:
         return (0, 0)
 
     @abstractmethod
+    def create_sorting_dictionary(self, dataset):
+        """Sort by image data size and return to the dictionary {idx, image_token}."""
+        return {}
+
+    @abstractmethod
+    def allocate_data_to_bucket(self, dataset):
+        """All data is allocated to different buckets based on rules."""
+        return ""
+
+    def suggest_thread_count(self, dataset):
+        cpu_count = os.cpu_count()
+        data_size = len(dataset)
+        processes_num = 8
+        data_size_threshold = 50000
+        if cpu_count is None:
+            return processes_num
+
+        # 线程数的设定规则：数据量小于5万时使用1/12个CPU核心数的线程，数据量大于等于5万时使用1/6个线程，最少8为线程
+        if data_size < data_size_threshold:
+            scale_factor = 1 / 12
+        else:
+            scale_factor = 1 / 6
+        processes_num = max(8, int(cpu_count * scale_factor))
+        return processes_num
+
+    def handle_data_reordering_img(self, condataset):
+        sorting_dict = self.create_sorting_dictionary(condataset)
+        if sorting_dict is None:
+            raise ValueError("Sorting dictionary creation failed")
+        return sorting_dict
+
+    def handle_data_bucketing_img(self, condataset):
+        self.buckets = self.create_buckets()
+        if not self.buckets:
+            raise ValueError("Bucket creation failed")
+
+        try:
+            self.allocate_data_to_bucket(condataset)
+        except Exception as e:
+            raise ValueError(f"Data allocation to buckets failed: {str(e)}") from e
+        return self.buckets
+
     def group_by_bucket(self, condataset):
-        """Add samples to buckets based on group information."""
-        return []
+        priority_handlers = {
+            "data_reordering_img": self.handle_data_reordering_img,
+            "data_bucketing_img": self.handle_data_bucketing_img,
+        }
+
+        handler = priority_handlers.get(self.priority_mode)
+        if handler is None:
+            raise ValueError(f"Unknown priority mode: {self.priority_mode}")
+        
+        return handler(condataset)
+
+    def generate_index_by_gbs(self, idx_range_active, final_results_dict):
+        # 存储排序后的索引
+        sorted_indices = []
+
+        sort_batch_size = int(self.global_batch_size / self.num_replicas)
+        for i in range(0, len(idx_range_active), sort_batch_size):
+            batch_indices = idx_range_active[i:i + sort_batch_size]
+
+            # 根据 batch_indices 从 result_dict 中取出对应的值并组合成元组 (idx, value)
+            batch_data = [(idx, final_results_dict.get(idx)) for idx in batch_indices]
+
+            batch_data.sort(key=lambda x: x[1])
+
+            # 提取排序后的索引并加入到 sorted_indices 中
+            sorted_batch_indices = [idx for idx, _ in batch_data]
+
+            sorted_indices.extend(sorted_batch_indices)  # 合并成一维列表
+        return sorted_indices
 
     def print_buckets(self):
         """Print the distribution of samples in the barrel, and print the number of samples in each group by group."""
@@ -204,7 +277,7 @@ class BucketManager:
         num_package = min_length // self.batch_size  
 
         for package_index in range(num_package): 
-            package = BucketManager.Package(is_mixed=False, num_groups=self.num_groups)  
+            package = BucketManager.Package(mixed=False, num_groups=self.num_groups)  
             for group_id in range(cur_bucket.num_groups): 
                 startX = package_index * self.batch_size
                 samples_range = list(range(startX, startX + self.batch_size))
@@ -235,7 +308,7 @@ class BucketManager:
         cur_packages = []
         num_package = min_length // self.batch_size  
         for package_index in range(num_package):
-            package = BucketManager.Package(is_mixed=True, num_groups=self.num_groups)  
+            package = BucketManager.Package(mixed=True, num_groups=self.num_groups)  
             samples = []
             for group_id in range(self.num_groups):
                 startX = package_index * self.batch_size
@@ -246,20 +319,20 @@ class BucketManager:
         total_packages.extend(cur_packages)
         return total_packages
 
-    def generate_index(self, is_shuffle=True, seed=42) -> List[int]:
+    def generate_index(self, shuffle=True, seed=42) -> List[int]:
         """Regenerate the index of the data group from the package."""
         total_packages = self.total_packages
         index_packages = list(range(len(total_packages)))
         
-        if is_shuffle:
+        if shuffle:
             random.seed(seed)
             random.shuffle(index_packages)
-        # buckets need to refresh_index(is_shuffle True/False)
+
         for bucket in self.buckets:
-            bucket.refresh_index(is_shuffle, seed)
+            bucket.refresh_index(shuffle, seed)
 
         index_list = []
-        if self.is_sharding:
+        if self.sharding:
             group_list = [[] for _ in range(self.num_groups)]  
             for idx in index_packages:
                 cur_list = total_packages[idx].get_samples(self.buckets)
@@ -284,18 +357,14 @@ class BucketManager_qwen2vl(BucketManager):
         patch_size: int = 14,
         merge_size: int = 2,
         batch_size: int = 1,
-        is_sharding: bool = False,
-        num_groups: int = 1,
+        sharding: bool = False,
+        num_replicas: int = 1,
         keep_remainder: bool = False,
         rank: int = 1,
-        bucket_interval: int = 200  # 分桶的token间隔
+        bucket_interval: int = 200,  # 分桶的token间隔
+        global_batch_size: int = 128,
+        priority_mode: str = "data_bucketing_img"
     ):
-        self.image_size = image_size
-        self.batch_size = batch_size
-        self.is_sharding = is_sharding
-        self.num_groups = num_groups
-        self.keep_remainder = keep_remainder
-        self.rank = rank
         self.bucket_interval = bucket_interval
         self.min_pixels = min_pixels
         self.max_pixels = max_pixels
@@ -307,10 +376,12 @@ class BucketManager_qwen2vl(BucketManager):
         super().__init__(
             image_size=image_size,
             batch_size=batch_size,
-            is_sharding=is_sharding,
-            num_groups=num_groups,
+            sharding=sharding,
+            num_replicas=num_replicas,
             keep_remainder=keep_remainder,
-            rank=rank
+            rank=rank,
+            global_batch_size=global_batch_size,
+            priority_mode=priority_mode,
         )
         
     def create_buckets(self):
@@ -381,23 +452,48 @@ class BucketManager_qwen2vl(BucketManager):
             return idx, width, height, width_patch, height_patch
         except Exception as e:
             print(f"Error processing sample {idx}: {e}")
-            return idx, None, None, None, None  
+            return idx, None, None, None, None
 
-    def group_by_bucket(self, condataset):
+    def process_calculate_images_token(self, idx, condataset):
+        full_image_path = self.get_img_fullpath(idx, condataset)
+        result_dict = {}
+        try:
+            width, height = self.load_image_and_get_dimensions(full_image_path)
+            width_patch = width / self.patch_size
+            height_patch = height / self.patch_size
+            result_dict[idx] = width_patch * height_patch
+        except Exception as e:
+            print(f"Error processing sample {idx}: {e}")
+            result_dict[idx] = None
+        return result_dict
+
+    def create_sorting_dictionary(self, dataset):
+        indices = [i for i in range(len(dataset))]
+        self.processes_num = self.suggest_thread_count(dataset)
+        with Pool(processes=self.processes_num) as pool:
+            results = pool.starmap(self.process_calculate_images_token, [(idx, dataset) for idx in indices])
+        
+        # 合并所有返回的字典
+        for result in results:
+            self.final_results_dict.update(result)
+        return self.final_results_dict
+
+    def allocate_data_to_bucket(self, condataset):
         group_length = len(condataset) // self.num_groups
         last_patch = len(condataset) % group_length
         indices = [i for i in range(len(condataset) - last_patch)]
-
-        with Pool(processes=min(self.processes_num, os.cpu_count())) as pool:
+        self.processes_num = self.suggest_thread_count(condataset)
+        with Pool(processes=self.processes_num) as pool:
             results = pool.starmap(self.process_bucket_data, [(idx, condataset) for idx in indices])
 
         for idx, width, height, width_patch, height_patch in results:
             if width is None or height is None:
                 continue  
-
+            
+            image_tokens = width_patch * height_patch
             bfind = False
             for bucket in self.buckets:
-                if width_patch * height_patch > bucket.bucket_range[0] and width_patch * height_patch <= bucket.bucket_range[1]:
+                if image_tokens > bucket.bucket_range[0] and image_tokens <= bucket.bucket_range[1]:
                     group_id = idx // group_length
                     bucket.add_sample(group_id, idx)
                     self.image_info[idx] = (width, height)
@@ -414,6 +510,7 @@ class BucketManager_qwen2vl(BucketManager):
                 self.bucket_info[idx] = last_bucket.bucket_range
 
         self.total_packages = self.create_package_list()
+        self.print_buckets()
 
 
 class BucketManager_internvl2(BucketManager):
@@ -423,17 +520,13 @@ class BucketManager_internvl2(BucketManager):
         min_num: int = 1,
         max_num: int = 6,
         batch_size: int = 1,
-        is_sharding: bool = False,
-        num_groups: int = 1,
+        sharding: bool = False,
+        num_replicas: int = 1,
         keep_remainder: bool = False,
-        rank: int = 1
+        rank: int = 1,
+        global_batch_size: int = 128,
+        priority_mode: str = "data_bucketing_img"
     ):
-        self.image_size = image_size
-        self.batch_size = batch_size
-        self.is_sharding = is_sharding
-        self.num_groups = num_groups
-        self.keep_remainder = keep_remainder
-        self.rank = rank
         self.min_num = min_num
         self.max_num = max_num
         self.target_ratios = set()
@@ -441,10 +534,12 @@ class BucketManager_internvl2(BucketManager):
         super().__init__(
             image_size=image_size,
             batch_size=batch_size,
-            is_sharding=is_sharding,
-            num_groups=num_groups,
+            sharding=sharding,
+            num_replicas=num_replicas,
             keep_remainder=keep_remainder,
-            rank=rank
+            rank=rank,
+            global_batch_size=global_batch_size,
+            priority_mode=priority_mode,
         )
 
     def create_buckets(self):
@@ -463,7 +558,7 @@ class BucketManager_internvl2(BucketManager):
             # 确保顺序一致，例如 (3, 4) 和 (4, 3) 视为同一个桶
             sorted_ratio = tuple(sorted(ratio))
             if sorted_ratio not in merged_buckets:
-                merged_buckets[sorted_ratio] = BucketManager.Bucket(ratio, self.num_groups)  
+                merged_buckets[sorted_ratio] = BucketManager.Bucket(ratio, self.num_groups)
         return list(merged_buckets.values())
 
     def get_dataset_info(self, idx: int, datasets):
@@ -505,14 +600,44 @@ class BucketManager_internvl2(BucketManager):
             return idx, width, height, closest_ratio, sorted_ratio
         except Exception as e:
             print(f"Error processing sample {idx}: {e}")
-            return idx, None, None, None, None  
+            return idx, None, None, None, None
 
-    def group_by_bucket(self, condataset):
+    def process_calculate_images_num(self, idx, condataset):
+        full_image_path = self.get_img_fullpath(idx, condataset)
+        result_dict = {}
+        try:
+            width, height = self.load_image_and_get_dimensions(full_image_path)
+            aspect_ratio = width / height
+            closest_ratio = find_closest_aspect_ratio(aspect_ratio, self.target_ratios, width, height, self.image_size)
+            result_dict[idx] = closest_ratio[0] * closest_ratio[1]
+        except Exception as e:
+            print(f"Error processing sample {idx}: {e}")
+            result_dict[idx] = None
+        return result_dict
+
+    def create_sorting_dictionary(self, dataset):
+        # 计算所有可能的目标长宽比（target_ratios），范围在 [min_num, max_num] 之间。
+        for n in range(self.min_num, self.max_num + 1):
+            for i in range(1, n + 1):
+                for j in range(1, n + 1):
+                    if self.min_num <= i * j <= self.max_num:
+                        self.target_ratios.add((i, j))
+        indices = [i for i in range(len(dataset))]
+        self.processes_num = self.suggest_thread_count(dataset)
+        with Pool(processes=self.processes_num) as pool:
+            results = pool.starmap(self.process_calculate_images_num, [(idx, dataset) for idx in indices])
+        
+        # 合并所有返回的字典
+        for result in results:
+            self.final_results_dict.update(result)
+        return self.final_results_dict
+
+    def allocate_data_to_bucket(self, condataset):
         group_length = len(condataset) // self.num_groups
         last_patch = len(condataset) % group_length
         indices = [i for i in range(len(condataset) - last_patch)]
-
-        with Pool(processes=min(self.processes_num, os.cpu_count())) as pool:
+        self.processes_num = self.suggest_thread_count(condataset)
+        with Pool(processes=self.processes_num) as pool:
             results = pool.starmap(self.process_bucket_data, [(idx, condataset) for idx in indices])
 
         for idx, width, height, closest_ratio, sorted_ratio in results:
@@ -532,3 +657,4 @@ class BucketManager_internvl2(BucketManager):
                 print(f"Warning: Could not find a suitable bucket for sample {idx}")
 
         self.total_packages = self.create_package_list()
+        self.print_buckets()

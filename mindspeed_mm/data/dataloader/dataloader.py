@@ -109,6 +109,7 @@ def prepare_sampler_dataloader(
     initial_global_step_for_sampler=0,
     collate_param=None,
     dataset_param=None,
+    priority_mode="data_bucketing_img",
 ):
     """
     Prepare a dataloader for distributed training. The dataloader will be wrapped by
@@ -269,6 +270,7 @@ def prepare_sampler_dataloader(
     elif sampler_type == "BucketBatchSampler":
         args = get_args()
         data_config = args.mm.data
+        gbs = args.global_batch_size
         batch_sampler = BucketBatchSampler(
             dataset,
             data_config=data_config,
@@ -279,6 +281,7 @@ def prepare_sampler_dataloader(
             drop_last=drop_last,
             consumed_samples=consumed_samples,
             data_sharding=data_sharding,
+            global_batch_size=gbs,
         )
 
         if collate_param is None or "model_name" not in collate_param:
