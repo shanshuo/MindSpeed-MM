@@ -3,8 +3,9 @@ import stat
 import copy
 import argparse
 from typing import Any, Dict, List
-import torch
 
+import torch
+from safetensors.torch import load_file
 from transformers import (
     AutoProcessor,
     LlavaForConditionalGeneration
@@ -348,7 +349,7 @@ def save(state_dicts: List[Dict], save_dir: str, latest_checkpointed_iteration="
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--module", type=str, choices=["dit", "text_encoder"], default="dit", help="The module to convert")
+    parser.add_argument("--module", type=str, choices=["dit", "text_encoder", "lora"], default="dit", help="The module to convert")
     parser.add_argument("--source_path", type=str, default="./transformers/mp_rank_00/model_states.pt", help="Source path of checkpoint")
     parser.add_argument("--target_path", type=str, default="./ckpt/hunyuanvideo/", help="Save path of MM checkpoint")
     parser.add_argument("--tp_size", type=int, default=2, help="Tensor model parallel world size")
@@ -364,11 +365,68 @@ def get_args():
     return args
 
 
+def convert_kohya_to_peft_keys(
+    kohya_dict: dict,
+    kohya_prefix="",
+    peft_prefix: str = "base_model.model",
+    device="cpu",
+    num_heads: int = 24,
+    head_dim: int = 128
+) -> dict:
+    hidden_size = num_heads * head_dim
+
+    peft_dict = {}
+    for k, v in kohya_dict.items():
+        if ".alpha" in k:
+            continue
+        new_key = k.replace(f"{kohya_prefix}_lora_", "")
+        new_key = new_key.replace("single_blocks_", "single_blocks.")
+        new_key = new_key.replace("double_blocks_", "double_blocks.")
+        new_key = new_key.replace("_img_attn_proj", ".img_attn_proj")
+        new_key = new_key.replace("_img_attn_qkv", ".img_attn_qkv")
+        new_key = new_key.replace("_img_mlp_fc", ".img_mlp.fc")
+        new_key = new_key.replace("_txt_mlp_fc", ".txt_mlp.fc")
+        new_key = new_key.replace("_img_mod", ".img_mod")
+        new_key = new_key.replace("_txt", ".txt")
+        new_key = new_key.replace("_modulation", ".modulation")
+        new_key = new_key.replace("_linear", ".linear")
+        new_key = new_key.replace("lora_down", "lora_A.default")
+        new_key = new_key.replace("lora_up", "lora_B.default")
+        new_key = new_key.replace(
+            "_individual_token_refiner_blocks_", ".individual_token_refiner.blocks."
+        )
+        new_key = new_key.replace("_mlp_fc", ".mlp.fc")
+
+        new_key = new_key.replace("vector_in_in_layer", "vector_in.fc1")
+        new_key = new_key.replace("vector_in_out_layer", "vector_in.fc2")
+        new_key = new_key.replace("final_layer.linear", "proj_out")
+
+        if "linear1" in new_key:
+            # split linear1 to linear1_qkv and linear1_mlp
+            if ".lora_A" in new_key:
+                peft_dict[new_key.replace("linear1", "linear1_qkv")] = v.to(device)
+                peft_dict[new_key.replace("linear1", "linear1_mlp")] = v.to(device)
+            else:
+                w_qkv = v[: hidden_size * 3]
+                w_mlp = v[hidden_size * 3:]
+                peft_dict[new_key.replace("linear1", "linear1_qkv")] = w_qkv.to(device)
+                peft_dict[new_key.replace("linear1", "linear1_mlp")] = w_mlp.to(device)
+        else:
+            peft_dict[new_key] = v.to(device)
+    return peft_dict
+
+
 if __name__ == "__main__":
     args = get_args()
 
     if args.module == "text_encoder":
         preprocess_text_encoder_tokenizer(args.source_path, args.target_path)
+    elif args.module == "lora":
+        kohya_weights = load_file(args.source_path)
+        state_dict = convert_kohya_to_peft_keys(
+            kohya_weights, kohya_prefix="Hunyuan_video_I2V", device="cpu"
+        )
+        save([state_dict], args.target_path)
     else:
         if args.mode == "split":
             source_state_dict = torch.load(args.source_path, map_location='cpu')['module']

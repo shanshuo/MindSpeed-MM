@@ -130,6 +130,7 @@ class StepVideoDiT(MultiModalModule):
     def prepare_attn_mask(self, encoder_attention_mask, encoder_hidden_states, q_seqlen):
         kv_seqlens = encoder_attention_mask.sum(dim=1).int()
         mask = torch.ones([len(kv_seqlens), q_seqlen, max(kv_seqlens)], dtype=torch.bool, device=encoder_attention_mask.device)
+        encoder_hidden_states = encoder_hidden_states.squeeze(1) # b 1 s d -> b s d
         encoder_hidden_states = encoder_hidden_states[:, : max(kv_seqlens)]
         for i, kv_len in enumerate(kv_seqlens):
             mask[i, :, :kv_len] = 0
@@ -155,16 +156,16 @@ class StepVideoDiT(MultiModalModule):
         else:
             rng_context = nullcontext()
 
-        encoder_hidden_states = prompt[0]
-        encoder_hidden_states_2 = prompt[1]
+        encoder_hidden_states = prompt[0]# b 1 s d
+        encoder_hidden_states_2 = prompt[1]# b 1 s d
 
         # Only retain stepllm's mask
         if isinstance(prompt_mask, list):
             encoder_attention_mask = prompt_mask[0]
         # Padding 1 on the mask of the stepllm
-        len_clip = encoder_hidden_states_2.shape[1]
+        len_clip = encoder_hidden_states_2.shape[2]
         encoder_attention_mask = encoder_attention_mask.squeeze(1).to(hidden_states.device) # stepchat_tokenizer_mask: b 1 s => b s
-        encoder_attention_mask = torch.nn.functional.pad(encoder_attention_mask, (len_clip, 0), value=1)   # pad attention_mask with clip's length 
+        encoder_attention_mask = torch.nn.functional.pad(encoder_attention_mask, (len_clip, 0), value=1)# pad attention_mask with clip's length 
 
         bsz, frame, _, height, width = hidden_states.shape
         if mpu.get_context_parallel_world_size() > 1:
@@ -192,7 +193,7 @@ class StepVideoDiT(MultiModalModule):
         encoder_hidden_states = self.caption_projection(self.caption_norm(encoder_hidden_states))
         if encoder_hidden_states_2 is not None and hasattr(self, 'clip_projection'):
             clip_embedding = self.clip_projection(encoder_hidden_states_2)
-            encoder_hidden_states = torch.cat([clip_embedding, encoder_hidden_states], dim=1)
+            encoder_hidden_states = torch.cat([clip_embedding, encoder_hidden_states], dim=2)
 
         hidden_states = rearrange(hidden_states, '(b f) l d->  b (f l) d', b=bsz, f=frame, l=len_frame).contiguous()
 

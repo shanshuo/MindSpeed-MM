@@ -265,7 +265,7 @@ def training_log(
     else:
         loss_name = "discriminator loss"
     
-    log_string = f" [{datetime.now(timezone.utc).astimezone(pytz.timezone("Asia/Shanghai")).strftime('%Y-%m-%d %H:%M:%S')}]"
+    log_string = f" [{datetime.now(timezone.utc).astimezone(pytz.timezone('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S')}]"
     log_string += ' iteration {:8d}/{:8d} |'.format(iteration, args.train_iters)
     log_string += ' elapsed time per iteration (s): {:.6f} |'.format(
             elapsed_time_per_iteration)
