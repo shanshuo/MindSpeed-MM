@@ -30,9 +30,9 @@ MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="ckpt/mm_path/Qwen2-VL-72B-Instruct"
 SAVE_PATH="save_dir"
 
-TP=1
+TP=2
 # 注意修改MM_MODEL里面PP配置，详见readme
-PP=8
+PP=4
 CP=1
 MBS=1
 GRAD_ACC_STEP=64

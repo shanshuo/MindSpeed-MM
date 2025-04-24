@@ -539,7 +539,7 @@ https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
 <a id="jump7"></a>
 ## Qwen2VL支持DPO算法
 
-**当前仅支持72B Lora场景，且只支持PP切分功能。**
+**当前仅支持72B Lora场景。**
 
 **环境安装、权重下载、权重转换同微调章节。**
 
@@ -594,7 +594,7 @@ https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
 
   参数含义同微调章节。
 
-  当前只支持PP功能。以单机8卡为例，需要将model_72b.json里面的`vision_encoder`和`text_decoder`的`pipeline_num_layer`参数调整为：
+  以单机8卡为例，需要将model_72b.json里面的`vision_encoder`和`text_decoder`的`pipeline_num_layer`参数调整为：
 
   ```json
   {
@@ -606,7 +606,7 @@ https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
               
               ...
               
-              "pipeline_num_layers": [32, 0, 0, 0, 0, 0, 0, 0],
+              "pipeline_num_layers": [32, 0, 0, 0],
               
               ...
           },
@@ -616,7 +616,7 @@ https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
           "model_id": "qwen2lm",
           "kv_channels": 128,
           "num_layers": 80,
-          "pipeline_num_layers": [5, 11, 11, 11, 11, 11, 11, 9],
+          "pipeline_num_layers": [17, 21, 22, 20],
           ...
   }
   ...

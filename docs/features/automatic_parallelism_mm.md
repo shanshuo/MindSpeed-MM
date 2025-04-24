@@ -153,7 +153,7 @@ OUTPUT_ARGS="
 logfile=$(date +%Y%m%d)_$(date +%H%M%S)
 mkdir -p logs
 
-python pretrain_qwen2vl.py \
+python pretrain_vlm.py \
     $GPT_ARGS \
     $MM_ARGS \
     $OUTPUT_ARGS \
