@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 
 import jsonargparse
 
-from checkpoint import qwen_vl_hf_to_mm, internvl2_hf_to_mm
+from checkpoint import qwen_vl_hf_to_mm, internvl2_hf_to_mm, deepseekvl_hf_to_mm
 from checkpoint.utils import ConvertHFConfig, ConvertResplitConfig, ConvertMMConfig, ConvertVppMMConfig, ConvertVppHFConfig
 
 # 安全权限，当前用户读写权限，用户组内可读权限，其他用户无权限
@@ -96,7 +96,7 @@ class Qwen2_5_VLConverter(Converter):
 
 
 class InternVLConverter(Converter):
-    """InternVL模型转换工具（仅做样例，当前尚未支持）"""
+    """InternVL模型转换工具"""
 
     @staticmethod
     def hf_to_mm(cfg: ConvertVppMMConfig):
@@ -112,6 +112,27 @@ class InternVLConverter(Converter):
         internvl2_mm_to_hf.main(cfg)
         # 安全管控权限
         os.chmod(cfg.save_hf_dir, SAFE_MODE)
+
+    @staticmethod
+    def resplit(cfg: ConvertResplitConfig):
+        """mindspeed-mm模型权重重新切分"""
+        pass
+
+
+class DeepSeekVLConverter(Converter):
+    """DeepSeekVL模型转换工具"""
+
+    @staticmethod
+    def hf_to_mm(cfg: ConvertMMConfig):
+        """huggingface模型转换mindspeed-mm模型权重"""
+        deepseekvl_hf_to_mm.main(cfg)
+        # 安全管控权限
+        os.chmod(cfg.mm_dir, SAFE_MODE)
+
+    @staticmethod
+    def mm_to_hf(cfg: ConvertHFConfig):
+        """mindspeed-mm模型转换huggingface模型权重"""
+        pass
 
     @staticmethod
     def resplit(cfg: ConvertResplitConfig):
