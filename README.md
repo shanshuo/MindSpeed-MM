@@ -154,15 +154,24 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="26"> 多模态生成 </td>
+      <td rowspan="29"> 多模态生成 </td>
       </tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-T2V</a></td>
+      <td rowspan="4"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-T2V</a></td>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers">1.3B</a></td>
       <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 0.770 (SPS) </td>
       <td> 0.960 (SPS) </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
+      <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers">1.3B</a></td>
+      <td> Lora微调 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.954 (SPS) </td>
+      <td> 1.042 (SPS) </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -174,8 +183,17 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.160 (SPS) </td>
       <td>【Test】</td>
     </tr>
+    <tr>
+      <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers">14B</a></td>
+      <td> Lora微调 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.179 (SPS) </td>
+      <td> 0.174 (SPS) </td>
+      <td>【Test】</td>
     </tr>
-      <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-I2V</a></td>
+    </tr>
+      <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-I2V</a></td>
       <td>1.3B</td>
       <td> 预训练 </td>
       <td> 1x8</td>
@@ -191,6 +209,15 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.130 (SPS) </td>
       <td> / </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
+      <td><a href="https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-720P-Diffusers">14B</a></td>
+      <td> Lora微调 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.179 (SPS) </td>
+      <td> 0.173 (SPS) </td>
       <td>【Test】</td>
     </tr>
     </tr>
