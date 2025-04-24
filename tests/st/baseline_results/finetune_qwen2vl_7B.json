@@ -1,34 +1,34 @@
 {
     "loss": [
-        9.754437E-01,
-        1.087073E+00,
-        7.737589E-01
+        1.212188E+01,
+        1.213822E+01,
+        9.515205E+00
     ],
     "time": [
-        15389.1,
-        979.6,
-        959.4
+        15741.5,
+        1060.0,
+        1014.7
     ],
     "memo info": [
         {
             "rank": 0,
-            "allocated memory": 10225,
-            "max allocated memory": 10820
+            "allocated memory": 10248,
+            "max allocated memory": 10843
         },
         {
             "rank": 2,
-            "allocated memory": 26687,
-            "max allocated memory": 27205
+            "allocated memory": 26694,
+            "max allocated memory": 27212
         },
         {
             "rank": 4,
-            "allocated memory": 26687,
-            "max allocated memory": 27205
+            "allocated memory": 26694,
+            "max allocated memory": 27212
         },
         {
             "rank": 6,
-            "allocated memory": 24923,
-            "max allocated memory": 27002
+            "allocated memory": 24929,
+            "max allocated memory": 27008
         }
     ],
     "warm_up": 1
