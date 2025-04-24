@@ -11,19 +11,7 @@ import stat
 
 import torch
 
-from checkpoint.utils import ConvertVppMMConfig
-
-
-def load_from_hf(load_dir, trust_remote_code):
-    # Load Huggingface model.
-    from transformers import AutoModelForCausalLM
-    hf_model = AutoModelForCausalLM.from_pretrained(
-        load_dir, device_map='cpu',
-        trust_remote_code=trust_remote_code,
-        local_files_only=True)
-    print(hf_model)
-
-    return hf_model
+from checkpoint.utils import ConvertVppMMConfig, load_from_hf
 
 
 def merge_pp_index(vit_pipeline_num_layers, llm_pipeline_num_layers):
@@ -279,8 +267,7 @@ def main(convert_config: ConvertVppMMConfig):
     trust_remote_code = convert_config.trust_remote_code
     parallel_config = convert_config.parallel_config
 
-    hf_model = load_from_hf(load_dir, trust_remote_code)
-    state_dict = hf_model.state_dict()
+    state_dict = load_from_hf(load_dir)
 
     pp_size = parallel_config.pp_size
     vp_size = parallel_config.vpp_size
