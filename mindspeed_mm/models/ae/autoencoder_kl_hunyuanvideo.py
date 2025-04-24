@@ -551,6 +551,7 @@ class AutoencoderKLHunyuanVideo(MultiModalModule):
         spatial_compression_ratio: int = 8,
         time_compression_ratio: int = 4,
         mid_block_add_attention: bool = True,
+        enable_tiling: bool = False,
         **kwargs
     ):
         super().__init__(config=None)
@@ -612,7 +613,8 @@ class AutoencoderKLHunyuanVideo(MultiModalModule):
         if from_pretrained is not None:
             load_checkpoint(self, from_pretrained)
 
-        self.enable_tiling()
+        if enable_tiling:
+            self.enable_tiling()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (EncoderCausal3D, DecoderCausal3D)):

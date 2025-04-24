@@ -294,6 +294,7 @@ class FlowMatchDiscreteScheduler:
         self,
         model: Callable,
         latents: torch.Tensor,
+        img_latents: Optional[torch.Tensor] = None,
         device: torch.device = "npu",
         do_classifier_free_guidance: bool = False,
         guidance_scale: float = 1.0,
@@ -301,6 +302,8 @@ class FlowMatchDiscreteScheduler:
         embedded_guidance_scale: Optional[float] = None,
         model_kwargs: dict = None,
         extra_step_kwargs: dict = None,
+        i2v_mode: bool = False,
+        i2v_condition_type: str = "token_replace",
         **kwargs
     ) -> torch.Tensor:
         dtype = latents.dtype
@@ -311,6 +314,9 @@ class FlowMatchDiscreteScheduler:
         # for loop denoising to get latents
         with tqdm(total=num_inference_steps) as propress_bar:
             for t in self.timesteps:
+                if i2v_mode and i2v_condition_type == "token_replace":
+                    latents = torch.concat([img_latents, latents[:, :, 1:, :, :]], dim=2)
+
                 latent_model_input = (
                     torch.cat([latents] * 2)
                     if do_classifier_free_guidance
@@ -345,12 +351,21 @@ class FlowMatchDiscreteScheduler:
                     )
 
                 # compute the previous noisy sample x_t -> x_t-1
-                latents = self.step(
-                    noise_pred,
-                    t,
-                    latents,
-                    **extra_step_kwargs
-                )
+                if i2v_mode and i2v_condition_type == "token_replace":
+                    latents = self.step(
+                        noise_pred[:, :, 1:, :, :],
+                        t,
+                        latents[:, :, 1:, :, :],
+                        **extra_step_kwargs
+                    )
+                    latents = torch.concat([img_latents, latents], dim=2)
+                else:
+                    latents = self.step(
+                        noise_pred,
+                        t,
+                        latents,
+                        **extra_step_kwargs
+                    )
                 propress_bar.update()
         
         return latents

@@ -29,17 +29,20 @@
         "scaling_factor": 0.476986,
         "time_compression_ratio": 4,
         "mid_block_add_attention": true,
-        "act_fn": "silu"
+        "act_fn": "silu",
+        "enable_tiling": true
     },
     "text_encoder": [
         {
-            "model_id": "Auto",
+            "model_id": "HunyuanMLLmModel",
             "dtype": "bf16",
             "from_pretrained": "llava-llama-3-8b-text-encoder-tokenizer",
             "hub_backend": "hf",
             "use_attention_mask": true,
             "hidden_state_skip_layer": 2,
-            "output_key": "hidden_states"            
+            "output_key": "hidden_states",
+            "template_id": "hyv-llm-encode-video",
+            "template_file_path": "examples/hunyuanvideo/template.json"          
         },
         {
             "model_id": "CLIP",

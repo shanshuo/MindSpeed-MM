@@ -26,7 +26,8 @@
         "scaling_factor": 0.476986,
         "time_compression_ratio": 4,
         "mid_block_add_attention": true,
-        "act_fn": "silu"
+        "act_fn": "silu",
+        "enable_tiling": true
     },
     "text_encoder": [
         {

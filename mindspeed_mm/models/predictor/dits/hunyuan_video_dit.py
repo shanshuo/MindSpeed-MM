@@ -945,6 +945,7 @@ class MMDoubleStreamBlock(nn.Module):
                 tr_img_mod2_gate
             ) = token_replace_img_mod1.chunk(6, dim=-1)
         else:
+            img_mod1 = self.img_mod(vec)
             (
                 img_mod1_shift,
                 img_mod1_scale,
@@ -953,6 +954,12 @@ class MMDoubleStreamBlock(nn.Module):
                 img_mod2_scale,
                 img_mod2_gate
             ) = img_mod1.chunk(6, dim=-1)
+            tr_img_mod1_shift = None
+            tr_img_mod1_scale = None
+            tr_img_mod1_gate = None
+            tr_img_mod2_shift = None
+            tr_img_mod2_scale = None
+            tr_img_mod2_gate = None
 
         (
             txt_mod1_shift,
@@ -1287,6 +1294,7 @@ class MMSingleStreamBlock(nn.Module):
             tr_mod_shift, tr_mod_scale, tr_mod_gate = tr_mod.chunk(3, dim=-1)
         else:
             mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
+            tr_mod_shift, tr_mod_scale, tr_mod_gate = None, None, None
         
         if self.i2v_condition_type == "token_replace":
             x_norm = self.pre_norm(x)

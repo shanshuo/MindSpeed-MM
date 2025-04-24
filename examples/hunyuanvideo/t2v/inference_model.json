@@ -30,10 +30,12 @@
     },
     "tokenizer": [
         {
-            "autotokenizer_name": "AutoTokenizer",
+            "autotokenizer_name": "hunyuanMLLmTokenizer",
             "hub_backend": "hf",
             "from_pretrained": "llava-llama-3-8b-text-encoder-tokenizer",
-            "model_max_length": 256
+            "model_max_length": 256,
+            "template_id": "hyv-llm-encode-video",
+            "template_file_path": "examples/hunyuanvideo/template.json"
         },
         {
             "autotokenizer_name": "CLIPTokenizer",
@@ -44,13 +46,15 @@
     ],
     "text_encoder": [
         {
-            "model_id": "Auto",
+            "model_id": "HunyuanMLLmModel",
             "dtype": "fp16",
             "from_pretrained": "llava-llama-3-8b-text-encoder-tokenizer",
             "hub_backend": "hf",
             "use_attention_mask": true,
             "hidden_state_skip_layer": 2,
-            "output_key": "hidden_states"            
+            "output_key": "hidden_states",
+            "template_id": "hyv-llm-encode-video",
+            "template_file_path": "examples/hunyuanvideo/template.json"         
         },
         {
             "model_id": "CLIP",
@@ -90,16 +94,15 @@
         "solver": "euler"
     }, 
     "pipeline_config": {
-        "input_size": [65, 256, 256],
+        "input_size": [65, 544, 960],
         "seed": 42,
-        "prompt_template": "dit-llm-encode",
-	    "prompt_template_video": "dit-llm-encode-video",
         "guidance_scale": 1.0,
         "guidance_rescale": 0.0,
-        "embedded_guidance_scale": 6.0
+        "embedded_guidance_scale": 6.0,
+        "cpu_offload": true
     },
     "micro_batch_size": 1,
-    "save_path": "./hunyuanvideo_samples/",
+    "save_path": "./hunyuanvideo_t2v_samples/",
     "prompt": "examples/hunyuanvideo/t2v/samples_prompts.txt",
     "dtype": "bf16",
     "device": "npu",

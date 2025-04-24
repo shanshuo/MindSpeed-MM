@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from transformers import AutoModel, LlavaForConditionalGeneration
+import transformers
 from transformers.modeling_outputs import ModelOutput
 
 
@@ -23,7 +23,7 @@ class HunyuanMLLmModel(nn.Module):
         image_embed_interleave=2,
     ):
         super().__init__()
-        self.model = model
+        self.model = model.to(model.dtype)
         self.template_info = template_info
         self.image_embed_interleave = image_embed_interleave
 
@@ -131,7 +131,8 @@ class HunyuanMLLmModel(nn.Module):
         with open(template_file_path, "r") as f:
             templates = json.load(f)
         image_embed_interleave = config.pop("image_embed_interleave", 4)
-        model = LlavaForConditionalGeneration.from_pretrained(**config)
+        model_type = config.pop("model_type", "AutoModel")
+        model = getattr(transformers, model_type).from_pretrained(**config)
         return HunyuanMLLmModel(
             model=model,
             template_info=templates[template_id],
