@@ -1,5 +1,3 @@
-# Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
-
 import torch
 
 from megatron.core.transformer.transformer_config import TransformerConfig
@@ -13,7 +11,7 @@ from .vision_encoders.minicpm_vit_model import MiniCPMViT
 from .vision_encoders.siglip_vit_model import create_siglip_vit
 from .projectors.multimodal_projector import MultimodalProjector
 from .projectors.internvl_mlp import InternVLMLP
-from .projectors.deepseekvl2_mlp import create_deepseekvl2_mlp
+from .projectors.deepseekvl_mlp import create_deepseekvl_mlp
 
 
 VISION_ENCODER_MAPPINGS = {
@@ -29,7 +27,7 @@ VISION_PROJECTION_MAPPINGS = {
     "mlp": MultimodalProjector,
     "InternVLMLP": InternVLMLP,
     "lnmlp": MultimodalProjector,
-    "DeepSeekVL2MLP": create_deepseekvl2_mlp,
+    "DeepSeekVL2MLP": create_deepseekvl_mlp,
 }
 
 

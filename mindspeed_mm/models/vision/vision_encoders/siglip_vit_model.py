@@ -1,4 +1,5 @@
 # --------------------------------------------------------
+# Copyright (c) 2025, HUAWEI CORPORATION.  All rights reserved.
 # Copyright (c) 2023 DeepSeek
 # Licensed under The MIT License [see LICENSE for details]
 # --------------------------------------------------------
@@ -254,6 +255,7 @@ class VisionTransformer(MultiModalModule):
 
     def __init__(
             self,
+            config,
             img_size: Union[int, Tuple[int, int]] = 224,
             patch_size: Union[int, Tuple[int, int]] = 16,
             in_chans: int = 3,
@@ -316,10 +318,10 @@ class VisionTransformer(MultiModalModule):
             act_layer: MLP activation layer.
             block_fn: Transformer block layer.
         """
-        super().__init__()
+        super().__init__(config)
         if global_pool not in ('', 'avg', 'token', 'map'):
             raise AssertionError
-        if not class_token or global_pool != 'token':
+        if not (class_token or global_pool != 'token'):
             raise AssertionError
         use_fc_norm = global_pool == 'avg' if fc_norm is None else fc_norm
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
@@ -557,7 +559,8 @@ class VisionTransformer(MultiModalModule):
         x = self.head_drop(x)
         return x if pre_logits else self.head(x)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> torch.Tensor:
+        x = pixel_values
         x = self.forward_features(x)
         if not self.ignore_head:
             x = self.forward_head(x)
@@ -630,12 +633,14 @@ SigLIP_MODEL_CONFIG = {
 
 def create_siglip_vit(
         config,
-        model_name: str = "siglip_so400m_patch14_384",
-        image_size: int = 384,
-        select_layer: int = -1,
         ckpt_path: str = "",
         **kwargs
 ):
+    config_dict = config.to_dict
+    model_name = config_dict.get("model_name", "siglip_so400m_patch14_384")
+    image_size = config_dict.get("image_size", 384)
+    select_layer = config_dict.get("image_size", -1)
+
     if model_name not in SigLIP_MODEL_CONFIG.keys():
         raise AssertionError(f"model name should be in {SigLIP_MODEL_CONFIG.keys()}")
 
@@ -647,6 +652,7 @@ def create_siglip_vit(
         layers = min(vision_cfg.layers, select_layer)
 
     model = VisionTransformer(
+        config=config,
         img_size=image_size,
         patch_size=vision_cfg.patch_size,
         embed_dim=vision_cfg.width,

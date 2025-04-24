@@ -1,4 +1,5 @@
 # --------------------------------------------------------
+# Copyright (c) 2025, HUAWEI CORPORATION.  All rights reserved.
 # Copyright (c) 2023 DeepSeek
 # Licensed under The MIT License [see LICENSE for details]
 # --------------------------------------------------------
@@ -119,7 +120,7 @@ class MlpProjectorConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-def create_deepseekvl2_mlp(
+def create_deepseekvl_mlp(
         config,
         **kwargs
 ):
