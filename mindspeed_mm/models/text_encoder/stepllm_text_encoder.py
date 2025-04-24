@@ -10,6 +10,7 @@
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
 # ==============================================================================
+import math
 from typing import Optional
 from einops import rearrange
 
@@ -17,10 +18,35 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch_npu
+import numpy as np
 
 from transformers.modeling_utils import PretrainedConfig, PreTrainedModel
 
 from mindspeed_mm.models.common.normalize import normalize
+
+DTYPE_FP16_MIN = float(np.finfo(np.float16).min)
+
+
+def _get_alibi_slopes(n_heads):
+    n = 2 ** math.floor(math.log2(n_heads))
+    m0 = torch.tensor(2.0 ** (-8.0 / n), dtype=torch.float32).to("cpu")
+    slopes = torch.pow(m0, torch.arange(1, n + 1, dtype=torch.float32).to("cpu"))
+    if n < n_heads:
+        m1 = torch.tensor(2.0**(-4.0 / n), dtype=torch.float32).to("cpu")
+        mm = torch.pow(m1, torch.arange(1, 1 + 2 * (n_heads - n), 2, dtype=torch.float32).to("cpu"))
+        slopes = torch.cat([slopes, mm])
+    return slopes
+
+
+def _get_mask(seq_len, b, n):
+    slopes = _get_alibi_slopes(n)
+    tril = torch.tril(torch.ones((1, 1, seq_len, seq_len), dtype=torch.bool)).to(torch.int32)
+    bias_row = torch.arange(seq_len).view(1, -1)
+    bias_cols = torch.arange(seq_len).view(-1, 1)
+    bias = -torch.sqrt(bias_cols - bias_row)
+    bias = bias.view(1, seq_len, seq_len) * slopes.view(-1, 1, 1)
+    bias = bias.masked_fill(tril == 0, DTYPE_FP16_MIN)
+    return bias
 
 
 class LLaMaEmbedding(nn.Module):
@@ -53,11 +79,13 @@ class FlashSelfAttention(nn.Module):
 
     def forward(self, q, k, v, cu_seqlens=None):
         if cu_seqlens is None:
-            atten_mask_npu = torch.triu(torch.ones([2048, 2048], device="npu"), diagonal=1).bool()
-            head_num = q.shape[2]
-            scale = q.size(-1) ** (-0.5)
-            output = torch_npu.npu_fusion_attention(q, k, v, head_num, "BSND", keep_prob=1.0,
-                                                 scale=scale, atten_mask=atten_mask_npu, sparse_mode=3)[0]
+            alibi_mask = _get_mask(q.size(1), q.size(0), q.size(2))
+            alibi_mask = alibi_mask[:, :q.size(2), :, :].to(q.dtype).to(q.device)
+            q = q.transpose(1, 2)
+            k = k.transpose(1, 2)
+            v = v.transpose(1, 2)
+            output = torch.nn.functional.scaled_dot_product_attention(q, k, v, attn_mask=alibi_mask)
+            output = output.transpose(1, 2)
         else:
             raise ValueError('cu_seqlens is not supported!')
 

@@ -23,6 +23,7 @@ from mindspeed_mm.models.ae.wfvae import WFVAE
 from mindspeed_mm.models.ae.contextparallel_causalvae import ContextParallelCasualVAE
 from mindspeed_mm.models.ae.autoencoder_kl_hunyuanvideo import AutoencoderKLHunyuanVideo
 from mindspeed_mm.models.ae.wan_video_vae import WanVideoVAE
+from mindspeed_mm.models.ae.stepvideo_vae import StepVideoVae
 
 
 AE_MODEL_MAPPINGS = {
@@ -32,7 +33,8 @@ AE_MODEL_MAPPINGS = {
     "wfvae": WFVAE,
     "contextparallelcasualvae": ContextParallelCasualVAE,
     "autoencoder_kl_hunyuanvideo": AutoencoderKLHunyuanVideo,
-    "wan_video_vae": WanVideoVAE
+    "wan_video_vae": WanVideoVAE,
+    "stepvideovae": StepVideoVae
 }
 
 

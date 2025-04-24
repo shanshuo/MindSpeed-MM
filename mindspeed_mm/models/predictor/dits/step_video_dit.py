@@ -1,3 +1,15 @@
+# Copyright 2025 StepFun Inc. All Rights Reserved.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# ==============================================================================
 from typing import Optional, Dict, Tuple
 from contextlib import nullcontext
 
@@ -65,7 +77,7 @@ class StepVideoDiT(MultiModalModule):
 
         self.pos_embed = PatchEmbed(
             patch_size=patch_size,
-            in_channels=self.in_channels,
+            in_channels=self.in_channels if not use_additional_conditions else in_channels * 2,
             embed_dim=self.inner_dim
         )
 
@@ -92,7 +104,7 @@ class StepVideoDiT(MultiModalModule):
 
         # 3. Output blocks.
         self.norm_out = nn.LayerNorm(self.inner_dim, eps=norm_eps, elementwise_affine=norm_elementwise_affine)
-        self.scale_shift_table = nn.Parameter(torch.randn(2, self.inner_dim) / self.inner_dim**0.5)
+        self.scale_shift_table = nn.Parameter(torch.randn(2, self.inner_dim) / self.inner_dim ** 0.5)
         self.proj_out = nn.Linear(self.inner_dim, patch_size * patch_size * self.out_channels)
         self.patch_size = patch_size
 
@@ -104,7 +116,7 @@ class StepVideoDiT(MultiModalModule):
             caption_channel = self.caption_channels
         else:
             caption_channel, clip_channel = self.caption_channels
-            self.clip_projection = nn.Linear(clip_channel, self.inner_dim) 
+            self.clip_projection = nn.Linear(clip_channel, self.inner_dim)
 
         self.caption_norm = nn.LayerNorm(caption_channel, eps=norm_eps, elementwise_affine=norm_elementwise_affine)
         
@@ -122,15 +134,18 @@ class StepVideoDiT(MultiModalModule):
             buffers = tuple(self.buffers())
             return buffers[0].dtype
 
-    def patchfy(self, hidden_states):
+    def patchfy(self, hidden_states, condition_hidden_states):
+        if condition_hidden_states is not None:
+            hidden_states = torch.cat([hidden_states, condition_hidden_states], dim=2)
         hidden_states = rearrange(hidden_states, 'b f c h w -> (b f) c h w')
         hidden_states = self.pos_embed(hidden_states)
         return hidden_states
 
     def prepare_attn_mask(self, encoder_attention_mask, encoder_hidden_states, q_seqlen):
         kv_seqlens = encoder_attention_mask.sum(dim=1).int()
-        mask = torch.ones([len(kv_seqlens), q_seqlen, max(kv_seqlens)], dtype=torch.bool, device=encoder_attention_mask.device)
-        encoder_hidden_states = encoder_hidden_states.squeeze(1) # b 1 s d -> b s d
+        mask = torch.ones([len(kv_seqlens), q_seqlen, max(kv_seqlens)], dtype=torch.bool,
+                          device=encoder_attention_mask.device)
+        encoder_hidden_states = encoder_hidden_states.squeeze(1)
         encoder_hidden_states = encoder_hidden_states[:, : max(kv_seqlens)]
         for i, kv_len in enumerate(kv_seqlens):
             mask[i, :, :kv_len] = 0
@@ -156,16 +171,20 @@ class StepVideoDiT(MultiModalModule):
         else:
             rng_context = nullcontext()
 
-        encoder_hidden_states = prompt[0]# b 1 s d
-        encoder_hidden_states_2 = prompt[1]# b 1 s d
+        encoder_hidden_states = prompt[0]
+        encoder_hidden_states_2 = prompt[1]
+        motion_score = kwargs.get("motion_score")
+        condition_hidden_states = kwargs.get("image_latents")
 
         # Only retain stepllm's mask
         if isinstance(prompt_mask, list):
             encoder_attention_mask = prompt_mask[0]
         # Padding 1 on the mask of the stepllm
         len_clip = encoder_hidden_states_2.shape[2]
-        encoder_attention_mask = encoder_attention_mask.squeeze(1).to(hidden_states.device) # stepchat_tokenizer_mask: b 1 s => b s
-        encoder_attention_mask = torch.nn.functional.pad(encoder_attention_mask, (len_clip, 0), value=1)# pad attention_mask with clip's length 
+        encoder_attention_mask = encoder_attention_mask.squeeze(1).to(
+            hidden_states.device)  # stepchat_tokenizer_mask: b 1 s => b s
+        encoder_attention_mask = torch.nn.functional.pad(encoder_attention_mask, (len_clip, 0),
+                                                         value=1)  # pad attention_mask with clip's length
 
         bsz, frame, _, height, width = hidden_states.shape
         if mpu.get_context_parallel_world_size() > 1:
@@ -174,15 +193,22 @@ class StepVideoDiT(MultiModalModule):
                                                         grad_scale='down')
         
         height, width = height // self.patch_size, width // self.patch_size
-        hidden_states = self.patchfy(hidden_states) 
+        hidden_states = self.patchfy(hidden_states, condition_hidden_states)
         len_frame = hidden_states.shape[1]
 
         if self.use_additional_conditions:
-            added_cond_kwargs = {
-                "resolution": torch.tensor([(height, width)] * bsz, device=hidden_states.device, dtype=hidden_states.dtype),
-                "nframe": torch.tensor([frame] * bsz, device=hidden_states.device, dtype=hidden_states.dtype),
-                "fps": fps
-            }    
+            if condition_hidden_states is not None:
+                added_cond_kwargs = {
+                    "motion_score": torch.tensor([motion_score], device=hidden_states.device,
+                                                 dtype=hidden_states.dtype).repeat(bsz)
+                }
+            else:
+                added_cond_kwargs = {
+                    "resolution": torch.tensor([(height, width)] * bsz, device=hidden_states.device,
+                                               dtype=hidden_states.dtype),
+                    "nframe": torch.tensor([frame] * bsz, device=hidden_states.device, dtype=hidden_states.dtype),
+                    "fps": fps
+                }
         else:
             added_cond_kwargs = {}
         
@@ -197,8 +223,9 @@ class StepVideoDiT(MultiModalModule):
 
         hidden_states = rearrange(hidden_states, '(b f) l d->  b (f l) d', b=bsz, f=frame, l=len_frame).contiguous()
 
-        encoder_hidden_states, attn_mask = self.prepare_attn_mask(encoder_attention_mask, encoder_hidden_states, q_seqlen=frame * len_frame)
-        
+        encoder_hidden_states, attn_mask = self.prepare_attn_mask(encoder_attention_mask, encoder_hidden_states,
+                                                                  q_seqlen=frame * len_frame)
+
         # Rotary positional embeddings
         rotary_pos_emb = self.rope(bsz, frame * mpu.get_context_parallel_world_size(), height, width, hidden_states.device)# s b 1 d
         if mpu.get_context_parallel_world_size() > 1:
@@ -451,8 +478,9 @@ class PixArtAlphaCombinedTimestepSizeEmbeddings(nn.Module):
             self.resolution_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=size_emb_dim)
             self.nframe_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
             self.fps_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
+            self.motion_score_embedder = TimestepEmbedding(in_channels=256, time_embed_dim=embedding_dim)
 
-    def forward(self, timestep, resolution=None, nframe=None, fps=None):
+    def forward(self, timestep, resolution=None, nframe=None, fps=None, motion_score=None):
         hidden_dtype = next(self.timestep_embedder.parameters()).dtype
 
         timesteps_proj = self.time_proj(timestep)
@@ -460,11 +488,9 @@ class PixArtAlphaCombinedTimestepSizeEmbeddings(nn.Module):
 
         if self.use_additional_conditions:
             batch_size = timestep.shape[0]
-            resolution_emb = self.additional_condition_proj(resolution.flatten()).to(hidden_dtype)
-            resolution_emb = self.resolution_embedder(resolution_emb).reshape(batch_size, -1)
-            nframe_emb = self.additional_condition_proj(nframe.flatten()).to(hidden_dtype)
-            nframe_emb = self.nframe_embedder(nframe_emb).reshape(batch_size, -1)
-            conditioning = timesteps_emb + resolution_emb + nframe_emb
+            motion_score_emb = self.additional_condition_proj(motion_score.flatten()).to(hidden_dtype)
+            motion_score_emb = self.motion_score_embedder(motion_score_emb).reshape(batch_size, -1)
+            conditioning = timesteps_emb + motion_score_emb
 
             if fps is not None:
                 fps_emb = self.additional_condition_proj(fps.flatten()).to(hidden_dtype)

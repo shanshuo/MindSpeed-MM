@@ -132,7 +132,7 @@ def base_conv3d_channel_last(x, conv_layer, residual=None):
             conv_result = conv_result.clone()
             out_nhwci.copy_(conv_result)
 
-            if conv_result.shape == out_nhwci.shape or conv_result.dtype == out_nhwci.dtype:
+            if conv_result.shape != out_nhwci.shape or conv_result.dtype != out_nhwci.dtype:
                 raise Exception(f"conv_result shape [{conv_result.shape}] must be the same as "
                                 f"out_nhwci shape [{out_nhwci.shape}], and conv_result dtype [{conv_result.dtype}] "
                                 f"must be the same as out_nhwci dtype [{out_nhwci.dtype}]")
@@ -690,7 +690,20 @@ class StepVideoVae(nn.Module):
         self.world_size = torch.distributed.get_world_size() if torch.distributed.is_initialized() else 1
 
         if from_pretrained is not None:
-            load_checkpoint(self, from_pretrained)
+            weight_dict = self.init_from_ckpt(from_pretrained)
+            if len(weight_dict) != 0:
+                self.load_state_dict(weight_dict)
+
+    def init_from_ckpt(self, model_path):
+        from safetensors import safe_open
+        p = {}
+        with safe_open(model_path, framework="pt", device="cpu") as f:
+            for k in f.keys():
+                tensor = f.get_tensor(k)
+                if k.startswith("decoder.conv_out."):
+                    k = k.replace("decoder.conv_out.", "decoder.conv_out.conv.")
+                p[k] = tensor
+        return p
 
     def naive_encode(self, x):
         length = x.size(1)

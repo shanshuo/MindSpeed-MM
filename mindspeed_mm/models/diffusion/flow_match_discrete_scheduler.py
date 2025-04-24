@@ -306,6 +306,7 @@ class FlowMatchDiscreteScheduler:
         i2v_condition_type: str = "token_replace",
         **kwargs
     ) -> torch.Tensor:
+        extra_step_kwargs = {} if extra_step_kwargs is None else extra_step_kwargs
         dtype = latents.dtype
         # denoising loop
         num_inference_steps = self.num_train_timesteps if self.num_inference_timesteps is None else self.num_inference_timesteps
