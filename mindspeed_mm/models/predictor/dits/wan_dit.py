@@ -46,6 +46,9 @@ class WanDiT(MultiModalModule):
         max_seq_len: int = 1024,
         fa_layout: str = "bnsd",
         clip_token_len: int = 257,
+        pre_process: bool = True,
+        post_process: bool = True,
+        global_layer_idx: Optional[Tuple] = None,
         **kwargs,
     ):
         super().__init__(config=None)
@@ -77,7 +80,9 @@ class WanDiT(MultiModalModule):
         self.max_seq_len = max_seq_len
         self.fa_layout = fa_layout
         self.clip_token_len = clip_token_len
-
+        self.pre_process = pre_process
+        self.post_process = post_process
+        self.global_layer_idx = global_layer_idx if global_layer_idx is not None else tuple(range(num_layers))
         self.head_dim = hidden_size // num_heads
 
         args = get_args()
@@ -122,26 +127,27 @@ class WanDiT(MultiModalModule):
         # rope
         self.rope = RoPE3DWan(head_dim=self.head_dim, max_seq_len=self.max_seq_len)
 
-        # embeddings
-        self.patch_embedding = nn.Conv3d(
-            self.in_dim,
-            self.hidden_size,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-        )
-        self.text_embedding = TextProjection(
-            self.text_dim, self.hidden_size, partial(nn.GELU, approximate="tanh")
-        )
-        self.time_embedding = nn.Sequential(
-            nn.Linear(self.freq_dim, self.hidden_size),
-            nn.SiLU(),
-            nn.Linear(self.hidden_size, self.hidden_size),
-        )
+        if self.pre_process:
+            # embeddings
+            self.patch_embedding = nn.Conv3d(
+                self.in_dim,
+                self.hidden_size,
+                kernel_size=self.patch_size,
+                stride=self.patch_size,
+            )
+            self.text_embedding = TextProjection(
+                self.text_dim, self.hidden_size, partial(nn.GELU, approximate="tanh")
+            )
+            self.time_embedding = nn.Sequential(
+                nn.Linear(self.freq_dim, self.hidden_size),
+                nn.SiLU(),
+                nn.Linear(self.hidden_size, self.hidden_size),
+            )
 
-        # time emb projection
-        self.time_projection = nn.Sequential(
-            nn.SiLU(), nn.Linear(self.hidden_size, self.hidden_size * 6)
-        )
+            # time emb projection
+            self.time_projection = nn.Sequential(
+                nn.SiLU(), nn.Linear(self.hidden_size, self.hidden_size * 6)
+            )
 
         # attention blocks
         self.blocks = nn.ModuleList(
@@ -163,10 +169,11 @@ class WanDiT(MultiModalModule):
             ]
         )
 
-        # head
-        self.head = Head(self.hidden_size, self.out_dim, self.patch_size, self.eps)
+        if self.post_process:
+            # head
+            self.head = Head(self.hidden_size, self.out_dim, self.patch_size, self.eps)
 
-        if model_type == "i2v":
+        if self.pre_process and model_type == "i2v":
             self.img_emb = MLPProj(self.img_dim, self.hidden_size)
 
     @property
@@ -285,42 +292,51 @@ class WanDiT(MultiModalModule):
         i2v_vae_feature: torch.Tensor = None,
         **kwargs,
     ):
+        if self.pre_process:
+            timestep = timestep.to(x[0].device)
+            # time embeddings
+            times = self.time_embedding(
+                self.sinusoidal_embedding_1d(self.freq_dim, timestep)
+            )
+            time_emb = self.time_projection(times).unflatten(1, (6, self.hidden_size))
 
-        # time embeddings
-        times = self.time_embedding(
-            self.sinusoidal_embedding_1d(self.freq_dim, timestep.to(x[0].device))
-        )
-        time_emb = self.time_projection(times).unflatten(1, (6, self.hidden_size))
+            # prompt embeddings
+            bs = prompt.size(0)
+            prompt = prompt.view(bs, -1, prompt.size(-1))
+            if prompt_mask is not None:
+                seq_lens = prompt_mask.view(bs, -1).sum(dim=-1)
+                for i, seq_len in enumerate(seq_lens):
+                    prompt[i, seq_len:] = 0
+            prompt_emb = self.text_embedding(prompt)
 
-        # prompt embeddings
-        bs = prompt.size(0)
-        prompt = prompt.view(bs, -1, prompt.size(-1))
-        if prompt_mask is not None:
-            seq_lens = prompt_mask.view(bs, -1).sum(dim=-1)
-            for i, seq_len in enumerate(seq_lens):
-                prompt[i, seq_len:] = 0
-        prompt_emb = self.text_embedding(prompt)
+            # cat i2v
+            if self.model_type == "i2v":
+                i2v_clip_feature = i2v_clip_feature.to(x)
+                i2v_vae_feature = i2v_vae_feature.to(x)
+                x = torch.cat([x, i2v_vae_feature], dim=1)  # (b, c[x+y], f, h, w)
+                clip_embedding = self.img_emb(i2v_clip_feature.to(time_emb.dtype))
+                prompt_emb = torch.cat([clip_embedding, prompt_emb], dim=1)
 
-        # cat i2v
-        if self.model_type == "i2v":
-            i2v_clip_feature = i2v_clip_feature.to(x)
-            i2v_vae_feature = i2v_vae_feature.to(x)
-            x = torch.cat([x, i2v_vae_feature], dim=1)  # (b, c[x+y], f, h, w)
-            clip_embedding = self.img_emb(i2v_clip_feature.to(time_emb.dtype))
-            prompt_emb = torch.cat([clip_embedding, prompt_emb], dim=1)
+            # patch embedding
+            patch_emb = self.patch_embedding(x.to(time_emb.dtype))
 
-        # patch embedding
-        patch_emb = self.patch_embedding(x.to(time_emb.dtype))
+            embs, grid_sizes = self.patchify(patch_emb)
 
-        embs, grid_sizes = self.patchify(patch_emb)
+            # rotary positional embeddings
+            batch_size, frames, height, width = (
+                embs.shape[0],
+                grid_sizes[0],
+                grid_sizes[1],
+                grid_sizes[2],
+            )
+        else:
+            batch_size, _, frames, height, width = kwargs["ori_shape"]
+            height, width = height // self.patch_size[1], width // self.patch_size[2]
+            prompt_emb = kwargs['prompt_emb']
+            time_emb = kwargs['time_emb']
+            times = kwargs['times']
+            embs = x
 
-        # rotary positional embeddings
-        batch_size, frames, height, width = (
-            embs.shape[0],
-            grid_sizes[0],
-            grid_sizes[1],
-            grid_sizes[2],
-        )
         rotary_pos_emb = self.rope(batch_size, frames, height, width)
 
         # RNG context
@@ -354,16 +370,88 @@ class WanDiT(MultiModalModule):
                 for block in self.blocks:
                     embs = block(embs, prompt_emb, time_emb, rotary_pos_emb)
 
-        if self.context_parallel_algo is not None:
-            embs = gather_forward_split_backward(
-                embs, mpu.get_context_parallel_group(), dim=1, grad_scale="up"
-            )
+        out = embs
+        if self.post_process:
+            if self.context_parallel_algo is not None:
+                embs = gather_forward_split_backward(
+                    embs, mpu.get_context_parallel_group(), dim=1, grad_scale="up"
+                )
+            embs_out = self.head(embs, times)
+            out = self.unpatchify(embs_out, frames, height, width)
 
-        embs_out = self.head(embs, times)
+        rtn = (out, prompt, prompt_emb, time_emb, times, prompt_mask)
 
-        out = self.unpatchify(embs_out, frames, height, width)
+        return rtn
 
-        return out
+    def pipeline_set_prev_stage_tensor(self, input_tensor_list, extra_kwargs):
+        """
+        Implemented for pipeline parallelism. The input tensor is got from last PP stage.
+        Args:
+            input_tensor_list: same as the return value of pipeline_set_next_stage_tensor
+            extra_kwargs: kwargs for forward func.
+
+        Returns:
+            predictor_input_list: values for predictor forward.
+            training_loss_input_list: values to calculate loss.
+        """
+        (prev_output, prompt, prompt_emb, time_emb, times, prompt_mask,
+         latents, timesteps, noise) = input_tensor_list
+        predictor_input_list = [prev_output, timesteps, prompt, None, prompt_mask]
+        training_loss_input_list = [latents, None, timesteps, noise, None]
+        extra_kwargs['prompt_emb'] = prompt_emb
+        extra_kwargs['time_emb'] = time_emb
+        extra_kwargs['times'] = times
+        extra_kwargs["ori_shape"] = latents.shape
+        return predictor_input_list, training_loss_input_list
+
+    def pipeline_set_next_stage_tensor(self, input_list, output_list, extra_kwargs=None):
+        """
+        input_list: [latents, noised_latents, timesteps, noise, video_mask]
+        output_list (predict_output):[out, prompt, prompt_emb, time_emb, times, prompt_mask]
+
+        return as
+        prev_output, prompt, prompt_emb, prompt_emb, time_emb, times, prompt_mask,
+        latents, timesteps, noise
+
+        which should be corresponded with initialize_pipeline_tensor_shapes
+        """
+        latents, _, timesteps, noise, _ = input_list
+        if timesteps.dtype != torch.float32:
+            timesteps = timesteps.to(torch.float32)
+
+        return list(output_list) + [latents, timesteps, noise]
+
+    @staticmethod
+    def initialize_pipeline_tensor_shapes():
+        args = get_args()
+        micro_batch_size = args.micro_batch_size
+        dtype = args.params_dtype
+
+        model_cfg = args.mm.model
+        data_cfg = args.mm.data.dataset_param.preprocess_parameters
+        hidden_size = model_cfg.predictor.hidden_size
+        height = data_cfg.max_height if hasattr(data_cfg, "max_height") else 480
+        width = data_cfg.max_width if hasattr(data_cfg, "max_width") else 832
+        latent_size = ((data_cfg.num_frames + 3) // 4, height // 8, width // 8)
+        divisor = model_cfg.predictor.patch_size[0] * model_cfg.predictor.patch_size[1] * \
+                  model_cfg.predictor.patch_size[2]
+        seq_len = latent_size[0] * latent_size[1] * latent_size[2] // divisor // mpu.get_context_parallel_world_size()
+        channels = model_cfg.predictor.in_dim
+        text_dim = model_cfg.predictor.text_dim
+        text_len = model_cfg.predictor.text_len
+
+        pipeline_tensor_shapes = [
+            {'shape': (micro_batch_size, seq_len, hidden_size), 'dtype': dtype},  # prev_output
+            {'shape': (micro_batch_size, text_len, text_dim), 'dtype': dtype},  # prompt
+            {'shape': (micro_batch_size, text_len, hidden_size), 'dtype': dtype},  # prompt_emb
+            {'shape': (micro_batch_size, 6, hidden_size), 'dtype': dtype},  # time_emb
+            {'shape': (micro_batch_size, hidden_size), 'dtype': dtype},  # times
+            {'shape': (micro_batch_size, 1, text_len), 'dtype': dtype},  # origin_prompt_mask
+            {'shape': (micro_batch_size, channels, *latent_size), 'dtype': dtype},  # latents(x0)
+            {'shape': (micro_batch_size), 'dtype': torch.float32},  # timesteps
+            {'shape': (micro_batch_size, channels, *latent_size), 'dtype': dtype},  # noise
+        ]
+        return pipeline_tensor_shapes
 
 
 class WanDiTBlock(nn.Module):

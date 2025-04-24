@@ -24,6 +24,7 @@
         "out_dim": 16,
         "num_heads": 12,
         "num_layers": 30,
+        "pipeline_num_layers": [7,8,8,7],
         "qk_norm": true,
         "qk_norm_type": "rmsnorm",
         "cross_attn_norm": true,

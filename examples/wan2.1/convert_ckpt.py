@@ -37,12 +37,20 @@ DIT_CONVERSION_MAPPING = {
 
 
 class CheckpointConverter:
-    def __init__(self, source_path: str, ckpt_path: str, target_path: str, mode: str):
+    def __init__(self, source_path: str, ckpt_path: str, target_path: str, mode: str, pp_vpp_layers: list):
         self.source_path = source_path
         self.ckpt_path = ckpt_path
         self.target_path = target_path
         self.mode = mode
         self.state_dict = None
+
+        self.pp_vpp_layers = pp_vpp_layers
+        if pp_vpp_layers and isinstance(pp_vpp_layers[0], list):
+            self.vpp_size = len(pp_vpp_layers)
+            self.pp_size = len(pp_vpp_layers[0])
+        else:
+            self.vpp_size = 1
+            self.pp_size = len(pp_vpp_layers) if pp_vpp_layers is not None else 1
 
     def load_weight(self, _weight_path):
         if _weight_path.endswith(".safetensors"):
@@ -68,9 +76,9 @@ class CheckpointConverter:
         return state_dicts
 
     def replace_state_dict(
-        self,
-        state_dict: Dict[str, Any],
-        conversion_mapping: Dict,
+            self,
+            state_dict: Dict[str, Any],
+            conversion_mapping: Dict,
     ) -> Dict[str, Any]:
         for ori_key, mm_key in conversion_mapping.items():
             if self.mode == "convert_to_hf" and mm_key in state_dict.keys():
@@ -140,7 +148,7 @@ class CheckpointConverter:
         return new_checkpoint
 
     def split_by_index_json(
-        self, state_dict: Dict[str, Any], _model_path: str
+            self, state_dict: Dict[str, Any], _model_path: str
     ) -> list[dict]:
         index_json_path = os.path.join(
             _model_path, "diffusion_pytorch_model.safetensors.index.json"
@@ -157,38 +165,92 @@ class CheckpointConverter:
             return_dicts[index - 1][key] = state_dict[key]
         return return_dicts
 
-    def save_to_mm(
-        self,
-        state_dicts: List[Dict],
-        _save_dir: str,
-        latest_checkpointed_iteration="release",
-    ):
-        if not os.path.exists(_save_dir):
-            os.makedirs(_save_dir)
+    def split_by_pp_vpp(self, state_dicts):
+        state_dicts = [state_dicts, ]
+        return_dict = []
+        if self.pp_size < 1:
+            for tp_rank, state_dict in enumerate(state_dicts):
+                return_dict.append((tp_rank, state_dict))
+            return return_dict
+
+        if self.vpp_size > 1:
+            pp_sizes_flat = [
+                layers
+                for vpp_layer in self.pp_vpp_layers
+                for layers in vpp_layer
+            ]
+        else:
+            pp_sizes_flat = self.pp_vpp_layers
+
+        print(f"pp_sizes_flat: {pp_sizes_flat}")
+        postprocess_weight_names = ['head.head.weight', 'head.head.bias', 'head.modulation']
+        for pp_rank, _ in enumerate(pp_sizes_flat):
+            is_first = pp_rank == 0
+            is_last = pp_rank == len(pp_sizes_flat) - 1
+            start_layer, end_layer = sum(pp_sizes_flat[:pp_rank]), sum(pp_sizes_flat[:pp_rank + 1])
+            for tp_rank, state_dict in enumerate(state_dicts):
+                pp_tp_param = dict()
+                for k in state_dict.keys():
+                    if k.startswith("blocks"):
+                        idx = int(k.split('.')[1])
+                        if start_layer <= idx < end_layer:
+                            cur_idx, tmps = str(idx - start_layer), k.split('.')
+                            new_k = '.'.join(tmps[:1] + [cur_idx] + tmps[2:])
+                            pp_tp_param[new_k] = state_dict[k]
+                    elif k in postprocess_weight_names:
+                        # for pp rank -1
+                        if is_last:
+                            pp_tp_param[k] = state_dict[k]
+                    else:
+                        # for pp rank 0
+                        if is_first:
+                            pp_tp_param[k] = state_dict[k]
+                return_dict.append((tp_rank, pp_tp_param))
+
+        return return_dict
+
+    def save_to_mm(self, state_dicts, save_dir, latest_checkpointed_iteration="release"):
+        if os.path.exists(save_dir):
+            print(f"save dir: {save_dir} exists, please check.")
+            return
+        else:
+            os.makedirs(save_dir)
 
         flags = os.O_WRONLY | os.O_CREAT
-        mode = stat.S_IWUSR | stat.S_IRUSR
-        with os.fdopen(
-            os.open(
-                os.path.join(_save_dir, "latest_checkpointed_iteration.txt"),
-                flags,
-                mode,
-            ),
-            "w",
-        ) as fout:
+        stat_mode = stat.S_IWUSR | stat.S_IRUSR
+        with os.fdopen(os.open(os.path.join(save_dir, "latest_checkpointed_iteration.txt"), flags, stat_mode),
+                       "w") as fout:
             fout.write(latest_checkpointed_iteration)
         if latest_checkpointed_iteration == "release":
             directory = "release"
         else:
             directory = "iter_{:07d}".format(latest_checkpointed_iteration)
 
-        os.makedirs(os.path.join(_save_dir, directory, f"mp_rank_00"))
-        save_path = os.path.join(
-            _save_dir, directory, f"mp_rank_00", "model_optim_rng.pt"
-        )
-        save_dict = {}
-        save_dict["model"] = state_dicts
-        torch.save(save_dict, save_path)
+        if self.pp_size <= 1:
+            for tp_rank, state_dict in state_dicts:
+                save_dict = {}
+                filename = f"mp_rank_{tp_rank:02d}"
+                os.makedirs(os.path.join(save_dir, directory, filename))
+                save_path = os.path.join(save_dir, directory, filename, "model_optim_rng.pt")
+                save_dict["model"] = state_dict
+                torch.save(save_dict, save_path)
+            return
+
+        for pp_rank in range(self.pp_size):
+            tp_rank, state_dict = state_dicts[pp_rank]
+            os.makedirs(os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}_{pp_rank:03d}"))
+            save_path = os.path.join(save_dir, directory, f"mp_rank_{tp_rank:02d}_{pp_rank:03d}", "model_optim_rng.pt")
+
+            save_dict = {}
+            if self.vpp_size > 1:
+                save_dict = {
+                    f"model{vpp_rank}": state_dicts[vpp_rank * self.pp_size + pp_rank][1]
+                    for vpp_rank in range(self.vpp_size)
+                }
+                save_dict['checkpoint_version'] = 3.0
+            else:
+                save_dict["model"] = state_dict
+            torch.save(save_dict, save_path)
 
     def forward(self):
         if self.mode == "convert_to_hf":
@@ -207,6 +269,7 @@ class CheckpointConverter:
                 self.state_dict, conversion_mapping=DIT_CONVERSION_MAPPING
             )
             self.state_dict = self.convert_attn_to_mm(self.state_dict)
+            self.state_dict = self.split_by_pp_vpp(self.state_dict)
             self.save_to_mm(self.state_dict, self.target_path)
             print("Checkpoint successfully converted from Hugging Face to MM format.")
 
@@ -214,6 +277,16 @@ class CheckpointConverter:
             raise ValueError(
                 "please select the mode only from convert_to_hf or convert_to_mm"
             )
+
+
+def parse_nested_list(value):
+    try:
+        pp_vpp_layers = json.loads(value)
+        if not isinstance(pp_vpp_layers, list):
+            raise argparse.ArgumentTypeError(f"Invalid input list format:{value}")
+        return pp_vpp_layers
+    except json.JSONDecodeError as e:
+        raise argparse.ArgumentTypeError(f"Invalid input list format:{value}, {e}")
 
 
 def get_args():
@@ -243,6 +316,14 @@ def get_args():
         required=True,
         help="Selection of conversion mode: convert_to_hf or convert_to_mm",
     )
+    parser.add_argument(
+        "--pp_vpp_layers",
+        type=parse_nested_list,
+        required=False,
+        default=[],
+        help="The pp and vpp layers per stage, only used for convert to mm : default means disable, \
+             '[7, 8, 8, 7]' meas pp_size=4, '[[7, 8], [7,8]]' means pp_size=2 and vpp_size=2"
+    )
 
     args = parser.parse_args()
     return args
@@ -256,5 +337,6 @@ if __name__ == "__main__":
         ckpt_path=args.ckpt_path,
         target_path=args.target_path,
         mode=args.mode,
+        pp_vpp_layers=args.pp_vpp_layers
     )
     converter.forward()

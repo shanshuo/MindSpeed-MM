@@ -159,11 +159,12 @@ python examples/wan2.1/convert_ckpt.py --source_path <./weights/Wan-AI/Wan2.1-{T
 
 权重转换脚本的参数说明如下：
 
-|参数| 含义 | 默认值 |
-|:------------|:----|:----|
-| --source_path | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
-| --target_path | 转换后的权重保存路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
-| --mode | 转换模式 | 需选择convert_to_mm |
+| 参数              | 含义                      | 默认值                                                                |
+|:----------------|:------------------------|:-------------------------------------------------------------------|
+| --source_path   | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
+| --target_path   | 转换后的权重保存路径              | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
+| --mode          | 转换模式                    | 需选择convert_to_mm                                                   |
+| --pp_vpp_layers | PP/VPP层数                | 在convert_to_mm时, 使用PP和VPP需要指定各stage的层数并转换, 默认不使用                   |
 
 如需转回Hugging Face格式，需运行权重转换脚本：
 
@@ -309,6 +310,46 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
     python <your_mindspeed_path>/mindspeed/core/distributed/layerzero/state/scripts/convert_to_megatron.py --input_folder ./save_ckpt/wan2.1/iter_000xxxx/ --output_folder ./save_ckpt/wan2.1_megatron_ckpt/iter_000xxxx/ --prefix predictor
     ```
 
++ PP：流水线并行
+
+  目前支持将predictor模型切分流水线。
+
+  - 使用场景：模型参数较大时候，通过流线线方式切分并行，降低训练内存占用
+
+  - 使能方式：
+    - 修改在 pretrain_model.json 文件中的"pipeline_num_layers", 类型为list。该list的长度即为 pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[7, 8, 8, 7]代表有4个pipeline stage， 每个容纳7/8个dit layers。注意list中 所有的数值的和应该和总num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，因此可以酌情减少第0个stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
+    - 此外使用pp时需要在运行脚本GPT_ARGS中打开以下几个参数
+  
+    ```shell
+    PP = 4 # PP > 1 开启 
+    GPT_ARGS="
+    --optimization-level 2 \
+    --use-multiparameter-pipeline-model-parallel \  #使用PP或者VPP功能必须要开启
+    --variable-seq-lengths \  #按需开启，动态shape训练需要加此配置，静态shape不要加此配置
+    “
+    ```
+
++ VP: 虚拟流水线并行
+
+  目前支持将predictor模型切分虚拟流水线并行。
+
+  - 使用场景：对流水线并行进行进一步切分，通过虚拟化流水线，降低空泡
+  - 使能方式:
+    - 如果想要使用虚拟流水线并行，将pretrain_model.json文件中的"pipeline_num_layers"一维数组改造为两维，其中第一维表示虚拟并行的数量，二维表示流水线并行的数量，例如[[3, 4, 4, 4], [3, 4, 4, 4]]其中第一维两个数组表示vp为2, 第二维的stage个数为4表示流水线数量pp为3或4。
+    - 需要在pretrain.sh当中修改如下变量，需要注意的是，VP仅在PP大于1的情况下生效:
+
+    ```shell
+    PP=4
+    VP=2
+
+    GPT_ARGS="
+      --pipeline-model-parallel-size ${PP} \
+      --virtual-pipeline-model-parallel-size ${VP} \
+      --optimization-level 2 \
+      --use-multiparameter-pipeline-model-parallel \  #使用PP或者VPP功能必须要开启
+      --variable-seq-lengths \  #按需开启，动态shape训练需要加此配置，静态shape不要加此配置
+    ”
+    ```
 #### 启动训练
 
 ```bash

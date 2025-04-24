@@ -92,7 +92,7 @@ class WanFlowMatchScheduler():
     def q_sample(self, latents, **kwargs):
         noise = torch.randn_like(latents)
         timestep_idx = torch.randint(0, self.num_train_timesteps, (1,))
-        timestep = self.timesteps[timestep_idx]
+        timestep = self.timesteps[timestep_idx].to(latents.device)
         sigma = self.sigmas[timestep_idx].to(latents.device)
         noised_latents = (1 - sigma) * latents + sigma * noise
         return noised_latents, noise, timestep
