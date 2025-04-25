@@ -110,7 +110,7 @@ pip install torch_npu-2.1.0*-cp310-cp310m-linux_aarch64.whl
 git clone https://gitee.com/ascend/MindSpeed.git
 cd MindSpeed
 # checkout commit from MindSpeed core_r0.8.0
-git checkout 59b4e983b7dc1f537f8c6b97a57e54f0316fafb0
+git checkout 6f11a6c9edd409f32a805a71e710b01f9191438f
 pip install -r requirements.txt
 pip3 install -e .
 cd ..

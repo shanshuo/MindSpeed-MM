@@ -50,7 +50,7 @@ Pipedream流水线并行切分粒度过大，运行过程中仍然有许多空�
 1.运行权重切分脚本时，vpp设置为True
 
 ```shell
-python internvl_convert_to_mm_ckpt.py --model-size 8B --vpp True --load-dir load_path --save-dir save_path --trust-remote-code True
+python internvl2_convert_to_mm_ckpt.py --model-size 8B --vpp True --load-dir load_path --save-dir save_path --trust-remote-code True
 ```
 
 2.修改model.json中的pipeline_num_layers，需要和权重转换时的layers一致。可参考examples/internvl2/model_8B_vpp.json

@@ -5,6 +5,7 @@ from torch.nn import CrossEntropyLoss
 
 from megatron.core import InferenceParams, mpu
 from megatron.core import tensor_parallel
+from megatron.core.tensor_parallel import scatter_to_sequence_parallel_region
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
@@ -28,7 +29,7 @@ class VLMModel(MultiModalModule):
         {
             "pre_process": (bool),  # Include the embedding leayer in the gpt decoder (used with pipeline parallelism).
             "post_process": (bool),  # Include an output layer and a layernorm in the gpt decoder (used with pipeline parallelism).
-            "add_text_encoder": (bool),  # Whether to construct the text encoder. not used now. 
+            "add_text_encoder": (bool),  # Whether to construct the text encoder. not used now.
             "add_image_encoder": (bool),  # Whether to construct the image encoder.
             "add_video_encoder": (bool),  # Whether to construct the video encoder. not used now.
             "add_text_decoder": (bool),  # Whether to construct the text decoder.
@@ -60,15 +61,15 @@ class VLMModel(MultiModalModule):
         self.position_embedding_type = config.text_decoder.position_embedding_type
         self.img_context_token_id = config.img_context_token_id
         self.vocab_size = config.text_decoder.vocab_size
-        
 
         # initialize pipeline parallel configs
         self.pp_size = mpu.get_pipeline_model_parallel_world_size()
-        if mpu.get_virtual_pipeline_model_parallel_world_size() is not None:
-            raise NotImplementedError("Not support virtual_pipeline_model_parallel now")
-        else:
-            self.pp_rank = mpu.get_pipeline_model_parallel_rank()
-        
+        self.enable_vp = mpu.get_virtual_pipeline_model_parallel_world_size() is not None
+        if self.enable_vp:
+            self.vp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
+            self.vp_size = mpu.get_virtual_pipeline_model_parallel_world_size()
+        self.pp_rank = mpu.get_pipeline_model_parallel_rank()
+
         if self.add_text_encoder:
             self.text_encoder = TextEncoder(config.text_encoder).get_model()
         if self.add_image_encoder:
@@ -77,6 +78,17 @@ class VLMModel(MultiModalModule):
             raise NotImplementedError("Not support video_encoder now")
         if self.add_text_decoder:
             self.text_decoder = self._build_text_decoder_model(config.text_decoder)
+
+
+    def shared_embedding_or_output_weight(self):
+        """
+        This is a convenience method to surface the language model's word embeddings, which is
+        necessary for 'finalize_model_grads._allreduce_word_embedding_grads'.
+        """
+        if self.add_text_decoder:
+            return self.text_decoder.shared_embedding_or_output_weight()
+        return None
+
 
     def _build_image_encoder_model(self, config):
         vit_layer_spec = get_vit_layer_spec(config.vision_encoder)
@@ -88,23 +100,42 @@ class VLMModel(MultiModalModule):
                 encoder_transformer_layer_spec=vit_layer_spec,
                 projector_layer_spec=proj_layer_spec
             )
+        if self.enable_vp:
+            if self.pp_size * self.vp_size != len(config.vision_encoder.pipeline_num_layers) * len(
+                    config.vision_encoder.pipeline_num_layers[0]):
+                raise ValueError(
+                    f"The product of pipeline-model-parallel-size and vpp-size must equal to the total number of stage in vision_encoder.pipeline_num_layers, "
+                    f"but got pipeline-model-parallel-size: {self.pp_size}, vpp-size: {self.vp_size}, "
+                    f"and total number of stage in vision_encoder.pipeline_num_layers: {len(config.vision_encoder.pipeline_num_layers) * len(config.vision_encoder.pipeline_num_layers[0])}.")
+        elif self.pp_size != len(config.vision_encoder.pipeline_num_layers):
+            raise ValueError(
+                f"length of vision_encoder.pipeline_num_layers must equal to pipeline-model-parallel-size, "
+                f"but got vision_encoder.pipeline_num_layers length:{len(config.vision_encoder.pipeline_num_layers)} "
+                f"and pipeline-model-parallel-size:{self.pp_size}.")
 
-        if self.pp_size != len(config.vision_encoder.pipeline_num_layers):
-            raise ValueError(f"length of vision_encoder.pipeline_num_layers must equal to pipeline-model-parallel-size, "
-                             f"but got vision_encoder.pipeline_num_layers length:{len(config.vision_encoder.pipeline_num_layers)} "
-                             f"and pipeline-model-parallel-size:{self.pp_size}.")
-        
-        local_num_layers = config.vision_encoder.pipeline_num_layers[self.pp_rank]
+        if self.enable_vp:
+            local_num_layers = config.vision_encoder.pipeline_num_layers[self.vp_rank][self.pp_rank]
+        else:
+            local_num_layers = config.vision_encoder.pipeline_num_layers[self.pp_rank]
+
         if local_num_layers == 0:
             self.add_image_encoder = False
             return None
 
-        pipeline_start_index = sum(config.vision_encoder.pipeline_num_layers[:self.pp_rank])
-        pipeline_end_index = sum(config.vision_encoder.pipeline_num_layers[:self.pp_rank + 1])
-        
+        if self.enable_vp:
+            pipeline_start_index = sum(
+                sum(vp_layer) for vp_layer in config.vision_encoder.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.vision_encoder.pipeline_num_layers[self.vp_rank][:self.pp_rank])
+            pipeline_end_index = sum(
+                sum(vp_layer) for vp_layer in config.vision_encoder.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.vision_encoder.pipeline_num_layers[self.vp_rank][:self.pp_rank + 1])
+        else:
+            pipeline_start_index = sum(config.vision_encoder.pipeline_num_layers[:self.pp_rank])
+            pipeline_end_index = sum(config.vision_encoder.pipeline_num_layers[:self.pp_rank + 1])
+
         pre_process = pipeline_start_index == 0
         post_process = pipeline_end_index == config.vision_encoder.num_layers
-        
+
         print(
             f"image encoder pipeline config:\
             pp_rank:{self.pp_rank},\
@@ -114,6 +145,8 @@ class VLMModel(MultiModalModule):
         )
         # num_layers will be divided by pp_size in TransformerBlock from megatron.core
         config.vision_encoder.num_layers = self.pp_size * local_num_layers
+        if self.enable_vp:
+            config.vision_encoder.num_layers *= self.vp_size
         return VisionModel(
             config=config,
             encoder_transformer_layer_spec=vit_layer_spec,
@@ -136,20 +169,36 @@ class VLMModel(MultiModalModule):
                 pre_process=self.pre_process,
                 post_process=self.post_process
             )
-        
-        if self.pp_size != len(config.pipeline_num_layers):
+        if self.enable_vp:
+            if self.pp_size * self.vp_size != len(config.pipeline_num_layers) * len(config.pipeline_num_layers[0]):
+                raise ValueError(
+                    f"The product of pipeline-model-parallel-size and vpp-size must equal to the total number of stage in pipeline_num_layers, "
+                    f"but got pipeline-model-parallel-size: {self.pp_size}, vpp-size: {self.vp_size}, "
+                    f"and total number of stage in pipeline_num_layers: {len(config.pipeline_num_layers) * len(config.pipeline_num_layers[0])}.")
+        elif self.pp_size != len(config.pipeline_num_layers):
             raise ValueError(f"length of pipeline_num_layers must equal to pipeline-model-parallel-size, "
                              f"but got pipeline_num_layers length:{len(config.pipeline_num_layers)} "
                              f"and pipeline-model-parallel-size:{self.pp_size}.")
 
-        local_num_layers = config.pipeline_num_layers[self.pp_rank]
+        if self.enable_vp:
+            local_num_layers = config.pipeline_num_layers[self.vp_rank][self.pp_rank]
+        else:
+            local_num_layers = config.pipeline_num_layers[self.pp_rank]
+
         if local_num_layers == 0:
             self.add_text_decoder = False
             return None
 
-        pipeline_start_index = sum(config.pipeline_num_layers[:self.pp_rank])
-        pipeline_end_index = sum(config.pipeline_num_layers[:self.pp_rank + 1])
-        
+        if self.enable_vp:
+            pipeline_start_index = sum(
+                sum(vp_layer) for vp_layer in config.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.pipeline_num_layers[self.vp_rank][:self.pp_rank])
+            pipeline_end_index = sum(sum(vp_layer) for vp_layer in config.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.pipeline_num_layers[self.vp_rank][:self.pp_rank + 1])
+        else:
+            pipeline_start_index = sum(config.pipeline_num_layers[:self.pp_rank])
+            pipeline_end_index = sum(config.pipeline_num_layers[:self.pp_rank + 1])
+
         pre_process = pipeline_start_index == 0
         post_process = pipeline_end_index == config.num_layers
 
@@ -162,7 +211,8 @@ class VLMModel(MultiModalModule):
         )
         # num_layers will be divided by pp_size in TransformerBlock from megatron.core
         config.num_layers = self.pp_size * local_num_layers
-
+        if self.enable_vp:
+            config.num_layers *= self.vp_size
         return MMGPTModel(
                 config=config,
                 transformer_layer_spec=get_llm_layer_spec(config),
@@ -174,7 +224,7 @@ class VLMModel(MultiModalModule):
                 rotary_base=config.rope_theta if getattr(config, 'rope_theta', None) else config.rotary_base,
                 pre_process=pre_process,
                 post_process=post_process
-            )
+        )
 
 
     def set_input_tensor(self, input_tensor):
@@ -236,8 +286,8 @@ class VLMModel(MultiModalModule):
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels[..., 1:].contiguous()
 
-        #如果想和torch.nn.CrossEntropyLoss对齐，需要将vocab_parallel_cross_entropy中的最大值归一化代码注释掉
-        loss = tensor_parallel.vocab_parallel_cross_entropy(shift_logits.float(), shift_labels) 
+        # 如果想和torch.nn.CrossEntropyLoss对齐，需要将vocab_parallel_cross_entropy中的最大值归一化代码注释掉
+        loss = tensor_parallel.vocab_parallel_cross_entropy(shift_logits.float(), shift_labels)
         loss = loss * (shift_labels > -1)
         loss = torch.sum(loss) / torch.sum(shift_labels > -1)
 
@@ -269,8 +319,10 @@ class VLMModel(MultiModalModule):
             if image_flags is not None:
                 if self.image_encoder.post_process:
                     image_flags = image_flags.squeeze(-1)
-                vit_embeds = vit_embeds[image_flags == 1]
-            vit_embeds = vit_embeds.reshape(-1, 1, vit_embeds.shape[-1]).clone()
+                    vit_embeds = vit_embeds[image_flags == 1]
+                    vit_embeds = vit_embeds.reshape(-1, 1, vit_embeds.shape[-1]).clone()
+            else:
+                vit_embeds = vit_embeds.reshape(-1, 1, vit_embeds.shape[-1]).clone()
             output = vit_embeds
         else:
             vit_embeds = self.input_tensor
@@ -279,6 +331,9 @@ class VLMModel(MultiModalModule):
             input_embeds = None
             if self.text_decoder.pre_process:
                 input_embeds = self.text_decoder.embedding(input_ids=input_ids, position_ids=position_ids).clone()
+                _input_ids = input_ids
+                if self.config.sequence_parallel:
+                    _input_ids = scatter_to_sequence_parallel_region(_input_ids.transpose(0, 1)).transpose(0, 1)
                 if vit_embeds is not None:
                     input_embeds = input_embeds.transpose(0, 1)  # bsh
                     # 用是否有image_bound做区分，实现minicpmv2.6模型vit_embeds嵌入input_embeds
@@ -302,7 +357,8 @@ class VLMModel(MultiModalModule):
                                 elif self.training:
                                     cur_vllm_emb += cur_vs_hs[0].mean() * 0
                     else:
-                        image_mask = torch.eq(input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
+                        image_mask = torch.eq(_input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(
+                            input_embeds)
                         vit_embeds = vit_embeds[:, 0, :]
                         input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
                         input_embeds = input_embeds.transpose(0, 1).clone()
