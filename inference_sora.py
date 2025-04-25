@@ -16,7 +16,8 @@ from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import (
     save_video_grid,
     load_prompts,
     load_images,
-    load_conditional_pixel_values
+    load_conditional_pixel_values,
+    load_videos,
 )
 from mindspeed_mm.models.predictor import PredictModel
 from mindspeed_mm.models.diffusion import DiffusionModel
@@ -72,13 +73,23 @@ def main():
         ]
 
     images = load_images(args.image) if hasattr(args, "image") else None
+    if hasattr(args, "video"):
+        if args.start_frame or args.num_frames is None:
+            raise ValueError("Please select both starting frame index and total number of frames")
+        videos = load_videos(args.video, args.start_frame, args.num_frames) if hasattr(args, "video") else None
+    else:
+        videos = None
     conditional_pixel_values_path = load_conditional_pixel_values(args.conditional_pixel_values_path) if hasattr(args, "conditional_pixel_values_path") else None
     mask_type = args.mask_type if hasattr(args, "mask_type") else None
     crop_for_hw = args.crop_for_hw if hasattr(args, "crop_for_hw") else None
     max_hxw = args.max_hxw if hasattr(args, "max_hxw") else None
+    strength = args.strength if hasattr(args, "strength") else None
 
     if images is not None and len(prompts) != len(images):
         raise AssertionError(f'The number of images {len(images)} and the numbers of prompts {len(prompts)} do not match')
+
+    if videos is not None and len(prompts) != len(videos):
+        raise AssertionError(f'The number of videos {len(videos)} and the numbers of prompts {len(prompts)} do not match')
 
     if len(prompts) % args.micro_batch_size != 0:
         raise AssertionError(f'The number of  prompts {len(prompts)} is not divisible by the batch size {args.micro_batch_size}')
@@ -109,12 +120,19 @@ def main():
         else:
             batch_images = None
 
+        if videos is not None:
+            batch_videos = videos[i: i + args.micro_batch_size]
+        else:
+            batch_videos = None
+
         videos = sora_pipeline(prompt=batch_prompts,
                                image=batch_images,
+                               video=batch_videos,
                                fps=save_fps,
                                use_prompt_preprocess=args.use_prompt_preprocess,
                                device=device,
                                dtype=dtype,
+                               strength=strength,
                                **kwargs
                                )
         if mpu.get_context_parallel_rank() == 0 and mpu.get_tensor_model_parallel_rank() == 0:

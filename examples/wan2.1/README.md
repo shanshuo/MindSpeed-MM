@@ -31,12 +31,12 @@
 
 ## 任务支持列表
 
-| 模型大小 | 任务类型 | 预训练 | lora微调 | 在线推理 |
-|------|:----:|:----|:-------|:-----|
-| 1.3B | t2v  | ✔   | ✔      | ✔    |
-| 1.3B | i2v  | ✔   |        |      |
-| 14B  | t2v  | ✔   | ✔      | ✔    |
-| 14B  | i2v  | ✔   | ✔      | ✔    |
+| 模型大小 | 任务类型 | 预训练 | lora微调 | 在线T2V推理 | 在线I2V推理 | 在线V2V推理 |
+|------|:----:|:----|:-------|:-----|:-----|:-----|
+| 1.3B | t2v  | ✔ | ✔ | ✔ | ✔ | ✔ |
+| 1.3B | i2v  | ✔ |  |  |  |  |
+| 14B  | t2v  | ✔ | ✔ | ✔ | ✔ | ✔ |
+| 14B  | i2v  | ✔ | ✔ | ✔ | ✔ | ✔ |
 
 ## 环境安装
 
@@ -395,6 +395,8 @@ bash examples/wan2.1/{model_size}/{task}/finetune_lora.sh
 | examples/wan2.1/samples_t2v_prompts.txt |    文件内容 |  T2V推理任务的prompt，可自定义，一行为一个prompt   |
 | examples/wan2.1/samples_i2v_prompts.txt |    文件内容 |  I2V推理任务的prompt，可自定义，一行为一个prompt   |
 | examples/wan2.1/samples_i2v_images.txt |    文件内容 |  I2V推理任务的首帧图片路径，可自定义，一行为一个图片路径   |
+| examples/wan2.1/samples_v2v_prompts.txt |    文件内容 |  V2V推理任务的prompt，可自定义，一行为一个prompt   |
+| examples/wan2.1/samples_v2v_images.txt |    文件内容 |  V2V推理任务的首个视频路径，可自定义，一行为一个视频路径   |
 | examples/wan2.1/{model_size}/{task}/inference_model.json |  save_path |  生成视频的保存路径 |
 | examples/wan2.1/{model_size}/{task}/inference_model.json |  input_size |  生成视频的分辨率，格式为 [t, h, w] |
 | examples/wan2.1/{model_size}/{task}/inference_model.json |  flow_shift |  sheduler参数，480P推荐shift=3.0，720P推荐shift=5.0 |

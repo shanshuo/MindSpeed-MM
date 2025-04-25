@@ -111,12 +111,37 @@ def load_images(image=None):
             with open(image, "r") as f:
                 lines = f.readlines()
                 if len(lines) > 100:
-                    print("The file has more than 100 lines of images, we can only proceed the first 100")
+                    print("The file has more than 100 lines of images, we can only process the first 100")
                     lines = lines[:100]
                 images = [safe_load_image(line.strip()) for line in lines]
             return images
     else:
         raise FileNotFoundError(f"The image path {image} does not exist")
+
+
+def load_videos(video=None, start_frame=0, num_frames=None):
+    if video is None:
+        print("The input video is None, execute text to video task")
+        return None
+    if os.path.exists(video):
+        if is_video_file(video):
+            return [open_video(video, start_frame, num_frames)]
+        else:
+            with open(video, "r") as f:
+                lines = f.readlines()
+                if len(lines) > 100:
+                    print("The file has more than 100 lines of videos, we can only process the first 100")
+                    lines = lines[:100]
+                videos = []
+                for line in lines:
+                    video_path = line.strip()
+                    if os.path.exists(video_path) and is_video_file(video_path):
+                        videos.append(open_video(video_path, start_frame, num_frames))
+                    else:
+                        print(f"The path {video_path} does not exist or is not a valid video file")
+            return videos
+    else:
+        raise FileNotFoundError(f"The video path {video} does not exist")
 
 
 def load_conditional_pixel_values(conditional_pixel_values_path):

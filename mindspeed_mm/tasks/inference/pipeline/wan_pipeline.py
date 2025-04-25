@@ -30,7 +30,6 @@ from .pipeline_base import MMPipeline
 from .pipeline_mixin.encode_mixin import MMEncoderMixin
 from .pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
 
-
 NEGATIVE_PROMOPT = "Bright tones, overexposed, static, blurred details, subtitles, style, works, paintings, images, static, overall gray, worst quality, low quality, JPEG compression residue, ugly, incomplete, extra fingers, poorly drawn hands, poorly drawn faces, deformed, disfigured, misshapen limbs, fused fingers, still picture, messy background, three legs, many people in the background, walking backwards"
 
 
@@ -81,6 +80,7 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self,
         prompt: Union[str, List[str]] = None,
         image: Optional[Union[Image, List[Image]]] = None,
+        video: List[Image] = None,
         negative_prompt: Union[str, List[str]] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
@@ -108,6 +108,7 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             batch_size = len(prompt)
         else:
             batch_size = prompt_embeds.shape[0]
+        self.strength = kwargs["strength"]
 
         # 3. Encode input prompt
         do_classifier_free_guidance = self.scheduler.do_classifier_free_guidance
@@ -122,7 +123,16 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         )
 
         # 4. Prepare latents and model_kwargs
-        if image is None:
+        if image is not None:
+            latents, clip_features, vae_features = self.prepare_image_latents(
+                batch_size, image, device, prompt_embeds.dtype
+            )
+        elif video is not None:
+            latents, video_vae_features = self.prepare_video_latents(
+                batch_size, video, device, prompt_embeds.dtype
+            )
+            clip_features, vae_features = None, None
+        else:
             shape = (
                 batch_size,
                 self.predict_model.in_dim,
@@ -132,10 +142,6 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             )
             latents = self.prepare_latents(shape, generator=self.generator, device=device, dtype=prompt_embeds.dtype)
             clip_features, vae_features = None, None
-        else:
-            latents, clip_features, vae_features = self.prepare_image_latents(
-                batch_size, image, device, prompt_embeds.dtype
-            )
 
         model_kwargs = {
             "prompt_embeds": prompt_embeds,
@@ -147,6 +153,13 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         # 5. Denoising to get clean latents
         num_inference_steps = self.scheduler.num_inference_steps
         timesteps = self.scheduler.timesteps
+
+        ## v2v task has to add noise
+        if video is not None:
+            timesteps, _ = self.get_timesteps(num_inference_steps, timesteps, self.strength)
+            latent_timestep = timesteps[:1].repeat(batch_size)
+            latents = self.scheduler.add_noise(video_vae_features, latents, latent_timestep)
+
         num_warmup_steps = self.scheduler.num_warmup_steps
         guidance_scale = self.scheduler.guidance_scale
         self.scheduler.diffusion.set_timesteps(num_inference_steps)  # reset timesteps
@@ -249,6 +262,13 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         self.text_prompt_checks(prompt, negative_prompt, prompt_embeds, negative_prompt_embeds)
 
+    def get_timesteps(self, num_inference_steps, timesteps, strength=0.7):
+        init_timestep = min(int(num_inference_steps * strength), num_inference_steps)
+
+        t_start = max(num_inference_steps - init_timestep, 0)
+        timesteps = timesteps[t_start * self.scheduler.order:]
+        return timesteps, num_inference_steps - t_start
+
     def prompt_preprocess(self, prompt):
 
         def basic_clean(text):
@@ -325,6 +345,57 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         vae_feature = torch.concat([msk, vae_feature], dim=1)
 
         return noise, clip_feature, vae_feature
+
+    def prepare_video_latents(self, batch_size, video, device, dtype):
+        # process video data
+        video = torch.stack(video, dim=0)
+        video = video.to(torch.float32) / 255.0 # normalize to [0, 1]
+        video = video.permute(0, 2, 1, 3, 4)
+
+        h, w = video.shape[-2:]
+
+        max_area = self.height * self.width
+        aspect_ratio = h / w
+        latent_h = round(
+            math.sqrt(max_area * aspect_ratio)
+            // self.vae_scale_factor_spatial
+            // self.patch_size[1]
+            // self.cp_size
+            * self.patch_size[1]
+            * self.cp_size
+        )
+        latent_w = round(
+            math.sqrt(max_area / aspect_ratio)
+            // self.vae_scale_factor_spatial
+            // self.patch_size[2]
+            // self.cp_size
+            * self.patch_size[2]
+            * self.cp_size
+        )
+
+        h = latent_h * self.vae_scale_factor_spatial
+        w = latent_w * self.vae_scale_factor_spatial
+        num_latent_frames = (video.size(2) - 1) // self.vae_scale_factor_temporal + 1
+
+        # vae encode
+        vae_transform = v2.Compose([v2.Resize(size=[h, w])])
+        video = vae_transform(video).to(device)
+
+        ## normalize to [-1, 1]
+        video = 2.0 * video - 1.0
+        vae_feature = self.vae.encode(video).to(dtype)
+
+        shape = (
+            batch_size,
+            self.vae.model.config.z_dim,
+            num_latent_frames,
+            latent_h,
+            latent_w,
+        )
+
+        noise = self.prepare_latents(shape, generator=self.generator, device=device, dtype=dtype)
+
+        return noise, vae_feature
 
     def _get_prompt_embeds(
         self,
