@@ -668,17 +668,17 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </tr>
 </table>
 
-## 文生视频： OpensoraPlan 1.3 T2V
+## 图生视频： Wan 2.1 I2V
 
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
-          <img src="sources/videos/video_ops_T2V.gif" width="100%" controls autoplay loop></video>
-          <p>Prompt: A gorgeously rendered papercraft world of a coral reef, rife with colorful fish and sea creatures</p>
+          <img src="examples/wan2.1/i2v_input.jpg" width="800" height="100%"></img>
+          <p>输入图片</p>
       </td>
       <td>
-          <img src="sources/videos/video_ops_T2V_twoships.gif" width="100%" controls autoplay loop></video>
-          <p>Prompt: Photorealistic closeup video of two pirate ships battling each other as they sail inside a cup of coffee</p>
+          <img src="sources/videos/video_wan_I2V.gif" width="100%" controls autoplay loop></video>
+          <p>Prompt: An astronaut hatching from an egg, on the surface of the moon, the darkness and depth of space realised in the background. High quality, ultrarealistic detail and breath-taking movie-like camera shot.</p>
       </td>
   </tr>
 </table>
