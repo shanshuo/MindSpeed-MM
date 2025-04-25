@@ -504,7 +504,9 @@ def _build_attentionmask_positionid_internllm(attention_mask, position_ids, dtyp
 
 attention_mask_list = {'qwen2lm': partial(_build_attentionmask_positionid_qwenllm, pos_func=qwen2_position),
                        'qwen2_5_lm': partial(_build_attentionmask_positionid_qwenllm, pos_func=qwen2_5_position),
-                       'internllm': _build_attentionmask_positionid_internllm}
+                       'internllm': _build_attentionmask_positionid_internllm,
+                       'deepseek': _build_attentionmask_positionid_internllm,
+                       }
 
 
 def prepare_positionsids_mask_for_llm(config=None, input_ids=None, inference_params=None, attention_mask=None, position_ids=None, *args, **kwargs):
