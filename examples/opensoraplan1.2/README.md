@@ -221,7 +221,8 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 【interleaved特性】
 
 在`model_opensoraplan1_2.json`文件中，启用`interleaved`参数可以在DIT进行forward前，批量完成`interleaved_steps`个batch的数据encode。从而在DIT的forward过程中，卸载`encoder`到cpu上，降低显存峰值。
-由于`encoder`会根据`interleaved_steps`数值大小，随着数据的批量处理反复从CPU加载到NPU上，再从NPU上卸载，所以`interleaved_steps`的数值应足够大以避免因为模型的反复加载影响训练性能。经测试以OpenSoraPlan1.2为例，`interleaved_steps`大于10后对整体性能影响较小，。
+该特性默认关闭，适用于模型规模较大或视频序列较长的自定义训练场景，可以有效降低内存占用。
+特性启用后，由于`encoder`会根据`interleaved_steps`数值大小，随着数据的批量处理反复从CPU加载到NPU上，再从NPU上卸载，所以`interleaved_steps`的数值应足够大以避免因为模型的反复加载影响训练性能。经测试以OpenSoraPlan1.2为例，`interleaved_steps`大于10后对整体性能影响较小。
 
 【单机运行】
 

@@ -1,7 +1,7 @@
 {
     "load_video_features": false,
     "load_text_features": false,
-    "interleaved": true,
+    "interleaved": false,
     "interleaved_steps": 10,
     "predictor": {
         "model_id": "videodit",
