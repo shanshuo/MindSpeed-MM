@@ -14,7 +14,7 @@ from mindspeed_mm.models.common.module import MultiModalModule
 class MlpProjector(MultiModalModule):
     def __init__(self, cfg):
 
-        super().__init__()
+        super().__init__(cfg)
 
         self.cfg = cfg
 
@@ -124,6 +124,7 @@ def create_deepseekvl_mlp(
         config,
         **kwargs
 ):
+    config = config.to_dict()
     cfg = MlpProjectorConfig(
         projector_type=config.get("projector_type", "downsample_mlp_gelu"),
         input_dim=config.get("input_dim", 1152),

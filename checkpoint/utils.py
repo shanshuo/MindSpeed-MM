@@ -36,6 +36,9 @@ class ParallelConfig(BaseModel):
     tp_size: PositiveInt = 1
     """tensor parallel张量并行组，模型转换时不同的tp组要切分到不同的目录下"""
 
+    ep_size: PositiveInt = 1
+    """expert parallel张量并行组，模型转换时不同的ep组要切分到不同的目录下"""
+
     @computed_field
     def pp_size(self) -> PositiveInt:
         return len(self.llm_pp_layers)

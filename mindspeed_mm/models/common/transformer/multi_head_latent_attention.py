@@ -78,13 +78,14 @@ class MultiHeadLatentAttention(SelfAttention):
         self.kv_lora_rank = args.kv_lora_rank
         self.v_head_dim = args.v_head_dim
 
-        self.mla_mm_split = args.mla_mm_split
-        self.mla_fa_without_pad = args.mla_fa_without_pad
+        self.mla_mm_split = self.config.mla_mm_split
+        self.mla_fa_without_pad = self.config.mla_fa_without_pad
+        self.padded_base_length = self.config.padded_base_length
 
         query_projection_size = self.config.num_attention_heads * self.v_head_dim
         self.q_head_dim = self.qk_nope_head_dim + self.qk_rope_head_dim
         max_dim = max(self.v_head_dim, self.q_head_dim)
-        self.fa_padding_length = math.ceil(max_dim / args.padded_base_length) * args.padded_base_length
+        self.fa_padding_length = math.ceil(max_dim / self.padded_base_length) * self.padded_base_length
 
         if self.q_lora_rank is None:
             self.q_rank = self.config.num_attention_heads * self.q_head_dim
@@ -221,8 +222,9 @@ class MultiHeadLatentAttention(SelfAttention):
         else:
             self.a2a_hooked_on_attention = False
 
-        self.mla_up_proj_tp_overlap = args.mla_up_proj_tp_overlap
-        self.recompute_mla_up_proj = args.recompute_mla_up_proj
+        self.mla_up_proj_tp_overlap = self.config.mla_up_proj_tp_overlap
+        self.recompute_mla_up_proj = self.config.recompute_mla_up_proj
+        self.mla_zero_memory = self.config.mla_zero_memory
 
     def forward(
         self,
@@ -314,11 +316,10 @@ class MultiHeadLatentAttention(SelfAttention):
                 if rotary_pos_emb is not None:
                     q_pos_emb, k_pos_emb = rotary_pos_emb
 
-                    if hasattr(args, "rope_scaling_type") and args.rope_scaling_type == "yarn":
-                        b, h, s, d = q_pe.shape
-                        q_pe = q_pe.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
-                        b, h, s, d = k_pe.shape
-                        k_pe = k_pe.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+                    b, h, s, d = q_pe.shape
+                    q_pe = q_pe.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
+                    b, h, s, d = k_pe.shape
+                    k_pe = k_pe.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
 
                     if packed_seq_params is not None:
                         cu_seqlens_q = packed_seq_params.cu_seqlens_q
@@ -400,7 +401,7 @@ class MultiHeadLatentAttention(SelfAttention):
             return core_attn_out
         
 
-        if args.mla_zero_memory:
+        if self.mla_zero_memory:
             self.mla_checkpoint_manager = CheckpointWithoutOutput()
             core_attn_out = self.mla_checkpoint_manager.checkpoint(mla_attention,
                                                                         False,
@@ -419,7 +420,7 @@ class MultiHeadLatentAttention(SelfAttention):
 
         output, bias = self.linear_proj(core_attn_out)
 
-        if args.mla_zero_memory:
+        if self.mla_zero_memory:
             self.mla_checkpoint_manager.discard_output()
             if output.requires_grad:
                 if args.reset_position_ids:

@@ -7,13 +7,15 @@
 
 """
 from copy import deepcopy
+from pathlib import Path
 from typing import cast
 
 import torch
 from tqdm import tqdm
 
-from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_model_by_pipeline, \
-    save_by_pp
+from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_model_by_pipeline
+
+LATEST_TXT = "latest_checkpointed_iteration.txt"
 
 
 def load_from_hf(load_dir, trust_remote_code):
@@ -119,7 +121,7 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
     for i in range(_num_layers):
         q_proj_name = f'text_decoder.decoder.layers.{i}.self_attention.q_proj.weight'
         kv_a_proj_name = f'text_decoder.decoder.layers.{i}.self_attention.kv_a_proj_with_mqa.weight'
-        linear_qkv_name = f'text_decoder.decoder.layers.{i}.mlp.shared_experts.linear_qkv.weight'
+        linear_qkv_name = f'text_decoder.decoder.layers.{i}.self_attention.linear_qkv.weight'
 
         if q_proj_name in new_params.keys() and kv_a_proj_name in new_params.keys():
             q_proj_weight = new_params[q_proj_name]
@@ -139,6 +141,50 @@ def split_by_tp(_state_dict: dict[str, torch.Tensor], _tp_num: int = 1) -> list[
         return [_state_dict]
     else:
         raise AssertionError("Don't support TP size > 1 now!")
+    
+
+def split_by_ep(_state_dict: dict[str, torch.Tensor], _ep_num: int = 1, _num_experts: int = 1) -> list[dict[str, torch.Tensor]]:
+    if _ep_num == 1:
+        return [_state_dict]
+    
+    per_ep_rank_experts = _num_experts // _ep_num
+    return_dicts = []
+    for ep_rank in range(_ep_num):
+        tmp_state_dict = {}
+        for key, value in _state_dict.items():
+            if "local_experts" in key:
+                expert_idx = int(key.split(".")[7]) # 此处"7"表示expert_idx位于key的第（7+1）位, eg: key = "text_decoder.decoder.layers.1.mlp.experts.local_experts.*.linear_fc1.weight"
+                if expert_idx >= ep_rank * per_ep_rank_experts and expert_idx < (ep_rank + 1) * per_ep_rank_experts:
+                    local_expert_idx = expert_idx - ep_rank * per_ep_rank_experts
+                    tmp_key_list = key.split(".")
+                    tmp_key_list[7] = str(local_expert_idx)
+                    new_key = ".".join(tmp_key_list)
+                    tmp_state_dict[new_key] = value
+            else:
+                tmp_state_dict[key] = value
+        
+        return_dicts.append(tmp_state_dict)
+    
+    return return_dicts
+
+
+def save_by_rank(state_dicts: list[dict[str, torch.Tensor]],
+               save_root_dir: Path,
+               iteration: str | int = 'release',
+               tp_rank: int = 0,
+               ep_rank: int = -1):
+    for pp_rank, state_dict in enumerate(tqdm(state_dicts, desc="pp step")):
+        # megatron格式权重的命名方式为 "mp_rank_{tp_rank}_{pp_rank}_{ep_rank}"
+        name_parts = ["mp", "rank", f"{tp_rank:02d}"]
+        if len(state_dicts) > 1:
+            name_parts.append(f"{pp_rank:03d}")
+        if ep_rank >= 0:
+            name_parts.append(f"{ep_rank:03d}")
+        iter_name = iteration if isinstance(iteration, str) else f"iter_{iteration:07d}"
+        save_path = save_root_dir.joinpath(iter_name, "_".join(name_parts))
+        save_path.mkdir(exist_ok=True, parents=True)
+        torch.save({'model': state_dict}, save_path.joinpath('model_optim_rng.pt'))
+    save_root_dir.joinpath(LATEST_TXT).write_text(str(iteration))
 
 
 def main(convert_config: ConvertMMConfig):
@@ -154,14 +200,17 @@ def main(convert_config: ConvertMMConfig):
     # hf权重映射到mm
     state_dict = convert_hf_to_mm(state_dict, config.language_config.num_hidden_layers, config.language_config.n_routed_experts)
 
-    # 权重字典按tp域切分
-    tp_state_dicts = split_by_tp(state_dict, parallel_config.tp_size)
-
+    # 权重字典按ep域切分
+    num_expert = config.language_config.n_routed_experts
+    ep_state_dicts = split_by_ep(state_dict, parallel_config.ep_size, _num_experts=num_expert)
     # pp索引生成
     pp_split = merge_pp_index(parallel_config.vit_pp_layers, parallel_config.llm_pp_layers)
 
-    # 处理每个tp域
-    for tp_rank, tp_state_dict in enumerate(tqdm(tp_state_dicts, desc="tp step")):
-        # 每个tp域对应的pp域拆分
-        pp_state_dicts = split_model_by_pipeline(tp_state_dict, pp_split)
-        save_by_pp(pp_state_dicts, convert_config.mm_dir, tp_rank=tp_rank)
+    if parallel_config.ep_size == 1:
+        pp_state_dicts = split_model_by_pipeline(ep_state_dicts[0], pp_split)
+        save_by_rank(pp_state_dicts, convert_config.mm_dir, ep_rank=-1)
+
+    else:
+        for ep_rank, tp_state_dict in enumerate(tqdm(ep_state_dicts, desc="ep step")):
+            pp_state_dicts = split_model_by_pipeline(tp_state_dict, pp_split)
+            save_by_rank(pp_state_dicts, convert_config.mm_dir, ep_rank=ep_rank)

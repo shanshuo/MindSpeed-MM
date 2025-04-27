@@ -636,7 +636,7 @@ def create_siglip_vit(
         ckpt_path: str = "",
         **kwargs
 ):
-    config_dict = config.to_dict
+    config_dict = config.to_dict()
     model_name = config_dict.get("model_name", "siglip_so400m_patch14_384")
     image_size = config_dict.get("image_size", 384)
     select_layer = config_dict.get("image_size", -1)
