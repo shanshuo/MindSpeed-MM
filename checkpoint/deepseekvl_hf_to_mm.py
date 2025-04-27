@@ -12,7 +12,6 @@ from typing import cast
 import torch
 from tqdm import tqdm
 
-from deepseek_vl2.models import DeepseekVLV2ForCausalLM, DeepseekVLV2Processor
 from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_model_by_pipeline, \
     save_by_pp
 
@@ -143,6 +142,7 @@ def split_by_tp(_state_dict: dict[str, torch.Tensor], _tp_num: int = 1) -> list[
 
 
 def main(convert_config: ConvertMMConfig):
+    from deepseek_vl2.models import DeepseekVLV2ForCausalLM, DeepseekVLV2Processor
     config = convert_config.hf_config.config
     load_dir = convert_config.hf_config.hf_dir
     parallel_config = convert_config.parallel_config
