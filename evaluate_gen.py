@@ -14,7 +14,7 @@ from mindspeed_mm.models.diffusion import DiffusionModel
 from mindspeed_mm.models.predictor import PredictModel
 from mindspeed_mm.models.text_encoder import TextEncoder
 from mindspeed_mm.tasks.evaluation.eval_datasets import eval_dataset_dict
-from mindspeed_mm.tasks.evaluation.eval_impl import eval_impl_dict, eval_pipeline_dict
+from mindspeed_mm.tasks.evaluation.gen_impl import eval_impl_dict, eval_pipeline_dict
 from mindspeed_mm.utils.utils import get_device, is_npu_available
 
 if is_npu_available():

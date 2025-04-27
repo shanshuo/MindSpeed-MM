@@ -10,14 +10,14 @@ from peft.config import PeftConfigMixin
 
 from mindspeed_mm.data import build_mm_dataloader
 from mindspeed_mm.data.data_utils.utils import build_iterations
-from mindspeed_mm.tasks.evaluation.eval_impl.base_gen import BaseGenEvalImpl
+from mindspeed_mm.tasks.evaluation.gen_impl.base_gen import BaseGenEvalImpl
 from mindspeed_mm.tasks.inference.pipeline.utils.sora_utils import safe_load_image
 from mindspeed_mm.utils.utils import get_dtype, get_device
-from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.compute_score import compute_score
-from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_t2v_patch import patch_t2v
-from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_i2v_patch import PatchPeftConfigMixin
-from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_i2v_patch import evaluate_i2v
-from mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_long_patch import (patch_static_filter_load_model,
+from mindspeed_mm.tasks.evaluation.gen_impl.vbench_utils.compute_score import compute_score
+from mindspeed_mm.tasks.evaluation.gen_impl.vbench_utils.vbench_t2v_patch import patch_t2v
+from mindspeed_mm.tasks.evaluation.gen_impl.vbench_utils.vbench_i2v_patch import PatchPeftConfigMixin
+from mindspeed_mm.tasks.evaluation.gen_impl.vbench_utils.vbench_i2v_patch import evaluate_i2v
+from mindspeed_mm.tasks.evaluation.gen_impl.vbench_utils.vbench_long_patch import (patch_static_filter_load_model,
                                                                                     evaluate_long)
 
 RATIO = ["1-1", "8-5", "7-4", "16-9"]

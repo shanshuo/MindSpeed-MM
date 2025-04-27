@@ -41,7 +41,7 @@ def evaluate_i2v(self, videos_path, name, dimension_list=None, custom_image_fold
     for dimension in dimension_list:
         try:
             if dimension in self.i2v_dims:
-                dimension_module = importlib.import_module('mindspeed_mm.tasks.evaluation.eval_impl.vbench_utils.vbench_i2v_patch')
+                dimension_module = importlib.import_module('mindspeed_mm.tasks.evaluation.gen_impl.vbench_utils.vbench_i2v_patch')
             else:
                 dimension_module = importlib.import_module(f'vbench.{dimension}')
             evaluate_func = getattr(dimension_module, f'compute_{dimension}')
