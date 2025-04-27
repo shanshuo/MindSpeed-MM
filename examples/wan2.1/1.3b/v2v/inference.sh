@@ -21,7 +21,7 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_MODEL="examples/wan2.1/1.3b/t2v/inference_model.json"
+MM_MODEL="examples/wan2.1/1.3b/v2v/inference_model.json"
 LOAD_PATH="./weights/Wan-AI/Wan2.1-T2V-1.3b-Diffusers/transformer/"  # ensure the wandit weight be converted
 
 DISTRIBUTED_ARGS="

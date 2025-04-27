@@ -170,12 +170,12 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
                 noise_pred = self.predict_model(
                     latent_model_input, timestep, model_kwargs.get("prompt_embeds"), **model_kwargs
-                )
+                )[0]
 
                 if do_classifier_free_guidance:
                     noise_uncond = self.predict_model(
                         latent_model_input, timestep, model_kwargs.get("negative_prompt_embeds"), **model_kwargs
-                    )
+                    )[0]
                     noise_pred = noise_uncond + guidance_scale * (noise_pred - noise_uncond)
 
                 # compute the previous noisy sample x_t -> x_t-1
