@@ -469,10 +469,16 @@ NPUS_PER_NODE=1
 
 ```shell
 pip install -e ".[evaluate]"
+# 上面命令会安装旧版transformers，需通过以下命令重新安装transformers指定版本
+git clone https://github.com/huggingface/transformers.git # 如果先前已经clone，可不执行此命令
+cd transformers
+git checkout fa56dcc2a
+pip install -e .
 ```
 
 启动shell开始评测
 ```shell
+# 在MindSpeed-MM目录下执行
 bash examples/qwen2.5vl/evaluate_qwen2_5_vl_7b.sh
 ```
 
