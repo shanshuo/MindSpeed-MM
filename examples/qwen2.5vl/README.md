@@ -348,9 +348,9 @@ mm-convert  Qwen2_5_VLConverter mm_to_hf \
 
 #### 1、配置参数
 
-根据实际情况修改examples/qwen2.5vl/inference_qwen2_5_vl_7b.json和examples/qwen2.5vl/inference_qwen2_5_vl_7b.sh中的路径配置，包括tokenizer的加载路径tokenizer_name_or_path、以及图片处理器的路径image_processer_path。需注意
+根据实际情况修改examples/qwen2.5vl/inference_qwen2_5_vl_7b.json和examples/qwen2.5vl/inference_qwen2_5_vl_7b.sh中的路径配置，包括tokenizer的加载路径from_pretrained。需注意
 
-（1）tokenizer_name_or_path配置的路径为从huggingface下载的原始Qwen2.5-VL-7B-Instruct路径。
+（1）tokenizer/from_pretrained配置的路径为从huggingface下载的原始Qwen2.5-VL-7B-Instruct路径。
 
 （2）shell文件中的LOAD_PATH的路径为经过权重转换后的模型路径(可PP切分)。
 
@@ -463,19 +463,6 @@ LOAD_PATH="ckpt/mm_path/Qwen2.5-VL-7B-Instruct"
 ```shell
 NPUS_PER_NODE=1
 ```
-### 关闭融合算子
-
-注释掉MindSpeed/mindspeed/croe/transformer/custom_layers/transformer_engine.py中的49行
-```python
-instance.use_fused_rmsnorm = True
-```
-
-### 修改模型template
-
-修改Qwen2.5-VL-7B-Instruct目录下的chat_template.json文件
-将`You are a helpful assistant.`修改为`Answer the question using a single word or phrase.`
-
-
 
 ### 启动评测
 评测额外依赖一些python包，使用下面命令进行安装

@@ -64,6 +64,7 @@ GPT_ARGS="
     --vocab-size 1 \
     --variable-seq-lengths \
     --distributed-timeout-minutes 1000 \
+    --use-flash-attn \
     --no-load-optim \
     --no-load-rng
 "

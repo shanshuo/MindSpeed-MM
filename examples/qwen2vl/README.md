@@ -476,9 +476,9 @@ pip install qwen_vl_utils
 <a id="jump5.2"></a>
 #### 2、配置参数
 
-根据实际情况修改examples/qwen2vl/inference_qwen2vl_7b.json和examples/qwen2vl/inference_qwen2vl_7b.sh中的路径配置，包括tokenizer的加载路径tokenizer_name_or_path、以及图片处理器的路径image_processer_path。需注意
+根据实际情况修改examples/qwen2vl/inference_qwen2vl_7b.json和examples/qwen2vl/inference_qwen2vl_7b.sh中的路径配置，包括tokenizer的加载路径from_pretrained、以及图片处理器的路径image_processer_path。需注意
 
-（1）tokenizer_name_or_path配置的路径为从huggingface下载的原始Qwen2-VL-7B-Instruct路径。
+（1）tokenizer/from_pretrained配置的路径为从huggingface下载的原始Qwen2-VL-7B-Instruct路径。
 
 （2）shell文件中的LOAD_PATH的路径为经过权重转换后的模型路径(可PP切分)。
 

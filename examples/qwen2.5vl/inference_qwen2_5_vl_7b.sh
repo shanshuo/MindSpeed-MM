@@ -57,6 +57,7 @@ GPT_ARGS="
     --bf16 \
     --load $LOAD_PATH \
     --variable-seq-lengths \
+    --use-flash-attn \
     --no-load-optim \
     --no-load-rng
 "
