@@ -168,7 +168,7 @@ class CheckpointConverter:
     def split_by_pp_vpp(self, state_dicts):
         state_dicts = [state_dicts, ]
         return_dict = []
-        if self.pp_size < 1:
+        if self.pp_size <= 1:
             for tp_rank, state_dict in enumerate(state_dicts):
                 return_dict.append((tp_rank, state_dict))
             return return_dict

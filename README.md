@@ -19,28 +19,22 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ## 🔥🔥🔥Latest News
 
-* [Apr. 3, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-32B模型 【Prototype】
+* [Apr. 03, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-32B模型 【Prototype】
 * [Mar. 27, 2025]: 🚀 MindSpeed-MM支持Wan2.1-1.3B/14B模型 【Prototype】
 * [Mar. 26, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-3B/7B/72B模型 【Prototype】
 * [Feb. 20, 2025]: 🚀 MindSpeed-MM支持InternVL2.5-78B模型 【Prototype】
 * [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型
 * [Feb. 17, 2025]: 🔥 MindSpeed-MM支持Mindspeed-Core & Megatron 0.8.0版本
 * [Feb. 15, 2025]: 🚀 MindSpeed-MM支持Sana模型
-* [Feb. 06, 2025]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.3模型PP与VPP
-* [Jan. 24, 2025]: 🚀 MindSpeed-MM支持CogVideoX 1.5 5B模型
-* [Jan. 22, 2025]: 🎉 MindSpeed-MM支持Qwen2VL视频模态
-* [Jan. 16, 2025]: 🎉 MindSpeed-MM支持wfvae训练
+* [Jan. 24, 2025]: 🚀 MindSpeed-MM支持CogVideoX 1.5模型
 * [Dec. 30, 2024]: 🔥 MindSpeed-MM版本1.0.0发布
-* [Dec. 19, 2024]: 🎉 MindSpeed-MM生成类模型支持分布式推理
 * [Dec. 16, 2024]: 🚀 MindSpeed-MM支持Qihoo-T2X模型
-* [Dec. 05, 2024]: 🎉 MindSpeed-MM理解类模型支持Lora微调
 * [Dec. 03, 2024]: 🚀 MindSpeed-MM支持SD3.5模型
 * [Nov. 30, 2024]: 🎉 MindSpeed-MM支持多模态理解测评
-* [Nov. 22, 2024]: 🚀 MindSpeed-MM支持CogVideoX-5B-t2v & i2v模型
-* [Nov. 13, 2024]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.3-i2v模型
+* [Nov. 22, 2024]: 🚀 MindSpeed-MM支持CogVideoX模型
 * [Nov. 06, 2024]: 🚀 MindSpeed-MM支持FLUX模型
-* [Oct. 30, 2024]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.3-t2v模型
-* [Oct. 21, 2024]: 🚀 MindSpeed-MM支持InternVL2-8B、以及Qwen2VL-7B模型
+* [Oct. 30, 2024]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.3模型
+* [Oct. 21, 2024]: 🚀 MindSpeed-MM支持InternVL2、以及Qwen2VL模型
 * [Oct. 16, 2024]: 🌱 MindSpeed-MM首版本1.0.RC3发布
 
 > 注： **Prototype**特性未经过充分验证，可能存在不稳定和bug问题，**beta**表示非商用特性
