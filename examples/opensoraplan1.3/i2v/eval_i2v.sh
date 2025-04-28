@@ -63,7 +63,7 @@ SORA_ARGS="
     --no-save-rng \
     --fp16 \
     --load $LOAD_PATH \
-    --distributed-timeout-minutes 20 \
+    --distributed-timeout-minutes 600 \
 "
 
 torchrun $DISTRIBUTED_ARGS  evaluate_gen.py  $MM_ARGS $SORA_ARGS

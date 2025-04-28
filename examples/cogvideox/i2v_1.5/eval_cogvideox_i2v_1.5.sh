@@ -65,6 +65,7 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --fp16 \
+    --distributed-timeout-minutes 600 \
     --load $LOAD_PATH \
 "
 
