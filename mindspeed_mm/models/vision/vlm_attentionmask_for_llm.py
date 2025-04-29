@@ -64,8 +64,11 @@ def qwen2vl_get_rope_index(
     """
     args = get_args()
     spatial_merge_size = getattr(args.mm.model.image_encoder.vision_encoder, 'spatial_merge_size', 2)
-    image_token_id = getattr(args.mm.model, 'img_context_token_id', 151655)
-    video_token_id = getattr(args.mm.model, 'video_token_id', 151656)
+    # image_token_id是在数据生成是固定的，用于从输入id中确定图片数量，151655对应原始数据中的"<|image_pad|>"
+    # video_token_id是在数据生成是固定的，用于从输入id中确定视频数量，151656对应原始数据中的"<|video_pad|>"
+    # 数据生成时固定的逻辑在函数 _register_template 中
+    image_token_id = 151655
+    video_token_id = 151656
     vision_start_token_id = getattr(args.mm.model, 'vision_start_token_id', 151652)
     mrope_position_deltas = []
     if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
@@ -107,9 +110,9 @@ def qwen2vl_get_rope_index(
                     ed = ed_image
                 else:
                     t, h, w = (
-                        video_grid_thw[video_index][0],
-                        video_grid_thw[video_index][1],
-                        video_grid_thw[video_index][2],
+                        image_grid_thw[video_index][0],
+                        image_grid_thw[video_index][1],
+                        image_grid_thw[video_index][2],
                     )
                     video_index += 1
                     remain_videos -= 1
@@ -225,8 +228,11 @@ def qwen2_5_vl_get_rope_index(
     """
     args = get_args()
     spatial_merge_size = getattr(args.mm.model.image_encoder.vision_encoder, 'spatial_merge_size', 2)
-    image_token_id = getattr(args.mm.model, 'img_context_token_id', 151655)
-    video_token_id = getattr(args.mm.model, 'video_token_id', 151656)
+    # image_token_id是在数据生成是固定的，用于从输入id中确定图片数量，151655对应原始数据中的"<|image_pad|>"
+    # video_token_id是在数据生成是固定的，用于从输入id中确定视频数量，151656对应原始数据中的"<|video_pad|>"
+    # 数据生成时固定的逻辑在函数 _register_template 中
+    image_token_id = 151655
+    video_token_id = 151656
     vision_start_token_id = getattr(args.mm.model, 'vision_start_token_id', 151652)
     mrope_position_deltas = []
     if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
@@ -275,9 +281,9 @@ def qwen2_5_vl_get_rope_index(
 
                 else:
                     t, h, w = (
-                        video_grid_thw[video_index][0],
-                        video_grid_thw[video_index][1],
-                        video_grid_thw[video_index][2],
+                        image_grid_thw[video_index][0],
+                        image_grid_thw[video_index][1],
+                        image_grid_thw[video_index][2],
                     )
                     if second_per_grid_ts is not None:
                         second_per_grid_t = second_per_grid_ts[video_index]

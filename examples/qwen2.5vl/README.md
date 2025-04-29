@@ -297,6 +297,60 @@ WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 bash examples/qwen2.5vl/finetune_qwen2_5_vl_7b.sh
 ```
 
+## Qwen2.5vl支持视频理解
+
+<a id="jump6.1"></a>
+### 1、加载视频数据集
+
+数据集中的视频数据集取自llamafactory，https://github.com/hiyouga/LLaMA-Factory/tree/main/data
+
+视频取自mllm_demo_data，使用时需要将该数据放到自己的data文件夹中去，同时将llamafactory上的mllm_video_demo.json也放到自己的data文件中
+
+之后根据实际情况修改 `data.json` 中的数据集路径，包括 `model_name_or_path` 、 `dataset_dir` 、 `dataset` 字段，并修改"attr"中  `images` 、 `videos` 字段，修改结果参考下图。
+
+```json
+{
+    "dataset_param": {
+        "dataset_type": "huggingface",
+        "preprocess_parameters": {
+            "model_name_or_path": "./Qwen2.5-VL-7B-Instruct",
+            ...
+        },
+        "basic_parameters": {
+            ...
+            "dataset_dir": "./data",
+            "dataset": "./data/mllm_video_demo.json",
+            "cache_dir": "./data/cache_dir",
+            ...
+        },
+        ...
+        "attr": {
+            "system": null,
+            "images": null,
+            "videos": "videos",
+            ...
+        },
+    },
+    ...
+}
+```
+
+
+### 2、修改模型配置
+
+在model_xxx.json中，修改`img_context_token_id`为下图所示：
+```
+"img_context_token_id": 151656
+```
+注意， `image_token_id` 和 `img_context_token_id`两个参数作用不一样。前者是固定的，是标识图片的 token ID，在qwen2_5_vl_get_rope_index中用于计算图文输入情况下序列中的图片数量。后者是标识视觉内容的 token ID，用于在forward中标记视觉token的位置，所以需要根据输入做相应修改。
+
+### 3、启动微调
+以Qwen2.5VL-7B为例，启动微调训练任务。
+
+```shell
+bash examples/qwen2.5vl/finetune_qwen2_5_vl_7b.sh
+```
+
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
