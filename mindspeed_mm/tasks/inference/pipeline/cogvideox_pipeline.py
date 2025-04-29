@@ -59,6 +59,7 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         self.use_tiling = config.get("use_tiling", True)
         self.cogvideo_version = config.get("version", 1.0)
+        self.additional_frames = 0
 
         if self.use_tiling:
             self.vae.enable_tiling()
@@ -160,10 +161,9 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         # For CogVideoX 1.5, the latent frames should be padded to make it divisible by patch_size_t
         patch_size_t = self.predict_model.patch_size[0]
-        additional_frames = 0
         if patch_size_t is not None and latent_frames % patch_size_t != 0:
-            additional_frames = patch_size_t - latent_frames % patch_size_t
-            self.num_frames += additional_frames * self.vae_scale_factor_temporal
+            self.additional_frames = patch_size_t - latent_frames % patch_size_t
+            self.num_frames += self.additional_frames * self.vae_scale_factor_temporal
 
         # prepare image_latents for i2v task
         if image is not None:
@@ -205,7 +205,7 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
                                         model_kwargs=model_kwargs,
                                         extra_step_kwargs=extra_step_kwargs)
 
-        latents = latents[:, additional_frames:]
+        latents = latents[:, self.additional_frames:]
         latents = latents.permute(0, 2, 1, 3, 4)  # [batch_size, num_channels, num_frames, height, width]
         latents = 1 / self.vae_scaling_factor * latents
         video = self.decode_latents(latents, cogvideo_version=self.cogvideo_version)
