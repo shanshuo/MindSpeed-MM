@@ -64,6 +64,8 @@ def main():
 
     prompts = load_prompts(args.prompt)
 
+    images = load_images(args.image) if hasattr(args, "image") else None
+
     # Generate args.num_inference_videos_per_sample inference videos for the same prompt.
     if hasattr(args, "num_inference_videos_per_sample") and args.num_inference_videos_per_sample > 1:
         prompts = [
@@ -72,7 +74,13 @@ def main():
             for _ in range(args.num_inference_videos_per_sample)
         ]
 
-    images = load_images(args.image) if hasattr(args, "image") else None
+        if images is not None:
+            images = [
+                item
+                for item in images
+                for _ in range(args.num_inference_videos_per_sample)
+            ]
+
     if hasattr(args, "video"):
         if args.start_frame or args.num_frames is None:
             raise ValueError("Please select both starting frame index and total number of frames")
