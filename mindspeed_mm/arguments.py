@@ -37,6 +37,7 @@ def process_args(parser):
     parser = _add_security_args(parser)
     parser = _add_auto_parallel_mm_args(parser)
     parser = _add_rlfh_args(parser)
+    parser = _add_network_args(parser)
     return parser
 
 
@@ -183,6 +184,20 @@ def _add_rlfh_args(parser):
         default=0.0,
         type=float,
         help="The supervised fine-tuning loss coefficient in DPO training.",
+    )
+
+    return parser
+
+
+def _add_network_args(parser):
+    group = parser.add_argument_group(title='network')
+
+    # MM_GRPO use，judging training methods
+    group.add_argument(
+        '--stage',
+        default=None,
+        choices=["ray_grpo"],
+        help='Determine training mode'
     )
 
     return parser
