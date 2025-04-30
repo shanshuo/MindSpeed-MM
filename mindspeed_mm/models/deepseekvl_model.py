@@ -478,7 +478,7 @@ class VLMModel(MultiModalModule):
             )
 
             if self.text_decoder.post_process:
-                logits = output
+                logits = output[0]
                 logits = logits.contiguous().float()
                 loss = None
                 if labels is not None:

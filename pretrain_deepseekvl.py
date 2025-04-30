@@ -7,11 +7,13 @@ import torch
 from megatron.core import mpu
 from megatron.core.enums import ModelType
 from megatron.training import get_args, print_rank_0
+from megatron.training.global_vars import set_args
 from megatron.training.utils import average_losses_across_data_parallel_group
 
 from mindspeed_mm.configs.config import mm_extra_args_provider
 from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
 from mindspeed_mm.data.data_utils.utils import build_iterations
+from mindspeed_mm.models.common.transformer.multi_token_prediction import apply_mtp_patch
 from mindspeed_mm.models.deepseekvl_model import VLMModel
 from mindspeed_mm.training import pretrain
 from mindspeed_mm.utils.transformer_model_config import get_model_config
@@ -21,6 +23,10 @@ from mindspeed_mm.patchs import dummy_optimizer_patch # noqa
 def model_provider(pre_process=True, post_process=True):
     """Builds the model."""
     args = get_args()
+    if hasattr(args.mm.model.text_decoder, "mtp_num_layers") and args.mm.model.text_decoder.mtp_num_layers:
+        args.mtp_num_layers = args.mm.model.text_decoder.mtp_num_layers
+        set_args(args)
+        apply_mtp_patch()
     print_rank_0("building VLMModel ...")
     vlm_config = deepcopy(args.mm.model)
 
