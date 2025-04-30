@@ -160,24 +160,32 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工�
 mm-convert  Qwen2VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-2B-Instruct" \
   --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-2B-Instruct" \
-  --cfg.parallel_config.llm_pp_layers [28] \
-  --cfg.parallel_config.vit_pp_layers [32] \
+  --cfg.parallel_config.llm_pp_layers [[28]] \
+  --cfg.parallel_config.vit_pp_layers [[32]] \
   --cfg.parallel_config.tp_size 1
 
 # 7b
 mm-convert  Qwen2VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-7B-Instruct" \
   --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-7B-Instruct" \
-  --cfg.parallel_config.llm_pp_layers [1,10,10,7] \
-  --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
+  --cfg.parallel_config.llm_pp_layers [[1,10,10,7]] \
+  --cfg.parallel_config.vit_pp_layers [[32,0,0,0]] \
+  --cfg.parallel_config.tp_size 1
+  
+# 7b vpp
+mm-convert  Qwen2VLConverter hf_to_mm \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-7B-Instruct-vpp" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-7B-Instruct" \
+  --cfg.parallel_config.llm_pp_layers [[0,0,0,1],[4,4,4,4],[4,3,2,2]] \
+  --cfg.parallel_config.vit_pp_layers [[10,10,10,2],[0,0,0,0],[0,0,0,0]] \
   --cfg.parallel_config.tp_size 1
 
 # 72b
 mm-convert  Qwen2VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-72B-Instruct" \
   --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2-VL-72B-Instruct" \
-  --cfg.parallel_config.llm_pp_layers [5,11,11,11,11,11,11,9] \
-  --cfg.parallel_config.vit_pp_layers [32,0,0,0,0,0,0,0] \
+  --cfg.parallel_config.llm_pp_layers [[5,11,11,11,11,11,11,9]] \
+  --cfg.parallel_config.vit_pp_layers [[32,0,0,0,0,0,0,0]] \
   --cfg.parallel_config.tp_size 2
 # 其中：
 # mm_dir: 转换后保存目录
