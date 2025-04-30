@@ -19,7 +19,7 @@ from megatron.core.tensor_parallel.mappings import gather_from_sequence_parallel
 from megatron.core.transformer import TransformerConfig, ModuleSpec, build_module
 from megatron.core.transformer.attention import SelfAttention, SelfAttentionSubmodules
 from megatron.core.transformer.enums import AttnMaskType
-from megatron.core import mpu, parallel_state
+from megatron.core import mpu, parallel_state, tensor_parallel
 from megatron.training import get_args
 
 try:
@@ -264,6 +264,7 @@ class MultiHeadLatentAttention(SelfAttention):
                 ],
                 dim=-1,
             )
+            k_pe = tensor_parallel.copy_to_tensor_model_parallel_region(k_pe)
             if self.mla_up_proj_tp_overlap:
                 query, key, value = mla_up_projection_overlap_tp_comm(q_a, compressed_kv, k_pe, rotary_pos_emb,
                                                                       packed_seq_params, self)
@@ -284,6 +285,7 @@ class MultiHeadLatentAttention(SelfAttention):
                         )
                         q_pe = q_pe.view(q_len, bsz, self.num_attention_heads_per_partition, -1)
                 else:
+                    q_a = tensor_parallel.scatter_to_tensor_model_parallel_region(q_a)
                     q = q_a.view(q_len, bsz, self.num_attention_heads_per_partition, -1)
                     q_nope, q_pe = torch.split(
                         q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1

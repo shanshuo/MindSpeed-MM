@@ -31,12 +31,15 @@ class PatchesManager:
         "ae_float32": [
             ("megatron.legacy.model.module.Float16Module.__init__", models_patches.float16Module_init),
             ("megatron.legacy.model.module.Float16Module.forward", models_patches.float16Module_forward)
+        ],
+        "moe_mlp": [
+            ("megatron.core.transformer.moe.experts.SequentialMLP.forward", models_patches.SequentialMLP_forward)
         ]
     }
 
     @staticmethod
     def register_patch(orig_func_name, new_func=None):
-        pm.register_patch(orig_func_name, new_func)
+        pm.register_patch(orig_func_name, new_func, force_patch=True)
 
     @staticmethod
     def apply_patches():

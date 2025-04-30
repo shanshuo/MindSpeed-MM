@@ -5,6 +5,8 @@ from megatron.training import get_args
 from megatron.core.transformer.enums import AttnMaskType
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.dot_product_attention import DotProductAttention
+from megatron.core import parallel_state
+from megatron.core.utils import divide
 
 
 def yarn_get_mscale(scale=1, mscale=1):
@@ -36,7 +38,11 @@ class MlaDotProductAttention(DotProductAttention):
         args = get_args()
 
         self.scale_mask_softmax.scale = True
-        self.hidden_size_per_partition = args.num_attention_heads * args.v_head_dim
+        projection_size = self.config.kv_channels * self.config.num_attention_heads
+
+        # Per attention head and per partition values.
+        world_size = parallel_state.get_tensor_model_parallel_world_size()
+        self.hidden_size_per_partition = divide(projection_size, world_size)
         self.q_head_dim = args.qk_nope_head_dim + args.qk_rope_head_dim
         self.softmax_scale = self.q_head_dim ** (-0.5)
 
