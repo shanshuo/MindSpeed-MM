@@ -68,9 +68,15 @@ class VppParallelConfig(BaseModel):
     def pp_size(self) -> PositiveInt:
         return len(self.llm_pp_layers[0])
 
+    def is_pp(self) -> bool:
+        return self.pp_size > 1
+
     @computed_field
     def vpp_size(self) -> PositiveInt:
         return len(self.llm_pp_layers)
+
+    def is_vpp(self) -> bool:
+        return self.vpp_size > 1
 
     @model_validator(mode='after')
     def validate_pp_layers(self) -> "VppParallelConfig":
@@ -178,8 +184,14 @@ class ConvertVppMMConfig(BaseModel):
         model_config = self.hf_config.config
         vit_pipeline_num_layers = self.parallel_config.vit_pp_layers
         llm_pipeline_num_layers = self.parallel_config.llm_pp_layers
-        vit_num_layers = model_config.vision_config.num_hidden_layers
-        llm_num_layers = model_config.llm_config.num_hidden_layers
+        """先尝试读取qwenvl的vit层数配置，再读取internvl的vit层数配置"""
+        vit_num_layers = getattr(model_config.vision_config, "depth", None)
+        if vit_num_layers is None:
+            vit_num_layers = model_config.vision_config.num_hidden_layers
+        """先尝试读取qwenvl的llm层数配置，再读取internvl的llm层数配置"""
+        llm_num_layers = getattr(model_config, "num_hidden_layers", None)
+        if llm_num_layers is None:
+            llm_num_layers = model_config.llm_config.num_hidden_layers
 
         # Flatten the vit and llm layers for VPP
         vit_pipeline_num_layers_flat = [
@@ -268,6 +280,25 @@ def merge_pp_index(vit_pipeline_num_layers: list[int], llm_pipeline_num_layers: 
     return split_method
 
 
+def merge_vpp_index(vit_pipeline_num_layers: list[list[int]], llm_pipeline_num_layers: list[list[int]]) -> list[tuple[int, int]]:
+    # Flatten the vit and llm layers for VPP
+    vit_pipeline_num_layers_flat = [
+        item
+        for sublist in vit_pipeline_num_layers
+        for item in sublist
+    ]
+    llm_pipeline_num_layers_flat = [
+        item
+        for sublist in llm_pipeline_num_layers
+        for item in sublist
+    ]
+    """返回每张卡上vit和llm各自的层数"""
+    split_method = []
+    for vit_num, llm_num in zip(vit_pipeline_num_layers_flat, llm_pipeline_num_layers_flat):
+        split_method.append((vit_num, llm_num))
+    return split_method
+
+
 def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, int]]) -> list[STATE_DICT_T]:
     if len(pp_split) <= 1:
         return [state_dict]
@@ -341,6 +372,31 @@ def save_by_pp(state_dicts: list[dict[str, torch.Tensor]],
         save_path = save_root_dir.joinpath(iter_name, "_".join(name_parts))
         save_path.mkdir(exist_ok=True, parents=True)
         torch.save({'model': state_dict}, save_path.joinpath('model_optim_rng.pt'))
+    save_root_dir.joinpath(LATEST_TXT).write_text(str(iteration))
+
+
+def save_by_vpp(state_dicts: list[dict[str, torch.Tensor]],
+               save_root_dir: Path,
+               iteration: str | int = 'release',
+               pp_and_vpp_size: tuple[int, int] = (1, 1),
+               tp_rank: int = 0):
+    """获取pp_size和vpp_size"""
+    pp_size, vpp_size = pp_and_vpp_size
+    for pp_rank in tqdm(range(pp_size), desc="pp step"):
+        name_parts = ["mp", "rank", f"{tp_rank:02d}"]
+        if pp_size > 1:
+            name_parts.append(f"{pp_rank:03d}")
+        iter_name = iteration if isinstance(iteration, str) else f"iter_{iteration:07d}"
+        save_path = save_root_dir.joinpath(iter_name, "_".join(name_parts))
+        save_path.mkdir(exist_ok=True, parents=True)
+        if vpp_size > 1:
+            # Collect VP state dicts for this PP rank
+            save_dict = {f'model{vpp_idx}': state_dicts[vpp_idx * pp_size + pp_rank] for vpp_idx in range(vpp_size)}
+            """用于规避megatron对vpp配置下的模型校验，checkpoint_version低于2.0会报错"""
+            save_dict['checkpoint_version'] = 3.0
+        else:
+            save_dict = {'model': state_dicts[pp_rank]}
+        torch.save(save_dict, save_path.joinpath('model_optim_rng.pt'))
     save_root_dir.joinpath(LATEST_TXT).write_text(str(iteration))
 
 

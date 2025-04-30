@@ -45,11 +45,11 @@ from tqdm import tqdm
 
 from checkpoint.operator import create_qwen2vl_ops, create_qwen2_5_vl_ops, qwen2vl_tp_patterns, qwen2_5_vl_tp_patterns, \
     Operator
-from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_model_by_pipeline, \
-    save_by_pp, split_by_tp, convert_hf_to_mm
+from checkpoint.utils import ConvertVppMMConfig, load_from_hf, merge_vpp_index, split_model_by_pipeline, \
+    save_by_vpp, split_by_tp, convert_hf_to_mm
 
 
-def convert(convert_config: ConvertMMConfig, config: Any, ops: list[Operator],
+def convert(convert_config: ConvertVppMMConfig, config: Any, ops: list[Operator],
             tp_patterns: dict[str, Callable]):
     parallel_config = convert_config.parallel_config
     # 校验tp切分数
@@ -62,15 +62,15 @@ def convert(convert_config: ConvertMMConfig, config: Any, ops: list[Operator],
     # 权重字典按tp域切分
     tp_state_dicts = split_by_tp(state_dict, tp_patterns, parallel_config.tp_size)
     # pp索引生成
-    pp_split = merge_pp_index(parallel_config.vit_pp_layers, parallel_config.llm_pp_layers)
+    pp_split = merge_vpp_index(parallel_config.vit_pp_layers, parallel_config.llm_pp_layers)
     # 处理每个tp域
     for tp_rank, tp_state_dict in enumerate(tqdm(tp_state_dicts, desc="tp step")):
         # 每个tp域对应的pp域拆分
         pp_state_dicts = split_model_by_pipeline(tp_state_dict, pp_split)
-        save_by_pp(pp_state_dicts, convert_config.mm_dir, tp_rank=tp_rank)
+        save_by_vpp(pp_state_dicts, convert_config.mm_dir, pp_and_vpp_size=(parallel_config.pp_size, parallel_config.vpp_size), tp_rank=tp_rank)
 
 
-def convert_qwen2vl(convert_config: ConvertMMConfig):
+def convert_qwen2vl(convert_config: ConvertVppMMConfig):
     from transformers.models.qwen2_vl import Qwen2VLConfig
     config = convert_config.hf_config.config
     config = cast(Qwen2VLConfig, config)
@@ -80,7 +80,7 @@ def convert_qwen2vl(convert_config: ConvertMMConfig):
     convert(convert_config, config, ops, qwen2vl_tp_patterns)
 
 
-def convert_qwen2_5_vl(convert_config: ConvertMMConfig):
+def convert_qwen2_5_vl(convert_config: ConvertVppMMConfig):
     from transformers.models.qwen2_5_vl import Qwen2_5_VLConfig
     config = convert_config.hf_config.config
     config = cast(Qwen2_5_VLConfig, config)

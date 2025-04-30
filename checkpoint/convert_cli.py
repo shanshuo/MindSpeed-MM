@@ -45,7 +45,7 @@ class Qwen2VLConverter(Converter):
     """Qwen2VL模型转换工具"""
 
     @staticmethod
-    def hf_to_mm(cfg: ConvertMMConfig):
+    def hf_to_mm(cfg: ConvertVppMMConfig):
         """huggingface模型转换mindspeed-mm模型权重"""
         qwen_vl_hf_to_mm.convert_qwen2vl(cfg)
         # 安全管控权限
@@ -74,7 +74,7 @@ class Qwen2_5_VLConverter(Converter):
     """Qwen2.5VL模型转换工具"""
 
     @staticmethod
-    def hf_to_mm(cfg: ConvertMMConfig):
+    def hf_to_mm(cfg: ConvertVppMMConfig):
         """huggingface模型转换mindspeed-mm模型权重"""
         qwen_vl_hf_to_mm.convert_qwen2_5_vl(cfg)
         # 安全管控权限

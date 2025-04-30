@@ -91,7 +91,7 @@ cp examples/qwen2vl/dot_product_attention.py MindSpeed/mindspeed/core/transforme
 pip install -e .
 
 # 安装transformers指定版本
-git clone git@github.com:huggingface/transformers.git
+git clone https://github.com/huggingface/transformers.git
 cd transformers
 git checkout fa56dcc2a
 pip install -e .
@@ -119,8 +119,8 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工�
 mm-convert  Qwen2_5_VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2.5-VL-7B-Instruct" \
   --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2.5-VL-7B-Instruct" \
-  --cfg.parallel_config.llm_pp_layers [1,10,10,7] \
-  --cfg.parallel_config.vit_pp_layers [32,0,0,0] \
+  --cfg.parallel_config.llm_pp_layers [[1,10,10,7]] \
+  --cfg.parallel_config.vit_pp_layers [[32,0,0,0]] \
   --cfg.parallel_config.tp_size 1
 
 # 其中：
