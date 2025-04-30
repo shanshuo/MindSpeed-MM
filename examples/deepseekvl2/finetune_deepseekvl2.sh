@@ -99,6 +99,7 @@ MOE_ARGS="
     --moe-token-dispatcher-type alltoall \
     --use-fused-moe-token-permute-and-unpermute \
     --n-shared-experts 2 \
+    --num-experts 72 \
 "
 
 OUTPUT_ARGS="

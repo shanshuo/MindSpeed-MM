@@ -250,3 +250,17 @@ qwen2_5_vl_tp_patterns = {**qwen2vl_tp_patterns,
                           **{"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias": tp_split_glu_bias,
                              "image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight": tp_split_glu_weight}
                           }
+
+deepseekvl_tp_patterns = {
+    "text_decoder.output_layer.weight": tp_split_row_weight,
+    "text_decoder.embedding.word_embeddings.weight": tp_split_row_weight,
+    'text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight': tp_split_glu_weight,
+    'text_decoder.decoder.layers.(\d+).mlp.linear_fc2.weight': tp_split_col_weight,
+    'text_decoder.decoder.layers.(\d+).self_attention.linear_kvb.weight': tp_split_row_weight,
+    'text_decoder.decoder.layers.(\d+).self_attention.linear_kvb.bias': tp_split_row_bias,
+    'text_decoder.decoder.layers.(\d+).self_attention.linear_proj.weight': tp_split_col_weight,
+    'text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight': tp_split_glu_weight,
+    "text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc2.weight": tp_split_col_weight,
+    "text_decoder.decoder.layers.(\d+).mlp.shared_experts.linear_fc1.weight": tp_split_glu_weight,
+    "text_decoder.decoder.layers.(\d+).mlp.shared_experts.linear_fc2.weight": tp_split_col_weight
+}

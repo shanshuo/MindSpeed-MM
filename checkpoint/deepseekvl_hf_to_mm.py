@@ -13,7 +13,8 @@ from typing import cast
 import torch
 from tqdm import tqdm
 
-from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_model_by_pipeline
+from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_model_by_pipeline, split_by_tp
+from checkpoint.operator import deepseekvl_tp_patterns
 
 LATEST_TXT = "latest_checkpointed_iteration.txt"
 
@@ -27,7 +28,6 @@ def load_from_hf(load_dir, trust_remote_code):
         torch_dtype=torch.bfloat16,
         trust_remote_code=trust_remote_code
     )
-
     return hf_model.state_dict()
 
 
@@ -136,13 +136,6 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
     return new_params
 
 
-def split_by_tp(_state_dict: dict[str, torch.Tensor], _tp_num: int = 1) -> list[dict[str, torch.Tensor]]:
-    if _tp_num == 1:
-        return [_state_dict]
-    else:
-        raise AssertionError("Don't support TP size > 1 now!")
-    
-
 def split_by_ep(_state_dict: dict[str, torch.Tensor], _ep_num: int = 1, _num_experts: int = 1) -> list[dict[str, torch.Tensor]]:
     if _ep_num == 1:
         return [_state_dict]
@@ -171,14 +164,15 @@ def split_by_ep(_state_dict: dict[str, torch.Tensor], _ep_num: int = 1, _num_exp
 def save_by_rank(state_dicts: list[dict[str, torch.Tensor]],
                save_root_dir: Path,
                iteration: str | int = 'release',
+               ep_size: int = 1,
                tp_rank: int = 0,
-               ep_rank: int = -1):
+               ep_rank: int = 1):
     for pp_rank, state_dict in enumerate(tqdm(state_dicts, desc="pp step")):
         # megatron格式权重的命名方式为 "mp_rank_{tp_rank}_{pp_rank}_{ep_rank}"
         name_parts = ["mp", "rank", f"{tp_rank:02d}"]
         if len(state_dicts) > 1:
             name_parts.append(f"{pp_rank:03d}")
-        if ep_rank >= 0:
+        if ep_size > 1:
             name_parts.append(f"{ep_rank:03d}")
         iter_name = iteration if isinstance(iteration, str) else f"iter_{iteration:07d}"
         save_path = save_root_dir.joinpath(iter_name, "_".join(name_parts))
@@ -203,14 +197,17 @@ def main(convert_config: ConvertMMConfig):
     # 权重字典按ep域切分
     num_expert = config.language_config.n_routed_experts
     ep_state_dicts = split_by_ep(state_dict, parallel_config.ep_size, _num_experts=num_expert)
+    
+    # 权重字典按tp域切分
+    ep_tp_state_dicts = []
+    for ep_state_dict in ep_state_dicts:
+        tp_state_dicts = split_by_tp(ep_state_dict, deepseekvl_tp_patterns, tp_size=parallel_config.tp_size)
+        ep_tp_state_dicts.append(tp_state_dicts)
+    
     # pp索引生成
     pp_split = merge_pp_index(parallel_config.vit_pp_layers, parallel_config.llm_pp_layers)
 
-    if parallel_config.ep_size == 1:
-        pp_state_dicts = split_model_by_pipeline(ep_state_dicts[0], pp_split)
-        save_by_rank(pp_state_dicts, convert_config.mm_dir, ep_rank=-1)
-
-    else:
-        for ep_rank, tp_state_dict in enumerate(tqdm(ep_state_dicts, desc="ep step")):
+    for ep_rank, tp_state_dicts in enumerate(tqdm(ep_tp_state_dicts, desc="ep step")):
+        for tp_rank, tp_state_dict in enumerate(tqdm(tp_state_dicts, desc="tp step")):
             pp_state_dicts = split_model_by_pipeline(tp_state_dict, pp_split)
-            save_by_rank(pp_state_dicts, convert_config.mm_dir, ep_rank=ep_rank)
+            save_by_rank(pp_state_dicts, convert_config.mm_dir, ep_size=parallel_config.ep_size, ep_rank=ep_rank, tp_rank=tp_rank)
