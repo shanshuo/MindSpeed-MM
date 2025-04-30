@@ -313,7 +313,10 @@ class VLMModel(MultiModalModule):
             *args, **kwargs
     ) -> Union[Dict[str, torch.Tensor], torch.Tensor]:
 
-        if self.add_image_encoder and pixel_values is not None:
+        # MM_GRPO use, if llm_only is True, directly get vit_embeds
+        if self.add_image_encoder and self.image_encoder.pre_process and kwargs.get('llm_only', False):
+            vit_embeds = kwargs.get('vit_embeds').unsqueeze(1)
+        elif self.add_image_encoder and pixel_values is not None:
             vit_embeds = self.image_encoder(pixel_values, image_grid_thw)
             if image_flags is not None:
                 if self.image_encoder.post_process:
@@ -325,6 +328,10 @@ class VLMModel(MultiModalModule):
             output = vit_embeds
         else:
             vit_embeds = self.input_tensor
+
+        # MM_GRPO use, if vit_only is True, only calculate vit_embeds and return
+        if kwargs.get('vit_only', False) and self.image_encoder.post_process:
+            return {"vit_embeds": vit_embeds}
 
         if self.add_text_decoder:
             input_embeds = None
@@ -381,18 +388,17 @@ class VLMModel(MultiModalModule):
             )
 
             if self.text_decoder.post_process:
-                logits = output
-                logits = logits.contiguous().float()
+                output = output.contiguous().float()
                 loss = None
                 if labels is not None:
                     # if use TP then must use compute_megatron_loss, if do not use TP, then two loss are ok, but they are not equal
                     global_args = get_args()
                     if global_args.tensor_model_parallel_size > 1:
-                        loss = self.compute_megatron_loss(logits, labels)
+                        loss = self.compute_megatron_loss(output, labels)
                     else:
-                        loss = self.compute_loss(logits, labels)
+                        loss = self.compute_loss(output, labels)
                 return {
                     "loss": loss,
-                    "logits": logits
+                    "logits": output
                 }
         return output
