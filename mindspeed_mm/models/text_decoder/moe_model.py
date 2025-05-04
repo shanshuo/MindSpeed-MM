@@ -15,7 +15,7 @@ from megatron.core.models.gpt.gpt_layer_specs import _get_mlp_module_spec
 from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.transformer.enums import AttnMaskType, ModelType
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
-from megatron.core.transformer.transformer_block import TransformerBlock
+from megatron.core.transformer.transformer_block import TENorm, TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.training.global_vars import get_args
 
@@ -25,6 +25,8 @@ from mindspeed.core.transformer.transformer import norm_recompute_forward
 from mindspeed.model.transformer import should_recompute_norm
 from mindspeed.utils import set_actual_seq_len
 
+from mindspeed_mm.models.common.mm_gpt_model import MMGPTModel
+from mindspeed_mm.models.common.transformer.multi_token_prediction import MultiTokenPredictionBlock, get_mtp_block_spec, tie_output_layer_state_dict, tie_word_embeddings_state_dict
 from mindspeed_mm.models.vision.vision_encoders.qwen2vl_vit_model import Qwen2VLRotaryEmbedding_llm
 from mindspeed_mm.utils.utils import ensure_valid
 
@@ -52,7 +54,7 @@ class MOETransformerBlock(TransformerBlock):
                                                                     moe_grouped_gemm=self.config.moe_grouped_gemm)
                 else:
                     layer_spec.submodules.mlp = _get_mlp_module_spec(use_te=use_te, moe_grouped_gemm=self.config.moe_grouped_gemm)
-            model = build_module(layer_spec, config=self.config, layer_number=layer_number, )
+            model = build_module(layer_spec, config=self.config, layer_number=layer_number)
             self.config.ffn_hidden_size = ffn_hidden_size
             return model
 
@@ -65,8 +67,9 @@ class MOETransformerBlock(TransformerBlock):
         )
 
         # mtp require seperate layernorms for main model and mtp modules, thus move finalnorm out of block
-        init_block_fn_flag = self.post_layer_norm and not (hasattr(self.config, "mtp_num_layers") and self.config.mtp_num_layers)
-        if self.submodules.layer_norm and self.post_process and init_block_fn_flag:
+        has_layernorm = self.post_layer_norm and self.submodules.layer_norm
+        mtp_process = hasattr(self.config, "mtp_num_layers") and self.config.mtp_num_layers
+        if self.post_process and has_layernorm and not mtp_process:
             self.final_layernorm = build_module(
                 self.submodules.layer_norm,
                 config=self.config,
@@ -86,7 +89,7 @@ class MOETransformerBlock(TransformerBlock):
                     layer.forward = types.MethodType(norm_recompute_forward, layer)
 
 
-class MOEModel(LanguageModule):
+class MOEModel(MMGPTModel):
     """MOEModel Transformer language model.
 
     Args:
@@ -121,8 +124,9 @@ class MOEModel(LanguageModule):
         rotary_base: int = 10000,
         seq_len_interpolation_factor: Optional[float] = None,
     ) -> None:
-        super().__init__(config=config)
+        super(LanguageModule, self).__init__(config=config)
 
+        args = get_args()
         self.transformer_layer_spec: ModuleSpec = transformer_layer_spec
         self.vocab_size = vocab_size
         self.max_sequence_length = max_sequence_length
@@ -132,6 +136,7 @@ class MOEModel(LanguageModule):
         self.parallel_output = parallel_output
         self.share_embeddings_and_output_weights = share_embeddings_and_output_weights
         self.position_embedding_type = position_embedding_type
+        self.mtp_process = hasattr(config, "mtp_num_layers") and config.mtp_num_layers
 
         # megatron core pipelining currently depends on model type 
         self.model_type = ModelType.encoder_or_decoder
@@ -153,9 +158,8 @@ class MOEModel(LanguageModule):
                 raise AssertionError('mrope section should be provided for mrope!')
             self.rotary_pos_emb = Qwen2VLRotaryEmbedding_llm(config=config)
         elif self.position_embedding_type == 'rope':
-            args = get_args()
             self.rotary_pos_emb = RotaryEmbedding(
-                kv_channels=args.qk_rope_head_dim,
+                kv_channels=args.qk_rope_head_dim if args.qk_rope_head_dim else self.config.kv_channels,
                 rotary_percent=rotary_percent,
                 rotary_interleaved=self.config.rotary_interleaved,
                 seq_len_interpolation_factor=seq_len_interpolation_factor,
@@ -169,6 +173,19 @@ class MOEModel(LanguageModule):
             pre_process=self.pre_process,
             post_process=self.post_process,
         )
+        
+        if self.post_process and self.mtp_process:
+            mtp_block_spec = get_mtp_block_spec(config, use_transformer_engine=False)
+            self.mtp = MultiTokenPredictionBlock(config=self.config, spec=mtp_block_spec)
+            # move block main model final norm here when mtp enable
+            self.final_layernorm = build_module(
+                    TENorm,
+                    config=self.config,
+                    hidden_size=self.config.hidden_size,
+                    eps=self.config.layernorm_epsilon,
+                )
+        else:
+            self.final_layernorm = None
 
         # Output
         if post_process:
@@ -305,14 +322,35 @@ class MOEModel(LanguageModule):
         output_weight = None
         if self.share_embeddings_and_output_weights:
             output_weight = self.shared_embedding_or_output_weight()
+
+        if self.mtp_process:
+            hidden_states = self.mtp(
+                input_ids=input_ids,
+                position_ids=position_ids,
+                labels=labels,
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                inference_params=inference_params,
+                rotary_pos_emb=rotary_pos_emb,
+                packed_seq_params=packed_seq_params,
+                embedding=self.embedding,
+                output_layer=self.output_layer,
+                output_weight=output_weight,
+                compute_language_model_loss=self.compute_language_model_loss,
+                **(extra_block_kwargs or {}),
+            )            
+
+        if self.final_layernorm is not None:
+            hidden_states = self.final_layernorm(hidden_states)
+
         logits, _ = self.output_layer(hidden_states, weight=output_weight)
 
         if labels is None:
-            return logits.transpose(0, 1).contiguous()
+            return logits.transpose(0, 1).contiguous(), None
 
         loss = self.compute_language_model_loss(labels, logits)
 
-        return loss
+        return logits.transpose(0, 1).contiguous(), loss
 
     def sharded_state_dict(
         self, prefix: str = '', sharded_offsets: tuple = (), metadata: Optional[Dict] = None
@@ -336,5 +374,70 @@ class MOEModel(LanguageModule):
         ensure_valid(not (
             output_extra_state and output_extra_state.data
         ), f'Expected output layer extra state to be empty, got: {output_extra_state}')
+
+        return sharded_state_dict
+
+    def shared_embedding_or_output_weight(self) -> Tensor:
+        """Gets the embedding weight or output logit weights when share input embedding and
+        output weights set to True or when use Multi-Token Prediction (MTP) feature.
+
+        Returns:
+            Tensor: During pre processing or MTP process it returns the input embeddings weight.
+            Otherwise, during post processing it returns the final output layers weight.
+        """
+        if not self.pre_process and self.post_process and get_args().schedules_method == 'dualpipev':
+            from mindspeed.core.pipeline_parallel.dualpipev.dualpipev_schedules import \
+                get_shared_embedding_from_dual_chunk
+            return get_shared_embedding_from_dual_chunk()
+        if self.pre_process or self.mtp_process:
+            # Multi-Token Prediction (MTP) need both embedding layer and output layer.
+            # So there will be both embedding layer and output layer in the mtp process stage.
+            # In this case, if share_embeddings_and_output_weights is True, the shared weights
+            # will be stored in embedding layer, and output layer will not have any weight.
+            if not hasattr(self, 'embedding'):
+                raise AssertionError(f"embedding is needed in this pipeline stage, but it is not initialized.")
+            return self.embedding.word_embeddings.weight
+        elif self.post_process:
+            return self.output_layer.weight
+        return None
+
+    def sharded_state_dict(
+        self, prefix: str = '', sharded_offsets: tuple = (), metadata: Optional[Dict] = None
+    ) -> ShardedStateDict:
+        """Sharded state dict implementation for GPTModel backward-compatibility.
+        Removing extra state.
+        Tie word embeddings and output layer in mtp process stage.
+
+        Args:
+            prefix (str): Module name prefix.
+            sharded_offsets (tuple): PP related offsets, expected to be empty at this module level.
+            metadata (Optional[Dict]): metadata controlling sharded state dict creation.
+
+        Returns:
+            ShardedStateDict: sharded state dict for the GPTModel
+        """
+        sharded_state_dict = super().sharded_state_dict(prefix, sharded_offsets, metadata)
+        # Multi-Token Prediction (MTP) need both embedding layer and output layer in
+        # mtp process stage.
+        # If MTP is not placed in the pre processing stage, we need to maintain a copy of
+        # embedding layer in the mtp process stage and tie it to the embedding in the pre
+        # processing stage.
+        # Also, if MTP is not placed in the post processing stage, we need to maintain a copy
+        # of output layer in the mtp process stage and tie it to the output layer in the post
+        # processing stage.
+        if self.mtp_process and not self.pre_process:
+            emb_weight_key = f'{prefix}embedding.word_embeddings.weight'
+            emb_weight = self.embedding.word_embeddings.weight
+            tie_word_embeddings_state_dict(sharded_state_dict, emb_weight, emb_weight_key)
+        if self.mtp_process and not self.post_process:
+            # We only need to tie the output layer weight if share_embeddings_and_output_weights
+            # is False. Because if share_embeddings_and_output_weights is True, the shared weight
+            # will be stored in embedding layer, and output layer will not have any weight.
+            if not self.share_embeddings_and_output_weights:
+                output_layer_weight_key = f'{prefix}output_layer.weight'
+                output_layer_weight = self.output_layer.weight
+                tie_output_layer_state_dict(
+                    sharded_state_dict, output_layer_weight, output_layer_weight_key
+                )
 
         return sharded_state_dict

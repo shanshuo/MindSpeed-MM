@@ -2,12 +2,12 @@
     "model_id": "DeepSeek-VL2",
     "text_decoder": {
         "model_id": "deepseek",
-        "num_layers": 30,
-        "hidden_size": 2560,
-        "num_attention_heads": 32,
-        "num_query_groups": 32,
-        "ffn_hidden_size": 12288,
-        "moe_intermediate_size": 1536,
+        "num_layers": 61,
+        "hidden_size": 7168,
+        "num_attention_heads": 128,
+        "num_query_groups": 128,
+        "ffn_hidden_size": 18432,
+        "moe_intermediate_size": 2048,
         "kv_channels": 128,
         "hidden_dropout": 0.0,
         "attention_dropout": 0.0,
@@ -41,9 +41,9 @@
         "rotary_base": 10000,
         "first_k_dense_replace": 1,
         "moe_layer_freq": 1,
-        "num_experts": 72,
-        "num_moe_experts": 72,
-        "moe_router_topk": 6,
+        "num_experts": 256,
+        "num_moe_experts": 256,
+        "moe_router_topk": 8,
         "moe_router_load_balancing_type": "none",
         "moe_router_pre_softmax": true,
         "mla_mm_split": false,
@@ -52,7 +52,12 @@
         "mla_up_proj_tp_overlap": false,
         "recompute_mla_up_proj": false,
         "mla_zero_memory": true,
-        "schedules_method": "None"
+        "schedules_method": "None",
+        "mtp_num_layers": 1,
+        "mtp_loss_scaling_factor": 0.3,
+        "recompute_mtp_norm": false,
+        "recompute_mtp_layer": false,
+        "moe_grouped_gemm": true
     },
     "image_encoder": {
         "tile_tag": "2D",
@@ -69,7 +74,7 @@
             "model_id": "DeepSeekVL2MLP",
             "projector_type": "downsample_mlp_gelu",
             "input_dim": 1152,
-            "n_embed": 2560,
+            "n_embed": 7168,
             "depth": 2,
             "mlp_ratio": 1,
             "downsample_ratio": 2,
@@ -77,8 +82,5 @@
         }
     },
     "text_encoder": null,
-    "video_encoder": null,
-    "patch": {
-        "moe_mlp": true
-    }
+    "video_encoder": null
 }

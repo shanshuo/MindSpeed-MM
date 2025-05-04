@@ -472,7 +472,7 @@ class VLMModel(MultiModalModule):
                 position_ids=position_ids,
                 attention_mask=attention_mask,
                 decoder_input=input_embeds,
-                labels=None,
+                labels=labels,
                 inference_params=inference_params,
                 **kwargs
             )
@@ -480,7 +480,7 @@ class VLMModel(MultiModalModule):
             if self.text_decoder.post_process:
                 logits = output[0]
                 logits = logits.contiguous().float()
-                loss = None
+                loss = output[1]
                 if labels is not None:
                     # if use TP then must use compute_megatron_loss, if do not use TP, then two loss are ok, but they are not equal
                     global_args = get_args()
