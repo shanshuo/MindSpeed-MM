@@ -25,6 +25,7 @@ from diffusers.models.embeddings import (
 from megatron.legacy.model.enums import AttnType
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
+from megatron.training.arguments import core_transformer_config_from_args
 
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.embeddings.pos_embeddings import RoPE3DStepVideo
@@ -173,7 +174,7 @@ class StepVideoDiT(MultiModalModule):
 
         encoder_hidden_states = prompt[0]
         encoder_hidden_states_2 = prompt[1]
-        motion_score = kwargs.get("motion_score")
+        motion_score = kwargs.get("motion_score", 5.0)
         condition_hidden_states = kwargs.get("image_latents")
 
         # Only retain stepllm's mask
@@ -516,12 +517,22 @@ class AdaLayerNormSingle(nn.Module):
     def __init__(self, embedding_dim: int, use_additional_conditions: bool = False, time_step_rescale=1000):
         super().__init__()
 
+        args = get_args()
         self.emb = PixArtAlphaCombinedTimestepSizeEmbeddings(
             embedding_dim, size_emb_dim=embedding_dim // 2, use_additional_conditions=use_additional_conditions
         )
 
         self.silu = nn.SiLU()
         self.linear = nn.Linear(embedding_dim, 6 * embedding_dim, bias=True)
+        config = core_transformer_config_from_args(args)
+        self.linear = tensor_parallel.ColumnParallelLinear(
+            embedding_dim,
+            6 * embedding_dim,
+            config=config,
+            init_method=config.init_method,
+            bias=True,
+            gather_output=True
+        )
 
         self.time_step_rescale = time_step_rescale  # timestep usually in [0, 1], we rescale it to [0,1000] for stability
 
@@ -532,6 +543,6 @@ class AdaLayerNormSingle(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         embedded_timestep = self.emb(timestep * self.time_step_rescale, **added_cond_kwargs)
 
-        out = self.linear(self.silu(embedded_timestep))
+        out = self.linear(self.silu(embedded_timestep))[0]
 
         return out, embedded_timestep

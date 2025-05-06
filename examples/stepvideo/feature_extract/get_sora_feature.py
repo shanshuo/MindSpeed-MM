@@ -2,7 +2,10 @@ import os
 import json
 import copy
 import time
+
 from numpy import save
+import numpy as np
+import PIL.Image
 import torch
 import torch.distributed
 import mindspeed.megatron_adaptor
@@ -150,7 +153,7 @@ def extract_feature():
             latents = video
         
         if extract_text_feature:
-            prompt = text_encoder.encode(prompt_ids, prompt_mask)
+            prompt, prompt_mask = text_encoder.encode(prompt_ids, prompt_mask)
         else:
             prompt = prompt_ids
         
@@ -190,6 +193,14 @@ def extract_feature():
                         "prompt": prompts_i,
                         "prompt_mask": prompt_masks_i
                     }
+                    if latents_dict:
+                        for key in latents_dict.keys():
+                            if isinstance(latents_dict[key][i], torch.Tensor):
+                                data_to_save[key] = latents_dict[key][i].cpu()
+                            elif isinstance(latents_dict[key][i], PIL.Image.Image):
+                                data_to_save[key] = np.array(latents_dict[key][i])
+                            else:
+                                data_to_save[key] = latents_dict[key][i]
                     pt_name = get_pt_name(file_names[i])
                     torch.save(data_to_save, os.path.join(save_path, "features", pt_name))
                 print_rank_0(f"consumed sample {counter} | elapsed time {(time.time() - start_time):.2f} | file {pt_name}")

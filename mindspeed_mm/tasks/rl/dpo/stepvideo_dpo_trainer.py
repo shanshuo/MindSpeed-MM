@@ -93,7 +93,6 @@ class StepVideoDPOTrainer(DPOTrainer):
         score_lose = batch.pop(SCORE_REJECTED, 1.0)
 
         args = get_args()
-        print(args.params_dtype)
 
         video = video.to(args.params_dtype)
         video_lose = video_lose.to(args.params_dtype)

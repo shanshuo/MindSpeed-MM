@@ -1,5 +1,6 @@
 #!/bin/bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
+# 该变量只用于规避megatron对其校验，对npu无效
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
@@ -7,7 +8,6 @@ export TASK_QUEUE_ENABLE=1
 export COMBINED_ENABLE=1
 export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
-export CUDA_DEVICE_MAX_CONNECTIONS=1
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
 NPUS_PER_NODE=1
@@ -23,8 +23,8 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP))
 
-MM_DATA="./examples/stepvideo/feature_extract/data.json"
-MM_MODEL="./examples/stepvideo/feature_extract/model_stepvideo.json"
+MM_DATA="./examples/stepvideo/feature_extract/data_i2v.json"
+MM_MODEL="./examples/stepvideo/feature_extract/model_stepvideo_i2v.json"
 MM_TOOL="./examples/stepvideo/feature_extract/tools.json"
 
 DISTRIBUTED_ARGS="

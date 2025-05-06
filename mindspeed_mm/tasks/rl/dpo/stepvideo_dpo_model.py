@@ -51,22 +51,23 @@ class StepVideoDPOModel(nn.Module):
         noised_latents, noise, timesteps = self.diffusion.q_sample(torch.cat((latents, latents_lose), dim=0), model_kwargs=kwargs, mask=video_mask)
         prompts, prompt_mask = self.text_encoder.encode(prompt_ids, prompt_mask)
         prompt = [torch.cat((prompt, prompt), dim=0) for prompt in prompts]
+        prompt_mask = [torch.cat((mask, mask), dim=0) for mask in prompt_mask]
 
         with torch.no_grad():
             refer_output = self.reference(
                 noised_latents,
                 timestep=timesteps,
-                encoder_hidden_states=prompt,
+                prompt=prompt,
                 video_mask=video_mask,
-                encoder_attention_mask=prompt_mask,
+                prompt_mask=prompt_mask,
                 **kwargs,
             )
         actor_output = self.actor(
             noised_latents,
             timestep=timesteps,
-            encoder_hidden_states=prompt,
+            prompt=prompt,
             video_mask=video_mask,
-            encoder_attention_mask=prompt_mask,
+            prompt_mask=prompt_mask,
             **kwargs,
         )
         output = torch.cat((refer_output, actor_output), dim=0)

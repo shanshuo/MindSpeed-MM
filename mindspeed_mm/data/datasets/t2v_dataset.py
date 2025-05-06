@@ -193,6 +193,8 @@ class T2VDataset(MMBaseDataset):
         self.use_video_feature = basic_param.get("use_video_feature", False)
 
         if self.data_storage_mode == "combine" or self.data_storage_mode == "sorafeatured":
+            if vid_img_process.get("skip_define_frame_index", False):
+                return
             self.dataset_prog = DataSetProg()
             dataloader_num_workers = vid_img_process.get("dataloader_num_workers", 1)
             self.data_samples, self.sample_num_frames, self.sample_size = (

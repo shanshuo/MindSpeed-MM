@@ -18,13 +18,7 @@ class MMPipeline(DiffusionPipeline):
         return latents
 
     def decode_latents(self, latents, value_range=(-1, 1), normalize=True, **kwargs):
-        print(f"before vae decode {latents.shape}",
-              torch.max(latents).item(), torch.min(latents).item(),
-              torch.mean(latents).item(), torch.std(latents).item())
         video = self.vae.decode(latents, **kwargs)  # [b, c, t, h, w]
-        print(f"before vae decode {video.shape}",
-              torch.max(video).item(), torch.min(latents).item(),
-              torch.mean(video).item(), torch.std(latents).item())
         if normalize:
             low, high = value_range
             video.clamp_(min=low, max=high)

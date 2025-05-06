@@ -17,8 +17,6 @@ DIT_CONVERT_MAPPING = {
     "adaln_single.emb.timestep_embedder.linear_1.weight": "adaln_single.emb.timestep_embedder.linear_1.weight",
     "adaln_single.emb.timestep_embedder.linear_2.bias": "adaln_single.emb.timestep_embedder.linear_2.bias",
     "adaln_single.emb.timestep_embedder.linear_2.weight": "adaln_single.emb.timestep_embedder.linear_2.weight",
-    "adaln_single.linear.bias": "adaln_single.linear.bias",
-    "adaln_single.linear.weight": "adaln_single.linear.weight",
     "caption_projection.linear_1.bias": "caption_projection.linear_1.bias",
     "caption_projection.linear_1.weight": "caption_projection.linear_1.weight",
     "caption_projection.linear_2.bias": "caption_projection.linear_2.bias",
@@ -107,9 +105,9 @@ def split_by_tp(state_dict: Dict[str, Any], tp_size: int = 2, num_layers: int = 
             ]
 
             for split_name in suffixed_common_col:
-                new_state_dict[split_name] = torch.chunk(state_dict[split_name], tp_size, dim=0)[tp_rank]
+                new_state_dict[split_name] = torch.chunk(state_dict[split_name], tp_size, dim=0)[tp_rank].clone()
             for split_name in suffixed_common_row:
-                new_state_dict[split_name] = torch.chunk(state_dict[split_name], tp_size, dim=1)[tp_rank]
+                new_state_dict[split_name] = torch.chunk(state_dict[split_name], tp_size, dim=1)[tp_rank].clone()
             for split_name in suffixed_col_qkv_concat:
                 weight = torch.chunk(state_dict[split_name], tp_size, dim=0)[tp_rank]
                 qkvs_per_head = torch.chunk(weight, num_heads_per_tp, dim=0)
@@ -118,7 +116,7 @@ def split_by_tp(state_dict: Dict[str, Any], tp_size: int = 2, num_layers: int = 
                 vs_per_head = [torch.chunk(w, 3, dim=0)[2] for w in qkvs_per_head]
                 
                 weight = torch.cat(qs_per_head + ks_per_head + vs_per_head, dim=0)
-                new_state_dict[split_name] = weight
+                new_state_dict[split_name] = weight.clone()
             for split_name in suffixed_col_kv_concat:
                 weight = torch.chunk(state_dict[split_name], tp_size, dim=0)[tp_rank]
                 weight = torch.chunk(state_dict[split_name], tp_size, dim=0)[tp_rank]
@@ -127,7 +125,14 @@ def split_by_tp(state_dict: Dict[str, Any], tp_size: int = 2, num_layers: int = 
                 vs_per_head = [torch.chunk(w, 2, dim=0)[1] for w in kvs_per_head]
                 
                 weight = torch.cat(ks_per_head + vs_per_head, dim=0)
-                new_state_dict[split_name] = weight
+                new_state_dict[split_name] = weight.clone()
+        # adaLN modulation
+        col_split_names = [
+            "adaln_single.linear.bias",
+            "adaln_single.linear.weight"
+        ]
+        for split_name in col_split_names:
+            new_state_dict[split_name] = torch.chunk(state_dict[split_name], tp_size, dim=0)[tp_rank].clone()
         
         new_state_dicts.append(new_state_dict)
     

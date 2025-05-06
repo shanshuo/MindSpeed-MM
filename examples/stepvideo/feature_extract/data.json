@@ -10,10 +10,10 @@
             "data_process_type": "CogvideoX",
 			"video_reader_type": "decoder",
             "fps": 8,
-            "skip_frame_num": 3,
-			"num_frames": 204,
-			"max_height": 768,
-			"max_width": 768,
+            "skip_frame_num": 0,
+			"num_frames": 136,
+			"max_height": 544,
+			"max_width": 992,
 			"dataloader_num_workers": 0,
 			"train_pipeline": {
 				"video": [],
@@ -21,6 +21,7 @@
 			}
 		},
 		"use_text_processer": true,
+		"enable_text_preprocessing": false,
 		"tokenizer_config": [
 			{
 				"autotokenizer_name": "stepchat",
@@ -39,7 +40,7 @@
 	"dataloader_param": {
 		"dataloader_mode": "sampler",
         "sampler_type": "SequentialSampler",
-		"shuffle": true,
+		"shuffle": false,
 		"drop_last": true,
 		"pin_memory": true,
 		"group_frame": false,
