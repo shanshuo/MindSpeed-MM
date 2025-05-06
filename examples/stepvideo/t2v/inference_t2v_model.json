@@ -20,7 +20,7 @@
     },
     "ae": {
         "model_id": "stepvideovae",
-        "from_pretrained": "./weights/vae/vae_xx.safetensors",
+        "from_pretrained": "./weights/vae/vae_v2.safetensors",
         "dtype": "bf16",
         "z_channels": 64,
         "frame_len": 17,
@@ -66,7 +66,7 @@
     "pipeline_config": {
         "version": "stepvideo",
         "use_attention_mask": true,
-        "input_size": [204, 768, 768],
+        "input_size": [204, 544, 992],
         "guidance_scale": 9.0,
         "model_type": "t2v",
         "seed": 1234
@@ -77,6 +77,7 @@
     "save_path":"examples/stepvideo/t2v/t2v_result/",
     "fps":25,
     "prompt": "examples/stepvideo/t2v/samples_prompts.txt",
+    "num_inference_videos_per_sample": 1,
     "use_prompt_preprocess": false,
     "pipeline_class": "StepVideoPipeline",
     "device":"npu",

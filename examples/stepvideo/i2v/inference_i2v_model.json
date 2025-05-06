@@ -25,7 +25,7 @@
     },
     "ae": {
         "model_id": "stepvideovae",
-        "from_pretrained": "./weights/vae/vae_xx.safetensors",
+        "from_pretrained": "./weights/vae/vae_v2.safetensors",
         "dtype": "bf16",
         "z_channels": 64,
         "frame_len": 17,
@@ -84,6 +84,7 @@
     "fps":25,
     "prompt": "examples/stepvideo/i2v/samples_i2v_prompts.txt",
     "image": "examples/stepvideo/i2v/samples_i2v_images.txt",
+    "num_inference_videos_per_sample": 1,
     "use_prompt_preprocess": false,
     "pipeline_class": "StepVideoPipeline",
     "device":"npu",
