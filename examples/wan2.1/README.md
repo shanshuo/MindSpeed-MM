@@ -341,7 +341,7 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
     ```shell
     PP=4
     VP=2
-
+    
     GPT_ARGS="
       --pipeline-model-parallel-size ${PP} \
       --virtual-pipeline-model-parallel-size ${VP} \
@@ -350,6 +350,28 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
       --variable-seq-lengths \  #按需开启，动态shape训练需要加此配置，静态shape不要加此配置
     ”
     ```
+
+- 选择性重计算 + FA激活值offload
+
+  - 如果显存比较充裕，可以开启选择性重计算（self-attention不进行重计算）以提高吞吐，建议同步开启FA激活值offload，将FA的激活值异步卸载至CPU
+
+  - 选择性重计算
+
+    - 在`exmaples/wan2.1/{model_size}/{task}/pretrain.sh`中，添加参数`--recompute-skip-core-attention`和`--recompute-num-layers-skip-core-attention x`可以开启选择性重计算，其中`--recompute-num-layers-skip-core-attention`后的数字表示跳过self attention计算的层数，`--recompute-full-layers`后的数字表示全重计算的层数，建议调小`recompute-full-layers`的同时增大`recompute-num-layers-skip-core-attention`直至显存打满。
+
+      ```bash
+      GPT_ARGS="
+      	--recompute-granularity full \
+          --recompute-method block \
+          --recompute-num-layers 0 \
+          --recompute-skip-core-attention \
+          --recompute-num-layers-skip-core-attention 40 \
+      "
+      ```
+
+  - 不进行重计算的self-attention激活值异步offload
+    - 在`exmaples/wan2.1/{model_size}/{task}/pretrain_model.json`中，通过`attention_async_offload`字段可以开启异步offload，建议开启该功能，节省更多的显存
+
 #### 启动训练
 
 ```bash

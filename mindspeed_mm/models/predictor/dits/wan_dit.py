@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
+import torch_npu
 from einops import rearrange
 from megatron.core import mpu, tensor_parallel
 from megatron.legacy.model.enums import AttnType
@@ -16,6 +17,7 @@ from mindspeed.core.context_parallel.unaligned_cp.mapping import (
     split_forward_gather_backward,
 )
 from mindspeed.core.parallel_state import get_context_parallel_group_for_hybrid_ulysses
+from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.attention import FlashAttention, ParallelAttention
@@ -49,6 +51,7 @@ class WanDiT(MultiModalModule):
         pre_process: bool = True,
         post_process: bool = True,
         global_layer_idx: Optional[Tuple] = None,
+        attention_async_offload: bool = False,
         **kwargs,
     ):
         super().__init__(config=None)
@@ -96,6 +99,13 @@ class WanDiT(MultiModalModule):
             if args.recompute_num_layers is not None
             else num_layers
         )
+
+        self.recompute_skip_core_attention = args.recompute_skip_core_attention
+        self.recompute_num_layers_skip_core_attention = args.recompute_num_layers_skip_core_attention
+        self.attention_async_offload = attention_async_offload
+        
+        self.h2d_stream = torch_npu.npu.Stream() if attention_async_offload else None
+        self.d2h_stream = torch_npu.npu.Stream() if attention_async_offload else None
 
         if self.recompute_granularity == "selective":
             raise ValueError(
@@ -164,8 +174,13 @@ class WanDiT(MultiModalModule):
                     rope=self.rope,
                     fa_layout=self.fa_layout,
                     clip_token_len=clip_token_len,
+                    attention_async_offload=self.attention_async_offload,
+                    h2d_stream=self.h2d_stream,
+                    d2h_stream=self.d2h_stream,
+                    layer_idx=index,
+                    num_layers=self.num_layers,
                 )
-                for _ in range(self.num_layers)
+                for index in range(self.num_layers)
             ]
         )
 
@@ -213,6 +228,11 @@ class WanDiT(MultiModalModule):
         "Forward method with activation checkpointing."
         num_layers = len(blocks)
         recompute_layers = self.recompute_layers
+        recompute_num_layers_skip_core_attention = (
+            self.recompute_num_layers_skip_core_attention
+            if self.recompute_skip_core_attention
+            else 0
+        )
 
         def custom(start, end):
             def custom_forward(*args):
@@ -249,6 +269,9 @@ class WanDiT(MultiModalModule):
                         x,
                         *args,
                     )
+                elif _layer_num < recompute_layers + recompute_num_layers_skip_core_attention:
+                    block = blocks[_layer_num]
+                    x = block(x, *args, recompute_skip_core_attention=True)
                 else:
                     block = blocks[_layer_num]
                     x = block(x, *args)
@@ -472,6 +495,12 @@ class WanDiTBlock(nn.Module):
         rope=None,
         fa_layout=None,
         clip_token_len: int = 257,
+        attention_async_offload: bool = False,
+        layer_idx: int = 0,
+        num_layers: int = 40,
+        h2d_stream: Optional[torch_npu.npu.Stream] = None,
+        d2h_stream: Optional[torch_npu.npu.Stream] = None,
+        **kwargs
     ):
         super().__init__()
 
@@ -481,6 +510,17 @@ class WanDiTBlock(nn.Module):
         self.ffn_dim = ffn_dim
         self.num_heads = num_heads
         self.clip_token_len = clip_token_len
+
+        args = get_args()
+        self.distribute_saved_activations = args.distribute_saved_activations
+
+        self.attention_async_offload_param = {
+            "async_offload": attention_async_offload,
+            "block_idx": layer_idx,
+            "depth": num_layers,
+            "h2d_stream": h2d_stream,
+            "d2h_stream": d2h_stream,
+        }
 
         self.self_attn = WanVideoParallelAttention(
             query_dim=hidden_size,
@@ -541,23 +581,98 @@ class WanDiTBlock(nn.Module):
         prompt,
         time_emb,
         rotary_pos_emb,
+        recompute_skip_core_attention=False
+    ):
+        # before self attention process
+        if recompute_skip_core_attention:
+            query, key, value, gate_msa, shift_mlp, scale_mlp, gate_mlp = tensor_parallel.checkpoint(
+                self._before_self_attention,
+                self.distribute_saved_activations,
+                time_emb, 
+                latents,
+                rotary_pos_emb,
+            )
+        else:
+            query, key, value, gate_msa, shift_mlp, scale_mlp, gate_mlp = self._before_self_attention(
+                time_emb, 
+                latents,
+                rotary_pos_emb
+            )
+
+        # self attention
+        self_attn_out = self.self_attn.core_attention_flash(
+            query=query,
+            key=key, 
+            value=value, 
+            **self.attention_async_offload_param
+        )
+
+        # after self attention
+        if recompute_skip_core_attention:
+            latents = tensor_parallel.checkpoint(
+                self._after_self_attention,
+                self.distribute_saved_activations,
+                self_attn_out,
+                latents,
+                prompt,
+                gate_msa,
+                shift_mlp,
+                scale_mlp,
+                gate_mlp
+            )
+        else:
+            latents = self._after_self_attention(
+                self_attn_out, 
+                latents, 
+                prompt, 
+                gate_msa, 
+                shift_mlp, 
+                scale_mlp, 
+                gate_mlp
+            )
+
+        return latents
+
+    def _before_self_attention(
+        self,
+        time_emb,
+        latents,
+        rotary_pos_emb
     ):
         dtype = time_emb.dtype
         device = time_emb.device
-
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
             self.modulation.to(dtype=dtype, device=device) + time_emb
         ).chunk(6, dim=1)
+
         self_attn_input = self.modulate(
             self.norm1(latents.to(torch.float32)), shift_msa, scale_msa
+        ).to(dtype)
+
+        # before self attention
+        query, key, value = self.self_attn.function_before_core_attention(
+            query=self_attn_input,
+            input_layout="bsh",
+            rotary_pos_emb=rotary_pos_emb.to(time_emb.device)
         )
 
-        # self attention
-        self_attn_out = self.self_attn(
-            self_attn_input.to(dtype),
-            rotary_pos_emb=rotary_pos_emb.to(device),
-            input_layout="bsh",
+        return (
+            query, key, value,
+            gate_msa, shift_mlp, scale_mlp, gate_mlp
         )
+    
+    def _after_self_attention(
+        self,
+        self_attn_out,
+        latents,
+        prompt,
+        gate_msa,
+        shift_mlp,
+        scale_mlp,
+        gate_mlp
+    ):
+        self_attn_out = self.self_attn.function_after_core_attention(self_attn_out, output_layout="bsh")
+        
         latents = latents + gate_msa * self_attn_out
 
         # cross attention
@@ -658,70 +773,6 @@ class RoPE3DWan(nn.Module):
         return freqs
 
 
-class WanFlashAttention(FlashAttention):
-    def __init__(
-        self,
-        softmax_scale=None,
-        attention_dropout=0.0,
-        fa_layout="bnsd",
-        attention_type=AttnType.self_attn,
-    ):
-        super().__init__(
-            softmax_scale=softmax_scale,
-            attention_dropout=attention_dropout,
-        )
-        self.attention_type = attention_type
-        # context parallel setting
-        args = get_args()
-        self.context_parallel_algo = args.context_parallel_algo
-
-        # Decide cp group
-        if self.context_parallel_algo == "hybrid_cp_algo":
-            self.ulysses_cp_group = get_context_parallel_group_for_hybrid_ulysses()
-        elif self.context_parallel_algo == "ulysses_cp_algo":
-            self.ulysses_cp_group = mpu.get_context_parallel_group()
-        else:
-            self.ulysses_cp_group = None
-
-        # Decide cp algo
-        if attention_type == AttnType.cross_attn:
-            self.context_parallel_algo = "ulysses_cp_algo"
-
-        # Decide fa layout because USP & ring attention only supports layout of SBH as input
-        if self.context_parallel_algo in ["hybrid_cp_algo", "megatron_cp_algo"]:
-            self.fa_layout = "sbh"
-        else:
-            self.fa_layout = fa_layout
-
-    def _split_head(self, x, dim=2):
-        if self.ulysses_cp_group is None:
-            return x
-        return split_forward_gather_backward(x, self.ulysses_cp_group, dim=dim)
-
-    def _all_to_all(self, x, scatter_dim=2, gather_dim=0):
-        if self.ulysses_cp_group is None:
-            return x
-        return all_to_all(
-            x, self.ulysses_cp_group, scatter_dim=scatter_dim, gather_dim=gather_dim
-        )
-
-    def forward(self, query, key, value, attention_mask=None):
-
-        if self.attention_type == AttnType.self_attn:
-            query = self._all_to_all(query, scatter_dim=2, gather_dim=0)
-            key = self._all_to_all(key, scatter_dim=2, gather_dim=0)
-            value = self._all_to_all(value, scatter_dim=2, gather_dim=0)
-
-        else:
-            query = self._all_to_all(query, scatter_dim=2, gather_dim=0)
-            key = self._split_head(key, dim=2)
-            value = self._split_head(value, dim=2)
-        attn_out = super().forward(query, key, value, attention_mask)
-
-        attn_out = self._all_to_all(attn_out, scatter_dim=0, gather_dim=2)
-        return attn_out
-
-
 class WanVideoParallelAttention(ParallelAttention):
 
     def __init__(
@@ -766,13 +817,32 @@ class WanVideoParallelAttention(ParallelAttention):
             rope=rope,
             **kwargs,
         )
+        args = get_args()
 
-        self.core_attention_flash = WanFlashAttention(
+        if self.cp_size > 1 and attention_type == AttnType.self_attn \
+            and args.context_parallel_algo in ["megatron_cp_algo", "hybrid_cp_algo"]:
+            # The input layout of `ringattn_context_parallel` must be 'sbh'
+            fa_layout = "sbh"
+
+        self.core_attention_flash = FlashAttention(
             attention_dropout=dropout,
             fa_layout=fa_layout,
             softmax_scale=1 / math.sqrt(self.head_dim),
-            attention_type=attention_type,
         )
+
+        if self.cp_size > 1 and attention_type == AttnType.self_attn \
+            and args.context_parallel_algo in ["ulysses_cp_algo", "hybrid_cp_algo"]:
+
+            if args.context_parallel_algo == "hybrid_cp_algo":
+                ulysses_group = get_context_parallel_group_for_hybrid_ulysses()
+            else:
+                ulysses_group = mpu.get_context_parallel_group()            
+            
+            self.core_attention_flash = UlyssesContextAttention(self.core_attention_flash, ulysses_group)
+        
+        if self.cp_size > 1 and attention_type == AttnType.cross_attn:
+            #In the case of cross attention, it is equivalent to performing the raw npu_fusion_attention for the slicing q
+            self.core_attention_flash.context_parallel_algo = "ulysses_cp_algo"
 
         # Normalize
         if self.use_qk_norm:

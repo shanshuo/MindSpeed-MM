@@ -27,6 +27,7 @@ GPT_ARGS="
     --use-cp-send-recv-overlap \
     --ulysses-degree-in-cp [int] \
     --megatron-cp-in-bnsd \
+    --attention-mask-type [str] \
 ...
 ```
 
@@ -35,6 +36,7 @@ GPT_ARGS="
   - 例如当设置```--context-parallel-size```为8时，可以设置```--ulysses-degree-in-cp```为2或```--ulysses-degree-in-cp```为4
   - 同时需要确保```--ulysses-degree-in-cp```可以被num-attention-heads数整除
 - ```--megatron-cp-in-bnsd```为可选参数，建议开启，因默认`fa_layout`为"sbh",开启后可支持[B, N, S, D]格式计算，可提高性能。
+- `--attention-mask-type`设置attention计算时mask的类型，可选参数为`general`和`causal`，其中`general`表示全attention，`causal`表示causal attention
 
 ## 使用效果
 

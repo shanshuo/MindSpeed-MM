@@ -159,7 +159,7 @@ class FlashAttention(nn.Module):
         self.context_parallel_algo = args.context_parallel_algo
         self.context_parallel_size = args.context_parallel_size
 
-    def forward(self, query, key, value, attention_mask):
+    def forward(self, query, key, value, attention_mask=None, **kwargs):
         """Implements the multihead softmax attention.
         Arguments
         ---------
@@ -205,18 +205,18 @@ class FlashAttention(nn.Module):
                 if attention_mask is not None:
                     attention_mask.view(batch_size, 1, -1, attention_mask.shape[-1])
             
-            output = torch_npu.npu_fusion_attention(
-                query, key, value, n_head, self.fa_layout.upper(),
-                pse=self.pse,
-                padding_mask=None,
-                atten_mask=attention_mask,
+            output = do_npu_fusion_attention(
+                query, key, value,
+                head_num=n_head,
+                softmax_scale=self.softmax_scale,
+                layout=self.fa_layout.upper(),
+                attn_mask=attention_mask,
                 actual_seq_qlen=actual_seq_qlen,
                 actual_seq_kvlen=actual_seq_kvlen,
-                scale=self.softmax_scale,
-                keep_prob=1 - self.attention_dropout,
-                inner_precise=0,
-                sparse_mode=self.sparse_mode
-            )[0]
+                dropout_p=self.attention_dropout,
+                sparse_mode=self.sparse_mode,
+                **kwargs,
+            )
 
         output = change_tensor_layout(output, self.fa_layout, "sbh", batch_size=batch_size)
         return output
