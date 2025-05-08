@@ -110,9 +110,9 @@ def qwen2vl_get_rope_index(
                     ed = ed_image
                 else:
                     t, h, w = (
-                        image_grid_thw[image_index][0],
-                        image_grid_thw[image_index][1],
-                        image_grid_thw[image_index][2],
+                        image_grid_thw[video_index][0],
+                        image_grid_thw[video_index][1],
+                        image_grid_thw[video_index][2],
                     )
                     video_index += 1
                     remain_videos -= 1
