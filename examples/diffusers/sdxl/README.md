@@ -203,7 +203,7 @@
     config_file="${scripts_path}/pretrain_${mixed_precision}_accelerate_config.yaml"
 
     # accelerate launch *** \ 目录下
-    --dataloader_num_workers=8 \ # 请基于系统配置与数据大小进行调整num workers
+    --dataloader_num_workers=8 \ # 请基于系统配置与数据大小进行调整
     ```
 
     修改bash文件中`accelerate`配置下`train_text_to_image_sdxl_pretrain.py`的路径（默认路径在diffusers/sdxl/）

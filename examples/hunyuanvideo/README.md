@@ -268,7 +268,7 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
   
   - 使能方式：在启动脚本中设置 CP > 1，如：CP=2；
   
-  - 限制条件：head 数量需要能够被TP*CP整除（在`exmaples/hunyuanvideo/{task_name}/model_hunyuanvideo.json`中配置，默认为24）
+  - 限制条件：head 数量需要能够被TP*CP整除（在`examples/hunyuanvideo/{task_name}/model_hunyuanvideo.json`中配置，默认为24）
 
 
 + TP: 张量模型并行
@@ -277,7 +277,7 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
 
   - 使能方式：在启动脚本中设置 TP > 1，如：TP=8
 
-  - 限制条件：head 数量需要能够被TP*CP整除（在`exmaples/hunyuanvideo/{task_name}/model_hunyuanvideo.json`中配置，默认为24）
+  - 限制条件：head 数量需要能够被TP*CP整除（在`examples/hunyuanvideo/{task_name}/model_hunyuanvideo.json`中配置，默认为24）
 
 
 + TP-SP

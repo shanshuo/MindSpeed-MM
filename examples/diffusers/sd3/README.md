@@ -242,7 +242,7 @@ torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huaw
     vim examples/dreambooth/train_dreambooth_sd3.py
     ```
 
-    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （30行附近）
+    - 在文件上方的import栏增加`DistributedType`在`from accelerate import Accelerator`后 （30行附近）
     - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED`（dreambooth在1681行附近），并在`if args.checkpoints_total_limit is not None`后增加`and accelerator.is_main_process`
 
     ```python

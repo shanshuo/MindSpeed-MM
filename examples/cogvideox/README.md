@@ -203,7 +203,7 @@ CogVideoX-5B-Converted
 ├── release
 │   └──mp_rank_00
 │      └──model_optim_rng.pt
-└──latest_ckeckpointed_iterations.txt
+└──latest_checkpointed_iterations.txt
 ```
 TP=2,PP=1, TP>2的情况依此类推：
 ```
@@ -213,7 +213,7 @@ CogVideoX-5B-Converted
 │   │    └──model_optim_rng.pt
 │   └──mp_rank_01
 │      └──model_optim_rng.pt
-└──latest_ckeckpointed_iterations.txt
+└──latest_checkpointed_iterations.txt
 ```
 TP=1,PP=4, PP>1及TP>1的情况依此类推：
 ```
@@ -227,7 +227,7 @@ CogVideoX-5B-Converted
 │   │   └──model_optim_rng.pt
 │   └──mp_rank_00_003
 │       └──model_optim_rng.pt
-└──latest_ckeckpointed_iterations.txt
+└──latest_checkpointed_iterations.txt
 ```
 
 ---

@@ -55,7 +55,7 @@ MindSpeed-MM 暂时未发布wheel包，无正式对外公开接口，所有功�
 
 - [pretrain_sora](https://gitee.com/ascend/MindSpeed-MM/blob/master/pretrain_sora.py)
 - [pretrain_llava](https://gitee.com/ascend/MindSpeed-MM/blob/master/pretrain_llava.py)
-- [pretrain_intenvl](https://gitee.com/ascend/MindSpeed-MM/blob/master/pretrain_intenvl.py)
+- [pretrain_internvl](https://gitee.com/ascend/MindSpeed-MM/blob/master/pretrain_internvl.py)
 - [pretrain_whisper](https://gitee.com/ascend/MindSpeed-MM/blob/master/pretrain_whisper.py)
 - [inference_sora](https://gitee.com/ascend/MindSpeed-MM/blob/master/inference_sora.py)
 - [inference_vlm](https://gitee.com/ascend/MindSpeed-MM/blob/master/inference_vlm.py)

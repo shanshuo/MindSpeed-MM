@@ -50,7 +50,7 @@ Pipedream流水线并行切分粒度过大，运行过程中仍然有许多空�
 1.运行权重切分脚本时，vpp设置为True
 
 ```shell
-python internvl2_convert_to_mm_ckpt.py --model-size 8B --vpp True --load-dir load_path --save-dir save_path --trust-remote-code True
+python examples/internvl2/internvl2_convert_to_mm_ckpt.py --model-size 8B --vpp True --load-dir load_path --save-dir save_path --trust-remote-code True
 ```
 
 2.修改model.json中的pipeline_num_layers，需要和权重转换时的layers一致。可参考examples/internvl2/model_8B_vpp.json
@@ -63,7 +63,7 @@ python internvl2_convert_to_mm_ckpt.py --model-size 8B --vpp True --load-dir loa
 "pipeline_num_layers": [[6, 7, 7, 4],[0, 0, 0, 0],[0, 0, 0, 0]]
 ```
 
-3.shell添加vpp参数，可参考examples/internvl2/finetune_internvl2_8B_vpp.sh。因为megatron原生只支持vpp均匀切分，为了支持vpp分均匀切分，需要在shell中导入VP_SIZE变量，VP_SIZE等于pipeline_num_layers的长度；`--num-layers-per-virtual-pipeline-stage 2`该参数仅用于开启vpp功能，需设置成大于1的整数，在初始化通信组时不会用到
+3.shell添加vpp参数，可参考examples/internvl2/finetune_internvl2_8B_vpp.sh。因为megatron原生只支持vpp均匀切分，为了支持vpp非均匀切分，需要在shell中导入VP_SIZE变量，VP_SIZE等于pipeline_num_layers的长度；`--num-layers-per-virtual-pipeline-stage 2`该参数仅用于开启vpp功能，需设置成大于1的整数，在初始化通信组时不会用到
 
 ```shell
 export VP_SIZE=3

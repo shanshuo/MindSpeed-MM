@@ -241,7 +241,7 @@ Sana是由NVIDIA、麻省理工学院和清华大学共同推出的文生图模�
         vim examples/dreambooth/train_dreambooth_lora_sana.py #（1788行附近）
         ```
 
-        - 在文件上方的import栏增加`DistributedType`在`from accelerate import Acceleratore`后 （31行附近）
+        - 在文件上方的import栏增加`DistributedType`在`from accelerate import Accelerator`后 （31行附近）
         - 在`if accelerator.is_main_process`后增加 `or accelerator.distributed_type == DistributedType.DEEPSPEED` (1431行附近)，并在`if args.checkpoints_total_limit is not None`后增加`and accelerator.is_main_process`
 
         ```python
