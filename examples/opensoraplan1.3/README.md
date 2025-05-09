@@ -323,7 +323,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
   GPT_ARGS="
     --context-parallel-size ${CP} \
     --context-parallel-algo megatron_cp_algo \
-    --cp-attention-mask-type general \
+    --attention-mask-type general \
     --use-cp-send-recv-overlap \
     --cp-window-size 1
   ...
@@ -345,7 +345,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
   GPT_ARGS="
     --context-parallel-size ${CP} \
     --context-parallel-algo hybrid_cp_algo \
-    --cp-attention-mask-type general \
+    --attention-mask-type general \
     --use-cp-send-recv-overlap \
     --ulysses-degree-in-cp [int]
   ...

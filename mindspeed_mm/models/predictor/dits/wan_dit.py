@@ -471,7 +471,7 @@ class WanDiT(MultiModalModule):
             {'shape': (micro_batch_size, hidden_size), 'dtype': dtype},  # times
             {'shape': (micro_batch_size, 1, text_len), 'dtype': dtype},  # origin_prompt_mask
             {'shape': (micro_batch_size, channels, *latent_size), 'dtype': dtype},  # latents(x0)
-            {'shape': (micro_batch_size), 'dtype': torch.float32},  # timesteps
+            {'shape': (micro_batch_size,), 'dtype': torch.float32},  # timesteps
             {'shape': (micro_batch_size, channels, *latent_size), 'dtype': dtype},  # noise
         ]
         return pipeline_tensor_shapes
