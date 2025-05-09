@@ -492,8 +492,15 @@ class MOEModel(MMGPTModel):
         )
         
         if self.post_process and self.mtp_process:
-            mtp_block_spec = get_mtp_block_spec(config, use_transformer_engine=False)
-            self.mtp = MultiTokenPredictionBlock(config=self.config, spec=mtp_block_spec)
+            mtp_block_spec = get_mtp_block_spec(
+                config=self.config,
+                transformer_layer_spec=transformer_layer_spec,
+                use_transformer_engine=False,
+            )
+            self.mtp = MultiTokenPredictionBlock(
+                config=self.config,
+                spec=mtp_block_spec,
+            )
             # move block main model final norm here when mtp enable
             self.final_layernorm = build_module(
                     TENorm,

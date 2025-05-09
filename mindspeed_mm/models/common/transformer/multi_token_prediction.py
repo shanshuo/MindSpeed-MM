@@ -626,7 +626,9 @@ class MultiTokenPredictionBlock(MegatronModule):
     """
 
     def __init__(
-        self, config: TransformerConfig, spec: Union[TransformerBlockSubmodules, ModuleSpec]
+        self,
+        config: TransformerConfig,
+        spec: Union[TransformerBlockSubmodules, ModuleSpec],
     ):
         super().__init__(config=config)
         self.submodules = _get_mtp_block_submodules(config, spec)
@@ -781,26 +783,13 @@ class MultiTokenPredictionBlock(MegatronModule):
 
 def get_mtp_block_spec(
     config: TransformerConfig,
+    transformer_layer_spec: ModuleSpec,
     use_transformer_engine: bool,
 ) -> MultiTokenPredictionBlockSubmodules:
     """GPT Multi-Token Prediction (MTP) block spec."""
     num_layers_to_build = get_mtp_num_layers_to_build(config)
     if num_layers_to_build == 0:
         return None
-
-    args = get_args()
-    if use_transformer_engine:
-        transformer_layer_spec = get_gpt_layer_with_transformer_engine_spec(config.num_experts, args.moe_grouped_gemm)
-    else:
-        transformer_layer_spec = get_gpt_layer_local_spec(config.num_experts, args.moe_grouped_gemm)
-
-    if isinstance(transformer_layer_spec, TransformerBlockSubmodules):
-        # get the spec for the last layer of decoder block
-        transformer_layer_spec = transformer_layer_spec.layer_specs[-1]
-    elif isinstance(transformer_layer_spec, ModuleSpec) and transformer_layer_spec.module == TransformerLayer:
-        transformer_layer_spec = transformer_layer_spec
-    else:
-        raise ValueError(f"Invalid spec: {transformer_layer_spec}")
 
     mtp_layer_spec = get_mtp_layer_spec(
         transformer_layer_spec=transformer_layer_spec,
