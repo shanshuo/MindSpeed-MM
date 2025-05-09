@@ -264,7 +264,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 
 + PP：流水线并行
 
-  目前支持将predictor模型切分流水线。在data.json文件中新增字段"pipeline_num_layers", 类型为list。该list的长度即为 pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
+  目前支持将predictor模型切分流水线。在pretrain_xx_model.json文件修改字段"pipeline_num_layers", 类型为list。该list的长度即为 pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
 
   - 使用场景：模型参数较大时候，通过流线线方式切分并行，降低内存 
 
@@ -323,7 +323,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
   GPT_ARGS="
     --context-parallel-size ${CP} \
     --context-parallel-algo megatron_cp_algo \
-    --cp-attention-mask-type general \
+    --attention-mask-type general \
     --use-cp-send-recv-overlap \
     --cp-window-size 1
   ...
@@ -345,7 +345,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
   GPT_ARGS="
     --context-parallel-size ${CP} \
     --context-parallel-algo hybrid_cp_algo \
-    --cp-attention-mask-type general \
+    --attention-mask-type general \
     --use-cp-send-recv-overlap \
     --ulysses-degree-in-cp [int]
   ...
@@ -370,7 +370,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 
 ```shell
     GPUS_PER_NODE=8
-    MASTER_ADDR=locahost
+    MASTER_ADDR=localhost
     MASTER_PORT=29501
     NNODES=1  
     NODE_RANK=0  
