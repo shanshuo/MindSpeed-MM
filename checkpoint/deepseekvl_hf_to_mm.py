@@ -13,8 +13,8 @@ from typing import cast
 import torch
 from tqdm import tqdm
 
-from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_model_by_pipeline, split_by_tp
-from checkpoint.operator import deepseekvl_tp_patterns
+from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_by_tp
+from checkpoint.operator import deepseekvl_tp_patterns, STATE_DICT_T
 
 LATEST_TXT = "latest_checkpointed_iteration.txt"
 
@@ -182,6 +182,83 @@ def save_by_rank(state_dicts: list[dict[str, torch.Tensor]],
         save_path.mkdir(exist_ok=True, parents=True)
         torch.save({'model': state_dict}, save_path.joinpath('model_optim_rng.pt'))
     save_root_dir.joinpath(LATEST_TXT).write_text(str(iteration))
+
+
+def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, int]]) -> list[STATE_DICT_T]:
+    if len(pp_split) <= 1:
+        return [state_dict]
+
+    pp_size = len(pp_split)
+    vit_range = [0, 0]
+    llm_range = [pp_size - 1, pp_size - 1]
+    for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
+        if vit_num > 0 and pp_rank > vit_range[1]:
+            vit_range[1] = pp_rank
+        if llm_num > 0 and pp_rank < llm_range[0]:
+            llm_range[0] = pp_rank
+    vit_start_idx = 0
+    llm_start_idx = 0
+    return_dicts = []
+    copy_dict = deepcopy(state_dict)
+    for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
+        vit_end_idx = vit_start_idx + vit_num
+        llm_end_idx = llm_start_idx + llm_num
+        new_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith('image_encoder.encoder.patch_embed.'):
+                if pp_rank == vit_range[0]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('image_encoder.encoder.pos_embed'):
+                if pp_rank == vit_range[0]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('image_encoder.encoder.blocks.'):
+                layer_idx = int(key.split('.')[3])
+                if vit_start_idx <= layer_idx < vit_end_idx and vit_range[0] <= pp_rank <= vit_range[1]:
+                    new_idx = layer_idx - vit_start_idx
+                    new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
+                    new_dict[new_key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('image_encoder.encoder.norm'):
+                if pp_rank == vit_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('image_encoder.encoder.attn_pool'):
+                if pp_rank == vit_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('image_newline'):
+                new_dict[key] = value
+            elif key.startswith('view_seperator'):
+                new_dict[key] = value
+            elif key.startswith('image_encoder.projector.'):
+                if pp_rank == vit_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.embedding.'):
+                if pp_rank == llm_range[0]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.decoder.layers.'):
+                layer_idx = int(key.split('.')[3])
+                if llm_start_idx <= layer_idx < llm_end_idx and llm_range[0] <= pp_rank <= llm_range[1]:
+                    new_idx = layer_idx - llm_start_idx
+                    new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
+                    new_dict[new_key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.decoder.final_layernorm.'):
+                if pp_rank == llm_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('text_decoder.output_layer.'):
+                if pp_rank == llm_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+        vit_start_idx = vit_end_idx
+        llm_start_idx = llm_end_idx
+        return_dicts.append(new_dict)
+    return return_dicts
 
 
 def main(convert_config: ConvertMMConfig):
