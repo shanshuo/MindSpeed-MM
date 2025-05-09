@@ -50,6 +50,7 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
             new_key = new_key.replace('model.layers', 'decoder.layers')
 
             new_key = new_key.replace('self_attn.q_proj', 'self_attention.q_proj')
+            new_key = new_key.replace('self_attn.q_b_proj', 'self_attention.linear_qb')
             new_key = new_key.replace('self_attn.kv_a_proj_with_mqa', 'self_attention.kv_a_proj_with_mqa')
             new_key = new_key.replace('self_attn.kv_a_layernorm', 'self_attention.k_layernorm')
             new_key = new_key.replace('self_attn.kv_b_proj', 'self_attention.linear_kvb')
@@ -62,6 +63,8 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
 
             new_key = new_key.replace('mlp.experts', 'mlp.experts.local_experts')
             new_key = new_key.replace('mlp.gate', 'mlp.router')
+
+            new_key = new_key.replace('e_score_correction_bias', 'expert_bias')
 
             new_key = new_key.replace('model.norm', 'decoder.final_layernorm')
             new_key = new_key.replace('lm_head', 'output_layer')

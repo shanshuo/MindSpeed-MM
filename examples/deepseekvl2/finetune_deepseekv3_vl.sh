@@ -99,8 +99,6 @@ MOE_ARGS="
     --moe-permutation-async-comm \
     --moe-token-dispatcher-type alltoall \
     --use-fused-moe-token-permute-and-unpermute \
-    --n-shared-experts 1 \
-    --num-experts 256 \
 "
 
 ROPE_ARGS="
