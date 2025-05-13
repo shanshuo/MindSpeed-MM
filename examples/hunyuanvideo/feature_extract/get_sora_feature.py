@@ -144,7 +144,8 @@ def extract_feature():
         
         if extract_video_feature:
             latents, latents_dict = vae.encode(video, **kwargs)
-            kwargs.update(latents_dict)
+            if latents_dict is not None:
+                kwargs.update(latents_dict)
         else:
             latents = video
         
