@@ -46,8 +46,8 @@ def _add_lora_args(parser):
 
     group.add_argument('--lora-target-modules', nargs='+', type=str, default=[],
                        help='Use lora in target modules.')
-    group.add_argument('--lora-load', type=str, default=None,
-                       help='Directory containing a lora model checkpoint.')
+    group.add_argument('--load-base-model', type=str, default=None,
+                       help='Directory containing a base model checkpoint for lora.')
     group.add_argument('--lora-dropout', type=float, default=0.0, help="lora dropout rate")
     group.add_argument('--lora-r', type=int, default=8,
                        help='Lora rank.')

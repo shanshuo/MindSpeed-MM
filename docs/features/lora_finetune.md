@@ -36,8 +36,8 @@ LoRA权重和原始权重合并方法：
 - **`--load`**
   若不指定该参数加载权重，模型会随机初始化权重。
 
-- **`--lora-load`**
-  加载 LoRA 权重断点继续训练或用于推理。在推理时需与 `--load` 参数配合使用，加载 `CKPT_SAVE_DIR` 路径下的 LoRA 权重。
+- **`--load-base-model`**
+  续训时与 `--load` 参数配合使用。`--load` 加载`CKPT_SAVE_DIR` 路径下的 LoRA 权重，`--load-base-model` 加载`CKPT_LOAD_DIR` 路径下的原始基础模型权重。
 
 - **`--lora-r`**
   LoRA rank，表示低秩矩阵的维度。较低的 rank 值模型在训练时会使用更少的参数更新，从而减少计算量和内存消耗。然而，过低的 rank 可能限制模型的表达能力。

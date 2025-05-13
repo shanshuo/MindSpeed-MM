@@ -123,8 +123,10 @@ def _load_base_checkpoint_wrapper(fn):
             exclude_words = ['base_layer', 'lora_', 'norm']
             state_dict['model'] = modify_keys_with_dict(state_dict['model'], exclude_words)
 
-            if args.lora_load is not None:
-                state_dict_lora, checkpoint_name_lora, release_lora = fn(args.lora_load, **kwargs)
+            if args.load_base_model is not None:
+                state_dict_lora, checkpoint_name_lora, release_lora = fn(args.load_base_model, **kwargs)
+                exclude_words = ['base_layer', 'lora_', 'norm']
+                state_dict_lora['model'] = modify_keys_with_dict(state_dict_lora['model'], exclude_words)
                 merge_dicts(state_dict, state_dict_lora)
         return state_dict, checkpoint_name, release
 
@@ -135,7 +137,7 @@ def load_checkpoint_wrapper(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
         args_ = get_args()
-        if is_enable_lora():
+        if is_enable_lora() and args_.load_base_model is None:
             strict = False
             kwargs['strict'] = strict
 
