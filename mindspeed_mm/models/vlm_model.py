@@ -1,4 +1,5 @@
 # Copyright (c) 2023; NVIDIA CORPORATION. All rights reserved.
+from copy import deepcopy
 from typing import Optional, Dict, Tuple, Union
 import torch
 from torch.nn import CrossEntropyLoss
@@ -7,7 +8,7 @@ from megatron.core import InferenceParams, mpu
 from megatron.core import tensor_parallel
 from megatron.core.tensor_parallel import scatter_to_sequence_parallel_region
 from megatron.core.packed_seq_params import PackedSeqParams
-from megatron.training import get_args
+from megatron.training import get_args, print_rank_0
 from megatron.training.arguments import core_transformer_config_from_args
 
 from mindspeed_mm.models.common.module_spec.get_layer_spec import get_vit_layer_spec, get_llm_layer_spec, \
@@ -17,6 +18,7 @@ from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.text_encoder.text_encoder import TextEncoder
 from mindspeed_mm.models.common.mm_gpt_model import MMGPTModel
 from mindspeed_mm.models.vision.vlm_attentionmask_for_llm import prepare_positionsids_mask_for_llm
+from mindspeed_mm.utils.transformer_model_config import get_model_config
 
 
 class VLMModel(MultiModalModule):
@@ -402,3 +404,28 @@ class VLMModel(MultiModalModule):
                     "logits": output
                 }
         return output
+
+
+def model_provider(pre_process=True, post_process=True):
+    """Builds the model."""
+    args = get_args()
+    print_rank_0("building VLMModel ...")
+    vlm_config = deepcopy(args.mm.model)
+
+    # distinguish model construct stage when pipeline parallel
+    vlm_config.pre_process = pre_process
+    vlm_config.post_process = post_process
+
+    if vlm_config.image_encoder:
+        vlm_config.image_encoder.vision_encoder = get_model_config(vlm_config.image_encoder.vision_encoder)
+        vlm_config.image_encoder.vision_projector = get_model_config(vlm_config.image_encoder.vision_projector)
+        vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
+
+        model = VLMModel(vlm_config)
+        model.freeze(freeze_image_encoder=getattr(vlm_config.image_encoder.vision_encoder, 'freeze', True), \
+            freeze_image_projection=getattr(vlm_config.image_encoder.vision_projector, 'freeze', False))
+    else:
+        vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
+        model = VLMModel(vlm_config)
+
+    return model
