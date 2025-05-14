@@ -370,9 +370,10 @@ class WanDiT(MultiModalModule):
 
         # cp split
         if self.context_parallel_algo is not None:
-            embs = split_forward_gather_backward(
-                embs, mpu.get_context_parallel_group(), dim=1, grad_scale="down"
-            )  # b s h
+            if self.pre_process:
+                embs = split_forward_gather_backward(
+                    embs, mpu.get_context_parallel_group(), dim=1, grad_scale="down"
+                )  # b s h
             rotary_pos_emb = split_forward_gather_backward(
                 rotary_pos_emb,
                 mpu.get_context_parallel_group(),
@@ -453,20 +454,21 @@ class WanDiT(MultiModalModule):
         model_cfg = args.mm.model
         data_cfg = args.mm.data.dataset_param.preprocess_parameters
         hidden_size = model_cfg.predictor.hidden_size
-        height = data_cfg.max_height if hasattr(data_cfg, "max_height") else 480
-        width = data_cfg.max_width if hasattr(data_cfg, "max_width") else 832
-        latent_size = ((data_cfg.num_frames + 3) // 4, height // 8, width // 8)
+        height = getattr(data_cfg, "max_height", 480)
+        width = getattr(data_cfg, "max_width", 832)
+        vae_scale_factor = getattr(model_cfg.predictor, "vae_scale_factor", [4, 8, 8])
+        latent_size = ((data_cfg.num_frames + 3) // vae_scale_factor[0], height // vae_scale_factor[1], width // vae_scale_factor[2])
         divisor = model_cfg.predictor.patch_size[0] * model_cfg.predictor.patch_size[1] * \
                   model_cfg.predictor.patch_size[2]
         seq_len = latent_size[0] * latent_size[1] * latent_size[2] // divisor // mpu.get_context_parallel_world_size()
-        channels = model_cfg.predictor.in_dim
+        channels = model_cfg.predictor.out_dim
         text_dim = model_cfg.predictor.text_dim
         text_len = model_cfg.predictor.text_len
-
+        img_token_len = model_cfg.predictor.clip_token_len if model_cfg.predictor.model_type == 'i2v' else 0
         pipeline_tensor_shapes = [
             {'shape': (micro_batch_size, seq_len, hidden_size), 'dtype': dtype},  # prev_output
             {'shape': (micro_batch_size, text_len, text_dim), 'dtype': dtype},  # prompt
-            {'shape': (micro_batch_size, text_len, hidden_size), 'dtype': dtype},  # prompt_emb
+            {'shape': (micro_batch_size, text_len + img_token_len, hidden_size), 'dtype': dtype},  # prompt_emb
             {'shape': (micro_batch_size, 6, hidden_size), 'dtype': dtype},  # time_emb
             {'shape': (micro_batch_size, hidden_size), 'dtype': dtype},  # times
             {'shape': (micro_batch_size, 1, text_len), 'dtype': dtype},  # origin_prompt_mask

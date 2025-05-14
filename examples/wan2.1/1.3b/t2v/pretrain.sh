@@ -18,9 +18,12 @@ WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 TP=1
 PP=1
+VP=1
 CP=1
 MBS=1
-GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
+GRAD_ACC_STEP=1
+DP=$(($WORLD_SIZE/$TP/$PP/$CP))
+GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
 MM_DATA="./examples/wan2.1/1.3b/t2v/feature_data.json"
 MM_MODEL="./examples/wan2.1/1.3b/t2v/pretrain_model.json"
@@ -40,6 +43,7 @@ DISTRIBUTED_ARGS="
 GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
+    --virtual-pipeline-model-parallel-size ${VP} \
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \

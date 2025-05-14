@@ -24,11 +24,13 @@
         "out_dim": 16,
         "num_heads": 40,
         "num_layers": 40,
+        "pipeline_num_layers": [10,10,10,10],
         "qk_norm": true,
         "qk_norm_type": "rmsnorm",
         "cross_attn_norm": true,
         "eps": 1e-6,
         "max_seq_len": 1024,
-        "attention_async_offload": false
+        "attention_async_offload": false,
+        "clip_token_len": 257
     }
 }
