@@ -81,8 +81,5 @@
         }
     },
     "text_encoder": null,
-    "video_encoder": null,
-    "patch": {
-        "moe_mlp": true
-    }
+    "video_encoder": null
 }
