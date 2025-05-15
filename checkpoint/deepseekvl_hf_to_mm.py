@@ -31,6 +31,19 @@ def load_from_hf(load_dir, trust_remote_code):
     return hf_model.state_dict()
 
 
+def merge_llm_state_dict(vl_state_dict, llm_state_dict):
+    for key in list(vl_state_dict.keys()):
+        if key.startswith("vision"):
+            continue
+        vl_state_dict.pop(key)
+
+    for key in list(llm_state_dict.keys()):
+        llm_state_dict[f"language.{key}"] = llm_state_dict.pop(key)
+
+    merged_state_dict = {**vl_state_dict, **llm_state_dict}
+    return merged_state_dict
+
+
 def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
                      _num_layers: int,
                      _num_experts: int) -> dict[str, torch.Tensor]:
@@ -50,8 +63,10 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
             new_key = new_key.replace('model.layers', 'decoder.layers')
 
             new_key = new_key.replace('self_attn.q_proj', 'self_attention.q_proj')
+            new_key = new_key.replace('self_attn.q_a_proj', 'self_attention.q_proj')
             new_key = new_key.replace('self_attn.q_b_proj', 'self_attention.linear_qb')
             new_key = new_key.replace('self_attn.kv_a_proj_with_mqa', 'self_attention.kv_a_proj_with_mqa')
+            new_key = new_key.replace('self_attn.q_a_layernorm', 'self_attention.q_layernorm')
             new_key = new_key.replace('self_attn.kv_a_layernorm', 'self_attention.k_layernorm')
             new_key = new_key.replace('self_attn.kv_b_proj', 'self_attention.linear_kvb')
             new_key = new_key.replace('self_attn.o_proj', 'self_attention.linear_proj')
@@ -267,17 +282,28 @@ def main(convert_config: ConvertMMConfig):
     load_dir = convert_config.hf_config.hf_dir
     parallel_config = convert_config.parallel_config
     trust_remote_code = convert_config.trust_remote_code
+    llm_hf_config = convert_config.llm_hf_config
+
+    llm_num_layers = config.language_config.num_hidden_layers
+    num_experts = config.language_config.n_routed_experts
 
     # 加载原始权重字典
     state_dict = load_from_hf(load_dir, trust_remote_code=trust_remote_code)
 
+    # 如果有llm权重，则合并llm权重
+    if llm_hf_config is not None:
+        llm_state_dict = load_from_hf(llm_hf_config.hf_dir, trust_remote_code=trust_remote_code)
+        state_dict = merge_llm_state_dict(state_dict, llm_state_dict)
+
+        llm_num_layers = llm_hf_config.config.num_hidden_layers
+        num_experts = llm_hf_config.config.n_routed_experts
+
     # hf权重映射到mm
-    state_dict = convert_hf_to_mm(state_dict, config.language_config.num_hidden_layers, config.language_config.n_routed_experts)
+    state_dict = convert_hf_to_mm(state_dict, llm_num_layers, num_experts)
 
     # 权重字典按ep域切分
-    num_expert = config.language_config.n_routed_experts
-    ep_state_dicts = split_by_ep(state_dict, parallel_config.ep_size, _num_experts=num_expert)
-    
+    ep_state_dicts = split_by_ep(state_dict, parallel_config.ep_size, _num_experts=num_experts)
+
     # 权重字典按tp域切分
     ep_tp_state_dicts = []
     for ep_state_dict in ep_state_dicts:

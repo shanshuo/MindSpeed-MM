@@ -12,6 +12,7 @@ import shutil
 from copy import deepcopy
 from functools import cached_property
 from pathlib import Path
+from typing import Optional
 
 import torch
 from safetensors.torch import save_file, load_file
@@ -126,6 +127,9 @@ class ConvertMMConfig(BaseModel):
 
     mm_dir: Path
     """mm保存的路径"""
+
+    llm_hf_config: Optional[HfConfig] = None
+    """hf下载的llm权重路径配置"""
 
     parallel_config: ParallelConfig
     """并行配置"""

@@ -128,7 +128,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，使用`mm-convert`工�
 
 `mm-convert`工具详细用法参考[权重转换工具](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/权重转换工具.md)
 
-*注意：DeepSeekVL权重转换依赖deepseekvl包，安装过程参考[链接](https://github.com/deepseek-ai/DeepSeek-VL)。*
+*注意：DeepSeekVL权重转换依赖deepseekvl2包，安装过程参考[链接](https://github.com/deepseek-ai/DeepSeek-VL2)。*
 
 使用命令如下
 
