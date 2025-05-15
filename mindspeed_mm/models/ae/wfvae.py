@@ -8,7 +8,7 @@ from megatron.core import mpu
 from mindspeed_mm.models.common.checkpoint import load_checkpoint
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.common.normalize import normalize
-from mindspeed_mm.models.common.attention import WfCausalConv3dAttnBlock, WfCausalConv3dAttnBlockForOpenSoraPlan
+from mindspeed_mm.models.common.attention import WfCausalConv3dAttnBlock
 from mindspeed_mm.models.common.distrib import DiagonalGaussianDistribution
 from mindspeed_mm.models.common.wavelet import (
     HaarWaveletTransform2D,
@@ -43,7 +43,6 @@ WFVAE_MODULE_MAPS = {
     "Upsample": Upsample,
     "Spatial2xTime2x3DUpsample": CachedCausal3DUpsample,
     "WfCausalConv3dAttnBlock": WfCausalConv3dAttnBlock,
-    "WfCausalConv3dAttnBlockForOpenSoraPlan": WfCausalConv3dAttnBlockForOpenSoraPlan
 }
 
 

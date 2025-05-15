@@ -1,7 +1,7 @@
 __all__ = [
     "ParallelAttention", "ParallelMultiHeadAttentionSBH", "Attention", "SeqParallelAttention",
     "MultiHeadCrossAttention", "SeqParallelMultiHeadCrossAttention", "Conv2dAttnBlock", "CausalConv3dAttnBlock",
-    "WfCausalConv3dAttnBlock", "WfCausalConv3dAttnBlockForOpenSoraPlan", "FinalLayer", "T2IFinalLayer", "set_grad_checkpoint", "auto_grad_checkpoint",
+    "WfCausalConv3dAttnBlock", "FinalLayer", "T2IFinalLayer", "set_grad_checkpoint", "auto_grad_checkpoint",
     "load_checkpoint", "all_to_all", "all_to_all_SBH", "split_forward_gather_backward", "gather_forward_split_backward",
     "Conv2d", "CausalConv3d", "WfCausalConv3d", "MultiModalModule", "ResnetBlock2D", "ResnetBlock3D", "Upsample",
     "Downsample", "SpatialDownsample2x", "SpatialUpsample2x", "TimeDownsample2x", "TimeUpsample2x",
@@ -18,8 +18,7 @@ from mindspeed_mm.models.common.attention import (
     SeqParallelMultiHeadCrossAttention,
     Conv2dAttnBlock,
     CausalConv3dAttnBlock,
-    WfCausalConv3dAttnBlock,
-    WfCausalConv3dAttnBlockForOpenSoraPlan
+    WfCausalConv3dAttnBlock
 )
 from mindspeed_mm.models.common.blocks import FinalLayer, T2IFinalLayer
 from mindspeed_mm.models.common.checkpoint import set_grad_checkpoint, auto_grad_checkpoint, load_checkpoint

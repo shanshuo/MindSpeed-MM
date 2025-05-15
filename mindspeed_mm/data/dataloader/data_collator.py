@@ -271,10 +271,10 @@ class DataCollatorForOpenSoraPlan:
     @staticmethod
     def package(batch):
         batch_tubes = [i.get(VIDEO, None) for i in batch]  # b [c t h w]
+        file = [i.get(FILE_INFO, None) for i in batch]
         if not isinstance(batch[0].get(PROMPT_IDS, None), list):
             input_ids = [i.get(PROMPT_IDS, None) for i in batch]  # b [1 l]
             cond_mask = [i.get(PROMPT_MASK, None) for i in batch]  # b [1 l]
-            file = [i.get(FILE_INFO, None) for i in batch]
         else:
             input_ids = list(map(list, zip(*[i[PROMPT_IDS] for i in batch])))
             cond_mask = list(map(list, zip(*[i[PROMPT_MASK] for i in batch])))

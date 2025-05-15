@@ -1760,15 +1760,6 @@ class WfCausalConv3dAttnBlock(nn.Module):
         return x + h_
 
     def run_attention(self, params: AttentionParams, head_dim, enable_FA=True):
-        return torch_npu.npu_fusion_attention(params.query, params.key, params.value,
-                                                           head_num=params.head_num,
-                                                           atten_mask=None,
-                                                           input_layout=params.input_layout,
-                                                           scale=1 / math.sqrt(head_dim))[0]
-
-
-class WfCausalConv3dAttnBlockForOpenSoraPlan(WfCausalConv3dAttnBlock):
-    def run_attention(self, params: AttentionParams, head_dim, enable_FA=True):
         if enable_FA:
             hidden_states = torch_npu.npu_fusion_attention(params.query, params.key, params.value,
                                                            head_num=params.head_num,
