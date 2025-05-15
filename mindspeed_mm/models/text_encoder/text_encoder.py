@@ -13,7 +13,8 @@ TRANSFORMERS_TEXT_ENCODER_MAPPING = {
     "UMT5": "UMT5EncoderModel",
     "CLIP": "CLIPTextModel",
     "Auto": "AutoModel",
-    "BertModel": "BertModel"
+    "BertModel": "BertModel",
+    "CLIPWithProjection": "CLIPTextModelWithProjection",
 }
 
 CUSTOM_TEXT_ENCODER_MAPPING = {
@@ -112,7 +113,7 @@ class TextEncoder(nn.Module):
 
         if text_encoder.output_key in ["last_hidden_state", "hidden_states"]:
             emb = emb.view(*BN, emb.shape[-2], -1)
-        elif text_encoder.output_key in ["pooler_output"]:
+        elif text_encoder.output_key in ["pooler_output", "text_embeds"]:
             emb = emb.view(*BN, -1)
         else:
             raise NotImplementedError(f"Text encoder output_key: {text_encoder.output_key} is not implenmented! ")
