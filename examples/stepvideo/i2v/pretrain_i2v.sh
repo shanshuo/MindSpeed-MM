@@ -11,12 +11,12 @@ export HCCL_CONNECT_TIMEOUT=1200
 export MULTI_STREAM_MEMORY_REUSE=1
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
-GPUS_PER_NODE=8
+NPUS_PER_NODE=8
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
 NODE_RANK=0
-WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
+WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 TP=8
 PP=1
@@ -33,7 +33,7 @@ LOAD_PATH="your_converted_dit_ckpt_dir"
 SAVE_PATH="your_ckpt_path_to_save"
 
 DISTRIBUTED_ARGS="
-    --nproc_per_node $GPUS_PER_NODE \
+    --nproc_per_node $NPUS_PER_NODE \
     --nnodes $NNODES \
     --node_rank $NODE_RANK \
     --master_addr $MASTER_ADDR \

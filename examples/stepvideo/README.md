@@ -193,9 +193,9 @@ StepVideo i2v权重下载(需要下载 VAE、transformer、text_encoder、tokeni
 #### 权重转换
 权重转换source_path参数请配置transformer权重文件的路径：
 ```bash
-python examples/stepvideo/convert_ckpt_to_mm.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 2 --pp_size 48 --num_layers 48 --mode split
+python examples/stepvideo/convert_ckpt_to_mm.py --source_path <your source path> --target_path <target path> --tp_size 2 --pp_size 48 --num_layers 48 --mode split
 ```
-其中--tp_size 后为实际的tp切分策略， --task 的值为t2v或i2v，当前还不支持PP切分。
+其中--tp_size 后为实际的tp切分策略，当前还不支持PP切分。
 
 转换后的权重结构如下：
 
@@ -259,7 +259,7 @@ data.jsonl文件内容如下示例：
 
 检查模型权重路径、数据集路径、提取后的特征保存路径等配置是否完成
 
-| 配置文件                                                     |       修改字段        | 修改说明                                            |
+| t2v配置文件                                                     |       修改字段        | 修改说明                                            |
 | ------------------------------------------------------------ | :-------------------: | :-------------------------------------------------- |
 | examples/stepvideo/feature_extract/data.json              |      basic_parameters   | 数据集路径，`data_path`和`data_folder`分别配置data.jsonl的文件路径和目录 |
 | examples/stepvideo/feature_extract/data.json              |      num_frames        | 最大的帧数，超过则随机选取其中的num_frames帧, 其中i2v配置102,t2v配置136 |
@@ -268,10 +268,25 @@ data.jsonl文件内容如下示例：
 | examples/stepvideo/feature_extract/model_stepvideo.json   |      ae              | 配置VAE模型路径`"from_pretrained": "./weights/vae/vae_v2.safetensors"` |
 | examples/stepvideo/feature_extract/tools.json             |      save_path       | 提取后的特征保存路径                                |
 
+| i2v配置文件                                                     |       修改字段        | 修改说明                                            |
+| ------------------------------------------------------------ | :-------------------: | :-------------------------------------------------- |
+| examples/stepvideo/feature_extract/data_i2v.json              |      basic_parameters   | 数据集路径，`data_path`和`data_folder`分别配置data.jsonl的文件路径和目录 |
+| examples/stepvideo/feature_extract/data_i2v.json              |      num_frames        | 最大的帧数，超过则随机选取其中的num_frames帧, 其中i2v配置102,t2v配置136 |
+| examples/stepvideo/feature_extract/data_i2v.json              |      tokenizer_config  | tokenizer分词器选择，配置两种分词器的路径`"from_pretrained": "/model_path/step_llm/step1_chat_tokenizer.model"` 及`"from_pretrained": "/model_path/hunyuan_clip/tokenizer"` |
+| examples/stepvideo/feature_extract/model_stepvideo_i2v.json   |      text_encoder    | 配置两种文本编译器路径`"from_pretrained": "./weights/step_llm/"`及`"from_pretrained": "./weights/hunyuan_clip/clip_text_encoder"` |
+| examples/stepvideo/feature_extract/model_stepvideo_i2v.json   |      ae              | 配置VAE模型路径`"from_pretrained": "./weights/vae/vae_v2.safetensors"` |
+| examples/stepvideo/feature_extract/tools.json                 |      save_path       | 提取后的特征保存路径                                |
+
 2.启动特征提取
 
+t2v执行命令
 ```bash
 bash examples/stepvideo/feature_extract/feature_extraction.sh
+```
+
+i2v执行命令
+```bash
+bash examples/stepvideo/feature_extract/feature_extraction_i2v.sh
 ```
 
 <a id="jump5.3"></a>
@@ -390,7 +405,7 @@ StepVideo推理启动文件为shell脚本，主要分为如下2个：
 如果使用训练后保存的权重进行推理，需要使用脚本进行转换，权重转换source_path参数请配置训练时的保存路径
 
 ```bash
-python examples/stepvideo/convert_ckpt_to_mm.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 2 --pp_size 48 --num_layers 48 --mode merge
+python examples/stepvideo/convert_ckpt_to_mm.py --source_path <your source path> --target_path <target path> --tp_size 2 --pp_size 48 --num_layers 48 --mode merge
 ```
 
 <a id="jump6.3"></a>
@@ -489,21 +504,21 @@ data.jsonl中包含成对的视频偏好数据和文本信息，具体示例如�
 
 1. 权重配置
 
-  需根据实际任务情况在启动脚本文件（如`posttrain_t2v.sh`）中的`LOAD_PATH="your_converted_dit_ckpt_dir"`变量中添加转换后的权重的实际路径，如`LOAD_PATH="./StepVideo-Converted"`,其中`./StepVideo-Converted`为转换后的权重的实际路径，其文件夹内容结构如权重转换一节所示。`LOAD_PATH`变量中填写的完整路径一定要正确，填写错误的话会导致权重无法加载但运行并不会提示报错。
+  需根据实际任务情况在启动脚本文件（如`posttrain_t2v_dpo.sh`）中的`LOAD_PATH="your_converted_dit_ckpt_dir"`变量中添加转换后的权重的实际路径，如`LOAD_PATH="./StepVideo-Converted"`,其中`./StepVideo-Converted`为转换后的权重的实际路径，其文件夹内容结构如权重转换一节所示。`LOAD_PATH`变量中填写的完整路径一定要正确，填写错误的话会导致权重无法加载但运行并不会提示报错。
 根据需要填写`SAVE_PATH`变量中的路径，用以保存训练后的权重。
 
 2. 偏好数据集路径配置
 
-  根据实际情况修改`data_static_resolution.json`中的偏好数据集路径，分别为`"data_path":"/data_path/data.jsonl"`替换为实际的data.jsonl所在路径,`"data_folder":"/data_path/"`替换`"/data_path/"`为实际的视频样本所在路径。
+  根据实际情况修改`data_dpo.json`中的偏好数据集路径，分别为`"data_path":"/data_path/data.jsonl"`替换为实际的data.jsonl所在路径,`"data_folder":"/data_path/"`替换`"/data_path/"`为实际的视频样本所在路径。
 
 3. VAE及text_encoder、tokenizer路径配置
 
   根据实际情况修改模型参数配置文件，如`posttrain_*_model.json`文件中`text_encoder`字段配置两种文本编译器路径`"from_pretrained": "./weights/step_llm/"`及`"from_pretrained": "./weights/hunyuan_clip/clip_text_encoder"`，`ae`字段配置VAE模型路径`"from_pretrained": "./weights/vae/vae_v2.safetensors"`
-  `data_static_resolution.json`文件中`tokenizer_config`字段配置两种分词器路径`"from_pretrained": "/model_path/step_llm/step1_chat_tokenizer.model"` 及`"from_pretrained": "/model_path/hunyuan_clip/tokenizer"`
+  `data_dpo.json`文件中`tokenizer_config`字段配置两种分词器路径`"from_pretrained": "/model_path/step_llm/step1_chat_tokenizer.model"` 及`"from_pretrained": "/model_path/hunyuan_clip/tokenizer"`
 
 4. dpo参数配置
 
-  根据实际情况修改`data_static_resolution.json`中的直方图文件路径，即将`histgram_path`的值配置为执行生成偏好数据集脚本后，生成的"video_score_histogram.json"文件路径
+  根据实际情况修改`data_dpo.json`中的直方图文件路径，即将`histgram_path`的值配置为执行生成偏好数据集脚本后，生成的"video_score_histogram.json"文件路径
 
 <a id="jump7.5"></a>
 #### 启动dpo训练
