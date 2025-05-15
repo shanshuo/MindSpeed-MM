@@ -11,6 +11,8 @@ from megatron import core
 from megatron.core import mpu, tensor_parallel
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
+
+from megatron.legacy.model.rms_norm import RMSNorm
 from megatron.legacy.model.enums import AttnType
 from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesContextAttention
 from mindspeed.core.parallel_state import get_context_parallel_group_for_hybrid_ulysses
@@ -776,6 +778,255 @@ class MultiHeadSparseAttentionSBH(ParallelAttention):
         out = self.function_after_core_attention(out, frames=frames, height=height, width=width, dtype=query.dtype)
 
         return out
+
+
+class MultiHeadSparseMMAttentionSBH(MultiHeadSparseAttentionSBH):
+    """
+    A multi-head attention layer for both self-atten and cross-atten, layout "SBH", MMdit.
+    """
+
+    def __init__(
+        self,
+        query_dim: int,
+        key_dim: int,
+        num_heads: int,
+        head_dim: int,
+        added_kv_proj_dim: int = None,
+        dropout: float = 0.0,
+        proj_qkv_bias: bool = False,
+        proj_out_bias: bool = True,
+        sparse1d: bool = False,
+        sparse_n: int = None,
+        sparse_group: bool = None,
+        is_cross_attn: bool = False,
+        context_pre_only: bool = False,
+        qk_norm: Optional[str] = None,
+        eps: float = 1e-5,
+        elementwise_affine: bool = True,
+    ):
+        proj_q_bias = proj_k_bias = proj_v_bias = proj_qkv_bias
+        super().__init__(
+            query_dim=query_dim,
+            key_dim=key_dim,
+            num_attention_heads=num_heads,
+            hidden_size=num_heads * head_dim,
+            proj_q_bias=proj_q_bias,
+            proj_k_bias=proj_k_bias,
+            proj_v_bias=proj_v_bias,
+            proj_out_bias=proj_out_bias,
+            dropout=dropout,
+            sparse1d=sparse1d,
+            sparse_n=sparse_n,
+            sparse_group=sparse_group,
+            elementwise_affine=elementwise_affine,
+        )
+        
+        self.head_dim = head_dim
+        self.inner_dim = num_heads * self.head_dim
+        
+        if qk_norm is None:
+            self.norm_proj_q = None
+            self.norm_proj_k = None
+        elif qk_norm == "layer_norm":
+            self.norm_proj_q = nn.LayerNorm(head_dim, eps=eps, elementwise_affine=elementwise_affine)
+            self.norm_proj_k = nn.LayerNorm(head_dim, eps=eps, elementwise_affine=elementwise_affine)
+        elif qk_norm == "rms_norm":
+            self.norm_proj_q = RMSNorm(head_dim, eps=eps, sequence_parallel=True)
+            self.norm_proj_k = RMSNorm(head_dim, eps=eps, sequence_parallel=True)
+        else:
+            raise ValueError(f"Unsupported qk_norm: {qk_norm}")
+
+        if qk_norm is not None and added_kv_proj_dim is not None:
+            if qk_norm == "layer_norm":
+                self.norm_added_proj_q = nn.LayerNorm(head_dim, eps=eps, elementwise_affine=elementwise_affine)
+                self.norm_added_proj_k = nn.LayerNorm(head_dim, eps=eps, elementwise_affine=elementwise_affine)
+            elif qk_norm == "rms_norm":
+                self.norm_added_proj_q = RMSNorm(head_dim, eps=eps, sequence_parallel=True)
+                self.norm_added_proj_k = RMSNorm(head_dim, eps=eps, sequence_parallel=True)
+            else:
+                raise ValueError(f"Unsupported qk_norm: {qk_norm}")
+
+        args = get_args()
+        config = core_transformer_config_from_args(args)
+
+        self.context_pre_only = context_pre_only
+        self.added_kv_proj_dim = added_kv_proj_dim
+
+        if self.added_kv_proj_dim is not None:
+            self.added_proj_k = tensor_parallel.ColumnParallelLinear(
+                self.inner_dim,
+                self.added_kv_proj_dim,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_k_bias,
+                gather_output=False
+            )
+            self.added_proj_v = tensor_parallel.ColumnParallelLinear(
+                self.inner_dim,
+                self.added_kv_proj_dim,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_v_bias,
+                gather_output=False
+            )
+            if self.context_pre_only is not None:
+                self.added_proj_q = tensor_parallel.ColumnParallelLinear(
+                    self.inner_dim,
+                    self.added_kv_proj_dim,
+                    config=config,
+                    init_method=config.init_method,
+                    bias=proj_q_bias,
+                    gather_output=False
+                )
+
+        if self.context_pre_only is not None:
+            self.added_proj_out = tensor_parallel.RowParallelLinear(
+                added_kv_proj_dim,
+                self.inner_dim,
+                config=config,
+                init_method=config.init_method,
+                bias=proj_out_bias,
+                input_is_parallel=True,
+                skip_bias_add=False
+            )
+    
+    def rotate_half(self, x):
+        x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+        return torch.cat((-x2, x1), dim=-1)
+
+    def apply_rope1d(self, tokens, cos, sin):
+        """
+            * tokens: ntokens x batch_size x nheads x dim
+        """
+        return (tokens * cos) + (self.rotate_half(tokens) * sin)
+
+    def apply_rotary_emb(self, tokens, video_rotary_emb):
+        cos_t, sin_t, cos_y, sin_y, cos_x, sin_x = video_rotary_emb
+        # split features into three along the feature dimension, and apply rope1d on each half
+        dim = tokens.shape[-1]
+        D_t = dim // 16 * 4
+        D = dim // 16 * 6
+        t, y, x = torch.split(tokens, [D_t, D, D], dim=-1)
+        t = self.apply_rope1d(t, cos_t, sin_t)
+        y = self.apply_rope1d(y, cos_y, sin_y)
+        x = self.apply_rope1d(x, cos_x, sin_x)
+        tokens = torch.cat((t, y, x), dim=-1)
+        return tokens
+
+    def _reverse_sparse_1d_enc(self, x):
+        """
+        require the shape of (ntokens x batch_size x dim)
+        """
+        x = rearrange(x, 's (k b) d -> s k b d', k=self.sparse_n).mean(1)
+        return x
+    
+    def _sparse_1d_enc(self, x):
+        """
+        require the shape of (ntokens x batch_size x dim)
+        """
+        x = repeat(x, 's b d -> s (k b) d', k=self.sparse_n)
+        return x
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        frames: int,
+        height: int,
+        width: int,
+        attention_mask: Optional[torch.Tensor] = None,
+        video_rotary_emb: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        """
+        Args:
+            hidden_states: The hidden states of the visual stream.
+            encoder_hidden_states: The hidden states of the textual stream.
+            frames: The frame number of video
+            height: The height of the video
+            width: The width of the video
+            attention_mask: The attention mask to use.
+            video_rotary_emb: The rotary embeddings for the video
+        """
+        
+        # Step 1: Project the hidden states and encoder hidden states
+        q, _ = self.proj_q(hidden_states)
+        k, _ = self.proj_k(hidden_states)
+        v, _ = self.proj_v(hidden_states)
+        added_q, _ = self.added_proj_q(encoder_hidden_states)
+        added_k, _ = self.added_proj_k(encoder_hidden_states)
+        added_v, _ = self.added_proj_v(encoder_hidden_states)
+
+        batch_size = q.shape[1]
+        batch_size = added_q.shape[1]
+
+        total_frames = frames
+
+
+        # Step 2: QK Norm
+        q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        q = self.norm_proj_q(q)
+        k = self.norm_proj_k(k)
+
+        added_q = added_q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        added_k = added_k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp, self.head_dim)
+        added_q = self.norm_added_proj_q(added_q)
+        added_k = self.norm_added_proj_k(added_k)
+
+        # Step 3: Apply rope
+        q = self.apply_rotary_emb(q, video_rotary_emb)
+        k = self.apply_rotary_emb(k, video_rotary_emb)
+
+        q = q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        k = k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        v = v.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+
+        added_q = added_q.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        added_k = added_k.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+        added_v = added_v.view(-1, batch_size, self.num_attention_heads_per_partition_per_cp * self.head_dim)
+
+        # Step 4: Sparse 1D
+        if self.sparse1d:
+            q, _ = self._sparse_1d(q, total_frames, height, width)
+            k, _ = self._sparse_1d(k, total_frames, height, width)
+            v, _ = self._sparse_1d(v, total_frames, height, width)
+            added_q = self._sparse_1d_enc(added_q)
+            added_k = self._sparse_1d_enc(added_k)
+            added_v = self._sparse_1d_enc(added_v)
+
+        # Step 5: Concat hidden_states and encoder_hidden_states to do mm attention
+        fa_visual_sequence_length = q.shape[0]
+        fa_text_sequence_length_length = added_q.shape[0]
+        q = torch.cat([q, added_q], dim=0)
+        k = torch.cat([k, added_k], dim=0)
+        v = torch.cat([v, added_v], dim=0)
+
+        out = torch_npu.npu_fusion_attention(
+            q,
+            k,
+            v,
+            head_num=self.num_attention_heads_per_partition_per_cp,
+            atten_mask=attention_mask,
+            input_layout="SBH",
+            scale=1 / math.sqrt(self.head_dim)
+        )[0]
+
+        hidden_states, encoder_hidden_states = out.split([fa_visual_sequence_length, fa_text_sequence_length_length], dim=0)
+
+        # Step 6: Reverse sparse 1D
+        if self.sparse1d:
+            hidden_states = self._reverse_sparse_1d(hidden_states, total_frames, height, width)
+            encoder_hidden_states = self._reverse_sparse_1d_enc(encoder_hidden_states)
+
+
+        # Step 7: Project out
+        hidden_states, _ = self.proj_out(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        if self.context_pre_only is not None:
+            encoder_hidden_states, _ = self.added_proj_out(encoder_hidden_states)
+
+        return hidden_states, encoder_hidden_states
 
 
 class ParallelMultiHeadAttentionSBH(nn.Module):
