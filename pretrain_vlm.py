@@ -1,19 +1,45 @@
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
 """Pretrain VLM (ViT+MLP+LLM) MODEL."""
-
+from copy import deepcopy
 import mindspeed.megatron_adaptor  # noqa
 import torch
 from megatron.core import mpu
 from megatron.core.enums import ModelType
-from megatron.training import get_args
+from megatron.training import get_args, print_rank_0
 from megatron.training.utils import average_losses_across_data_parallel_group
 
 from mindspeed_mm.configs.config import mm_extra_args_provider
 from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
 from mindspeed_mm.data.data_utils.utils import build_iterations
-from mindspeed_mm.models.vlm_model import model_provider
+from mindspeed_mm.models.vlm_model import VLMModel
 from mindspeed_mm.training import pretrain
+from mindspeed_mm.utils.transformer_model_config import get_model_config
 from mindspeed_mm.patchs import dummy_optimizer_patch # noqa
+
+
+def model_provider(pre_process=True, post_process=True):
+    """Builds the model."""
+    args = get_args()
+    print_rank_0("building VLMModel ...")
+    vlm_config = deepcopy(args.mm.model)
+
+    # distinguish model construct stage when pipeline parallel
+    vlm_config.pre_process = pre_process
+    vlm_config.post_process = post_process
+
+    if vlm_config.image_encoder:
+        vlm_config.image_encoder.vision_encoder = get_model_config(vlm_config.image_encoder.vision_encoder)
+        vlm_config.image_encoder.vision_projector = get_model_config(vlm_config.image_encoder.vision_projector)
+        vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
+
+        model = VLMModel(vlm_config)
+        model.freeze(freeze_image_encoder=getattr(vlm_config.image_encoder.vision_encoder, 'freeze', True), \
+            freeze_image_projection=getattr(vlm_config.image_encoder.vision_projector, 'freeze', False))
+    else:
+        vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
+        model = VLMModel(vlm_config)
+
+    return model
 
 
 def get_batch(data_iterator):

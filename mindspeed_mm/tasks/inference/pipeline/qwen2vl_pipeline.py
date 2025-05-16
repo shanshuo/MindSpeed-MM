@@ -8,7 +8,6 @@ from transformers import AutoProcessor
 from qwen_vl_utils import process_vision_info
 from transformers.generation.streamers import TextStreamer
 
-from mindspeed_mm.models.vlm_model import model_provider
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.generation_mixin import GenerationMixin
 from mindspeed_mm.models.text_encoder import Tokenizer
 
@@ -20,6 +19,7 @@ class Qwen2VlPipeline(GenerationMixin):
     def __init__(self, infer_config):
         self.infer_config = infer_config
         self.tokenizer = Tokenizer(infer_config.tokenizer).get_tokenizer()
+        from pretrain_vlm import model_provider
         self.model = ParallelWrapper(model_provider)
         self.image_processor = AutoProcessor.from_pretrained(infer_config.tokenizer.from_pretrained,
                                                              local_files_only=True)
