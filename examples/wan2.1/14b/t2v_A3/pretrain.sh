@@ -4,12 +4,13 @@ source /usr/local/Ascend/ascend-toolkit/set_env.sh
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
-export TASK_QUEUE_ENABLE=1
+export TASK_QUEUE_ENABLE=2
+export ACLNN_CACHE_LIMIT=100000
 export COMBINED_ENABLE=1
 export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
-NPUS_PER_NODE=8
+NPUS_PER_NODE=16
 MASTER_ADDR=localhost
 MASTER_PORT=6000
 NNODES=1
@@ -18,19 +19,16 @@ WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 TP=1
 PP=1
-VP=1
-CP=2
+CP=1
 MBS=1
-GRAD_ACC_STEP=1
-DP=$(($WORLD_SIZE/$TP/$PP/$CP))
-GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
+GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_DATA="./examples/wan2.1/14b/i2v/feature_data.json"
-MM_MODEL="./examples/wan2.1/14b/i2v/pretrain_model.json"
+MM_DATA="./examples/wan2.1/14b/t2v_A3/feature_data.json"
+MM_MODEL="./examples/wan2.1/14b/t2v_A3/pretrain_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH=./weights/Wan-AI/Wan2.1-I2V-14B-Diffusers/transformer/  # ensure the wandit weight be converted
+LOAD_PATH="./weights/Wan-AI/Wan2.1-T2V-14B-Diffusers/transformer/"  # ensure the wandit weight be converted
 SAVE_PATH="path to save your wandit weight"
-layerzero_config="examples/wan2.1/zero_config.yaml"
+layerzero_config="./examples/wan2.1/zero_config.yaml"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -43,7 +41,6 @@ DISTRIBUTED_ARGS="
 GPT_ARGS="
     --tensor-model-parallel-size ${TP} \
     --pipeline-model-parallel-size ${PP} \
-    --virtual-pipeline-model-parallel-size ${VP} \
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
@@ -78,7 +75,9 @@ GPT_ARGS="
     --bf16 \
     --recompute-granularity full \
     --recompute-method block \
-    --recompute-num-layers 40 \
+    --recompute-num-layers 30 \
+    --recompute-skip-core-attention \
+    --recompute-num-layers-skip-core-attention 10 \
     --use-distributed-optimizer \
     --overlap-grad-reduce \
     --overlap-param-gather \

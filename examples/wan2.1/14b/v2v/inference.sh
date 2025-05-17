@@ -46,8 +46,6 @@ GPT_ARGS="
     --num-attention-heads 48 \
     --seq-length 24 \
     --max-position-embeddings 24 \
-    --attention-dropout 0.0 \
-    --hidden-dropout 0.0 \
     --tokenizer-type NullTokenizer \
     --vocab-size 0 \
     --position-embedding-type rope \
