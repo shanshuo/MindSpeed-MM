@@ -9,7 +9,8 @@ __all__ = [
     "PTDiT",
     "HunyuanVideoDiT",
     "WanDiT",
-    "StepVideoDiT"
+    "StepVideoDiT",
+    "SparseUMMDiT"
 ]
 
 from .video_dit import VideoDiT
@@ -22,4 +23,4 @@ from .pt_dit_diffusers import PTDiTDiffuser as PTDiT
 from .hunyuan_video_dit import HunyuanVideoDiT
 from .wan_dit import WanDiT
 from .step_video_dit import StepVideoDiT
-
+from .sparseu_mmdit import SparseUMMDiT
