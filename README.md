@@ -17,7 +17,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ---
 
-## 🔥🔥🔥Latest News
+# 🔥🔥🔥Latest News
 
 * [Apr. 03, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-32B模型 【Prototype】
 * [Mar. 27, 2025]: 🚀 MindSpeed-MM支持Wan2.1-1.3B/14B模型 【Prototype】
@@ -40,6 +40,87 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 > 注： **Prototype**特性未经过充分验证，可能存在不稳定和bug问题，**beta**表示非商用特性
 
 ---
+
+# 效果展示
+
+## 图生视频： OpensoraPlan 1.3 I2V
+
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <img src="sources/images/rocket.jpg" width="500" height="100%"></img>
+          <p>输入图片</p>
+      </td>
+      <td>
+          <img src="sources/videos/video_ops_I2V.gif" width="100%" controls autoplay loop></video>
+          <p>Prompt: A rocket ascends slowly into the sky</p>
+      </td>
+  </tr>
+</table>
+
+## 图生视频： Wan 2.1 I2V
+
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <img src="examples/wan2.1/i2v_input.jpg" width="800" height="100%"></img>
+          <p>输入图片</p>
+      </td>
+      <td>
+          <img src="sources/videos/video_wan_I2V.gif" width="100%" controls autoplay loop></video>
+          <p>Prompt: An astronaut hatching from an egg, on the surface of the moon, the darkness and depth of space realised in the background. High quality, ultrarealistic detail and breath-taking movie-like camera shot.</p>
+      </td>
+  </tr>
+</table>
+
+## 文生图：Flux T2I
+
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <img src="sources/images/flux_cat.png" width="800"></img>
+          <p>Prompt: A cat holding a sign that says hello world</p>
+      </td>
+      <td>
+          <img src="sources/images/flux_cat_MM.png" width="800"></img>
+          <p>Prompt: A cat holding a sign that says MindSpeed</p>
+      </td>
+  </tr>
+</table>
+
+## 理解模型：InternVL2 & Qwen2VL
+
+<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
+  <tr>
+      <td>
+          <p>Input image for both models:</p>
+          <img src="sources/images/view.jpg" width="1000" height="700"></img>
+          <p>Input text for both models: Please describe the image shortly</p>
+          <p>InternVL2推理结果: The image depicts a serene lakeside scene with a wooden dock extending into the calm water. The water reflects the surrounding landscape, which includes dense forests and a mountain range in the background. The sky is partly cloudy, adding to the tranquil atmosphere of the scene</p>
+          <p>Qwen2VL推理结果: The image depicts a serene lakeside scene with a wooden dock extending into the calm waters. The dock is made of weathered wooden planks and leads to a small platform with a ladder, suggesting it is used for swimming or diving. The lake is surrounded by lush green forests and mountains in the background, creating a picturesque and tranquil setting. The sky is overcast, adding to the calm and peaceful atmosphere of the scene.</p>
+          <p>Input text for InternVL2: 请简短描述这张照片</p>
+          <p>InternVL2推理结果: 这张图片展示了一个宁静的湖泊，湖面平静，反射着天空和周围景物的影像。湖的中央有一个木制码头，延伸到湖中，码头上有几根柱子支撑。 湖的远端是一片茂密的森林，树木高大，覆盖着茂密的绿色植被。森林的尽头是一座高耸的山峰，山峰上覆盖着积雪，显得格外壮丽。 天空中有一些云朵，但整体上是晴朗的，阳光从云层中透出，照亮了整个湖面和周围的景色。 这张图片整体给人一种宁静、祥和的感觉，仿佛是一个远离尘嚣的世外桃源</p>
+          <p>Input text for Qwen2VL: 请用中文简短描述这张照片</p>
+          <p>Qwen2VL推理结果: 这张图片展示了一座木制码头延伸到平静的湖面上，背景是连绵的山脉和茂密的森林。天空多云，整体色调偏冷，给人一种宁静和自然的感觉。</p>
+      </td>
+  </tr>
+</table>
+
+---
+
+# 环境部署
+
+具体部署步骤请查看[部署文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/install_guide.md)
+
+---
+
+# 快速上手
+
+快速上手操作请查看[快速上手文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/quick_start.md)
+
+---
+
+# 特性/模型介绍
 
 ## 已支持特性概览
 
@@ -79,39 +160,6 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 ---
 
-## 研发中的特性与模型
-
-* 【新模型】  JanusPro
-* 【模型特性】 CogVideoX: PP
-* 【模型特性】 OpensoraPlan1.3: CP (Ring Attention)
-* 【模型特性】 Qwen2VL: VPP, CP (Ulysses & Ring Attention)
-* 【模型特性】 InternVL2: TP, CP (Ulysses & Ring Attention)
-* 【基础特性】 Distrain
-
----
-
-## 版本维护策略
-
-MindSpeed-MM版本有以下五个维护阶段：
-
-| **状态**            | **时间** | **说明**                                                               |
-| ------------------- | -------- |----------------------------------------------------------------------|
-| 计划                | 1—3 个月 | 计划特性                                                                 |
-| 开发                | 3 个月   | 开发特性                                                                 |
-| 维护                | 6-12 个月| 合入所有已解决的问题并发布版本，针对不同的MindSpeed-MM版本采取不同的维护策略，常规版本和长期支持版本维护周期分别为6个月和12个月 |
-| 无维护              | 0—3 个月 | 合入所有已解决的问题，无专职维护人员，无版本发布                                             |
-| 生命周期终止（EOL） | N/A      | 分支不再接受任何修改                                                           |
-
-MindSpeed-MM已发布版本维护策略：
-
-| **MindSpeed-MM版本** | **维护策略** | **当前状态** | **发布时间**   | **后续状态**         | **EOL日期** |
-|-----------------|-----------|--------|------------|-----------------------|-----------|
-| 2.0.0             |  常规版本  | 维护   | 2025/03/30 | 预计2025/09/30起无维护  |
-| 1.0.0             |  常规版本  | 维护   | 2024/12/30 | 预计2025/06/30起无维护  |           |
-| 1.0.RC3             |  常规版本  | 维护   | 2024/09/30 | 预计2025/03/30起无维护  |           |
-
----
-
 ## 配套版本与支持模型
 
 【现版本实测性能（硬件信息：Atlas 900 A2 PODc）】
@@ -148,15 +196,15 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="29"> 多模态生成 </td>
+      <td rowspan="30"> 多模态生成 </td>
       </tr>
       <td rowspan="4"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-T2V</a></td>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers">1.3B</a></td>
       <td> 预训练 </td>
       <td> 1x8</td>
       <td> BF16 </td>
-      <td> 0.770 (SPS) </td>
-      <td> 0.960 (SPS) </td>
+      <td> 0.918 (SPS) </td>
+      <td> 1.04 (SPS) </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -272,6 +320,16 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 1.17 (SPS) </td>
       <td> 1.15 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/vae">WFVAE</a></td>
+      <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.3.0/tree/main/vae"> 0.18B </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 23.860 (SPS) </td>
+      <td> 26.091 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -647,84 +705,30 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
 
 ---
 
-## 图生视频： OpensoraPlan 1.3 I2V
+# 特性规划
 
-<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
-  <tr>
-      <td>
-          <img src="sources/images/rocket.jpg" width="500" height="100%"></img>
-          <p>输入图片</p>
-      </td>
-      <td>
-          <img src="sources/videos/video_ops_I2V.gif" width="100%" controls autoplay loop></video>
-          <p>Prompt: A rocket ascends slowly into the sky</p>
-      </td>
-  </tr>
-</table>
-
-## 图生视频： Wan 2.1 I2V
-
-<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
-  <tr>
-      <td>
-          <img src="examples/wan2.1/i2v_input.jpg" width="800" height="100%"></img>
-          <p>输入图片</p>
-      </td>
-      <td>
-          <img src="sources/videos/video_wan_I2V.gif" width="100%" controls autoplay loop></video>
-          <p>Prompt: An astronaut hatching from an egg, on the surface of the moon, the darkness and depth of space realised in the background. High quality, ultrarealistic detail and breath-taking movie-like camera shot.</p>
-      </td>
-  </tr>
-</table>
-
-## 文生图：Flux T2I
-
-<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
-  <tr>
-      <td>
-          <img src="sources/images/flux_cat.png" width="800"></img>
-          <p>Prompt: A cat holding a sign that says hello world</p>
-      </td>
-      <td>
-          <img src="sources/images/flux_cat_MM.png" width="800"></img>
-          <p>Prompt: A cat holding a sign that says MindSpeed</p>
-      </td>
-  </tr>
-</table>
-
-## 理解模型：InternVL2 & Qwen2VL
-
-<table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
-  <tr>
-      <td>
-          <p>Input image for both models:</p>
-          <img src="sources/images/view.jpg" width="1000" height="700"></img>
-          <p>Input text for both models: Please describe the image shortly</p>
-          <p>InternVL2推理结果: The image depicts a serene lakeside scene with a wooden dock extending into the calm water. The water reflects the surrounding landscape, which includes dense forests and a mountain range in the background. The sky is partly cloudy, adding to the tranquil atmosphere of the scene</p>
-          <p>Qwen2VL推理结果: The image depicts a serene lakeside scene with a wooden dock extending into the calm waters. The dock is made of weathered wooden planks and leads to a small platform with a ladder, suggesting it is used for swimming or diving. The lake is surrounded by lush green forests and mountains in the background, creating a picturesque and tranquil setting. The sky is overcast, adding to the calm and peaceful atmosphere of the scene.</p>
-          <p>Input text for InternVL2: 请简短描述这张照片</p>
-          <p>InternVL2推理结果: 这张图片展示了一个宁静的湖泊，湖面平静，反射着天空和周围景物的影像。湖的中央有一个木制码头，延伸到湖中，码头上有几根柱子支撑。 湖的远端是一片茂密的森林，树木高大，覆盖着茂密的绿色植被。森林的尽头是一座高耸的山峰，山峰上覆盖着积雪，显得格外壮丽。 天空中有一些云朵，但整体上是晴朗的，阳光从云层中透出，照亮了整个湖面和周围的景色。 这张图片整体给人一种宁静、祥和的感觉，仿佛是一个远离尘嚣的世外桃源</p>
-          <p>Input text for Qwen2VL: 请用中文简短描述这张照片</p>
-          <p>Qwen2VL推理结果: 这张图片展示了一座木制码头延伸到平静的湖面上，背景是连绵的山脉和茂密的森林。天空多云，整体色调偏冷，给人一种宁静和自然的感觉。</p>
-      </td>
-  </tr>
-</table>
+* 【新模型】  JanusPro
+* 【模型特性】 CogVideoX: PP
+* 【模型特性】 OpensoraPlan1.3: CP (Ring Attention)
+* 【模型特性】 Qwen2VL: VPP, CP (Ulysses & Ring Attention)
+* 【模型特性】 InternVL2: TP, CP (Ulysses & Ring Attention)
+* 【基础特性】 Distrain
 
 ---
 
 <a id="jump2"></a>
 
-## MindSpeed-MM工具库
+# 工具使用
 
 <a id="jump2.1"></a>
 
-### 昇腾Profiling采集工具
+## 昇腾Profiling采集工具
 
 MindSpeed-MM集成了昇腾profiling采集工具，以提供对模型运行情况的分析。该工具能够依照配置采集模型的算子、显存等关键信息，同时支持动静态两种采集方式，协助开发者分析模型瓶颈，并可根据实际场景需求选择使用。
 
   具体方法见 [README](./mindspeed_mm/tools/README.md) 的profiling章节
 
-### MindStudio Insight性能分析工具
+## MindStudio Insight性能分析工具
 
 针对大模型集群场景的性能调优，这里推荐一款优秀的可视化调优工具MindStudio Insight。
 MindStudio Insight提供了包括Timeline视图、通信分析、计算耗时等的可视化呈现，以便用户分析潜在的性能瓶颈，并指导如何采取措施消除或减少这些瓶颈。
@@ -733,32 +737,35 @@ MindStudio Insight提供了包括Timeline视图、通信分析、计算耗时等
 
 ---
 
-## MindSpeed-MM FAQ
+# 版本维护
+
+MindSpeed-MM版本有以下五个维护阶段：
+
+| **状态**            | **时间** | **说明**                                                               |
+| ------------------- | -------- |----------------------------------------------------------------------|
+| 计划                | 1—3 个月 | 计划特性                                                                 |
+| 开发                | 3 个月   | 开发特性                                                                 |
+| 维护                | 6-12 个月| 合入所有已解决的问题并发布版本，针对不同的MindSpeed-MM版本采取不同的维护策略，常规版本和长期支持版本维护周期分别为6个月和12个月 |
+| 无维护              | 0—3 个月 | 合入所有已解决的问题，无专职维护人员，无版本发布                                             |
+| 生命周期终止（EOL） | N/A      | 分支不再接受任何修改                                                           |
+
+MindSpeed-MM已发布版本维护策略：
+
+| **MindSpeed-MM版本** | **维护策略** | **当前状态** | **发布时间**   | **后续状态**         | **EOL日期** |
+|-----------------|-----------|--------|------------|-----------------------|-----------|
+| 2.0.0             |  常规版本  | 维护   | 2025/03/30 | 预计2025/09/30起无维护  |
+| 1.0.0             |  常规版本  | 维护   | 2024/12/30 | 预计2025/06/30起无维护  |           |
+| 1.0.RC3             |  常规版本  | 维护   | 2024/09/30 | 预计2025/03/30起无维护  |           |
+
+---
+
+# 常见问题
 
 相关FAQ请参考链接：[FAQ](./docs/FAQ.md)
 
 ---
 
-## 致谢
-
-MindSpeed-MM 由华为公司的下列部门联合贡献 ：
-
-* 计算产品线
-* 公共开发部
-* 2012实验室
-* 华为云
-
-MindSpeed-MM 生态贡献方：
-
-* 360 AI Research
-* 北大OpenSoraPlan团队
-* 微信技术架构部基础架构中心
-
-感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
-
----
-
-## MindSpeed-MM 相关介绍
+# 相关资源
 
 1. [面向大规模分布式训练的多模态套件](https://mp.weixin.qq.com/s/Qiw_qThKA72T0lLOSpjkKw)
 2. [凭借昇腾澎湃算力，Open-Sora Plan实现电影级视频生成](https://mp.weixin.qq.com/s/KY2tLthhre-SRbuWka3c2w)
@@ -769,20 +776,47 @@ MindSpeed-MM 生态贡献方：
 
 ---
 
-## 安全申明
+# 安全申明
 
 [MindSpeed MM 安全申明](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/SECURITYNOTE.md)
 
 ---
 
-## 免责声明
+# 免责声明
 
-### 致MindSpeed-MM使用者
+## 致MindSpeed-MM使用者
 
 1. MindSpeed-MM提供的模型仅供您用于非商业目的。
 2. 对于各模型，MindSpeed-MM平台仅提示性地向您建议可用于训练的数据集，华为不提供任何数据集，如您使用这些数据集进行训练，请您特别注意应遵守对应数据集的License，如您因使用数据集而产生侵权纠纷，华为不承担任何责任。
 3. 如您在使用MindSpeed-MM模型过程中，发现任何问题（包括但不限于功能问题、合规问题），请在Gitee提交issue，我们将及时审视并解决。
 
-### 致数据集所有者
+## 致数据集所有者
 
 如果您不希望您的数据集在MindSpeed-MM中的模型被提及，或希望更新MindSpeed-MM中的模型关于您的数据集的描述，请在Gitee提交issue，我们将根据您的issue要求删除或更新您的数据集描述。衷心感谢您对MindSpeed-MM的理解和贡献。
+
+## License声明
+
+Ascend MindSpeed-MM提供的模型，如模型目录下存在License的，以该License为准。如模型目录下不存在License的，以Apache 2.0许可证许可，对应许可证文本可查阅Ascend MindSpeed-MM根目录。
+
+---
+
+# 致谢
+
+MindSpeed-MM 由华为公司的下列部门及昇腾生态合作伙伴联合贡献：
+
+华为公司：
+
+* 计算产品线
+* 公共开发部
+* 2012实验室
+* 华为云
+
+生态合作伙伴：
+
+* 360 AI Research
+* 北大OpenSoraPlan团队
+* 微信技术架构部基础架构中心
+
+感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
+
+---

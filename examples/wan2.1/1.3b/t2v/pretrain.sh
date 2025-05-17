@@ -61,8 +61,8 @@ GPT_ARGS="
     --rotary-base 500000 \
     --swiglu \
     --no-masked-softmax-fusion \
-    --lr 5e-6 \
-    --min-lr 5e-6 \
+    --lr 1e-5 \
+    --min-lr 1e-5 \
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
     --adam-eps 1e-8 \
@@ -80,7 +80,7 @@ GPT_ARGS="
     --bf16 \
     --recompute-granularity full \
     --recompute-method block \
-    --recompute-num-layers 30 \
+    --recompute-num-layers 20 \
     --use-distributed-optimizer \
     --overlap-grad-reduce \
     --overlap-param-gather \

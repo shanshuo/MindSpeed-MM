@@ -37,44 +37,10 @@ Sana是由NVIDIA、麻省理工学院和清华大学共同推出的文生图模�
 
 【模型开发时推荐使用配套的环境版本】
 
-<table border="0">
-  <tr>
-    <th>软件</th>
-    <th>版本</th>
-    <th>安装指南</th>
-  </tr>
-  <tr>
-    <td> Python </td>
-    <td> 3.10 </td>
-  </tr>
-  <tr>
-    <td> Driver </td>
-    <td> AscendHDK 24.1.0 </td>
-    <td rowspan="2">《<a href="https://www.hiascend.com/document/detail/zh/canncommercial/800/softwareinst/instg/instg_0003.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit">驱动固件安装指南</a> 》</td>
-  </tr>
-  <tr>
-    <td> Firmware </td>
-    <td> AscendHDK 24.1.0 </td>
-  </tr>
-  <tr>
-    <td> CANN </td>
-    <td> CANN 8.0.0 </td>
-    <td>《<a href="https://www.hiascend.com/document/detail/zh/canncommercial/800/softwareinst/instg/instg_0000.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit">CANN 软件安装指南</a> 》</td>
-  </tr>
-  <tr>
-    <td> Torch </td>
-    <td> 2.1.0 </td>
-    <td rowspan="2">《<a href="https://www.hiascend.com/document/detail/zh/Pytorch/600/configandinstg/instg/insg_0001.html">Ascend Extension for PyTorch 配置与安装</a> 》</td>
-  </tr>
-  <tr>
-    <td> Torch_npu </td>
-    <td> release v6.0.0 </td>
-  </tr>
-</table>
+请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/install_guide.md)
 
 1. 软件与驱动安装
 
-    torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
 
     ```bash
     # python3.10

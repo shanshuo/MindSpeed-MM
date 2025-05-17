@@ -54,7 +54,7 @@
 
 #### 2. 环境搭建
 
-torch npu 与 CANN包参考链接：[安装包参考链接](https://support.huawei.com/enterprise/zh/ascend-computing/cann-pid-251168373/software)
+请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/install_guide.md)
 
 ```bash
     # python3.10
