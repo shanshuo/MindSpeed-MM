@@ -52,12 +52,16 @@ class StepVideoDiT(MultiModalModule):
         fa_layout: str = "bsnd",
         use_additional_conditions: Optional[bool] = False,
         caption_channels: Optional[list] = None,
+        pre_process: bool = True,
+        post_process: bool = True,
         **kwargs
     ):
         super().__init__(config=None)
 
         # Set some common variables used across the board.
         args = get_args()
+        self.pre_process = pre_process
+        self.post_process = post_process
         self.num_attention_heads = num_attention_heads
         self.attention_head_dim = attention_head_dim
         self.inner_dim = num_attention_heads * attention_head_dim
@@ -66,6 +70,7 @@ class StepVideoDiT(MultiModalModule):
         self.num_layers = num_layers
         self.caption_channels = caption_channels
         self.use_additional_conditions = use_additional_conditions
+        self.patch_size = patch_size
         self.sequence_parallel = args.sequence_parallel
         self.recompute_granularity = args.recompute_granularity
         self.recompute_method = args.recompute_method
@@ -76,12 +81,28 @@ class StepVideoDiT(MultiModalModule):
         if self.distribute_saved_activations:
             raise NotImplementedError("distribute_saved_activations is currently not supported")
 
-        self.pos_embed = PatchEmbed(
-            patch_size=patch_size,
-            in_channels=self.in_channels if not use_additional_conditions else in_channels * 2,
-            embed_dim=self.inner_dim
-        )
+        if self.pre_process:
+            self.pos_embed = PatchEmbed(
+                patch_size=patch_size,
+                in_channels=self.in_channels if not use_additional_conditions else in_channels * 2,
+                embed_dim=self.inner_dim
+            )
 
+            self.adaln_single = AdaLayerNormSingle(
+                self.inner_dim, use_additional_conditions=self.use_additional_conditions
+            )
+
+            if isinstance(self.caption_channels, int):
+                caption_channel = self.caption_channels
+            else:
+                caption_channel, clip_channel = self.caption_channels
+                self.clip_projection = nn.Linear(clip_channel, self.inner_dim)
+
+            self.caption_norm = nn.LayerNorm(caption_channel, eps=norm_eps, elementwise_affine=norm_elementwise_affine)
+            self.caption_projection = PixArtAlphaTextProjection(
+                in_features=caption_channel, hidden_size=self.inner_dim
+            )
+        
         # Rotary positional embeddings
         self.rope = RoPE3DStepVideo(
             ch_split=channel_split
@@ -104,26 +125,10 @@ class StepVideoDiT(MultiModalModule):
         )
 
         # 3. Output blocks.
-        self.norm_out = nn.LayerNorm(self.inner_dim, eps=norm_eps, elementwise_affine=norm_elementwise_affine)
-        self.scale_shift_table = nn.Parameter(torch.randn(2, self.inner_dim) / self.inner_dim ** 0.5)
-        self.proj_out = nn.Linear(self.inner_dim, patch_size * patch_size * self.out_channels)
-        self.patch_size = patch_size
-
-        self.adaln_single = AdaLayerNormSingle(
-            self.inner_dim, use_additional_conditions=self.use_additional_conditions
-        )
-
-        if isinstance(self.caption_channels, int):
-            caption_channel = self.caption_channels
-        else:
-            caption_channel, clip_channel = self.caption_channels
-            self.clip_projection = nn.Linear(clip_channel, self.inner_dim)
-
-        self.caption_norm = nn.LayerNorm(caption_channel, eps=norm_eps, elementwise_affine=norm_elementwise_affine)
-        
-        self.caption_projection = PixArtAlphaTextProjection(
-            in_features=caption_channel, hidden_size=self.inner_dim
-        )
+        if self.post_process:
+            self.norm_out = nn.LayerNorm(self.inner_dim, eps=norm_eps, elementwise_affine=norm_elementwise_affine)
+            self.scale_shift_table = nn.Parameter(torch.randn(2, self.inner_dim) / self.inner_dim ** 0.5)
+            self.proj_out = nn.Linear(self.inner_dim, patch_size * patch_size * self.out_channels)
 
     @property
     def dtype(self) -> torch.dtype:
@@ -145,9 +150,9 @@ class StepVideoDiT(MultiModalModule):
     def prepare_attn_mask(self, encoder_attention_mask, encoder_hidden_states, q_seqlen):
         kv_seqlens = encoder_attention_mask.sum(dim=1).int()
         mask = torch.ones([len(kv_seqlens), q_seqlen, max(kv_seqlens)], dtype=torch.bool,
-                          device=encoder_attention_mask.device)
-        encoder_hidden_states = encoder_hidden_states.squeeze(1)
-        encoder_hidden_states = encoder_hidden_states[:, : max(kv_seqlens)]
+                          device=encoder_attention_mask.device)# b s_q s_kv
+        encoder_hidden_states = encoder_hidden_states.squeeze(1)# b 1 s h => b s h
+        encoder_hidden_states = encoder_hidden_states[:, : max(kv_seqlens)]# b s h
         for i, kv_len in enumerate(kv_seqlens):
             mask[i, :, :kv_len] = 0
 
@@ -163,74 +168,81 @@ class StepVideoDiT(MultiModalModule):
         fps: torch.Tensor = None,
         **kwargs
     ):
-        if hidden_states.ndim != 5:
-            raise ValueError("hidden_states's shape should be (bsz, f, ch, h ,w)")
-        
         # RNG context.
         if self.sequence_parallel:
             rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
         else:
             rng_context = nullcontext()
 
-        encoder_hidden_states = prompt[0]
-        encoder_hidden_states_2 = prompt[1]
-        motion_score = kwargs.get("motion_score", 5.0)
-        condition_hidden_states = kwargs.get("image_latents")
+        if self.pre_process:
+            if hidden_states.ndim != 5:
+                raise ValueError("hidden_states's shape should be (bsz, f, ch, h ,w)")
 
-        # Only retain stepllm's mask
-        if isinstance(prompt_mask, list):
-            encoder_attention_mask = prompt_mask[0]
-        # Padding 1 on the mask of the stepllm
-        len_clip = encoder_hidden_states_2.shape[2]
-        encoder_attention_mask = encoder_attention_mask.squeeze(1).to(
-            hidden_states.device)  # stepchat_tokenizer_mask: b 1 s => b s
-        encoder_attention_mask = torch.nn.functional.pad(encoder_attention_mask, (len_clip, 0),
-                                                         value=1)  # pad attention_mask with clip's length
+            encoder_hidden_states = prompt[0]# b 1 s h
+            encoder_hidden_states_2 = prompt[1]# b 1 s h
+            motion_score = kwargs.get("motion_score", 5.0)
+            condition_hidden_states = kwargs.get("image_latents")
 
-        bsz, frame, _, height, width = hidden_states.shape
-        if mpu.get_context_parallel_world_size() > 1:
-            frame //= mpu.get_context_parallel_world_size()
-            hidden_states = split_forward_gather_backward(hidden_states, mpu.get_context_parallel_group(), dim=1,
-                                                        grad_scale='down')
-        
-        height, width = height // self.patch_size, width // self.patch_size
-        hidden_states = self.patchfy(hidden_states, condition_hidden_states)
-        len_frame = hidden_states.shape[1]
+            # Only retain stepllm's mask
+            if isinstance(prompt_mask, list):
+                encoder_attention_mask = prompt_mask[0]
+            # Padding 1 on the mask of the stepllm
+            len_clip = encoder_hidden_states_2.shape[2]
+            encoder_attention_mask = encoder_attention_mask.squeeze(1).to(
+                hidden_states.device)  # stepchat_tokenizer_mask: b 1 s => b s
+            encoder_attention_mask = torch.nn.functional.pad(encoder_attention_mask, (len_clip, 0),
+                                                            value=1)  # pad attention_mask with clip's length
 
-        if self.use_additional_conditions:
-            if condition_hidden_states is not None:
-                added_cond_kwargs = {
-                    "motion_score": torch.tensor([motion_score], device=hidden_states.device,
-                                                 dtype=hidden_states.dtype).repeat(bsz)
-                }
+            bsz, frame, _, height, width = hidden_states.shape
+            if mpu.get_context_parallel_world_size() > 1:
+                frame //= mpu.get_context_parallel_world_size()
+                hidden_states = split_forward_gather_backward(hidden_states, mpu.get_context_parallel_group(), dim=1,
+                                                            grad_scale='down')
+            
+            height, width = height // self.patch_size, width // self.patch_size
+            hidden_states = self.patchfy(hidden_states, condition_hidden_states)
+            len_frame = hidden_states.shape[1]
+
+            if self.use_additional_conditions:
+                if condition_hidden_states is not None:
+                    added_cond_kwargs = {
+                        "motion_score": torch.tensor([motion_score], device=hidden_states.device,
+                                                    dtype=hidden_states.dtype).repeat(bsz)
+                    }
+                else:
+                    added_cond_kwargs = {
+                        "resolution": torch.tensor([(height, width)] * bsz, device=hidden_states.device,
+                                                dtype=hidden_states.dtype),
+                        "nframe": torch.tensor([frame] * bsz, device=hidden_states.device, dtype=hidden_states.dtype),
+                        "fps": fps
+                    }
             else:
-                added_cond_kwargs = {
-                    "resolution": torch.tensor([(height, width)] * bsz, device=hidden_states.device,
-                                               dtype=hidden_states.dtype),
-                    "nframe": torch.tensor([frame] * bsz, device=hidden_states.device, dtype=hidden_states.dtype),
-                    "fps": fps
-                }
+                added_cond_kwargs = {}
+
+            timestep, embedded_timestep = self.adaln_single(
+                timestep, added_cond_kwargs=added_cond_kwargs
+            )
+
+            encoder_hidden_states = self.caption_projection(self.caption_norm(encoder_hidden_states))
+            if encoder_hidden_states_2 is not None and hasattr(self, 'clip_projection'):
+                clip_embedding = self.clip_projection(encoder_hidden_states_2)
+                encoder_hidden_states = torch.cat([clip_embedding, encoder_hidden_states], dim=2)
+
+            hidden_states = rearrange(hidden_states, '(b f) l d->  b (f l) d', b=bsz, f=frame, l=len_frame).contiguous()
+
+            encoder_hidden_states, attn_mask = self.prepare_attn_mask(encoder_attention_mask, encoder_hidden_states,
+                                                                    q_seqlen=frame * len_frame)
+
+            # Rotary positional embeddings
+            rotary_pos_emb = self.rope(bsz, frame * mpu.get_context_parallel_world_size(), height, width, hidden_states.device)# s b 1 d
+            if mpu.get_context_parallel_world_size() > 1:
+                rotary_pos_emb = rotary_pos_emb.chunk(mpu.get_context_parallel_world_size(), dim=0)[mpu.get_context_parallel_rank()]
         else:
-            added_cond_kwargs = {}
-        
-        timestep, embedded_timestep = self.adaln_single(
-            timestep, added_cond_kwargs=added_cond_kwargs
-        )
-
-        encoder_hidden_states = self.caption_projection(self.caption_norm(encoder_hidden_states))
-        if encoder_hidden_states_2 is not None and hasattr(self, 'clip_projection'):
-            clip_embedding = self.clip_projection(encoder_hidden_states_2)
-            encoder_hidden_states = torch.cat([clip_embedding, encoder_hidden_states], dim=2)
-
-        hidden_states = rearrange(hidden_states, '(b f) l d->  b (f l) d', b=bsz, f=frame, l=len_frame).contiguous()
-
-        encoder_hidden_states, attn_mask = self.prepare_attn_mask(encoder_attention_mask, encoder_hidden_states,
-                                                                  q_seqlen=frame * len_frame)
-
-        # Rotary positional embeddings
-        rotary_pos_emb = self.rope(bsz, frame * mpu.get_context_parallel_world_size(), height, width, hidden_states.device)# s b 1 d
-        if mpu.get_context_parallel_world_size() > 1:
-            rotary_pos_emb = rotary_pos_emb.chunk(mpu.get_context_parallel_world_size(), dim=0)[mpu.get_context_parallel_rank()]
+            encoder_hidden_states = prompt
+            attn_mask = prompt_mask.to(torch.bool)
+            embedded_timestep = kwargs["embedded_timestep"]
+            rotary_pos_emb = kwargs["rotary_pos_emb"]
+            bsz, frame, height, width, len_frame = kwargs["batch_size"], kwargs["frames"], kwargs["h"], kwargs["w"], kwargs["len_frame"]
 
         with rng_context:
             if self.recompute_granularity == "full":
@@ -250,33 +262,105 @@ class StepVideoDiT(MultiModalModule):
                         attn_mask,
                         rotary_pos_emb
                     )
-        
-        hidden_states = rearrange(hidden_states, 'b (f l) d -> (b f) l d', b=bsz, f=frame, l=len_frame)
-        embedded_timestep = repeat(embedded_timestep, 'b d -> (b f) d', f=frame).contiguous()
-        
-        shift, scale = (self.scale_shift_table[None] + embedded_timestep[:, None]).chunk(2, dim=1)
-        hidden_states = self.norm_out(hidden_states)
-        # Modulation
-        hidden_states = hidden_states * (1 + scale) + shift
-        hidden_states = self.proj_out(hidden_states)
-        
-        # unpatchify
-        hidden_states = hidden_states.reshape(
-            shape=(-1, height, width, self.patch_size, self.patch_size, self.out_channels)
-        )
-        
-        hidden_states = rearrange(hidden_states, 'n h w p q c -> n c h p w q')
-        output = hidden_states.reshape(
-            shape=(-1, self.out_channels, height * self.patch_size, width * self.patch_size)
-        )
 
-        output = rearrange(output, '(b f) c h w -> b f c h w', f=frame)
+        output = hidden_states
 
-        if mpu.get_context_parallel_world_size() > 1:
-            output = gather_forward_split_backward(output, mpu.get_context_parallel_group(), dim=1,
-                                                        grad_scale='up')
+        if self.post_process:
+            hidden_states = rearrange(hidden_states, 'b (f l) d -> (b f) l d', b=bsz, f=frame, l=len_frame)
+            embedded_timestep = repeat(embedded_timestep, 'b d -> (b f) d', f=frame).contiguous()
+            
+            shift, scale = (self.scale_shift_table[None] + embedded_timestep[:, None]).chunk(2, dim=1)
+            hidden_states = self.norm_out(hidden_states)
+            # Modulation
+            hidden_states = hidden_states * (1 + scale) + shift
+            hidden_states = self.proj_out(hidden_states)
+            
+            # unpatchify
+            hidden_states = hidden_states.reshape(
+                shape=(-1, height, width, self.patch_size, self.patch_size, self.out_channels)
+            )
+            
+            hidden_states = rearrange(hidden_states, 'n h w p q c -> n c h p w q')
+            output = hidden_states.reshape(
+                shape=(-1, self.out_channels, height * self.patch_size, width * self.patch_size)
+            )
 
-        return output
+            output = rearrange(output, '(b f) c h w -> b f c h w', f=frame)
+
+            if mpu.get_context_parallel_world_size() > 1:
+                output = gather_forward_split_backward(output, mpu.get_context_parallel_group(), dim=1,
+                                                            grad_scale='up')
+
+        rtn = (output, encoder_hidden_states, timestep, embedded_timestep, attn_mask.to(torch.bfloat16), rotary_pos_emb)
+        return rtn
+    
+    def pipeline_set_prev_stage_tensor(self, input_tensor_list, extra_kwargs):
+        """
+        Implemnented for pipeline parallelism. The input tensor is got from last PP stage.
+        Args:
+            input_tensor_list: same as the return value of pipeline_set_next_stage_tensor
+            extra_kwargs: kwargs for forward func.
+
+        Returns:
+            predictor_input_list: values for predictor forward.
+            training_loss_input_list: values to calculate loss.
+        """
+        (prev_output, prompt, predictor_timesteps, embedded_timestep, attn_mask, rotary_pos_emb,
+         latents, noised_latents, timesteps, noise) = input_tensor_list
+        predictor_input_list = [prev_output, predictor_timesteps, prompt, None, attn_mask]
+        training_loss_input_list = [latents, noised_latents, timesteps, noise, None]
+
+        extra_kwargs["embedded_timestep"] = embedded_timestep
+        extra_kwargs["rotary_pos_emb"] = rotary_pos_emb
+        batch_size, frames, _, height, width = latents.shape
+        len_frame = ((height - self.patch_size) // self.patch_size + 1) * ((width - self.patch_size) // self.patch_size + 1)
+        (extra_kwargs["batch_size"], extra_kwargs["frames"], extra_kwargs["h"], extra_kwargs["w"], extra_kwargs["len_frame"]) = batch_size, frames, height, width, len_frame
+        
+
+        return predictor_input_list, training_loss_input_list
+
+    def pipeline_set_next_stage_tensor(self, input_list, output_list, extra_kwargs=None):
+        """return as
+        [prev_output, prompt, predictor_timesteps, embedded_timestep, prompt_mask, rotary_pos_emb
+         latents, noised_latents, timesteps, noise]
+         which should be corresponded with initialize_pipeline_tensor_shapes
+        """
+        latents, noised_latents, timesteps, noise, _ = input_list
+        return list(output_list) + [latents, noised_latents, timesteps, noise]
+
+    @staticmethod
+    def initialize_pipeline_tensor_shapes():
+        args = get_args()
+        micro_batch_size = args.micro_batch_size
+        dtype = args.params_dtype
+
+        model_cfg = args.mm.model
+        data_cfg = args.mm.data.dataset_param.preprocess_parameters
+        num_attention_heads = model_cfg.predictor.num_attention_heads
+        attention_head_dim = model_cfg.predictor.attention_head_dim
+        hidden_size = num_attention_heads * attention_head_dim
+        height = getattr(data_cfg, "max_height", 544)
+        width = getattr(data_cfg, "max_width", 992)
+        frames = data_cfg.num_frames
+        latent_size = (frames // model_cfg.ae.frame_len * 3, height // 2 ** 4, width // 2 ** 4)
+        seq_len = latent_size[0] * latent_size[1] * latent_size[2]
+        tokenizer_configs = args.mm.data.dataset_param.tokenizer_config
+        max_prompt_len = sum([tokenizer_config.get("model_max_length", 0) for tokenizer_config in tokenizer_configs])
+        channels = model_cfg.predictor.in_channels
+
+        pipeline_tensor_shapes = [
+            {"shape": (micro_batch_size, seq_len, hidden_size), "dtype": dtype},  # prev_output
+            {"shape": (micro_batch_size, max_prompt_len, hidden_size), "dtype": dtype},  # prompt
+            {"shape": (micro_batch_size, 6 * hidden_size), "dtype": dtype},  # predictor_timesteps
+            {"shape": (micro_batch_size, hidden_size), "dtype": dtype},  # embedded_timestep
+            {"shape": (micro_batch_size, seq_len, max_prompt_len), "dtype": dtype}, # origin_prompt_mask
+            {"shape": (seq_len, micro_batch_size, num_attention_heads, attention_head_dim), "dtype": torch.float32}, # rotary_pos_emb
+            {"shape": (micro_batch_size, latent_size[0], channels, latent_size[1], latent_size[2]), "dtype": dtype},  # latents(x0)
+            {"shape": (micro_batch_size, latent_size[0], channels, latent_size[1], latent_size[2]), "dtype": dtype},  # noised_latents
+            {"shape": (micro_batch_size,), "dtype": torch.float32},  # timesteps
+            {"shape": (micro_batch_size, latent_size[0], channels, latent_size[1], latent_size[2]), "dtype": dtype},  # noise
+        ]
+        return pipeline_tensor_shapes
 
     def _get_block(self, layer_number):
         return self.transformer_blocks[layer_number]
@@ -523,7 +607,6 @@ class AdaLayerNormSingle(nn.Module):
         )
 
         self.silu = nn.SiLU()
-        self.linear = nn.Linear(embedding_dim, 6 * embedding_dim, bias=True)
         config = core_transformer_config_from_args(args)
         self.linear = tensor_parallel.ColumnParallelLinear(
             embedding_dim,
