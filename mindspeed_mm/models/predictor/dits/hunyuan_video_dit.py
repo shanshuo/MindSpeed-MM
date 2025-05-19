@@ -23,8 +23,10 @@ from mindspeed.core.parallel_state import (
     get_context_parallel_for_hybrid_ring_world_size,
     get_context_parallel_for_hybrid_ulysses_world_size,
     get_context_parallel_next_rank,
-    get_context_parallel_for_hybrid_ring_global_ranks
+    get_context_parallel_for_hybrid_ring_global_ranks,
+    get_context_parallel_for_hybrid_ring_rank
 )
+from mindspeed.core.context_parallel.ring_context_parallel import ringattn_context_parallel
 
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.embeddings import (
@@ -1475,7 +1477,7 @@ def parallel_attention(
             head_num=heads_num // get_context_parallel_for_hybrid_ulysses_world_size(),
             softmax_scale=1 / math.sqrt(head_dim),
             attn_mask=None,
-            shape=rank_shape
+            shapes=rank_shape
         )
         
         attn = attn.transpose(0, 1)
@@ -1513,7 +1515,7 @@ def parallel_attention(
             head_num=heads_num,
             softmax_scale=1 / math.sqrt(head_dim),
             attn_mask=None,
-            shape=rank_shape
+            shapes=rank_shape
         )
         
         attn = attn.transpose(0, 1)
