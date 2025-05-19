@@ -231,8 +231,8 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 | 配置文件   |      修改字段       | 修改说明      |
 | --- | :---: | :--- |
 | examples/wan2.1/{model_size}/{task}/data.txt    | 文件内容  | 提取后的特征保存路径 |
-| examples/wan2.1/feature_data.json   |   from_pretrained   | 修改为下载的权重所对应路径 |
-| examples/wan2.1/feature_extract/tools.json/ | task | 修改为自己的任务类型 |
+| examples/wan2.1/{model_size}/{task}/feature_data.json   |   from_pretrained   | 修改为下载的权重所对应路径 |
+| examples/wan2.1/feature_extract/tools.json | task | 修改为自己的任务类型 |
 | examples/wan2.1/{model_size}/{task}/pretrain.sh |    NPUS_PER_NODE    | 每个节点的卡数                                      |
 | examples/wan2.1/{model_size}/{task}/pretrain.sh |       NNODES        | 节点数量                                            |
 | examples/wan2.1/{model_size}/{task}/pretrain.sh |      LOAD_PATH      | 权重转换后的预训练权重路径                          |
@@ -261,7 +261,7 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 
   - 使用场景：在模型参数规模较大时，单卡上无法承载完整的模型，可以通过开启layerzero降低静态内存。
   
-  - 使能方式：`examples/wan2.1/{task}/pretrain_wan2.1.sh`的`GPT_ARGS`中加入`--layerzero`和`--layerzero-config ${layerzero_config}`
+  - 使能方式：`examples/wan2.1/{model_size}/{task}/pretrain.sh`的`GPT_ARGS`中加入`--layerzero`和`--layerzero-config ${layerzero_config}`
   
   <a id="jump1"></a>
   - 训练权重后处理：使用该特性训练时，保存的权重需要使用下面的转换脚本进行后处理才能用于推理：
@@ -275,7 +275,7 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
     python <your_mindspeed_path>/mindspeed/core/distributed/layerzero/state/scripts/convert_to_megatron.py --input_folder ./save_ckpt/wan2.1/iter_000xxxx/ --output_folder ./save_ckpt/wan2.1_megatron_ckpt/iter_000xxxx/ --prefix predictor
     ```
 
-+ PP：流水线并行
+- PP：流水线并行
 
   目前支持将predictor模型切分流水线。
 
@@ -294,7 +294,7 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
     “
     ```
 
-+ VP: 虚拟流水线并行
+- VP: 虚拟流水线并行
 
   目前支持将predictor模型切分虚拟流水线并行。
 
@@ -326,7 +326,7 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 
       ```bash
       GPT_ARGS="
-      	--recompute-granularity full \
+       --recompute-granularity full \
           --recompute-method block \
           --recompute-num-layers 0 \
           --recompute-skip-core-attention \

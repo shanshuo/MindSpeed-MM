@@ -48,8 +48,8 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
+          <p>输入图片：</p>
           <img src="sources/images/rocket.jpg" width="500" height="100%"></img>
-          <p>输入图片</p>
       </td>
       <td>
           <img src="sources/videos/video_ops_I2V.gif" width="100%" controls autoplay loop></video>
@@ -63,8 +63,8 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
+          <p>输入图片：</p>
           <img src="examples/wan2.1/i2v_input.jpg" width="800" height="100%"></img>
-          <p>输入图片</p>
       </td>
       <td>
           <img src="sources/videos/video_wan_I2V.gif" width="100%" controls autoplay loop></video>

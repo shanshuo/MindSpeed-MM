@@ -22,8 +22,8 @@ CP=1
 MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
-MM_DATA="./examples/wan2.1/14b/i2v/feature_data.json"
-MM_MODEL="./examples/wan2.1/14b/i2v/pretrain_model.json"
+MM_DATA="./examples/wan2.1/14b/t2v/feature_data.json"
+MM_MODEL="./examples/wan2.1/14b/t2v/pretrain_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="./weights/Wan-AI/Wan2.1-T2V-14B-Diffusers/transformer/"  # ensure the wandit weight be converted
 LORA_PATH="./weights/Wan-AI/Wan2.1-T2V-14B-Diffusers/lora_weight/"
