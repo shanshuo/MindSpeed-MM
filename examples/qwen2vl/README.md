@@ -314,11 +314,10 @@ dataset_param->basic_parameters->dataset
         ...
     },
     ...
-    }
 }
 ```
 
-如果需要加载大批量数据，可使用流式加载，修改`data.json`中的`sampler_type`字段，增加`streaming`字段。（注意：使用流式加载后当前仅支持`num_worker=0`，单进程处理数据，会有性能波动，并且不支持断点续训功能。）
+如果需要加载大批量数据，可使用流式加载，修改`data.json`中的`sampler_type`字段，增加`streaming`字段。（注意：使用流式加载后当前仅支持`num_workers=0`，单进程处理数据，会有性能波动，并且不支持断点续训功能。）
 
 
 ```json

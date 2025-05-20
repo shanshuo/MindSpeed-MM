@@ -41,13 +41,13 @@
 #### 1. 仓库拉取
 
 ```shell
-    git clone https://gitee.com/ascend/MindSpeed-MM.git 
-    git clone https://github.com/NVIDIA/Megatron-LM.git
-    cd Megatron-LM
-    git checkout core_r0.8.0
-    cp -r megatron ../MindSpeed-MM/
-    cd ..
-    cd MindSpeed-MM
+git clone https://gitee.com/ascend/MindSpeed-MM.git 
+git clone https://github.com/NVIDIA/Megatron-LM.git
+cd Megatron-LM
+git checkout core_r0.8.0
+cp -r megatron ../MindSpeed-MM/
+cd ..
+cd MindSpeed-MM
 ```
 
 <a id="jump1.2"></a>
@@ -55,30 +55,30 @@
 #### 2. 环境搭建
 
 ```bash
-    # python3.8
-    conda create -n test python=3.8
-    conda activate test
+# python3.8
+conda create -n test python=3.8
+conda activate test
 
-    # 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
-    pip install torch-2.1.0-cp38-cp38m-manylinux2014_aarch64.whl 
-    pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
-    
-    # apex for Ascend 参考 https://gitee.com/ascend/apex
-    # 建议从原仓编译安装
+# 安装 torch 和 torch_npu，注意要选择对应python版本、x86或arm的torch、torch_npu及apex包
+pip install torch-2.1.0-cp38-cp38m-manylinux2014_aarch64.whl
+pip install torch_npu-2.1.0*-cp38-cp38m-linux_aarch64.whl
 
-    # 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh 
+# apex for Ascend 参考 https://gitee.com/ascend/apex
+# 建议从原仓编译安装
 
-    # 安装加速库
-    git clone https://gitee.com/ascend/MindSpeed.git
-    cd MindSpeed
-    git checkout 59b4e983b7dc1f537f8c6b97a57e54f0316fafb0
-    pip install -r requirements.txt 
-    pip3 install -e .
-    cd ..
+# 将shell脚本中的环境变量路径修改为真实路径，下面为参考路径
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
 
-    # 安装其余依赖库
-    pip install -e .
+# 安装加速库
+git clone https://gitee.com/ascend/MindSpeed.git
+cd MindSpeed
+git checkout 59b4e983b7dc1f537f8c6b97a57e54f0316fafb0
+pip install -r requirements.txt
+pip3 install -e .
+cd ..
+
+# 安装其余依赖库
+pip install -e .
 ```
 
 <a id="jump1.3"></a>
@@ -200,40 +200,40 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 
 默认场景无需调整，当增大模型参数规模或者视频序列长度时，需要根据实际情况启用以下并行策略，并通过调试确定最优并行策略。
 
-+ CP: 序列并行，当前支持Ulysess序列并行。
++ CP: 序列并行，当前支持Ulysses序列并行。
 
-  - 使用场景：在视频序列（分辨率X帧数）较大时，可以开启来降低内存占用。
+  - 使用场景：在视频序列（分辨率×帧数）较大时，可以开启来降低内存占用。
   
-  - 使能方式：在启动脚本中设置 CP > 1，如：CP=2；
+  - 使能方式：在启动脚本中设置 CP > 1，如：CP=2。
   
-  - 限制条件：head数量需要能够被TP*CP整除
+  - 限制条件：head数量需要能够被TP*CP整除。
 
 
 + TP: 张量模型并行
 
   - 使用场景：模型参数规模较大时，单卡上无法承载完整的模型，通过开启TP可以降低静态内存和运行时内存。
 
-  - 使能方式：在启动脚本中设置 TP > 1，如：TP=8
+  - 使能方式：在启动脚本中设置 TP > 1，如：TP=8。
 
-  - 限制条件：head 数量需要能够被TP*CP整除
+  - 限制条件：head 数量需要能够被TP*CP整除。
 
 
 + SP: Megatron序列并行
   
   - 使用场景：在张量模型并行的基础上，进一步对 LayerNorm 和 Dropout 模块的序列维度进行切分，以降低动态内存。 
 
-  - 使能方式：在 GPT_ARGS 设置 --sequence-parallel
+  - 使能方式：在 GPT_ARGS 设置 --sequence-parallel。
   
-  - 限制条件：前置必要条件为开启TP
+  - 限制条件：前置必要条件为开启TP。
 
 
 + PP：流水线并行
 
   目前支持将predictor模型切分流水线。在pretrain_xx_model.json文件修改字段"pipeline_num_layers", 类型为list。该list的长度即为 pipeline rank的数量，每一个数值代表rank_i中的层数。例如，[8, 8, 8, 8]代表有4个pipeline stage， 每个容纳8个dit layers。注意list中 所有的数值的和应该和num_layers字段相等。此外，pp_rank==0的stage中除了包含dit层数以外，还会容纳text_encoder和ae，因此可以酌情减少第0个 stage的dit层数。注意保证PP模型参数配置和模型转换时的参数配置一致。
 
-  - 使用场景：模型参数较大时候，通过流线线方式切分并行，降低内存 
+  - 使用场景：模型参数较大时候，通过流水线方式切分并行，降低内存。
 
-  - 使能方式：使用pp时需要在运行脚本GPT_ARGS中打开以下几个参数
+  - 使能方式：使用pp时需要在运行脚本GPT_ARGS中打开以下几个参数。
   
   ```shell
     PP = 4 # PP > 1 开启 
@@ -251,7 +251,7 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 
   目前支持将predictor模型切分虚拟流水线并行。将pretrain_xxx_model.json文件中的"pipeline_num_layers"一维数组改造为两维，其中第一维表示虚拟并行的数量，二维表示流水线并行的数量，例如[[4, 4, 4, 4], [4, 4, 4, 4]]其中第一维两个数组表示vp为2, 第二维的stage个数为4表示流水线数量pp为4。
 
-  - 使用场景：对流水线并行进行进一步切分，通过虚拟化流水线，降低空泡
+  - 使用场景：对流水线并行进行进一步切分，通过虚拟化流水线，降低空泡。
 
   - 使能方式:如果想要使用虚拟流水线并行，需要在pretrain.t2v.sh或者prerain_i2v.sh当中修改如下变量，需要注意的是，VP仅在PP大于1的情况下生效:
 
@@ -266,21 +266,21 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
   ```
 
 + VAE-CP：VAE序列并行
-  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成vae的encode计算，需要开启VAE-CP
-  - 使能方式：在xxx_model.json中设置vae_cp_size, vae_cp_size为大于1的整数时生效, 建议设置等于Dit部分cp_size
-  - 限制条件：暂不兼容PP
+  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成vae的encode计算，需要开启VAE-CP。
+  - 使能方式：在xxx_model.json中设置vae_cp_size, vae_cp_size为大于1的整数时生效, 建议设置等于Dit部分cp_size。
+  - 限制条件：暂不兼容PP。
   
 
 + Encoder-DP：Encoder数据并行
-  - 使用场景：在开启TP、CP时，DP较小，存在vae和text_encoder的冗余encode计算。开启以减小冗余计算，但会增加通信，需要按场景开启
-  - 使能方式：在xxx_model.json中设置"enable_encoder_dp": true
-  - 限制条件：暂不兼容PP、VAE-CP
+  - 使用场景：在开启TP、CP时，DP较小，存在vae和text_encoder的冗余encode计算。开启以减小冗余计算，但会增加通信，需要按场景开启。
+  - 使能方式：在xxx_model.json中设置"enable_encoder_dp": true。
+  - 限制条件：暂不兼容PP、VAE-CP。
 
 
 + DiT-RingAttention：DiT RingAttention序列并行
 
-  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention
-  - 使能方式：在启动脚本 pretrain_xxx.sh 中修改如下变量
+  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention。
+  - 使能方式：在启动脚本 pretrain_xxx.sh 中修改如下变量。
 
   ```shell
   CP=8
@@ -294,15 +294,15 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
   ...
   ```
 
-  - ```--use-cp-send-recv-overlap```为可选参数，建议开启，开启后支持send receive overlap功能
-  - ```--cp-window-size [int]```为可选参数，设置算法中双层Ring Attention的内层窗口大小，需要确保cp_size能被该参数整除
-    - 缺省值为1，即使用原始的Ring Attention算法
-    - 大于1时，即使用Double Ring Attention算法，优化原始Ring Attention性能
+  - ```--use-cp-send-recv-overlap```为可选参数，建议开启，开启后支持send receive overlap功能。
+  - ```--cp-window-size [int]```为可选参数，设置算法中双层Ring Attention的内层窗口大小，需要确保cp_size能被该参数整除。
+    - 缺省值为1，即使用原始的Ring Attention算法。
+    - 大于1时，即使用Double Ring Attention算法，优化原始Ring Attention性能。
 
 
 + DiT-USP: DiT USP混合序列并行（Ulysses + RingAttention）
-  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention
-  - 使能方式：在启动脚本pretrain_xxx.sh中修改如下变量
+  - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成DiT的计算，需要开启DiT-RingAttention。
+  - 使能方式：在启动脚本pretrain_xxx.sh中修改如下变量。
 
   ```shell
   CP=8
@@ -316,10 +316,10 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
   ...
   ```
 
-  - 需要确保```--context-parallel-size```可以被```--ulysses-degree-in-cp```整除且大于1
-    - 例如当设置```--context-parallel-size```为8时，可以设置```--ulysses-degree-in-cp```为2或```--ulysses-degree-in-cp```为4
-    - 同时需要确保```--ulysses-degree-in-cp```可以被num-attention-heads数整除
-  - RingAttention相关参数解析见DiT-RingAttention部分
+  - 需要确保```--context-parallel-size```可以被```--ulysses-degree-in-cp```整除且大于1。
+    - 例如当设置```--context-parallel-size```为8时，可以设置```--ulysses-degree-in-cp```为2或```--ulysses-degree-in-cp```为4。
+    - 同时需要确保```--ulysses-degree-in-cp```可以被num-attention-heads数整除。
+  - RingAttention相关参数解析见DiT-RingAttention部分。
 
 【动态/固定分辨率】
 - 支持使用动态分辨率或固定分辨率进行训练，默认为动态分辨率训练，如切换需修改启动脚本pretrain_xxx.sh
