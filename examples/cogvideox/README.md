@@ -282,7 +282,7 @@ CogvideoX训练阶段的启动文件为shell脚本，主要分为如下4个：
   参数里面的yaml文件如下面所示:
   ```yaml
   zero3_size: 8  
-  tranformer_layers:
+  transformer_layers:
     - mindspeed_mm.models.predictor.dits.sat_dit.VideoDiTBlock
   backward_prefetch: 'BACKWARD_PRE'
   param_dtype: "bf16"

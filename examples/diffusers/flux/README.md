@@ -168,7 +168,7 @@
 
 3. 【修改代码文件】
 
-    1. 在 `src/diffusers/models/embeddings.py` 文件里，在 `class FluxPosEmbed(nn.Module):` 下的 **第760行左右** 找到代码： `freqs_dtype = torch.float32 if is_mps else torch.float64` 进行修改, 请修改为：`freqs_dtype = torch.float32`
+    1. 在 `src/diffusers/models/embeddings.py` 文件里，在 `class FluxPosEmbed(nn.Module):` 下的 **第813行左右** 找到代码： `freqs_dtype = torch.float32 if is_mps else torch.float64` 进行修改, 请修改为：`freqs_dtype = torch.float32`
 
         ```shell
         # 修改为freqs_dtype = torch.float32
@@ -176,7 +176,7 @@
         ```
 
         ```python
-        freqs_dtype = torch.float32 # 760行附近
+        freqs_dtype = torch.float32 # 813行附近
         # freqs_dtype = torch.float32 if is_mps else torch.float64 # 原代码
         ```
 
@@ -189,7 +189,7 @@
         vim ../advanced_diffusion_training/train_dreambooth_lora_flux_advanced.py # 进入Python文件
         ```
 
-        - 在import栏/`if is_wandb_available():`上方（62行附近添加代码）
+        - 在import栏`if is_wandb_available():`上方（62行附近添加代码）
 
         ```python
         # 添加代码到train_dreambooth_flux.py 62行附近
