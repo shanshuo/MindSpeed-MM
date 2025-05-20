@@ -396,7 +396,7 @@ bash examples/stepvideo/i2v/inference_i2v.sh
 #### 环境准备
 
 1. 参考docs/features/vbench-evaluate.md中的环境安装指导完成vbench及依赖三方件的安装
-2. 将[t2v json](https://github.com/Vchitect/VBench/blob/master/vbench/VBench_full_info.json) 下载到MM代码根路径"./vbench/VBench_full_info.json"
+2. 将VBench的 [t2v json](https://github.com/Vchitect/VBench/blob/master/vbench/VBench_full_info.json) 下载到MM代码根路径"./vbench/VBench_full_info.json"
 
 <a id="jump7.2"></a>
 #### 生成视频样本
@@ -427,7 +427,7 @@ bash examples/stepvideo/{task_name}/inference_{task_name}.sh
 
 执行如下命令，为生成的视频样本打分，并生成偏好数据文件
 ```bash
-bash python examples/stepvideo/histgram_generator.py --prompt_file <prompt文件路径> --videos_path <视频样本路径> --num_inference_videos_per_sample <每个prompt生成的视频样本数量>
+python examples/stepvideo/histgram_generator.py --prompt_file <prompt文件路径> --videos_path <视频样本路径> --num_inference_videos_per_sample <每个prompt生成的视频样本数量>
 ```
 
 生成偏好数据集脚本的参数说明如下：
@@ -482,7 +482,7 @@ data.jsonl中包含成对的视频偏好数据和文本信息，具体示例如�
 
 4. dpo参数配置
 
-  根据实际情况修改`data_dpo.json`中的直方图文件路径，即将`histgram_path`的值配置为执行生成偏好数据集脚本后，生成的"video_score_histogram.json"文件路径
+  根据实际情况修改`posttrain_t2v_model.json`中的直方图文件路径，即将`histgram_path`的值配置为执行生成偏好数据集脚本后，生成的"video_score_histogram.json"文件路径
 
 <a id="jump7.5"></a>
 #### 启动dpo训练
