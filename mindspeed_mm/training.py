@@ -121,6 +121,10 @@ def pretrain(
     args = get_args()
     merge_mm_args(args)
     
+    if args.log_throughput:
+        print("[WARNING] Currently, the calculation of TFLOPS is incorrect for multimodal models. "
+                             "Please do not use this as a reference for performance.")
+    
     if hasattr(args, "mm") and getattr(args, "profile_subgraph_seg", False):
         from mindspeed.core.auto_parallel.mm_search.profiling import set_profile_model_config
         set_profile_model_config(args)
