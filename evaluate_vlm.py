@@ -19,7 +19,7 @@ def main():
     eval_dataset_class = eval_dataset_dict[args.evaluation_dataset]
     eval_impl_class = eval_impl_dict[args.evaluation_dataset]
     if args.evaluation_model in eval_model_prompt_dict:
-        model_prompt_build = eval_model_prompt_dict[args.evaluation_model]()
+        model_prompt_build = eval_model_prompt_dict[args.evaluation_model](getattr(args, 'use_custom_prompt', True))
     else:
         model_prompt_build = None
     inference_pipeline = inference_pipeline_class(args)

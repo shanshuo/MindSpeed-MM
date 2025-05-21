@@ -10,8 +10,8 @@ from mindspeed_mm.tasks.evaluation.eval_datasets.datasets_base import datasets_t
 
 class Qwen2vlPromptTemplate(BasePromptTemplate):
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, use_custom_prompt):
+        super().__init__(use_custom_prompt)
         self.tgt_path = None
 
     def build_prompt(self, line, dump_image: Callable, dataset_name=None):
@@ -29,6 +29,8 @@ class Qwen2vlPromptTemplate(BasePromptTemplate):
 
     def is_use_custom_prompt(self, dataset_name):
         dataset_type = datasets_type[dataset_name]
+        if not self._use_custom_prompt:
+            return False
         if dataset_name in {'mmmu_dev_val', 'mmmu_test'}:
             return True
         if dataset_type == 'MCQ':

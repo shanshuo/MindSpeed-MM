@@ -100,7 +100,11 @@ class BaseEvalImpl:
                 self.result[data_index] = response
 
             # 每20步存一下pkl文件
-            if (i + 1) % 20 == 0:
+            if (
+                ((i + 1) % 20 == 0)
+                and mpu.is_pipeline_last_stage()
+                and (mpu.get_tensor_model_parallel_rank() == 0)
+            ):
                 save_pkl(self.result, self.out_file)
 
         if mpu.is_pipeline_last_stage() and mpu.get_tensor_model_parallel_rank() == 0:

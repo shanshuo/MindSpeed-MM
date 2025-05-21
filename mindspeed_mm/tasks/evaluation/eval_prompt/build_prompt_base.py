@@ -10,7 +10,8 @@ from mindspeed_mm.tasks.evaluation.utils.string_utils import is_cn_string
 
 class BasePromptTemplate:
 
-    def __init__(self):
+    def __init__(self, use_custom_prompt):
+        self._use_custom_prompt = use_custom_prompt
         self.device = torch.cuda.current_device()
 
     def build_prompt(self, line, dump_image: Callable, dataset_name=None):
