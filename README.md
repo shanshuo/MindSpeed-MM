@@ -174,6 +174,8 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
 
 (注：此处SPS、FPS展示集群吞吐；TPS展示单卡吞吐)
 
+**平均序列长度**是指在性能测试过程中所使用数据集的平均序列长度，通过统计各个序列长度的出现频率进行加权平均计算得出
+
 **亲和场景**为调整少量结构或参数，使得模型更加亲和昇腾，性能更优
 
 **A3** 为硬件 Atlas A3 训练系列产品
@@ -191,6 +193,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <th>精度格式</th>
       <th>NPU性能</th>
       <th>参考性能</th>
+      <th>平均序列长度</th>
       <th>认证</th>
     </tr>
   </thead>
@@ -205,6 +208,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.918 (SPS) </td>
       <td> 1.04 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -214,6 +218,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.954 (SPS) </td>
       <td> 1.042 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -223,6 +228,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.160 (SPS) </td>
       <td> 0.160 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -232,6 +238,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.179 (SPS) </td>
       <td> 0.174 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     </tr>
@@ -242,6 +249,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.76 (SPS) </td>
       <td>  / </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -250,6 +258,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 1x8</td>
       <td> BF16 </td>
       <td> 0.130 (SPS) </td>
+      <td> / </td>
       <td> / </td>
       <td>【Test】</td>
     </tr>
@@ -260,6 +269,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.179 (SPS) </td>
       <td> 0.173 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     </tr>
@@ -270,6 +280,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.171 (SPS) </td>
       <td> 0.181 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -280,6 +291,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 3.18 (SPS)</td>
       <td> 2.04 (SPS)</td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -290,6 +302,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 7.31 (SPS) </td>
       <td> 8.15 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -300,6 +313,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.42 (SPS) </td>
       <td> 0.37 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -310,6 +324,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 1.29 (SPS) </td>
       <td> 1.27 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -320,6 +335,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 1.17 (SPS) </td>
       <td> 1.15 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -330,6 +346,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 23.860 (SPS) </td>
       <td> 26.091 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -340,6 +357,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.37 (SPS) </td>
       <td> 0.46 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -350,6 +368,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 0.37 (SPS) </td>
       <td> 0.46 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
   <tr>
@@ -360,6 +379,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 1.88 (SPS) </td>
       <td> 2.09 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -369,6 +389,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 2.89 (SPS) </td>
       <td> 3.03 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -379,6 +400,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 1.81 (SPS) </td>
       <td> 2.01 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -388,6 +410,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 3.44 (SPS) </td>
       <td> 3.92 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -396,6 +419,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 推理 </td>
       <td> 1x1 </td>
       <td> BF16 </td>
+      <td> / </td>
       <td> / </td>
       <td> / </td>
       <td>【奇虎360贡献】</td>
@@ -408,6 +432,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 29.92  (FPS)</td>
       <td> 30.65 (FPS)</td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -417,6 +442,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> FP16 </td>
       <td> 28.51 (FPS)</td>
       <td> 30.23 (FPS)</td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -427,6 +453,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 16.09 (FPS)</td>
       <td> 16.01 (FPS)</td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -437,6 +464,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 26.20 (FPS)</td>
       <td> 28.33 (FPS)</td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -446,6 +474,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> FP16 </td>
       <td> 47.93 (FPS)</td>
       <td> 47.95 (FPS)</td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -456,6 +485,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 55.23 (FPS) </td>
       <td> 53.65 (FPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -466,6 +496,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 28.7 (FPS) </td>
       <td> 32.8 (FPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -474,6 +505,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 推理 </td>
       <td> 1x1 </td>
       <td> FP16 </td>
+      <td> / </td>
       <td> / </td>
       <td> / </td>
       <td>【Test】</td>
@@ -487,6 +519,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 48.27 (SPS) </td>
       <td> 49.94 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
    <tr>
@@ -497,6 +530,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 33.77 (SPS) </td>
       <td> 22.46 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -506,6 +540,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 12.86 (SPS) </td>
       <td> 11.00 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -515,6 +550,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 3.31 (SPS) </td>
       <td> 3.26 (SPS) </td>
+      <td> / </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -524,6 +560,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 214 (TPS) </td>
       <td> 191 (TPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -532,6 +569,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 微调 </td>
       <td> 8x8 </td>
       <td> BF16 </td>
+      <td> / </td>
       <td> / </td>
       <td> / </td>
       <td>【Test】</td>
@@ -544,6 +582,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 34.15 (SPS) </td>
       <td> 34.88 (SPS) </td>
+      <td> 563 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -553,6 +592,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 13.28 (SPS) </td>
       <td> 11.66 (SPS) </td>
+      <td> 563 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -562,6 +602,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 261.25 (TPS) </td>
       <td> 257.63 (TPS) </td>
+      <td> 563 </td>
       <td>【Pass】</td>
     </tr>
     <tr>
@@ -572,6 +613,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 23.77 (SPS) </td>
       <td> 21.79 (SPS) </td>
+      <td> 563 </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -581,6 +623,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 14.20 (SPS) </td>
       <td> 12.67 (SPS) </td>
+      <td> 563 </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -590,6 +633,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 249.94 (TPS) </td>
       <td> / </td>
+      <td> 563 </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -599,6 +643,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> / </td>
       <td> / </td>
+      <td> 563 </td>
       <td>【Test】</td>
     </tr>
     <tr>
@@ -610,6 +655,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 93.38 (SPS) </td>
       <td> 109.23 (SPS) </td>
+      <td> / </td>
       <td>【Test】</td>
     </tr>
     </tbody>
