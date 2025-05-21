@@ -358,7 +358,7 @@ class MOETransformerBlock(TransformerBlock):
             ffn_hidden_size = self.config.ffn_hidden_size
             # For deepseek
             if (
-                    self.config.num_experts
+                    self.config.num_moe_experts
                     and self.config.first_k_dense_replace is not None
                     and self.config.moe_layer_freq is not None
             ):
@@ -367,7 +367,7 @@ class MOETransformerBlock(TransformerBlock):
                         and (global_layer_number - 1) % self.config.moe_layer_freq == 0
                 ):
                     self.config.ffn_hidden_size = self.config.moe_intermediate_size
-                    layer_spec.submodules.mlp = get_mlp_module_spec(use_te=use_te, num_experts=self.config.num_experts,
+                    layer_spec.submodules.mlp = get_mlp_module_spec(use_te=use_te, num_experts=self.config.num_moe_experts,
                                                                     moe_grouped_gemm=self.config.moe_grouped_gemm)
                 else:
                     layer_spec.submodules.mlp = get_mlp_module_spec(use_te=use_te, moe_grouped_gemm=self.config.moe_grouped_gemm)

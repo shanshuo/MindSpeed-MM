@@ -37,7 +37,6 @@
         "rotary_base": 10000,
         "first_k_dense_replace": 1,
         "moe_layer_freq": 1,
-        "num_experts": 72,
         "num_moe_experts": 72,
         "n_shared_experts": 2,
         "n_group": 1,
