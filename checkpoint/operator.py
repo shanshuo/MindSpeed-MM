@@ -51,6 +51,34 @@ class Operator(ABC):
         pass
 
 
+class ZeroWeightOp(Operator):
+    """
+    权重置零操作，将权重值赋值为零或向权重字典添加全零权重
+    权重转换需要把q,k,v权重合并成一个完整的qkv大矩阵。
+    而由于在Qwen2.5-Omni模型的音频模型中，k没有bias，所以需要将k的bias以全零权重的形式添加到权重字典
+    """
+
+    def __init__(self, name: str, shape: List[int], layers: int):
+        """
+        初始化权重信息
+
+        参数:
+        - name (str): 权重的名称。
+        - shape (List[int]): 权重的的形状，以整数列表形式表示。
+        - layers (int): 模型的层数。
+        """
+        self.name = name
+        self.shape = shape
+        self.layers = layers
+
+    def handle(self, weights: STATE_DICT_T):
+        """向weights字典中添加权重或修改权重为0"""
+        for layer_num in range(self.layers):
+            tensor = torch.zeros(self.shape)
+            name = self.name.replace(DIGIT_FMT, str(layer_num))
+            weights[name] = tensor
+
+
 class RenameOp(Operator):
     def __init__(self, patterns: Tuple[Tuple[str, str], ...]):
         self.patterns = patterns
@@ -224,6 +252,94 @@ def create_qwen2_5_vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_
                   raw_names=["visual.blocks.(\d+).mlp.gate_proj.bias", "visual.blocks.(\d+).mlp.up_proj.bias"],
                   new_name="image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias")
           ] + create_qwen2vl_ops(vit_embed_dim, vit_num_heads, llm_num_query_groups)
+    return ops
+
+
+def create_qwen2_5_omni_ops(vit_num_heads: int, llm_num_query_groups: int, audio_num_heads: int, audio_d_model: int,
+                            audio_encoder_layers: int) -> List[Operator]:
+    """qwen2.5-omni 权重转换逻辑"""
+    ops = [
+        # 音频模型中，k没有bias，所以需要将k的bias以全零权重的形式添加到权重字典，以便进行后续的qkv拼接
+        ZeroWeightOp(
+            name="thinker.audio_tower.layers.(\d+).self_attn.k_proj.bias",
+            shape=[audio_d_model],
+            layers=audio_encoder_layers
+        ),
+        UpGateMergeOp(
+            raw_names=["thinker.visual.blocks.(\d+).mlp.gate_proj.weight",
+                       "thinker.visual.blocks.(\d+).mlp.up_proj.weight"],
+            new_name="image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight"),
+        UpGateMergeOp(
+            raw_names=["thinker.visual.blocks.(\d+).mlp.gate_proj.bias",
+                       "thinker.visual.blocks.(\d+).mlp.up_proj.bias"],
+            new_name="image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias"),
+        UpGateMergeOp(raw_names=["thinker.model.layers.(\d+).mlp.gate_proj.weight",
+                                 "thinker.model.layers.(\d+).mlp.up_proj.weight"],
+                      new_name="text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight"),
+        QKVMergeOp(raw_names=["thinker.model.layers.(\d+).self_attn.q_proj.weight",
+                              "thinker.model.layers.(\d+).self_attn.k_proj.weight",
+                              "thinker.model.layers.(\d+).self_attn.v_proj.weight"],
+                   new_name="text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.weight",
+                   group=llm_num_query_groups),
+        QKVMergeOp(raw_names=["thinker.model.layers.(\d+).self_attn.q_proj.bias",
+                              "thinker.model.layers.(\d+).self_attn.k_proj.bias",
+                              "thinker.model.layers.(\d+).self_attn.v_proj.bias"],
+                   new_name="text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.bias",
+                   group=llm_num_query_groups),
+        QKVMergeOp(raw_names=["thinker.visual.blocks.(\d+).attn.q.weight",
+                              "thinker.visual.blocks.(\d+).attn.k.weight",
+                              "thinker.visual.blocks.(\d+).attn.v.weight"],
+                   new_name="image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight",
+                   group=vit_num_heads),
+        QKVMergeOp(raw_names=["thinker.visual.blocks.(\d+).attn.q.bias",
+                              "thinker.visual.blocks.(\d+).attn.k.bias",
+                              "thinker.visual.blocks.(\d+).attn.v.bias"],
+                   new_name="image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias",
+                   group=vit_num_heads),
+        QKVMergeOp(raw_names=["thinker.audio_tower.layers.(\d+).self_attn.q_proj.weight",
+                              "thinker.audio_tower.layers.(\d+).self_attn.k_proj.weight",
+                              "thinker.audio_tower.layers.(\d+).self_attn.v_proj.weight"],
+                   new_name="audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight",
+                   group=audio_num_heads),
+        QKVMergeOp(raw_names=["thinker.audio_tower.layers.(\d+).self_attn.q_proj.bias",
+                              "thinker.audio_tower.layers.(\d+).self_attn.k_proj.bias",
+                              "thinker.audio_tower.layers.(\d+).self_attn.v_proj.bias"],
+                   new_name="audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias",
+                   group=audio_num_heads),
+        RenameOp(
+            (
+                # 定义多个正则替换规则（按处理顺序排列）
+                # 处理 visual.blocks.{n} 路径
+                (r'^thinker.visual\.blocks\.(\d+)\.', r'image_encoder.encoder.blocks.layers.\1.'),
+                (r'\.attn\.proj\.', '.self_attention.linear_proj.'),
+                (r'\.attn\.qkv\.', '.self_attention.linear_qkv.'),
+                (r'\.norm1\.', '.input_layernorm.'),
+                (r'\.norm2\.', '.pre_mlp_layernorm.'),
+                # 处理 model.layers.{n} 路径
+                (r'^thinker.model\.layers\.(\d+)\.', r'text_decoder.decoder.layers.\1.'),
+                (r'\.mlp\.down_proj\.', '.mlp.linear_fc2.'),
+                (r'\.post_attention_layernorm\.', '.pre_mlp_layernorm.'),
+                (r'\.self_attn\.o_proj\.', '.self_attention.linear_proj.'),
+                # 处理 visual.merger 相关
+                (r'^thinker.visual\.merger\.ln_q', 'image_encoder.projector.layernorm'),
+                (r'^thinker.visual\.merger\.mlp\.0', 'image_encoder.projector.encoder.linear_fc1'),
+                (r'^thinker.visual\.merger\.mlp\.2', 'image_encoder.projector.encoder.linear_fc2'),
+                # audio_tower相关
+                (r'^thinker.audio_tower\.layers\.(\d+)\.', r'audio_encoder.encoder.blocks.layers.\1.'),
+                (r'\.self_attn\.out_proj\.', '.self_attention.linear_proj.'),
+                (r'\.fc1\.', '.mlp.linear_fc1.'),
+                (r'\.fc2\.', '.mlp.linear_fc2.'),
+                (r'\.self_attn_layer_norm\.', '.input_layernorm.'),
+                (r'\.final_layer_norm\.', '.pre_mlp_layernorm.'),
+                (r'^thinker.audio_tower\.', r'audio_encoder.encoder.'),
+                # 其他固定映射
+                (r'^thinker.visual\.patch_embed\.proj', 'image_encoder.encoder.patch_embed.proj'),
+                (r'^thinker.model\.embed_tokens', 'text_decoder.embedding.word_embeddings'),
+                (r'^thinker.model\.norm', 'text_decoder.decoder.final_layernorm'),
+                (r'^thinker.lm_head', 'text_decoder.output_layer')
+            )
+        ),
+    ]
     return ops
 
 

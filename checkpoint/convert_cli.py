@@ -95,6 +95,28 @@ class Qwen2_5_VLConverter(Converter):
         pass
 
 
+class Qwen2_5_OmniConverter(Converter):
+    """Qwen2.5Omni模型转换工具"""
+
+    @staticmethod
+    def hf_to_mm(cfg: ConvertVppMMConfig):
+        """huggingface模型转换mindspeed-mm模型权重"""
+        qwen_vl_hf_to_mm.convert_qwen2_5_omni(cfg)
+        # 安全管控权限
+        os.chmod(cfg.mm_dir, SAFE_MODE)
+
+    @staticmethod
+    def mm_to_hf(cfg: ConvertHFConfig):
+        """mindspeed-mm模型转换huggingface模型权重"""
+        # qwen2_5_vl_mm_to_hf会用到mindspeed.megatron_adaptor模块，提前import会引入问题，故在此import
+        pass
+
+    @staticmethod
+    def resplit(cfg: ConvertResplitConfig):
+        """mindspeed-mm模型权重重新切分"""
+        pass
+
+
 class InternVLConverter(Converter):
     """InternVL模型转换工具"""
 

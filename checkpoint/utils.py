@@ -5,18 +5,18 @@
 @Time    : 2025/01/14
 @Desc    : 模型相关的配置定义
 """
-import os
 import json
+import os
 import re
 import shutil
 from copy import deepcopy
 from functools import cached_property
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Union, Any, Tuple
 
 import torch
-from safetensors.torch import save_file, load_file
 from pydantic import BaseModel, DirectoryPath, PositiveInt, NonNegativeInt, model_validator, computed_field
+from safetensors.torch import save_file, load_file
 from tqdm import tqdm
 from transformers import PretrainedConfig, AutoConfig
 
@@ -64,6 +64,9 @@ class VppParallelConfig(BaseModel):
 
     vit_pp_layers: list[list[NonNegativeInt]]
     """vit模块pipeline parallel切分每张卡上切分几层, vpp切分配置参考docs/features/virtual_pipeline_parallel.md"""
+
+    audio_pp_layers: Optional[list[list[NonNegativeInt]]] = None
+    """audio模块pipeline parallel切分每张卡上切分几层, vpp切分配置参考docs/features/virtual_pipeline_parallel.md"""
 
     tp_size: PositiveInt = 1
     """tensor parallel张量并行组，模型转换时不同的tp组要切分到不同的目录下"""
@@ -189,16 +192,38 @@ class ConvertVppMMConfig(BaseModel):
     @model_validator(mode='after')
     def validate_sum_of_layers(self) -> "ConvertVppMMConfig":
         model_config = self.hf_config.config
+
+        # 视觉层数配置调用示例（带注释）
+        vit_num_layers = get_first_available(
+            model_config,
+            candidates=[
+                (['vision_config'], 'depth'),                       # 优先级1: qwenvl 风格的路径 (model_config.vision_config.depth)
+                (['thinker_config', 'vision_config'], 'depth'),     # 优先级2: qwen-omni 路径 (model_config.thinker_config.vision_config.depth)
+                (['vision_config'], 'num_hidden_layers')            # 优先级3: internvl 回退路径 (model_config.vision_config.num_hidden_layers)
+            ]
+        )
+        if vit_num_layers is None:
+            raise AttributeError("Required vision layer config not found in any model type.")
+
+        # 大语言模型层数配置（优先尝试qwenvl > qwen-omni > internvl）
+        llm_num_layers = get_first_available(model_config, [
+            ([], 'num_hidden_layers'),  # qwenvl直接取model_config
+            (['thinker_config', 'text_config'], 'num_hidden_layers'),  # qwen-omni
+            (['llm_config'], 'num_hidden_layers')  # internvl
+        ])
+        if llm_num_layers is None:
+            raise AttributeError("Required LLM layer config not found in any model type.")
+
+        # 音频层数配置（仅尝试qwen-omni）
+        audio_num_layers = get_first_available(model_config, [
+            (['thinker_config', 'audio_config'], 'num_hidden_layers'),
+        ])
+        if audio_num_layers is None and self.parallel_config.audio_pp_layers is not None:
+            raise AttributeError("Required audio layer config not found in any model type.")
+
         vit_pipeline_num_layers = self.parallel_config.vit_pp_layers
         llm_pipeline_num_layers = self.parallel_config.llm_pp_layers
-        """先尝试读取qwenvl的vit层数配置，再读取internvl的vit层数配置"""
-        vit_num_layers = getattr(model_config.vision_config, "depth", None)
-        if vit_num_layers is None:
-            vit_num_layers = model_config.vision_config.num_hidden_layers
-        """先尝试读取qwenvl的llm层数配置，再读取internvl的llm层数配置"""
-        llm_num_layers = getattr(model_config, "num_hidden_layers", None)
-        if llm_num_layers is None:
-            llm_num_layers = model_config.llm_config.num_hidden_layers
+        audio_pipeline_num_layers = self.parallel_config.audio_pp_layers
 
         # Flatten the vit and llm layers for VPP
         vit_pipeline_num_layers_flat = [
@@ -226,7 +251,50 @@ class ConvertVppMMConfig(BaseModel):
         if sum(llm_pipeline_num_layers_flat) != llm_num_layers:
             raise AssertionError(f'Sum of llm_pipeline_num_layers_flat must be equal to llm_num_layers, '
                                  f'but got {sum(llm_pipeline_num_layers_flat)} and {llm_num_layers}.')
+        if audio_num_layers is not None:
+            audio_pipeline_num_layers_flat = [
+                item
+                for sublist in audio_pipeline_num_layers
+                for item in sublist
+            ]
+            if len(audio_pipeline_num_layers_flat) != expected_length:
+                raise AssertionError(f'Length of audio_pipeline_num_layers_flat must be equal to pp_size * vp_size, '
+                                     f'but got {len(audio_pipeline_num_layers_flat)} and {expected_length}.')
+            if sum(audio_pipeline_num_layers_flat) != audio_num_layers:
+                raise AssertionError(f'Sum of audio_pipeline_num_layers_flat must be equal to audio_num_layers, '
+                                     f'but got {sum(audio_pipeline_num_layers_flat)} and {audio_num_layers}.')
         return self
+
+
+def get_first_available(
+        model_cfg: Any,
+        candidates: List[Tuple[List[str], str]]
+):
+    """
+    安全地按优先级尝试多个属性路径，返回第一个存在的属性值，否则返回 None。
+
+    参数:
+        model_cfg (Any):
+            包含嵌套配置的模型配置对象（通常为 HuggingFace 模型的 config 对象）。
+        candidates (List[Tuple[List[str], str]]):
+            优先级排序的候选路径列表，每个元素为 (属性路径, 目标属性名)。
+            属性路径是嵌套属性的层级列表，例如 ['vision_config', 'depth'] 对应 model_cfg.vision_config.depth。
+
+    返回:
+        Optional[Union[int, float, str, dict, list]]:
+            第一个有效路径对应的属性值，如果所有路径均无效则返回 None。
+
+    """
+    for path, attr in candidates:
+        current = model_cfg
+        try:
+            # 逐级访问嵌套属性
+            for step in path:
+                current = getattr(current, step)
+            return getattr(current, attr)
+        except AttributeError:
+            continue
+    return None
 
 
 class ConvertVppHFConfig(ConvertVppMMConfig):
@@ -287,7 +355,8 @@ def merge_pp_index(vit_pipeline_num_layers: list[int], llm_pipeline_num_layers: 
     return split_method
 
 
-def merge_vpp_index(vit_pipeline_num_layers: list[list[int]], llm_pipeline_num_layers: list[list[int]]) -> list[tuple[int, int]]:
+def merge_vpp_index(vit_pipeline_num_layers: list[list[int]], llm_pipeline_num_layers: list[list[int]],
+                    audio_pipeline_num_layers: list[list[int]]) -> list[tuple[int, ...]]:
     # Flatten the vit and llm layers for VPP
     vit_pipeline_num_layers_flat = [
         item
@@ -301,30 +370,58 @@ def merge_vpp_index(vit_pipeline_num_layers: list[list[int]], llm_pipeline_num_l
     ]
     """返回每张卡上vit和llm各自的层数"""
     split_method = []
-    for vit_num, llm_num in zip(vit_pipeline_num_layers_flat, llm_pipeline_num_layers_flat):
-        split_method.append((vit_num, llm_num))
+    if audio_pipeline_num_layers is None:
+        for vit_num, llm_num in zip(vit_pipeline_num_layers_flat, llm_pipeline_num_layers_flat):
+            split_method.append((vit_num, llm_num))
+    else:
+        audio_pipeline_num_layers_flat = [
+            item
+            for sublist in audio_pipeline_num_layers
+            for item in sublist
+        ]
+        for vit_num, llm_num, audio_num in zip(vit_pipeline_num_layers_flat, llm_pipeline_num_layers_flat,
+                                               audio_pipeline_num_layers_flat):
+            split_method.append((vit_num, llm_num, audio_num))
     return split_method
 
 
-def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, int]]) -> list[STATE_DICT_T]:
+def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, ...]]) -> list[STATE_DICT_T]:
     if len(pp_split) <= 1:
         return [state_dict]
 
     pp_size = len(pp_split)
     vit_range = [0, 0]
     llm_range = [pp_size - 1, pp_size - 1]
-    for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
+    audio_range = [0, 0]
+    for pp_rank, split in enumerate(pp_split):
+        # 当模型无音频模块时，split为2，有音频模块时，split为3
+        if len(split) == 2:
+            vit_num, llm_num = split
+            audio_num = 0
+        else:
+            vit_num, llm_num, audio_num = split
         if vit_num > 0 and pp_rank > vit_range[1]:
             vit_range[1] = pp_rank
         if llm_num > 0 and pp_rank < llm_range[0]:
             llm_range[0] = pp_rank
+        if audio_num > 0 and pp_rank > audio_range[1]:
+            audio_range[1] = pp_rank
+
     vit_start_idx = 0
     llm_start_idx = 0
+    audio_start_idx = 0
     return_dicts = []
     copy_dict = deepcopy(state_dict)
-    for pp_rank, (vit_num, llm_num) in enumerate(pp_split):
+    for pp_rank, split in enumerate(pp_split):
+        # 当模型无音频模块时，split为2，有音频模块时，split为3
+        if len(split) == 2:
+            vit_num, llm_num = split
+            audio_num = 0
+        else:
+            vit_num, llm_num, audio_num = split
         vit_end_idx = vit_start_idx + vit_num
         llm_end_idx = llm_start_idx + llm_num
+        audio_end_idx = audio_start_idx + audio_num
         new_dict = {}
         for key, value in state_dict.items():
             if key.startswith('image_encoder.encoder.patch_embed.'):
@@ -361,8 +458,35 @@ def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, 
                 if pp_rank == llm_range[1]:
                     new_dict[key] = value
                     copy_dict.pop(key)
+            elif key.startswith('audio_encoder.encoder.blocks.layers.'):
+                layer_idx = int(key.split('.')[4])
+                """
+                判断当前音频层是否属于当前流水线阶段处理的范围。
+
+                条件说明:
+                - 第一个条件 `audio_start_idx <= layer_idx < audio_end_idx`：
+                  表示当前音频层索引 `layer_idx` 是否在当前流水线阶段负责的音频层范围内。
+
+                - 第二个条件 `audio_range[0] <= pp_rank <= audio_range[1]`：
+                  表示当前流水线阶段编号[pp_rank]是否在音频模块负责的流水线阶段范围内。
+                """
+                if audio_start_idx <= layer_idx < audio_end_idx and audio_range[0] <= pp_rank <= audio_range[1]:
+                    new_idx = layer_idx - audio_start_idx
+                    new_key = key.replace(f'{layer_idx}', f'{new_idx}', 1)
+                    new_dict[new_key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('audio_encoder.encoder.conv') or key.startswith(
+                    'audio_encoder.encoder.audio_bos_eos_token'):
+                if pp_rank == audio_range[0]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
+            elif key.startswith('audio_encoder.encoder.proj') or key.startswith('audio_encoder.encoder.ln_post'):
+                if pp_rank == audio_range[1]:
+                    new_dict[key] = value
+                    copy_dict.pop(key)
         vit_start_idx = vit_end_idx
         llm_start_idx = llm_end_idx
+        audio_start_idx = audio_end_idx
         return_dicts.append(new_dict)
     return return_dicts
 
@@ -383,10 +507,10 @@ def save_by_pp(state_dicts: list[dict[str, torch.Tensor]],
 
 
 def save_by_vpp(state_dicts: list[dict[str, torch.Tensor]],
-               save_root_dir: Path,
-               iteration: str | int = 'release',
-               pp_and_vpp_size: tuple[int, int] = (1, 1),
-               tp_rank: int = 0):
+                save_root_dir: Path,
+                iteration: str | int = 'release',
+                pp_and_vpp_size: tuple[int, int] = (1, 1),
+                tp_rank: int = 0):
     """获取pp_size和vpp_size"""
     pp_size, vpp_size = pp_and_vpp_size
     for pp_rank in tqdm(range(pp_size), desc="pp step"):
