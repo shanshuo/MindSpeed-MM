@@ -237,10 +237,12 @@ class DeepSeekVLDataset(MMBaseDataset):
         basic_param: dict,
         processor_path: str,
         repeat_time: float = 1.0,
+        group_by_length: bool = False,
         **kwargs
     ):
         super().__init__(**basic_param)
         self.processor = DeepseekVLV2Processor.from_pretrained(processor_path)
+        self.group_by_length = group_by_length
 
         if repeat_time < 1:
             # If repeat_time is less than 1, select a portion of the data
@@ -296,7 +298,10 @@ class DeepSeekVLDataset(MMBaseDataset):
             conversations=conversation,
             images=pil_images,
             force_batchify=False, # must set to False for training
-            system_prompt=""
+            inference_mode=False,
+            system_prompt="",
+            group_by_length=self.group_by_length,
+            max_length=get_args().seq_length
         )
 
         return {

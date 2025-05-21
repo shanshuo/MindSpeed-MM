@@ -27,6 +27,7 @@ import torchvision.transforms as T
 from transformers import LlamaTokenizerFast
 from transformers.processing_utils import ProcessorMixin
 from PIL import Image, ImageOps
+from megatron.training import print_rank_0
 
 from .conversation import get_conv_template
 
@@ -384,6 +385,8 @@ class DeepseekVLV2Processor(ProcessorMixin):
             apply_sft_format: bool = False,
             inference_mode: bool = True,
             system_prompt: str = "",
+            group_by_length: bool = False,
+            max_length: int = 4096,
             **kwargs,
     ):
         """
@@ -448,6 +451,18 @@ class DeepseekVLV2Processor(ProcessorMixin):
         target_ids[(input_ids < 0) | (input_ids == self.image_token_id)] = self.ignore_id
         input_ids[input_ids < 0] = self.pad_id
 
+        # 填充或裁剪到固定长度
+        if not group_by_length:
+            if len(input_ids) > max_length:
+                print_rank_0(f"[Warning]: input_ids length {len(input_ids)} is larger than max_length {max_length}, truncating to max_length.")
+                input_ids = input_ids[:max_length]
+                target_ids = target_ids[:max_length]
+                images_seq_mask = images_seq_mask[:max_length]
+            else:
+                input_ids = torch.cat([input_ids, torch.full((max_length - len(input_ids),), self.pad_id, dtype=input_ids.dtype, device=input_ids.device)], dim=0)
+                target_ids = torch.cat([target_ids, torch.full((max_length - len(target_ids),), self.ignore_id, dtype=target_ids.dtype, device=target_ids.device)], dim=0)
+                images_seq_mask = torch.cat([images_seq_mask, torch.full((max_length - len(images_seq_mask),), False, dtype=images_seq_mask.dtype, device=images_seq_mask.device)], dim=0)
+        
         if inference_mode:
             # 去掉结尾的eos token
             if input_ids[-1] != self.eos_id:
@@ -485,6 +500,8 @@ class DeepseekVLV2Processor(ProcessorMixin):
             force_batchify: bool = True,
             inference_mode: bool = True,
             system_prompt: str = "",
+            group_by_length: bool = False,
+            max_length: int = 4096,
             **kwargs,
     ):
         """
@@ -514,7 +531,9 @@ class DeepseekVLV2Processor(ProcessorMixin):
             images=images,
             apply_sft_format=apply_sft_format,
             inference_mode=inference_mode,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            group_by_length=group_by_length,
+            max_length=max_length,
         )
 
         return prepare
