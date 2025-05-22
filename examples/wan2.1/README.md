@@ -355,7 +355,6 @@ bash examples/wan2.1/{model_size}/{task}/pretrain.sh
 
 | 配置文件                                             |        修改字段         | 修改说明                         |
 |--------------------------------------------------|:-------------------:|:-----------------------------|
-| examples/wan2.1/{model_size}/{task}/finetune_lora.sh |      lora-load      | 微调权重路径，加载以继续微调               |
 | examples/wan2.1/{model_size}/{task}/finetune_lora.sh |       lora-r        | lora更新矩阵的维度                  |
 | examples/wan2.1/{model_size}/{task}/finetune_lora.sh |     lora-alpha      | lora-alpha 调节分解后的矩阵对原矩阵的影响程度 |
 | examples/wan2.1/{model_size}/{task}/finetune_lora.sh | lora-target-modules | 应用lora的模块列表                  |

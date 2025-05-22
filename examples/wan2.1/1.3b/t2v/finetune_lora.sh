@@ -26,7 +26,6 @@ MM_DATA="./examples/wan2.1/1.3b/t2v/feature_data.json"
 MM_MODEL="./examples/wan2.1/1.3b/t2v/pretrain_model.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="./weights/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/transformer/"
-LORA_PATH="./weights/Wan-AI/Wan2.1-T2V-1.3B-Diffusers/lora_weight/"
 SAVE_PATH="path to save your wandit weight path"
 
 DISTRIBUTED_ARGS="
@@ -82,7 +81,6 @@ GPT_ARGS="
 "
 
 LORA_ARGS="
-    --lora-load $LORA_PATH \
     --lora-r 16 \
     --lora-alpha 16 \
     --lora-target-modules ffn.2 ffn.0 proj_q proj_k proj_v proj_out \
