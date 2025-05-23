@@ -552,6 +552,9 @@ class AutoencoderKLHunyuanVideo(MultiModalModule):
         time_compression_ratio: int = 4,
         mid_block_add_attention: bool = True,
         enable_tiling: bool = False,
+        use_slicing: bool = False,
+        use_spatial_tiling: bool = False,
+        use_temporal_tiling: bool = False,
         **kwargs
     ):
         super().__init__(config=None)
@@ -589,9 +592,9 @@ class AutoencoderKLHunyuanVideo(MultiModalModule):
         self.quant_conv = nn.Conv3d(2 * latent_channels, 2 * latent_channels, kernel_size=1)
         self.post_quant_conv = nn.Conv3d(latent_channels, latent_channels, kernel_size=1)
 
-        self.use_slicing = False
-        self.use_spatial_tiling = False
-        self.use_temporal_tiling = False
+        self.use_slicing = use_slicing
+        self.use_spatial_tiling = use_spatial_tiling
+        self.use_temporal_tiling = use_temporal_tiling
 
         # only relevant if vae tiling is enabled
         self.tile_sample_min_tsize = sample_tsize
