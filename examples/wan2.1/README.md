@@ -375,18 +375,18 @@ bash examples/wan2.1/{model_size}/{task}/finetune_lora.sh
 
 检查模型权重路径、并行参数等配置是否完成
 
-| 配置文件 | 修改字段  |  修改说明 |
-|------|:------:|:-----|
+| 配置文件                                                     | 修改字段  |  修改说明 |
+|----------------------------------------------------------|:------:|:-----|
 | examples/wan2.1/{model_size}/{task}/inference_model.json | from_pretrained |  修改为下载的权重所对应路径（包括vae、tokenizer、text_encoder   |
-| examples/wan2.1/samples_t2v_prompts.txt |    文件内容 |  T2V推理任务的prompt，可自定义，一行为一个prompt   |
-| examples/wan2.1/samples_i2v_prompts.txt |    文件内容 |  I2V推理任务的prompt，可自定义，一行为一个prompt   |
-| examples/wan2.1/samples_i2v_images.txt |    文件内容 |  I2V推理任务的首帧图片路径，可自定义，一行为一个图片路径   |
-| examples/wan2.1/samples_v2v_prompts.txt |    文件内容 |  V2V推理任务的prompt，可自定义，一行为一个prompt   |
-| examples/wan2.1/samples_v2v_images.txt |    文件内容 |  V2V推理任务的首个视频路径，可自定义，一行为一个视频路径   |
+| examples/wan2.1/samples_t2v_prompts.txt                  |    文件内容 |  T2V推理任务的prompt，可自定义，一行为一个prompt   |
+| examples/wan2.1/samples_i2v_prompts.txt                  |    文件内容 |  I2V推理任务的prompt，可自定义，一行为一个prompt   |
+| examples/wan2.1/samples_i2v_images.txt                   |    文件内容 |  I2V推理任务的首帧图片路径，可自定义，一行为一个图片路径   |
+| examples/wan2.1/samples_v2v_prompts.txt                  |    文件内容 |  V2V推理任务的prompt，可自定义，一行为一个prompt   |
+| examples/wan2.1/samples_v2v_videos.txt                   |    文件内容 |  V2V推理任务的首个视频路径，可自定义，一行为一个视频路径   |
 | examples/wan2.1/{model_size}/{task}/inference_model.json |  save_path |  生成视频的保存路径 |
 | examples/wan2.1/{model_size}/{task}/inference_model.json |  input_size |  生成视频的分辨率，格式为 [t, h, w] |
 | examples/wan2.1/{model_size}/{task}/inference_model.json |  flow_shift |  sheduler参数，480P推荐shift=3.0，720P推荐shift=5.0 |
-| examples/wan2.1/{task}/inference.sh |   LOAD_PATH | 转换之后的transformer部分权重路径 |
+| examples/wan2.1/{model_size}/{task}/inference.sh         |   LOAD_PATH | 转换之后的transformer部分权重路径 |
 
 ### 启动推理
 
