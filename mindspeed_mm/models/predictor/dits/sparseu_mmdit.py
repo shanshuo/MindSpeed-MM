@@ -15,7 +15,7 @@ from megatron.training.arguments import core_transformer_config_from_args
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.embeddings import PatchEmbed2D, CombinedTimestepTextProjEmbeddings
 from mindspeed_mm.models.common.ffn import FeedForward
-from mindspeed_mm.models.common.normalize import OpenSoraLayerNorm
+from mindspeed_mm.models.common.normalize import FP32LayerNorm
 from mindspeed_mm.models.common.attention import MultiHeadSparseMMAttentionSBH
 from mindspeed_mm.models.common.communications import split_forward_gather_backward, gather_forward_split_backward
 
@@ -121,7 +121,7 @@ class SparseUMMDiT(MultiModalModule):
         sparse1d: bool = False,
         pooled_projection_dim: int = 1024,
         timestep_embed_dim: int = 512,
-        norm_cls: str = 'opensora_layer_norm',
+        norm_cls: str = 'fp32_layer_norm',
         skip_connection: bool = False,
         explicit_uniform_rope: bool = False,
         skip_connection_zero_init: bool = True,
@@ -153,8 +153,8 @@ class SparseUMMDiT(MultiModalModule):
 
         if norm_cls == 'rms_norm':
             self.norm_cls = RMSNorm
-        elif norm_cls == 'opensora_layer_norm':
-            self.norm_cls = OpenSoraLayerNorm
+        elif norm_cls == 'fp32_layer_norm':
+            self.norm_cls = FP32LayerNorm
 
         if len(num_layers) != len(sparse_n):
             raise ValueError("num_layers and sparse_n must have the same length")
@@ -597,7 +597,7 @@ class SparseMMDiTBlock(nn.Module):
         sparse1d: bool = False,
         sparse_n: int = 2,
         sparse_group: bool = False,
-        norm_cls: str = 'opensora_layer_norm',
+        norm_cls: str = 'fp32_layer_norm',
     ):
         super().__init__()
 
@@ -608,8 +608,8 @@ class SparseMMDiTBlock(nn.Module):
 
         if norm_cls == 'rms_norm':
             self.norm_cls = RMSNorm
-        elif norm_cls == 'opensora_layer_norm':
-            self.norm_cls = OpenSoraLayerNorm
+        elif norm_cls == 'fp32_layer_norm':
+            self.norm_cls = FP32LayerNorm
 
         # adanorm-zero1: to introduce timestep and clip condition
         self.norm1 = OpenSoraNormZero(
@@ -753,7 +753,7 @@ class AdaNorm(nn.Module):
         output_dim: Optional[int] = None,
         norm_elementwise_affine: bool = False,
         norm_eps: float = 1e-5,
-        norm_cls: str = 'opensora_layer_norm',
+        norm_cls: str = 'fp32_layer_norm',
     ):
         super().__init__()
         args = get_args()
@@ -769,8 +769,8 @@ class AdaNorm(nn.Module):
         self.linear = nn.Linear(embedding_dim, output_dim)
         if norm_cls == 'rms_norm':
             self.norm_cls = RMSNorm
-        elif norm_cls == 'opensora_layer_norm':
-            self.norm_cls = OpenSoraLayerNorm
+        elif norm_cls == 'fp32_layer_norm':
+            self.norm_cls = FP32LayerNorm
         self.norm = self.norm_cls(
             output_dim // 2, eps=norm_eps
         )
@@ -807,7 +807,7 @@ class OpenSoraNormZero(nn.Module):
         elementwise_affine: bool = True,
         eps: float = 1e-5,
         bias: bool = True,
-        norm_cls: str = 'opensora_layer_norm',
+        norm_cls: str = 'fp32_layer_norm',
         context_pre_only: bool = False,
     ) -> None:
         super().__init__()
@@ -817,8 +817,8 @@ class OpenSoraNormZero(nn.Module):
 
         if norm_cls == 'rms_norm':
             self.norm_cls = RMSNorm
-        elif norm_cls == 'opensora_layer_norm':
-            self.norm_cls = OpenSoraLayerNorm
+        elif norm_cls == 'fp32_layer_norm':
+            self.norm_cls = FP32LayerNorm
 
         self.silu = nn.SiLU()
         self.linear = tensor_parallel.ColumnParallelLinear(

@@ -27,7 +27,7 @@ class LayerNorm(nn.Module):
         return x
 
 
-class OpenSoraLayerNorm(nn.Module):
+class FP32LayerNorm(nn.Module):
     def __init__(
         self,
         dim: int,

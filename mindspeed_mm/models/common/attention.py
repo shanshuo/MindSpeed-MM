@@ -32,7 +32,7 @@ from mindspeed.core.parallel_state import (
 from mindspeed.core.context_parallel.unaligned_cp import mapping
 
 from mindspeed_mm.utils.utils import video_to_image, change_tensor_layout
-from mindspeed_mm.models.common.normalize import normalize, OpenSoraLayerNorm
+from mindspeed_mm.models.common.normalize import normalize, FP32LayerNorm
 from mindspeed_mm.models.common.embeddings.rope import RoPE3D, PositionGetter3D
 from mindspeed_mm.models.common.conv import CausalConv3d, WfCausalConv3d
 from mindspeed_mm.models.common.linear import MatmulAddLinear
@@ -827,9 +827,9 @@ class MultiHeadSparseMMAttentionSBH(MultiHeadSparseAttentionSBH):
         if qk_norm is None:
             self.norm_proj_q = None
             self.norm_proj_k = None
-        elif qk_norm == "opensora_layer_norm":
-            self.norm_proj_q = OpenSoraLayerNorm(head_dim, eps=eps, sequence_parallel=True)
-            self.norm_proj_k = OpenSoraLayerNorm(head_dim, eps=eps, sequence_parallel=True)
+        elif qk_norm == "fp32_layer_norm":
+            self.norm_proj_q = FP32LayerNorm(head_dim, eps=eps, sequence_parallel=True)
+            self.norm_proj_k = FP32LayerNorm(head_dim, eps=eps, sequence_parallel=True)
         elif qk_norm == "rms_norm":
             self.norm_proj_q = RMSNorm(head_dim, eps=eps, sequence_parallel=True)
             self.norm_proj_k = RMSNorm(head_dim, eps=eps, sequence_parallel=True)
@@ -837,9 +837,9 @@ class MultiHeadSparseMMAttentionSBH(MultiHeadSparseAttentionSBH):
             raise ValueError(f"Unsupported qk_norm: {qk_norm}")
 
         if qk_norm is not None and added_kv_proj_dim is not None:
-            if qk_norm == "opensora_layer_norm":
-                self.norm_added_proj_q = OpenSoraLayerNorm(head_dim, eps=eps, sequence_parallel=True)
-                self.norm_added_proj_k = OpenSoraLayerNorm(head_dim, eps=eps, sequence_parallel=True)
+            if qk_norm == "fp32_layer_norm":
+                self.norm_added_proj_q = FP32LayerNorm(head_dim, eps=eps, sequence_parallel=True)
+                self.norm_added_proj_k = FP32LayerNorm(head_dim, eps=eps, sequence_parallel=True)
             elif qk_norm == "rms_norm":
                 self.norm_added_proj_q = RMSNorm(head_dim, eps=eps, sequence_parallel=True)
                 self.norm_added_proj_k = RMSNorm(head_dim, eps=eps, sequence_parallel=True)
