@@ -1,18 +1,16 @@
 import torch
 
-from megatron.core.transformer.transformer_config import TransformerConfig
 from megatron.core.transformer.spec_utils import ModuleSpec
-
+from megatron.core.transformer.transformer_config import TransformerConfig
 from mindspeed_mm.models.common.module import MultiModalModule
+from .projectors.deepseekvl_mlp import create_deepseekvl_mlp
+from .projectors.internvl_mlp import InternVLMLP
+from .projectors.multimodal_projector import MultimodalProjector
 from .vision_encoders.clip_vit_model import CLIPViT
 from .vision_encoders.internvit_model import InternViT
-from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
 from .vision_encoders.minicpm_vit_model import MiniCPMViT
+from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
 from .vision_encoders.siglip_vit_model import create_siglip_vit
-from .projectors.multimodal_projector import MultimodalProjector
-from .projectors.internvl_mlp import InternVLMLP
-from .projectors.deepseekvl_mlp import create_deepseekvl_mlp
-
 
 VISION_ENCODER_MAPPINGS = {
     "clip": CLIPViT,
@@ -20,7 +18,7 @@ VISION_ENCODER_MAPPINGS = {
     "qwen2vit": Qwen2VLViT,
     "qwen2_5_vit": Qwen2VLViT,
     "MiniCPMViT": MiniCPMViT,
-    "SigLip": create_siglip_vit,
+    "SigLip": create_siglip_vit
 }
 
 VISION_PROJECTION_MAPPINGS = {
@@ -43,22 +41,23 @@ class VisionModel(MultiModalModule):
             "drop_vision_class_token": (bool),  # Drop vision class token(s) before input to the text decoder.
         }
     """
+
     def __init__(
-        self,
-        config: TransformerConfig,
-        encoder_transformer_layer_spec: ModuleSpec = None,
-        projector_layer_spec: ModuleSpec = None,
-        pre_process: bool = True,
-        post_process: bool = True,
-        *args,
-        **kwargs
+            self,
+            config: TransformerConfig,
+            encoder_transformer_layer_spec: ModuleSpec = None,
+            projector_layer_spec: ModuleSpec = None,
+            pre_process: bool = True,
+            post_process: bool = True,
+            *args,
+            **kwargs
     ) -> None:
         super().__init__(config=config)
         self.pre_process = pre_process
         self.post_process = post_process
         self.add_encoder = config.vision_encoder is not None
         self.add_projector = config.vision_projector is not None and self.post_process
-        self.projector = None # 开pp时projector只在最后一张卡有projector，这里默认要设为None不然影响freeze
+        self.projector = None  # 开pp时projector只在最后一张卡有projector，这里默认要设为None不然影响freeze
         self.encoder = None
         if self.add_encoder:
             self.encoder = VISION_ENCODER_MAPPINGS[config.vision_encoder.model_id](
@@ -77,9 +76,9 @@ class VisionModel(MultiModalModule):
         self.encoder.set_input_tensor(input_tensor)
 
     def freeze(
-        self,
-        freeze_encoder: bool = False,
-        freeze_projector: bool = False
+            self,
+            freeze_encoder: bool = False,
+            freeze_projector: bool = False
     ):
         """
         Freeze model modules.
@@ -115,8 +114,8 @@ class VisionModel(MultiModalModule):
                 image_embeddings = image_embeddings[reverse_indices, :]
 
         return image_embeddings
-    
-    
+
+
 class Qwen2vlVisionModel(VisionModel):
     def forward(self, images: torch.Tensor, image_grid_thw: torch.Tensor) -> torch.Tensor:
         encoder_out = self.encoder(images, image_grid_thw)

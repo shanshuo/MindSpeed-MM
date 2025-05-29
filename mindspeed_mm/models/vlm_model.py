@@ -244,6 +244,8 @@ class VLMModel(MultiModalModule):
             self,
             freeze_text_decoder: bool = False,
             freeze_image_encoder: bool = False,
+            freeze_audio_encoder: bool = False,
+            freeze_audio_projection: bool = False,
             freeze_image_projection: bool = False,
     ):
         """

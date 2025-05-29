@@ -10,7 +10,7 @@ from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
 
-from mindspeed_mm.models.common.module_spec.qwen2vl_layer_spec import get_qwen2vl_layer_spec, get_mlp_module_spec, get_qwen2vlllm_layer_local_spec
+from mindspeed_mm.models.common.module_spec.qwen2vl_layer_spec import get_qwen2vl_layer_spec, get_mlp_module_spec, get_qwen2vl_llm_layer_spec
 from mindspeed_mm.models.vision.vision_model import Qwen2vlVisionModel
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.text_encoder.text_encoder import TextEncoder
@@ -122,7 +122,7 @@ class Qwen2VLModel(MultiModalModule):
         if self.pp_size <= 1:
             return MMGPTModel(
                 config=config,
-                transformer_layer_spec=get_qwen2vlllm_layer_local_spec(),
+                transformer_layer_spec=get_qwen2vl_llm_layer_spec(),
                 vocab_size=config.vocab_size,
                 max_sequence_length=config.max_position_embeddings,
                 parallel_output=config.parallel_output,
@@ -161,7 +161,7 @@ class Qwen2VLModel(MultiModalModule):
 
         return MMGPTModel(
                 config=config,
-                transformer_layer_spec=get_qwen2vlllm_layer_local_spec(),
+                transformer_layer_spec=get_qwen2vl_llm_layer_spec(),
                 vocab_size=config.vocab_size,
                 max_sequence_length=config.max_position_embeddings,
                 parallel_output=config.parallel_output,

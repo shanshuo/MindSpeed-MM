@@ -1,4 +1,5 @@
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
+# Copyright (c) 2023 Alibaba PAI and Nvidia Megatron-LM Team.
 
 from megatron.core.fusions.fused_bias_dropout import get_bias_dropout_add
 from megatron.core.tensor_parallel.layers import ColumnParallelLinear, RowParallelLinear
@@ -20,7 +21,7 @@ from mindspeed_mm.models.common.module_spec.llava_layer_spec import get_mlp_modu
 from mindspeed_mm.models.vision.vision_encoders.qwen2vl_vit_model import Qwen2vlVitSelfAttention, Qwen2vlSelfAttention
 
 
-def get_qwen2vlllm_layer_local_spec(config=None, *args, **kwargs) -> ModuleSpec:
+def get_qwen2vl_llm_layer_spec(config=None, *args, **kwargs) -> ModuleSpec:
     qk_layernorm = False
 
     mlp = _get_mlp_module_spec(use_te=False)
