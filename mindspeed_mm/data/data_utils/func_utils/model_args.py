@@ -54,3 +54,43 @@ class ProcessorArguments:
         default=64,
         metadata={"help": "The maximum number of sampled frames for video inputs."},
     )
+    image_max_pixels: int = field(
+        default=768 * 768,
+        metadata={"help": "The maximum number of pixels of image inputs."},
+    )
+    image_min_pixels: int = field(
+        default=32 * 32,
+        metadata={"help": "The minimum number of pixels of image inputs."},
+    )
+    video_max_pixels: int = field(
+        default=256 * 256,
+        metadata={"help": "The maximum number of pixels of video inputs."},
+    )
+    video_min_pixels: int = field(
+        default=16 * 16,
+        metadata={"help": "The minimum number of pixels of video inputs."},
+    )
+    video_fps: float = field(
+        default=2.0,
+        metadata={"help": "The frames to sample per second for video inputs."},
+    )
+    video_maxlen: int = field(
+        default=128,
+        metadata={"help": "The maximum number of sampled frames for video inputs."},
+    )
+    image_do_pan_and_scan: bool = field(
+        default=False,
+        metadata={"help": "Use pan and scan to process image for gemma3."},
+    )
+    crop_to_patches: bool = field(
+        default=False,
+        metadata={"help": "Whether to crop the image to patches for internvl."},
+    )
+    use_audio_in_video: bool = field(
+        default=False,
+        metadata={"help": "Whether or not to use audio in video inputs."},
+    )
+    audio_sampling_rate: int = field(
+        default=16000,
+        metadata={"help": "The sampling rate of audio inputs."},
+    )

@@ -226,6 +226,31 @@ _register_template(
     mm_plugin=get_mm_plugin(name="qwen2_vl", image_token="<|image_pad|>", video_token="<|video_pad|>")
 )
 
+# copied from qwen template
+_register_template(
+    name="qwen2_omni",
+    params=RegisterParams(
+        format_user=StringFormatter(slots=["<|im_start|>user\n{{content}}<|im_end|>\n<|im_start|>assistant\n"]),
+        format_assistant=StringFormatter(slots=["{{content}}<|im_end|>\n"]),
+        format_system=StringFormatter(slots=["<|im_start|>system\n{{content}}<|im_end|>\n"]),
+        format_observation=StringFormatter(
+            slots=[
+                "<|im_start|>user\n<tool_response>\n{{content}}\n</tool_response><|im_end|>\n<|im_start|>assistant\n"]
+        ),
+
+        default_system="You are a helpful assistant.",
+        stop_words=["<|im_end|>"],
+        replace_eos=True),
+    mm_plugin=get_mm_plugin(
+        name="qwen2_omni", audio_token="<|AUDIO|>", image_token="<|IMAGE|>", video_token="<|VIDEO|>")
+
+)
+
+
+def _add_or_replace_eos_token(tokenizer: "PreTrainedTokenizer", eos_token: str) -> None:
+    if tokenizer.eos_token == eos_token:
+        return
+
 
 def get_template_and_fix_tokenizer(tokenizer: "PreTrainedTokenizer", template: str) -> "Template":
     r"""

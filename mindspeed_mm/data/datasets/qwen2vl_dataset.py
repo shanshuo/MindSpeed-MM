@@ -1,10 +1,9 @@
 import os
 import warnings
-from functools import partial
 
 import torch
 from datasets import load_dataset
-from torch.utils.data import Dataset, IterableDataset
+from torch.utils.data import IterableDataset
 from transformers.training_args import TrainingArguments
 
 from megatron.training import get_args
@@ -12,9 +11,9 @@ from mindspeed_mm.data.data_utils.func_utils.convert import (
     DataArguments,
     DatasetAttr,
     load_tokenizer,
-    convert_sharegpt,
-    preprocess_supervised_dataset,
-    preprocess_pairwise_dataset
+    align_dataset,
+    SupervisedDatasetProcessor,
+    PairwiseDatasetProcessor
 )
 from mindspeed_mm.data.data_utils.func_utils.log import get_logger
 from mindspeed_mm.data.data_utils.func_utils.model_args import ProcessorArguments
@@ -50,8 +49,9 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
     # 确保主进程进行数据处理，其他进程复用缓存避免重复计算，该策略和llamafactory对数据处理策略一致
     with TrainingArguments(output_dir='./').main_process_first(desc="pre-process dataset"):
         # -----------------load dataset from file-------------------------------------------------------------------------
-        train_dataset = load_dataset(path="json", data_files=data_args.dataset, split="train", cache_dir=data_args.cache_dir,
-                               streaming=data_args.streaming)
+        train_dataset = load_dataset(path="json", data_files=data_args.dataset, split="train",
+                                     cache_dir=data_args.cache_dir,
+                                     streaming=data_args.streaming)
         if data_args.max_samples and not data_args.streaming:
             train_dataset = train_dataset.select(range(data_args.max_samples))
 
@@ -67,7 +67,9 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
             if data_args.val_max_samples:
                 val_dataset = val_dataset.select(range(data_args.val_max_samples))
             if data_args.val_rate is not None and data_args.val_rate > 0.0:
-                warnings.warn("Warning: Both val_dataset and val_rate have been provided. The val_dataset will take priority, and the val_rate will be ignored.", UserWarning)
+                warnings.warn(
+                    "Warning: Both val_dataset and val_rate have been provided. The val_dataset will take priority, and the val_rate will be ignored.",
+                    UserWarning)
 
         local_process_index = int(os.getenv("LOCAL_RANK", -1))
         if data_args.streaming:
@@ -81,56 +83,17 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
             }
         logger.debug(f'Rank: %s, kwargs: %s', local_process_index, kwargs)
         # -----------------convert to sharegpt ---------------------------------------------------------------------------
-        convert_func = partial(convert_sharegpt, dataset_attr=dataset_attr, dataset_dir=data_args.dataset_dir)
-        if data_args.streaming:
-            train_dataset = train_dataset.map(
-                convert_func,
-                batched=False,
-                remove_columns=(list(next(iter(train_dataset)).keys())),
-                **kwargs,
-            )
-            if val_dataset:
-                val_dataset = val_dataset.map(
-                    convert_func,
-                    batched=False,
-                    remove_columns=(list(next(iter(val_dataset)).keys())),
-                    **kwargs,
-                )
-        else:
-            train_dataset = train_dataset.map(
-                convert_func,
-                batched=False,
-                remove_columns=(list(next(iter(train_dataset)).keys())),
-                desc=f"Rank {local_process_index}, converting format of train_dataset",
-                **kwargs,
-            )
-            if val_dataset:
-                val_dataset = val_dataset.map(
-                    convert_func,
-                    batched=False,
-                    remove_columns=(list(next(iter(val_dataset)).keys())),
-                    desc=f"Rank {local_process_index}, converting format of val_dataset",
-                    **kwargs,
-                )
+        train_dataset = align_dataset(train_dataset, dataset_attr, data_args)
+        if val_dataset:
+            val_dataset = align_dataset(val_dataset, dataset_attr, data_args)
 
         # -----------------convert text to token id ----------------------------------------------------------------------
         if dataset_attr.ranking:
-            preprocess_func = partial(
-                preprocess_pairwise_dataset,
-                template=template,
-                tokenizer=tokenizer,
-                processor=processor,
-                data_args=data_args,
-            )
+            dataset_processor_cls = PairwiseDatasetProcessor
         else:
-            preprocess_func = partial(
-                preprocess_supervised_dataset,
-                template=template,
-                tokenizer=tokenizer,
-                processor=processor,
-                data_args=data_args,
-            )
-
+            dataset_processor_cls = SupervisedDatasetProcessor
+        preprocess_func = dataset_processor_cls(template=template, tokenizer=tokenizer, processor=processor,
+                                                data_args=data_args).preprocess_dataset
         if data_args.streaming:
             train_dataset = train_dataset.map(
                 preprocess_func,
@@ -168,5 +131,5 @@ def get_qwen2vl_dataset(basic_param, preprocess_param, dataset_param):
                     desc=f"Rank {local_process_index}, running tokenizer on val_dataset",
                     **kwargs,
                 )
-                return train_dataset, val_dataset   
+                return train_dataset, val_dataset
         return train_dataset
