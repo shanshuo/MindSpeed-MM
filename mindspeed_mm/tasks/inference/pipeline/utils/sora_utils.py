@@ -99,13 +99,13 @@ def safe_load_image(path):
         return load_image(path)
 
 
-def load_images(image=None):
+def load_images(image=None, dual_image=False):
     if image is None:
         print("The input image is None, execute text to video task")
         return None
 
     if os.path.exists(image):
-        if os.path.splitext(image)[-1].lower() in [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff"]:
+        if os.path.splitext(image)[-1].lower() in [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff"] and not dual_image:
             return [safe_load_image(image)]
         else:
             with open(image, "r") as f:
@@ -113,7 +113,17 @@ def load_images(image=None):
                 if len(lines) > 100:
                     print("The file has more than 100 lines of images, we can only process the first 100")
                     lines = lines[:100]
-                images = [safe_load_image(line.strip()) for line in lines]
+                if dual_image:
+                    images = []
+                    for line in lines:
+                        paths = line.strip().split(',')
+                        if len(paths) != 2:
+                            raise ValueError(f"Each line must contain two paths separated by commas (,). Current line:{line}")
+                        image1 = safe_load_image(paths[0].strip())
+                        image2 = safe_load_image(paths[1].strip())
+                        images.append([image1, image2])
+                else:
+                    images = [safe_load_image(line.strip()) for line in lines]
             return images
     else:
         raise FileNotFoundError(f"The image path {image} does not exist")

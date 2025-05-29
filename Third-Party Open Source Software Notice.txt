@@ -495,3 +495,11 @@ Copyright Notice included in the software:
 Copyright 2024 Vchitect/LiteGen
 
 Copyright 2025 StepFun Inc
+
+Software Notice
+Software Wan2.1
+License: Apache License 2.0
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2025 Wan-Video/Wan2.1

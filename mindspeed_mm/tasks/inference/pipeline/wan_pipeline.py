@@ -21,6 +21,7 @@ import ftfy
 import regex as re
 import torch
 from torchvision.transforms import v2
+from torchvision.transforms.functional import center_crop
 from transformers import CLIPVisionModel
 from megatron.training import get_args
 from megatron.core import mpu
@@ -59,6 +60,8 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             image_encoder=image_encoder,
         )
 
+        self.dual_image = args.dual_image
+        self.model_type = args.predictor.model_type
         self.cp_size = mpu.get_context_parallel_world_size()
         self.vae_scale_factor_temporal = (
             2 ** sum(self.vae.model.config.temperal_downsample) if getattr(self, "vae", None) else 4
@@ -91,6 +94,8 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
     ):
         # 1. Check inputs. Raise error if not correct
         if negative_prompt is None or negative_prompt == "":
+            if self.model_type == "flf2v":
+                negative_prompt = "Lens switching, lens shaking, b" + NEGATIVE_PROMOPT[1:]
             negative_prompt = NEGATIVE_PROMOPT
         self.check_inputs(
             prompt,
@@ -286,8 +291,22 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
     def prepare_image_latents(self, batch_size, image, device, dtype):
         to_tensor = v2.ToTensor()
-        image = torch.stack(to_tensor(image), dim=0)
-        h, w = image.shape[-2:]
+        if not self.dual_image:
+            image = torch.stack(to_tensor(image), dim=0)
+            h, w = image.shape[-2:]
+        else:
+            image_f, image_l = [], []
+            for i in range(batch_size):
+                image_f.append(image[i][0])
+                image_l.append(image[i][1])
+            image_f, image_l = torch.stack(to_tensor(image_f), dim=0), torch.stack(to_tensor(image_l), dim=0)
+            h, w = image_f.shape[-2:]
+            h_l, w_l = image_l.shape[-2:]
+            if (h, w) != (h_l, w_l):
+                resize_ratio_l = max(h / h_l, w / w_l)
+                h_l, w_l = round(h_l * resize_ratio_l), round(w_l * resize_ratio_l)
+                image_l = center_crop(image_l, [h_l, w_l])
+            image = image_f
 
         max_area = self.height * self.width
         aspect_ratio = h / w
@@ -321,7 +340,10 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         noise = self.prepare_latents(shape, generator=self.generator, device=device, dtype=dtype)
         msk = torch.ones(batch_size, self.num_frames, latent_h, latent_w).to(dtype=dtype, device=device)
-        msk[:, 1:] = 0
+        if self.dual_image:
+            msk[:, 1:-1] = 0
+        else:
+            msk[:, 1:] = 0
         msk = torch.concat([torch.repeat_interleave(msk[:, 0:1], repeats=4, dim=1), msk[:, 1:]], dim=1)
         msk = msk.view(-1, msk.shape[1] // 4, 4, latent_h, latent_w).transpose(1, 2)
 
@@ -333,14 +355,27 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
             ]
         )
         clip_input = clip_transform(image).to(device=device, dtype=dtype)
-        clip_feature = self.image_encoder(clip_input, output_hidden_states=True).hidden_states[-2]
+        if self.dual_image:
+            clip_input_l = clip_transform(image_l).to(device=device, dtype=dtype)
+            # The original Wan2.1 code only supports single batch
+            clip_feature = self.image_encoder(torch.concat([clip_input, clip_input_l], dim=0), output_hidden_states=True).hidden_states[-2]
+        else:
+            clip_feature = self.image_encoder(clip_input, output_hidden_states=True).hidden_states[-2]
 
         # vae encode
         vae_transform = v2.Compose([v2.Resize(size=[h, w]), v2.Normalize(mean=[0.5], std=[0.5])])
         vae_input = vae_transform(image)
-        vae_input = torch.concat(
-            [vae_input.unsqueeze(2), torch.zeros(batch_size, 3, self.num_frames - 1, h, w)], dim=2
-        ).to(device=device, dtype=dtype)
+        if self.dual_image:
+            vae_input_l = vae_transform(image_l)
+            vae_input = torch.concat([
+                vae_input.unsqueeze(2), 
+                torch.zeros(batch_size, 3, self.num_frames - 2, h, w),
+                vae_input_l.unsqueeze(2)
+                ], dim=2).to(device=device, dtype=dtype)
+        else:
+            vae_input = torch.concat(
+                [vae_input.unsqueeze(2), torch.zeros(batch_size, 3, self.num_frames - 1, h, w)], dim=2
+            ).to(device=device, dtype=dtype)
         vae_feature = self.vae.encode(vae_input)
         vae_feature = torch.concat([msk, vae_feature], dim=1)
 

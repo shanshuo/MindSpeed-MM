@@ -30,6 +30,7 @@ DIT_CONVERSION_MAPPING = {
     "condition_embedder.image_embedder.norm1.bias": "img_emb.proj.0.bias",
     "condition_embedder.image_embedder.norm2.weight": "img_emb.proj.4.weight",
     "condition_embedder.image_embedder.norm2.bias": "img_emb.proj.4.bias",
+    "condition_embedder.image_embedder.pos_embed": "img_emb.emb_pos",
     "scale_shift_table": "head.modulation",
     "proj_out.bias": "head.head.bias",
     "proj_out.weight": "head.head.weight",

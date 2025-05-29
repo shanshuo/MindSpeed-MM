@@ -22,7 +22,7 @@ from mindspeed.core.context_parallel.ulysses_context_parallel import UlyssesCont
 from mindspeed_mm.models.common import MultiModalModule
 from mindspeed_mm.models.common.attention import FlashAttention, ParallelAttention
 from mindspeed_mm.models.common.embeddings import TextProjection
-from mindspeed_mm.models.common.normalize import normalize
+from mindspeed_mm.models.common.normalize import normalize, FP32LayerNorm
 
 
 class WanDiT(MultiModalModule):
@@ -52,12 +52,13 @@ class WanDiT(MultiModalModule):
         post_process: bool = True,
         global_layer_idx: Optional[Tuple] = None,
         attention_async_offload: bool = False,
+        fp32_calculate: bool = False,
         **kwargs,
     ):
         super().__init__(config=None)
 
-        if model_type not in ["t2v", "i2v"]:
-            raise ValueError("Please only select between 't2v' and 'i2v' tasks")
+        if model_type not in ["t2v", "i2v", "flf2v"]:
+            raise ValueError("Please only select among 't2v', 'i2v' and 'flf2v' tasks")
 
         if not ((hidden_size % num_heads) == 0 and (hidden_size // num_heads) % 2 == 0):
             raise ValueError(
@@ -103,6 +104,7 @@ class WanDiT(MultiModalModule):
         self.recompute_skip_core_attention = args.recompute_skip_core_attention
         self.recompute_num_layers_skip_core_attention = args.recompute_num_layers_skip_core_attention
         self.attention_async_offload = attention_async_offload
+        self.fp32_calculate = fp32_calculate
         
         self.h2d_stream = torch_npu.npu.Stream() if attention_async_offload else None
         self.d2h_stream = torch_npu.npu.Stream() if attention_async_offload else None
@@ -153,6 +155,8 @@ class WanDiT(MultiModalModule):
                 nn.SiLU(),
                 nn.Linear(self.hidden_size, self.hidden_size),
             )
+            if self.fp32_calculate:
+                self.time_embedding = self.time_embedding.to(torch.float32)
 
             # time emb projection
             self.time_projection = nn.Sequential(
@@ -179,6 +183,7 @@ class WanDiT(MultiModalModule):
                     d2h_stream=self.d2h_stream,
                     layer_idx=index,
                     num_layers=self.num_layers,
+                    fp32_calculate=self.fp32_calculate,
                 )
                 for index in range(self.num_layers)
             ]
@@ -188,8 +193,8 @@ class WanDiT(MultiModalModule):
             # head
             self.head = Head(self.hidden_size, self.out_dim, self.patch_size, self.eps)
 
-        if self.pre_process and model_type == "i2v":
-            self.img_emb = MLPProj(self.img_dim, self.hidden_size)
+        if self.pre_process and model_type in ["i2v", "flf2v"]:
+            self.img_emb = MLPProj(self.img_dim, self.hidden_size, model_type == 'flf2v', clip_token_len, self.fp32_calculate)
 
     @property
     def dtype(self) -> torch.dtype:
@@ -332,12 +337,12 @@ class WanDiT(MultiModalModule):
                     prompt[i, seq_len:] = 0
             prompt_emb = self.text_embedding(prompt)
 
-            # cat i2v
-            if self.model_type == "i2v":
+            # cat i2v & flf2v
+            if self.model_type in ["i2v", "flf2v"]:
                 i2v_clip_feature = i2v_clip_feature.to(x)
                 i2v_vae_feature = i2v_vae_feature.to(x)
                 x = torch.cat([x, i2v_vae_feature], dim=1)  # (b, c[x+y], f, h, w)
-                clip_embedding = self.img_emb(i2v_clip_feature.to(time_emb.dtype))
+                clip_embedding = self.img_emb(i2v_clip_feature.float() if self.fp32_calculate else i2v_clip_feature.to(time_emb.dtype))
                 prompt_emb = torch.cat([clip_embedding, prompt_emb], dim=1)
 
             # patch embedding
@@ -500,6 +505,7 @@ class WanDiTBlock(nn.Module):
         attention_async_offload: bool = False,
         layer_idx: int = 0,
         num_layers: int = 40,
+        fp32_calculate: bool = False,
         h2d_stream: Optional[torch_npu.npu.Stream] = None,
         d2h_stream: Optional[torch_npu.npu.Stream] = None,
         **kwargs
@@ -512,6 +518,7 @@ class WanDiTBlock(nn.Module):
         self.ffn_dim = ffn_dim
         self.num_heads = num_heads
         self.clip_token_len = clip_token_len
+        self.fp32_calculate = fp32_calculate
 
         args = get_args()
         self.distribute_saved_activations = args.distribute_saved_activations
@@ -557,13 +564,13 @@ class WanDiTBlock(nn.Module):
             norm_type=qk_norm_type,
             norm_eps=eps,
             attention_type=AttnType.cross_attn,
-            has_img_input=model_type == "i2v",
+            has_img_input=model_type in ["i2v", "flf2v"],
             fa_layout=fa_layout,
         )
 
         self.norm1 = nn.LayerNorm(self.hidden_size, eps=eps, elementwise_affine=False)
         self.norm2 = nn.LayerNorm(self.hidden_size, eps=eps, elementwise_affine=False)
-        self.norm3 = nn.LayerNorm(self.hidden_size, eps=eps)
+        self.norm3 = FP32LayerNorm(self.hidden_size, eps=eps) if fp32_calculate else nn.LayerNorm(self.hidden_size, eps=eps)
         self.ffn = nn.Sequential(
             nn.Linear(self.hidden_size, self.ffn_dim),
             nn.GELU(approximate="tanh"),
@@ -642,9 +649,10 @@ class WanDiTBlock(nn.Module):
         rotary_pos_emb
     ):
         dtype = time_emb.dtype
+        modu_dtype = torch.float32 if self.fp32_calculate else dtype
         device = time_emb.device
         shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = (
-            self.modulation.to(dtype=dtype, device=device) + time_emb
+            self.modulation.to(dtype=modu_dtype, device=device) + time_emb.to(modu_dtype)
         ).chunk(6, dim=1)
 
         self_attn_input = self.modulate(
@@ -673,17 +681,19 @@ class WanDiTBlock(nn.Module):
         scale_mlp,
         gate_mlp
     ):
+        dtype = torch.float32 if self.fp32_calculate else latents.dtype
         self_attn_out = self.self_attn.function_after_core_attention(self_attn_out, output_layout="bsh")
         
-        latents = latents + gate_msa * self_attn_out
+        latents = (latents + gate_msa * self_attn_out).to(latents.dtype)
 
         # cross attention
-        crs_attn_input = self.norm3(latents)
+        crs_attn_input = self.norm3(latents.to(dtype)).to(latents.dtype)
 
-        # i2v
-        if self.model_type == "i2v":
-            img = prompt[:, :self.clip_token_len]
-            txt = prompt[:, self.clip_token_len:]
+        # i2v & flf2v
+        if self.model_type in ["i2v", "flf2v"]:
+            img_clip_token_len = 2 * self.clip_token_len if self.model_type == "flf2v" else self.clip_token_lenzhangseh
+            img = prompt[:, :img_clip_token_len]
+            txt = prompt[:, img_clip_token_len:]
             crs_attn_out = self.cross_attn(
                 query=crs_attn_input,
                 key=(img, txt),
@@ -699,10 +709,10 @@ class WanDiTBlock(nn.Module):
             )
 
         latents = latents + crs_attn_out
-        modu_out = self.modulate(self.norm2(latents), shift_mlp, scale_mlp)
+        modu_out = self.modulate(self.norm2(latents.to(dtype)), shift_mlp, scale_mlp).to(latents.dtype)
 
         # ffn
-        latents = latents + gate_mlp * self.ffn(modu_out)
+        latents = ((latents.to(dtype)) + gate_mlp * self.ffn(modu_out).to(dtype)).to(latents.dtype)
 
         return latents
 
@@ -970,37 +980,44 @@ class WanVideoParallelAttention(ParallelAttention):
 class Head(nn.Module):
 
     def __init__(
-        self, dim: int, out_dim: int, patch_size: List[int], eps: float = 1e-6
+        self, dim: int, out_dim: int, patch_size: List[int], eps: float = 1e-6, fp32_calculate: bool = False
     ):
         super().__init__()
         self.dim = dim
         self.out_dim = out_dim
         self.patch_size = patch_size
+        self.fp32_calculate = fp32_calculate
 
-        self.norm = nn.LayerNorm(dim, eps=eps, elementwise_affine=False)
+        self.norm = FP32LayerNorm(dim, eps=eps, elementwise_affine=False) if fp32_calculate else nn.LayerNorm(dim, eps=eps, elementwise_affine=False)
         self.head = nn.Linear(dim, out_dim * math.prod(patch_size))
         self.modulation = nn.Parameter(torch.randn(1, 2, dim) / dim**0.5)
 
     def forward(self, latents, times):
         shift, scale = (
-            self.modulation.to(dtype=times.dtype, device=times.device) + times
+            self.modulation.to(dtype=torch.float32 if self.fp32_calculate else times.dtype, device=times.device) + times
         ).chunk(2, dim=1)
-        out = self.head(self.norm(latents) * (1 + scale) + shift)
+        out = self.head((self.norm(latents.float() if self.fp32_calculate else latents) * (1 + scale) + shift).to(latents.dtype))
         return out
 
 
 class MLPProj(nn.Module):
 
-    def __init__(self, in_dim: int, out_dim: int):
+    def __init__(self, in_dim: int, out_dim: int, flf_pos_emb=False, clip_token_len=257, fp32_calculate=False):
         super().__init__()
 
         self.proj = nn.Sequential(
-            nn.LayerNorm(in_dim),
+            FP32LayerNorm(in_dim) if fp32_calculate else nn.LayerNorm(in_dim),
             nn.Linear(in_dim, in_dim),
             nn.GELU(),
             nn.Linear(in_dim, out_dim),
-            nn.LayerNorm(out_dim),
+            FP32LayerNorm(out_dim) if fp32_calculate else nn.LayerNorm(out_dim),
         )
+        if flf_pos_emb:   # NOTE: only used in "flf2v"
+            self.emb_pos = nn.Parameter(torch.zeros(1, clip_token_len * 2, in_dim))
 
     def forward(self, image_emb):
+        if hasattr(self, 'emb_pos'):
+            bs, n, d = image_emb.shape
+            image_emb = image_emb.view(-1, 2 * n, d)
+            image_emb = image_emb + self.emb_pos
         return self.proj(image_emb)

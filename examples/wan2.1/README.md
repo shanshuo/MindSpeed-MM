@@ -31,12 +31,13 @@
 
 ## 任务支持列表
 
-| 模型大小 | 任务类型 | 预训练 | lora微调 | 在线T2V推理 | 在线I2V推理 | 在线V2V推理 |
-|------|:----:|:----|:-------|:-----|:-----|:-----|
-| 1.3B | t2v  | ✔ | ✔ | ✔ | ✔ | ✔ |
-| 1.3B | i2v  | ✔ |  |  |  |  |
-| 14B  | t2v  | ✔ | ✔ | ✔ | ✔ | ✔ |
-| 14B  | i2v  | ✔ | ✔ | ✔ | ✔ | ✔ |
+| 模型大小 | 任务类型 | 预训练 | lora微调 | 在线T2V推理 | 在线I2V推理 | 在线FLF2V推理 | 在线V2V推理 |
+|------|:----:|:----|:-------|:-----|:-----|:-----|:-----|
+| 1.3B | t2v  | ✔ | ✔ | ✔ |  |  | ✔ |
+| 1.3B | i2v  | ✔ |  |  |  |  |  |
+| 14B  | t2v  | ✔ | ✔ | ✔ |  |  | ✔ |
+| 14B  | i2v  | ✔ | ✔ |  | ✔ |  |  |
+| 14B  | flf2v|   |  |  |  | ✔ |  |
 
 ## 环境安装
 
@@ -113,6 +114,7 @@ pip install decord==0.6.0
 |  T2V-14B    |  <https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers>    |
 |  I2V-14B-480P  |   <https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-480P-Diffusers>   |
 |  I2V-14B-720P  |   <https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-720P-Diffusers>   |
+|  FLF2V-14B-720P |   <https://huggingface.co/Wan-AI/Wan2.1-FLF2V-14B-720P-Diffusers>   |
 
 ### 权重转换
 
@@ -126,8 +128,8 @@ python examples/wan2.1/convert_ckpt.py --source_path <./weights/Wan-AI/Wan2.1-{T
 
 | 参数              | 含义                      | 默认值                                                                |
 |:----------------|:------------------------|:-------------------------------------------------------------------|
-| --source_path   | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
-| --target_path   | 转换后的权重保存路径              | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
+| --source_path   | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/ |
+| --target_path   | 转换后的权重保存路径              | ./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/ |
 | --mode          | 转换模式                    | 需选择convert_to_mm                                                   |
 | --pp_vpp_layers | PP/VPP层数                | 在convert_to_mm时, 使用PP和VPP需要指定各stage的层数并转换, 默认不使用                   |
 
@@ -136,7 +138,7 @@ python examples/wan2.1/convert_ckpt.py --source_path <./weights/Wan-AI/Wan2.1-{T
 **注**： 如进行layer zero进行训练，则需首先进行其[训练权重后处理](#jump1)，在进行如下操作：
 
 ```shell
-python examples/wan2.1/convert_ckpt.py --source_path <path for your saved weight/> --ckpt_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> --target_path <path for your saved weight/> --mode convert_to_hf
+python examples/wan2.1/convert_ckpt.py --source_path <path for your saved weight/> --ckpt_path <./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/> --target_path <path for your saved weight/> --mode convert_to_hf
 ```
 
 权重转换脚本的参数说明如下：
@@ -144,8 +146,8 @@ python examples/wan2.1/convert_ckpt.py --source_path <path for your saved weight
 |参数| 含义 | 默认值 |
 |:------------|:----|:----|
 | --source_path | 训练权重/layer zero训练后处理权重 | path for your saved weight |
-| --ckpt_path | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
-| --target_path | 转换后的权重保存路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/ |
+| --ckpt_path | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/ |
+| --target_path | 转换后的权重保存路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/ |
 | --mode | 转换模式 | 需选择convert_to_hf |
 
 ---
@@ -381,11 +383,14 @@ bash examples/wan2.1/{model_size}/{task}/finetune_lora.sh
 | examples/wan2.1/samples_t2v_prompts.txt                  |    文件内容 |  T2V推理任务的prompt，可自定义，一行为一个prompt   |
 | examples/wan2.1/samples_i2v_prompts.txt                  |    文件内容 |  I2V推理任务的prompt，可自定义，一行为一个prompt   |
 | examples/wan2.1/samples_i2v_images.txt                   |    文件内容 |  I2V推理任务的首帧图片路径，可自定义，一行为一个图片路径   |
+| examples/wan2.1/samples_flf2v_prompts.txt                |    文件内容 |  FLF2V推理任务的prompt，可自定义，一行为一个prompt   |
+| examples/wan2.1/samples_flf2v_images.txt                 |    文件内容 |  FLF2V推理任务的首、尾帧图片路径，可自定义，一行为两张图片（首、尾帧）路径，用", "隔开   |
 | examples/wan2.1/samples_v2v_prompts.txt                  |    文件内容 |  V2V推理任务的prompt，可自定义，一行为一个prompt   |
 | examples/wan2.1/samples_v2v_videos.txt                   |    文件内容 |  V2V推理任务的首个视频路径，可自定义，一行为一个视频路径   |
 | examples/wan2.1/{model_size}/{task}/inference_model.json |  save_path |  生成视频的保存路径 |
+| examples/wan2.1/{model_size}/{task}/inference_model.json |  dual_image |  双帧推理输入，仅在FLF2V任务中设置为true，其他任务可不配置 |
 | examples/wan2.1/{model_size}/{task}/inference_model.json |  input_size |  生成视频的分辨率，格式为 [t, h, w] |
-| examples/wan2.1/{model_size}/{task}/inference_model.json |  flow_shift |  sheduler参数，480P推荐shift=3.0，720P推荐shift=5.0 |
+| examples/wan2.1/{model_size}/{task}/inference_model.json |  flow_shift |  sheduler参数，480P推荐shift=3.0，720P推荐shift=5.0，FLF2V任务推荐shift=16.0 |
 | examples/wan2.1/{model_size}/{task}/inference.sh         |   LOAD_PATH | 转换之后的transformer部分权重路径 |
 
 ### 启动推理
