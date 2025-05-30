@@ -506,6 +506,7 @@ attention_mask_list = {'qwen2lm': partial(_build_attentionmask_positionid_qwenll
                        'qwen2_5_lm': partial(_build_attentionmask_positionid_qwenllm, pos_func=qwen2_5_position),
                        'internllm': _build_attentionmask_positionid_internllm,
                        'deepseek': _build_attentionmask_positionid_internllm,
+                       'qwen3_lm': partial(_build_attentionmask_positionid_qwenllm, pos_func=qwen2_5_position),
                        }
 
 
