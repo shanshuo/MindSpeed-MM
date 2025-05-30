@@ -71,6 +71,9 @@ class VppParallelConfig(BaseModel):
     tp_size: PositiveInt = 1
     """tensor parallel张量并行组，模型转换时不同的tp组要切分到不同的目录下"""
 
+    ep_size: Optional[PositiveInt] = 1
+    """expert parallel专家并行组，模型转换时不同的ep组要切分到不同的目录下"""
+
     @computed_field
     def pp_size(self) -> PositiveInt:
         return len(self.llm_pp_layers[0])
@@ -186,6 +189,9 @@ class ConvertVppMMConfig(BaseModel):
     hf_config: HfConfig
     """hf下载的原始权重路径配置"""
 
+    llm_hf_config: Optional[HfConfig] = None
+    """hf下载的llm权重路径配置"""
+
     trust_remote_code: bool = False
     """trust_remote_code 默认设为False, 需要用户手动设为True"""
 
@@ -211,6 +217,10 @@ class ConvertVppMMConfig(BaseModel):
             (['thinker_config', 'text_config'], 'num_hidden_layers'),  # qwen-omni
             (['llm_config'], 'num_hidden_layers')  # internvl
         ])
+
+        if self.llm_hf_config is not None:
+            llm_num_layers = self.llm_hf_config.config.num_hidden_layers
+
         if llm_num_layers is None:
             raise AttributeError("Required LLM layer config not found in any model type.")
 
@@ -510,13 +520,18 @@ def save_by_vpp(state_dicts: list[dict[str, torch.Tensor]],
                 save_root_dir: Path,
                 iteration: str | int = 'release',
                 pp_and_vpp_size: tuple[int, int] = (1, 1),
-                tp_rank: int = 0):
+                ep_size: int = 1,
+                tp_rank: int = 0,
+                ep_rank: int = 0):
     """获取pp_size和vpp_size"""
     pp_size, vpp_size = pp_and_vpp_size
     for pp_rank in tqdm(range(pp_size), desc="pp step"):
+        # megatron格式权重目录的命名方式为 "mp_rank_{tp_rank}_{pp_rank}_{ep_rank}"
         name_parts = ["mp", "rank", f"{tp_rank:02d}"]
         if pp_size > 1:
             name_parts.append(f"{pp_rank:03d}")
+        if ep_size > 1:
+            name_parts.append(f"{ep_rank:03d}")
         iter_name = iteration if isinstance(iteration, str) else f"iter_{iteration:07d}"
         save_path = save_root_dir.joinpath(iter_name, "_".join(name_parts))
         save_path.mkdir(exist_ok=True, parents=True)
@@ -591,6 +606,31 @@ def split_by_tp(state_dict: STATE_DICT_T, patterns: TP_PATTERN_T, tp_size: int =
     return return_dicts
 
 
+def split_by_ep(_state_dict: STATE_DICT_T, _ep_size: int = 1, _num_experts: int = 0) -> list[dict[str, torch.Tensor]]:
+    if _ep_size == 1 or _num_experts == 0:
+        return [_state_dict]
+
+    per_ep_rank_experts = _num_experts // _ep_size
+    ep_state_dicts = []
+    for ep_rank in range(_ep_size):
+        tmp_state_dict = {}
+        for key, value in _state_dict.items():
+            if "local_experts" in key:
+                expert_idx = int(key.split(".")[7]) # 此处"7"表示expert_idx位于key的第（7+1）位, eg: key = "text_decoder.decoder.layers.1.mlp.experts.local_experts.*.linear_fc1.weight"
+                if expert_idx >= ep_rank * per_ep_rank_experts and expert_idx < (ep_rank + 1) * per_ep_rank_experts:
+                    local_expert_idx = expert_idx - ep_rank * per_ep_rank_experts
+                    tmp_key_list = key.split(".")
+                    tmp_key_list[7] = str(local_expert_idx)
+                    new_key = ".".join(tmp_key_list)
+                    tmp_state_dict[new_key] = value
+            else:
+                tmp_state_dict[key] = value
+        
+        ep_state_dicts.append(tmp_state_dict)
+    
+    return ep_state_dicts
+
+
 def convert_hf_to_mm(state_dict: STATE_DICT_T, ops: list[Operator], is_tie: bool, is_pp: bool) -> STATE_DICT_T:
     if is_tie and is_pp:
         # pp1时，output_layer从word_embedding处获取共享权重。pp>1时，流水线后面的卡无法获得word_embedding，因此需要加上该权重
@@ -599,3 +639,15 @@ def convert_hf_to_mm(state_dict: STATE_DICT_T, ops: list[Operator], is_tie: bool
     for op in ops:
         op.handle(state_dict)
     return state_dict
+
+
+def merge_llm_weights_to_state_dict(vl_state_dict: STATE_DICT_T, llm_state_dict: STATE_DICT_T) -> STATE_DICT_T:
+    # 过滤掉vl_state_dict中llm相关的键
+    for key in list(vl_state_dict.keys()):
+        if key.startswith('model') or key.startswith("visual.merger"):
+            vl_state_dict.pop(key)
+
+    # 合并llm_state_dict到vl_state_dict
+    vl_state_dict.update(llm_state_dict)
+    
+    return vl_state_dict

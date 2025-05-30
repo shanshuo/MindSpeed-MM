@@ -13,7 +13,7 @@ from typing import cast
 import torch
 from tqdm import tqdm
 
-from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_by_tp
+from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_by_ep, split_by_tp
 from checkpoint.operator import deepseekvl_tp_patterns, STATE_DICT_T
 
 LATEST_TXT = "latest_checkpointed_iteration.txt"
@@ -152,31 +152,6 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
             new_params[linear_qkv_name] = linear_qkv
 
     return new_params
-
-
-def split_by_ep(_state_dict: dict[str, torch.Tensor], _ep_num: int = 1, _num_experts: int = 1) -> list[dict[str, torch.Tensor]]:
-    if _ep_num == 1:
-        return [_state_dict]
-    
-    per_ep_rank_experts = _num_experts // _ep_num
-    return_dicts = []
-    for ep_rank in range(_ep_num):
-        tmp_state_dict = {}
-        for key, value in _state_dict.items():
-            if "local_experts" in key:
-                expert_idx = int(key.split(".")[7]) # 此处"7"表示expert_idx位于key的第（7+1）位, eg: key = "text_decoder.decoder.layers.1.mlp.experts.local_experts.*.linear_fc1.weight"
-                if expert_idx >= ep_rank * per_ep_rank_experts and expert_idx < (ep_rank + 1) * per_ep_rank_experts:
-                    local_expert_idx = expert_idx - ep_rank * per_ep_rank_experts
-                    tmp_key_list = key.split(".")
-                    tmp_key_list[7] = str(local_expert_idx)
-                    new_key = ".".join(tmp_key_list)
-                    tmp_state_dict[new_key] = value
-            else:
-                tmp_state_dict[key] = value
-        
-        return_dicts.append(tmp_state_dict)
-    
-    return return_dicts
 
 
 def save_by_rank(state_dicts: list[dict[str, torch.Tensor]],

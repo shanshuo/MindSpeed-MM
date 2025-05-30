@@ -117,6 +117,26 @@ class Qwen2_5_OmniConverter(Converter):
         pass
 
 
+class Qwen3_VLConverter(Converter):
+    """Qwen3VL模型转换工具"""
+
+    @staticmethod
+    def hf_to_mm(cfg: ConvertVppMMConfig):
+        """huggingface模型转换mindspeed-mm模型权重"""
+        qwen_vl_hf_to_mm.convert_qwen3_vl(cfg)
+        # 安全管控权限
+        os.chmod(cfg.mm_dir, SAFE_MODE)
+
+    @staticmethod
+    def mm_to_hf(cfg: ConvertHFConfig):
+        pass
+
+    @staticmethod
+    def resplit(cfg: ConvertResplitConfig):
+        """mindspeed-mm模型权重重新切分"""
+        pass
+
+
 class InternVLConverter(Converter):
     """InternVL模型转换工具"""
 

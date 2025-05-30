@@ -41,7 +41,17 @@ def merge_to_interleaved_qkv(q: Tensor, k: Tensor, v: Tensor, group: int) -> Ten
 
 def get_layer_num(pattern: str, names: Iterable[str]) -> int:
     """在names中找到pattern正则匹配到的数数字的最大值"""
-    return max(int(re.findall(pattern, k)[0]) for k in names if re.match(pattern, k)) + 1
+    layer_ids = [int(re.findall(pattern, k)[0]) for k in names if re.match(pattern, k)]
+    if len(layer_ids) == 0:
+        return 0
+    return max(layer_ids) + 1
+
+
+def get_layer_and_expert_num(pattern: str, names: Iterable[str]) -> Tuple[int, int]:
+    """仅在含有expert相关的参数时调用，匹配到的第一个数字为层数，第二个数字为专家数"""
+    layer_num = max(int(re.findall(pattern, k)[0][0]) for k in names if re.match(pattern, k)) + 1
+    expert_num = max(int(re.findall(pattern, k)[0][1]) for k in names if re.match(pattern, k)) + 1
+    return layer_num, expert_num
 
 
 class Operator(ABC):
@@ -116,6 +126,15 @@ class UpGateMergeOp(MergeOp):
 
     def merge(self, tensors: List[Tensor]) -> Tensor:
         return torch.concat(tensors, dim=0)
+
+
+class ExpertUpGateMergeOp(UpGateMergeOp):
+    def handle(self, weights: STATE_DICT_T):
+        layer_num, expert_num = get_layer_and_expert_num(self.raw_names[0], weights.keys())
+        for layer_id in range(layer_num):
+            for expert_id in range(expert_num):
+                merged_tensor = self.merge([weights.pop(name.replace(DIGIT_FMT, str(layer_id), 1).replace(DIGIT_FMT, str(expert_id), 1)) for name in self.raw_names])
+                weights[self.new_name.replace(DIGIT_FMT, str(layer_id), 1).replace(DIGIT_FMT, str(expert_id), 1)] = merged_tensor
 
 
 class QKVMergeOp(MergeOp):
@@ -255,6 +274,27 @@ def create_qwen2_5_vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_
     return ops
 
 
+def create_qwen3_vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_groups: int) -> List[Operator]:
+    """qwen3vl 在qwen2.5vl的基础上增加了moe相关的专家参数，需要增加映射逻辑"""
+    ops = [
+        RenameOp(
+            (
+                # 处理 MoE专家相关
+                (r'\.mlp\.gate\.', '.mlp.router.'),
+                (r'^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.down_proj', r'text_decoder.decoder.layers.\1.mlp.experts.local_experts.\2.linear_fc2'),
+                # 处理 q, k layernorm
+                (r'\.self_attn\.q_norm\.', '.self_attention.q_layernorm.'),
+                (r'\.self_attn\.k_norm\.', '.self_attention.k_layernorm.'),
+            )
+        ),
+        ExpertUpGateMergeOp(
+            raw_names=["model.layers.(\d+).mlp.experts.(\d+).gate_proj.weight", "model.layers.(\d+).mlp.experts.(\d+).up_proj.weight"],
+            new_name="text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight"
+        )
+    ] + create_qwen2_5_vl_ops(vit_embed_dim, vit_num_heads, llm_num_query_groups)
+    return ops
+
+
 def create_qwen2_5_omni_ops(vit_num_heads: int, llm_num_query_groups: int, audio_num_heads: int, audio_d_model: int,
                             audio_encoder_layers: int) -> List[Operator]:
     """qwen2.5-omni 权重转换逻辑"""
@@ -361,11 +401,21 @@ qwen2vl_tp_patterns = {
     "image_encoder.projector.encoder.linear_fc1.weight": tp_split_row_weight,
     "image_encoder.projector.encoder.linear_fc2.weight": tp_split_col_weight
 }
+
 #  qwen2.5vl的tp切分在qwen2vl的tp切分基础上，修改了vit中mlp的tp切分逻辑，适应glu结构
 qwen2_5_vl_tp_patterns = {**qwen2vl_tp_patterns,
                           **{"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias": tp_split_glu_bias,
                              "image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight": tp_split_glu_weight}
                           }
+
+# qwen3vl的tp切分在qwen2.5vl的tp切分基础上，增加了expert的tp切分逻辑
+qwen3_vl_tp_patterns = {
+    **qwen2_5_vl_tp_patterns,
+    **{
+        "text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight": tp_split_glu_weight,
+        "text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc2.weight": tp_split_col_weight,
+    }
+}
 
 deepseekvl_tp_patterns = {
     "text_decoder.output_layer.weight": tp_split_row_weight,
