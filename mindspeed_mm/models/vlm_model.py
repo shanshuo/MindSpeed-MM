@@ -11,8 +11,9 @@ from megatron.training import get_args
 from megatron.training.arguments import core_transformer_config_from_args
 
 from mindspeed_mm.models.common.module_spec.get_layer_spec import get_vit_layer_spec, get_llm_layer_spec, \
-    get_projector_layer_spec
+    get_projector_layer_spec, get_audio_layer_spec
 from mindspeed_mm.models.vision.vision_model import VisionModel
+from mindspeed_mm.models.audio.audio_model import AudioModel
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.models.text_encoder.text_encoder import TextEncoder
 from mindspeed_mm.models.common.mm_gpt_model import MMGPTModel
@@ -51,6 +52,7 @@ class VLMModel(MultiModalModule):
         self.add_image_encoder = config.image_encoder is not None
         self.add_video_encoder = config.video_encoder is not None
         self.add_text_decoder = config.text_decoder is not None
+        self.add_audio_encoder = hasattr(config, "audio_encoder") and config.audio_encoder is not None
 
         self.text_encoder = None
         self.image_encoder = None
@@ -79,6 +81,8 @@ class VLMModel(MultiModalModule):
             raise NotImplementedError("Not support video_encoder now")
         if self.add_text_decoder:
             self.text_decoder = self._build_text_decoder_model(config.text_decoder)
+        if self.add_audio_encoder:
+            self.audio_encoder = self._build_audio_encoder_model(config.audio_encoder)
 
     def shared_embedding_or_output_weight(self):
         """
@@ -154,6 +158,70 @@ class VLMModel(MultiModalModule):
             post_process=post_process,
         )
 
+
+    def _build_audio_encoder_model(self, config):
+        audio_layer_spec = get_audio_layer_spec(config.audio_encoder)
+
+        if self.pp_size <= 1:
+            return AudioModel(
+                config=config,
+                encoder_transformer_layer_spec=audio_layer_spec
+            )
+        if self.enable_vp:
+            if self.pp_size * self.vp_size != len(config.audio_encoder.pipeline_num_layers) * len(
+                    config.audio_encoder.pipeline_num_layers[0]):
+                raise ValueError(
+                    f"The product of pipeline-model-parallel-size and vpp-size must equal to the total number of stage in audio_encoder.pipeline_num_layers, "
+                    f"but got pipeline-model-parallel-size: {self.pp_size}, vpp-size: {self.vp_size}, "
+                    f"and total number of stage in audio_encoder.pipeline_num_layers: {len(config.audio_encoder.pipeline_num_layers) * len(config.audio_encoder.pipeline_num_layers[0])}.")
+        elif self.pp_size != len(config.audio_encoder.pipeline_num_layers):
+            raise ValueError(
+                f"length of audio_encoder.pipeline_num_layers must equal to pipeline-model-parallel-size, "
+                f"but got audio_encoder.pipeline_num_layers length:{len(config.audio_encoder.pipeline_num_layers)} "
+                f"and pipeline-model-parallel-size:{self.pp_size}.")
+
+        if self.enable_vp:
+            local_num_layers = config.audio_encoder.pipeline_num_layers[self.vp_rank][self.pp_rank]
+        else:
+            local_num_layers = config.audio_encoder.pipeline_num_layers[self.pp_rank]
+
+        if local_num_layers == 0:
+            self.add_audio_encoder = False
+            return None
+
+        if self.enable_vp:
+            pipeline_start_index = sum(
+                sum(vp_layer) for vp_layer in config.audio_encoder.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.audio_encoder.pipeline_num_layers[self.vp_rank][:self.pp_rank])
+            pipeline_end_index = sum(
+                sum(vp_layer) for vp_layer in config.audio_encoder.pipeline_num_layers[:self.vp_rank]) + sum(
+                config.audio_encoder.pipeline_num_layers[self.vp_rank][:self.pp_rank + 1])
+        else:
+            pipeline_start_index = sum(config.audio_encoder.pipeline_num_layers[:self.pp_rank])
+            pipeline_end_index = sum(config.audio_encoder.pipeline_num_layers[:self.pp_rank + 1])
+
+        pre_process = pipeline_start_index == 0
+        post_process = pipeline_end_index == config.audio_encoder.num_layers
+        
+        print(
+            f"image encoder pipeline config:\
+            pp_rank:{self.pp_rank},\
+            pre_process:{pre_process},\
+            post_process:{post_process},\
+            local_num_layers:{local_num_layers}"
+        )
+        # num_layers will be divided by pp_size in TransformerBlock from megatron.core
+        config.audio_encoder.num_layers = self.pp_size * local_num_layers
+        if self.enable_vp:
+            config.audio_encoder.num_layers *= self.vp_size
+        return AudioModel(
+            config=config,
+            encoder_transformer_layer_spec=audio_layer_spec,
+            pre_process=pre_process,
+            post_process=post_process,
+        )
+
+        
     def _build_text_decoder_model(self, config):
         if self.pp_size <= 1:
             return MMGPTModel(
@@ -260,6 +328,8 @@ class VLMModel(MultiModalModule):
         """
         if self.add_image_encoder:
             self.image_encoder.freeze(freeze_image_encoder, freeze_image_projection)
+        if self.add_audio_encoder:
+            self.audio_encoder.freeze(freeze_audio_encoder, freeze_audio_projection)
         if self.add_text_decoder and freeze_text_decoder:
             for param in self.text_decoder.parameters():
                 param.requires_grad = False
@@ -368,6 +438,12 @@ class VLMModel(MultiModalModule):
                         image_mask = torch.eq(_input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
                         vit_embeds = vit_embeds[:, 0, :]
                         input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
+                        # 音频模态处理
+                        if 'input_features' in kwargs:  # 使用WhisperFeatureExtractor提取音频特征后输出值名为input_feature
+                            audio_features = self.audio_encoder(kwargs['input_features'], kwargs['feature_attention_mask'])
+                            audio_mask = torch.eq(_input_ids, 151646).unsqueeze(-1).expand_as(input_embeds) 
+                            audio_features = audio_features.to(input_embeds.device, input_embeds.dtype)
+                            input_embeds = input_embeds.masked_scatter(audio_mask, audio_features)
                         input_embeds = input_embeds.transpose(0, 1).clone()
 
             attention_mask, position_ids = prepare_positionsids_mask_for_llm(config=self.config, input_ids=input_ids,
@@ -404,6 +480,3 @@ class VLMModel(MultiModalModule):
                     "logits": output
                 }
         return output
-
-
-
