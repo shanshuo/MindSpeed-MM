@@ -147,7 +147,7 @@ mm-convert  DeepSeekVLConverter hf_to_mm \
        ├── ai2d_train_12k.jsonl
    ```
 
-修改data_convert_to_deepseekvl.py文件的input_file和output_file，例如：
+修改convert_ai2d_to_dsvl.py文件的input_file和output_file，例如：
 
 ```python
 input_file = "dataset/playground/opensource/ai2d_train_12k.jsonl"    # 替换为实际输入路径

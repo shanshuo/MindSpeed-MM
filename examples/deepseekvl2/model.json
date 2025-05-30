@@ -55,7 +55,10 @@
         "mla_up_proj_tp_overlap": false,
         "recompute_mla_up_proj": false,
         "mla_zero_memory": true,
-        "schedules_method": "None"
+        "schedules_method": "None",
+        "recompute_granularity": "full",
+        "recompute_method": "uniform",
+        "recompute_num_layers": 1
     },
     "image_encoder": {
         "tile_tag": "2D",

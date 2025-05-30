@@ -61,7 +61,7 @@ GPT_ARGS="
     --global-batch-size ${GBS} \
     --tokenizer-type NullTokenizer \
     --vocab-size 151936 \
-    --seq-length 1024 \
+    --seq-length 4096 \
     --make-vocab-size-divisible-by 1 \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
