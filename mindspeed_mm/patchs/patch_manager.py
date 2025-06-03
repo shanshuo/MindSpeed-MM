@@ -19,6 +19,7 @@ from mindspeed.patch_utils import MindSpeedPatchesManager as pm
 from mindspeed_mm.patchs import diffusers_patches
 from mindspeed_mm.patchs import transformers_patches
 from mindspeed_mm.patchs import models_patches
+from mindspeed_mm.patchs import adaptive_clip_grad_patch
 
 
 class PatchesManager:
@@ -34,6 +35,10 @@ class PatchesManager:
         ],
         "moe_mlp": [
             ("megatron.core.transformer.moe.experts.SequentialMLP.forward", models_patches.SequentialMLP_forward)
+        ],
+        "adaptive_clip_grad_norm": [
+            ("megatron.core.optimizer.distrib_optimizer.DistributedOptimizer.__init__", adaptive_clip_grad_patch.adaptive_clip_grad_norm_optimizer_init_wrapper),
+            ("megatron.core.optimizer.distrib_optimizer.DistributedOptimizer.clip_grad_norm", adaptive_clip_grad_patch.adaptive_clip_grad_norm_wrapper)
         ]
     }
 
