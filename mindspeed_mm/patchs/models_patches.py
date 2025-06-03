@@ -19,16 +19,38 @@ from megatron.core import mpu
 from megatron.legacy.model.module import fp32_to_float16, float16_to_fp32, Float16Module
 
 
+def _transform_model_dtype(module, transform, ignore_child_modules):
+    for child_module in module.children():
+        if child_module in ignore_child_modules:
+            continue
+        child_module = transform(child_module)
+    return module
+
+
 def float16Module_init(self, module, args):
     super(Float16Module, self).__init__()
 
+    # if AEModel use fp32
+    ae_config = getattr(args.mm.model, "ae", None)
+    ae_float32 = False
+    if ae_config is not None and getattr(ae_config, "dtype", None) == torch.float32:
+        module.ae = module.ae.float()
+        ae_float32 = True
+
     if args.fp16:
-        self.add_module("module", module.half())
+        if ae_float32:
+            self.add_module("module", _transform_model_dtype(module, lambda module: module.half(), [module.ae]))
+        else:
+            self.add_module("module", module.half())
 
         def float16_convertor(val):
             return val.half()
+
     elif args.bf16:
-        self.add_module("module", module.bfloat16())
+        if ae_float32:
+            self.add_module("module", _transform_model_dtype(module, lambda module: module.bfloat16(), [module.ae]))
+        else:
+            self.add_module("module", module.bfloat16())
 
         def float16_convertor(val):
             return val.bfloat16()
@@ -36,11 +58,6 @@ def float16Module_init(self, module, args):
         raise Exception("should not be here")
 
     self.float16_convertor = float16_convertor
-
-    # if AEModel use fp32
-    ae_config = getattr(args.mm.model, "ae", None)
-    if ae_config is not None and getattr(ae_config, "dtype", None) == torch.float32:
-        module.ae = module.ae.float()
 
 
 def float16Module_forward(self, *inputs, **kwargs):
