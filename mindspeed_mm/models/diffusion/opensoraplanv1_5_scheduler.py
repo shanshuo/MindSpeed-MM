@@ -285,6 +285,72 @@ class OpenSoraPlanScheduler:
         prev_sample = prev_sample.to(model_output.dtype)
 
         return prev_sample
+    
+    def training_losses(
+        self,
+        model_output: torch.Tensor,
+        x_start: torch.Tensor,
+        noise: torch.Tensor = None,
+        mask: torch.Tensor = None,
+        **kwargs
+    ):
+        if torch.all(mask.bool()):
+            mask = None
+
+        b, c, _, _, _ = model_output.shape
+        if mask is not None:
+            mask = mask.unsqueeze(1).repeat(1, c, 1, 1, 1).float()  # b t h w -> b c t h w
+            mask = mask.reshape(b, -1)
+
+        # these weighting schemes use a uniform timestep sampling and instead post-weight the loss
+        weighting = self.compute_loss_weighting_for_sd3(sigmas=self.sigmas)
+
+        # flow matching loss
+        target = noise - x_start
+
+        # Compute regular loss.
+        loss_mse = (weighting.float() * (model_output.float() - target.float()) ** 2).reshape(target.shape[0], -1)
+        if mask is not None:
+            loss = (loss_mse * mask).sum() / mask.sum()
+        else:
+            loss = loss_mse.mean()
+
+        return loss
+    
+    def q_sample(
+        self,
+        x_start: torch.Tensor,
+        sigmas: torch.Tensor = None,
+        noise: torch.Tensor = None,
+        **kwargs
+    ) -> torch.Tensor:
+        """
+        Diffuse the data for a given number of diffusion steps.
+        In other words, sample from q(x_t | x_0).
+        :param x_start: the initial data batch.
+        :param sigmas: interpolation factor in flow matching.
+        :param noise: if specified, the split-out normal noise.
+        :return: A noisy version of x_start.
+        """
+        b, c, _, _, _ = x_start.shape
+        if noise is None:
+            noise = torch.randn_like(x_start)
+            self.broadcast_tensor(noise)
+        if noise.shape != x_start.shape:
+            raise ValueError("The shape of noise and x_start must be equal.")
+        if sigmas is None:
+            sigmas = self.compute_density_for_sigma_sampling(b).to(x_start.device)
+            image_seq_len = (noise.shape[-1] * noise.shape[-2]) // 4 if self.use_dynamic_shifting else None # devided by patch embedding size
+            sigmas = self.sigma_shift_opensoraplan(sigmas, image_seq_len=image_seq_len)
+            timesteps = sigmas * 1000
+            while sigmas.ndim < x_start.ndim:
+                sigmas = sigmas.unsqueeze(-1)
+            self.broadcast_tensor(sigmas)
+            self.broadcast_tensor(timesteps)
+
+        self.sigmas = sigmas
+        x_t = self.add_noise(x_start, sigmas, noise)
+        return x_t, noise, timesteps
 
     def sample(
         self,

@@ -391,10 +391,21 @@ def collect_tensors_across_ranks(tensor, group=None):
         dist.all_gather_object(shape_list, [shape], group=group)
         return shape_list
 
-    shapes = broadcast_shapes(tensor, world_size, group)
-    recv_tensors = [torch.empty(*shape, dtype=tensor.dtype).to(tensor.device) for shape in shapes]
-    dist.all_gather(recv_tensors, tensor, group=group)
-
+    if isinstance(tensor, tuple) or isinstance(tensor, list):
+        recv_tensors = [[None for _ in range(len(tensor))] for _ in range(world_size)]
+        for i, tensor_i in enumerate(tensor):
+            if tensor_i is None:
+                continue
+            shapes = broadcast_shapes(tensor_i, world_size, group)
+            recv_tensors_i = [torch.empty(*shape, dtype=tensor_i.dtype).to(tensor_i.device) for shape in shapes]
+            dist.all_gather(recv_tensors_i, tensor_i, group=group)
+            for rank in range(world_size):
+                recv_tensors[rank][i] = recv_tensors_i[rank]
+    else:
+        shapes = broadcast_shapes(tensor, world_size, group)
+        recv_tensors = [torch.empty(*shape, dtype=tensor.dtype).to(tensor.device) for shape in shapes]
+        dist.all_gather(recv_tensors, tensor, group=group)
+        
     return recv_tensors
 
 

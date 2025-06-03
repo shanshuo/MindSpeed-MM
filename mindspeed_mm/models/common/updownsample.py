@@ -20,7 +20,8 @@ class Upsample(nn.Module):
         out_channels,
         kernel_size=3,
         stride=1,
-        padding=1
+        padding=1,
+        **kwargs
     ):
         super().__init__()
         self.conv = torch.nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding)
@@ -37,7 +38,8 @@ class Downsample(nn.Module):
         in_channels,
         out_channels,
         kernel_size=3,
-        undown=False
+        undown=False,
+        **kwargs
     ):
         super().__init__()
         self.undown = undown
@@ -71,7 +73,7 @@ class Downsample(nn.Module):
 
 
 class DownSample3D(nn.Module):
-    def __init__(self, in_channels, out_channels=None, with_conv=True, compress_time=False):
+    def __init__(self, in_channels, out_channels=None, with_conv=True, compress_time=False, **kwargs):
         super().__init__()
         self.with_conv = with_conv
         if out_channels is None:
@@ -127,7 +129,7 @@ class DownSample3D(nn.Module):
 
 
 class Upsample3D(nn.Module):
-    def __init__(self, in_channels, with_conv, compress_time=False):
+    def __init__(self, in_channels, with_conv, compress_time=False, **kwargs):
         super().__init__()
         self.with_conv = with_conv
         if self.with_conv:
@@ -218,6 +220,7 @@ class SpatialUpsample2x(nn.Module):
         kernel_size: Union[int, Tuple[int]] = (3, 3),
         stride: Union[int, Tuple[int]] = (1, 1),
         unup=False,
+        **kwargs
     ):
         super().__init__()
         self.unup = unup
@@ -243,7 +246,8 @@ class TimeDownsample2x(nn.Module):
     def __init__(
         self,
         kernel_size: int = 3,
-        stride: int = 2
+        stride: int = 2,
+        **kwargs
     ):
         super().__init__()
         # note: when kernel_size=(kernel_size, 1, 1), and stride=(stride, 1, 1), can be replaced by pool1d
@@ -262,7 +266,7 @@ class TimeDownsample2x(nn.Module):
 
 
 class TimeUpsample2x(nn.Module):
-    def __init__(self):
+    def __init__(self, **kwargs):
         super().__init__()
 
     def forward(self, x):
@@ -281,7 +285,8 @@ class TimeDownsampleRes2x(nn.Module):
         kernel_size: int = 3,
         stride: Tuple[int] = (2, 1, 1),
         padding: Tuple[int] = (0, 1, 1),
-        mix_factor: float = 2.0
+        mix_factor: float = 2.0,
+        **kwargs
     ):
         super().__init__()
         # note: when kernel_size=(kernel_size, 1, 1), and stride=(stride, 1, 1), can be replaced by pool1d
@@ -311,6 +316,7 @@ class TimeUpsampleRes2x(nn.Module):
         kernel_size: int = 3,
         padding: int = 1,
         mix_factor: float = 2.0,
+        **kwargs
     ):
         super().__init__()
         self.conv = CausalConv3d(in_channels, out_channels, kernel_size, padding)
@@ -327,7 +333,7 @@ class TimeUpsampleRes2x(nn.Module):
 
 
 class Spatial2xTime2x3DDownsample(nn.Module):
-    def __init__(self, in_channels, out_channels, conv_type="CausalConv3d", enable_vae_cp=False):
+    def __init__(self, in_channels, out_channels, conv_type="CausalConv3d", enable_vae_cp=False, **kwargs):
         super().__init__()
         if conv_type == "WfCausalConv3d":
             ConvLayer = WfCausalConv3d
@@ -350,7 +356,7 @@ class Spatial2xTime2x3DDownsample(nn.Module):
 
 
 class Spatial2xTime2x3DUpsample(nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, **kwargs):
         super().__init__()
         self.conv = CausalConv3d(in_channels, out_channels, kernel_size=3, padding=1)
 
@@ -372,6 +378,7 @@ class CachedCausal3DUpsample(nn.Module):
         out_channels,
         t_interpolation="trilinear",
         enable_cached=False,
+        **kwargs
     ):
         super().__init__()
         self.t_interpolation = t_interpolation
@@ -423,6 +430,7 @@ class DownsampleCausal3D(nn.Module):
         elementwise_affine=None,
         bias=True,
         stride=2,
+        **kwargs
     ):
         super().__init__()
         self.channels = channels
@@ -485,6 +493,7 @@ class UpsampleCausal3D(nn.Module):
         bias=True,
         interpolate=True,
         upsample_factor=(2, 2, 2),
+        **kwargs
     ):
         super().__init__()
         self.channels = channels

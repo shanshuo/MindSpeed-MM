@@ -89,7 +89,11 @@ class Encoder(MultiModalModule):
                 )
                 for _ in range(num_resblocks)
             ],
-            model_name_to_cls(l1_dowmsample_block)(in_channels=base_channels, out_channels=base_channels),
+            model_name_to_cls(l1_dowmsample_block)(
+                in_channels=base_channels, 
+                out_channels=base_channels,
+                conv_type="WfCausalConv3d"
+            ),
         )
 
         self.down2 = nn.Sequential(

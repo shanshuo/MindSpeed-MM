@@ -879,7 +879,7 @@ class MultiHeadSparseMMAttentionSBH(MultiHeadSparseAttentionSBH):
                     gather_output=False
                 )
 
-        if self.context_pre_only is not None:
+        if not self.context_pre_only:
             self.added_proj_out = tensor_parallel.RowParallelLinear(
                 added_kv_proj_dim,
                 self.inner_dim,
@@ -1024,7 +1024,7 @@ class MultiHeadSparseMMAttentionSBH(MultiHeadSparseAttentionSBH):
         hidden_states, _ = self.proj_out(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        if self.context_pre_only is not None:
+        if not self.context_pre_only:
             encoder_hidden_states, _ = self.added_proj_out(encoder_hidden_states)
 
         return hidden_states, encoder_hidden_states

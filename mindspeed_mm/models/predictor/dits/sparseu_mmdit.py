@@ -233,7 +233,7 @@ class SparseUMMDiT(MultiModalModule):
                         norm_elementwise_affine=norm_elementwise_affine,
                         norm_eps=norm_eps,
                         interpolation_scale_thw=interpolation_scale_thw,
-                        double_ff=double_ff,
+                        double_ff=double_ff and not (is_last_stage and i == num_layer - 1),
                         sparse1d=sparse1d if sparse_n > 1 else False,
                         sparse_n=sparse_n,
                         sparse_group=i % 2 == 1 if sparse_n > 1 else False,
@@ -605,6 +605,8 @@ class SparseMMDiTBlock(nn.Module):
         self.sparse_n = sparse_n
         self.sparse_group = sparse_group
         self.head_dim = head_dim
+        self.double_ff = double_ff
+        self.context_pre_only = context_pre_only
 
         if norm_cls == 'rms_norm':
             self.norm_cls = RMSNorm
@@ -637,7 +639,13 @@ class SparseMMDiTBlock(nn.Module):
 
         # adanorm-zero2: to introduce timestep and clip condition
         self.norm2 = OpenSoraNormZero(
-            timestep_embed_dim, dim, norm_elementwise_affine, norm_eps, bias=True, norm_cls=norm_cls
+            timestep_embed_dim, 
+            dim, 
+            norm_elementwise_affine, 
+            norm_eps, 
+            bias=True, 
+            norm_cls=norm_cls,
+            context_pre_only=(not double_ff and context_pre_only)
         )
 
         # 2. Feed-forward
@@ -650,7 +658,6 @@ class SparseMMDiTBlock(nn.Module):
             bias=ff_bias,
         )
 
-        self.double_ff = double_ff
         if self.double_ff:
             self.ff_enc = FeedForward(
                 dim,
@@ -697,12 +704,14 @@ class SparseMMDiTBlock(nn.Module):
         # 3. residual & gate
         hidden_states = hidden_states.float() + gate_msa * attn_hidden_states.float()
         hidden_states = hidden_states.to(weight_dtype)
-        encoder_hidden_states = encoder_hidden_states.float() + enc_gate_msa * attn_encoder_hidden_states.float()
-        encoder_hidden_states = encoder_hidden_states.to(weight_dtype)
+        if not self.context_pre_only:
+            encoder_hidden_states = encoder_hidden_states.float() + enc_gate_msa * attn_encoder_hidden_states.float()
+            encoder_hidden_states = encoder_hidden_states.to(weight_dtype)
 
         # 4. norm & scale & shift
         hidden_states = maybe_clamp_tensor(hidden_states, training=self.training)
-        encoder_hidden_states = maybe_clamp_tensor(encoder_hidden_states, training=self.training)
+        if not self.context_pre_only:
+            encoder_hidden_states = maybe_clamp_tensor(encoder_hidden_states, training=self.training)
 
         norm_hidden_states, norm_encoder_hidden_states, gate_ff, enc_gate_ff = self.norm2(
             hidden_states, encoder_hidden_states, inputs.embedded_timestep
@@ -727,9 +736,11 @@ class SparseMMDiTBlock(nn.Module):
             ff_output = self.ff(norm_hidden_states)
             # 6. residual & gate
             hidden_states = hidden_states.float() + gate_ff * ff_output[:vis_seq_length].float()
-            encoder_hidden_states = encoder_hidden_states.float() + enc_gate_ff * ff_output[vis_seq_length:].float()
             hidden_states = hidden_states.to(weight_dtype)
             encoder_hidden_states = encoder_hidden_states.to(weight_dtype)
+            if not self.context_pre_only:
+                encoder_hidden_states = encoder_hidden_states.float() + enc_gate_ff * ff_output[vis_seq_length:].float()
+                encoder_hidden_states = encoder_hidden_states.to(weight_dtype)
 
         return hidden_states, encoder_hidden_states
 
@@ -758,6 +769,8 @@ class AdaNorm(nn.Module):
         super().__init__()
         args = get_args()
         self.sequence_parallel = args.sequence_parallel
+        config = core_transformer_config_from_args(args)
+        config.sequence_parallel = False
         output_dim = output_dim or embedding_dim * 2
 
         if num_embeddings is not None:
@@ -766,7 +779,13 @@ class AdaNorm(nn.Module):
             self.emb = None
 
         self.silu = nn.SiLU()
-        self.linear = nn.Linear(embedding_dim, output_dim)
+        self.linear = tensor_parallel.ColumnParallelLinear(
+            embedding_dim,
+            output_dim,
+            config=config,
+            init_method=config.init_method,
+            gather_output=False
+        )
         if norm_cls == 'rms_norm':
             self.norm_cls = RMSNorm
         elif norm_cls == 'fp32_layer_norm':
@@ -781,12 +800,13 @@ class AdaNorm(nn.Module):
         if self.emb is not None:
             temb = self.emb(timestep)
 
-        temb = self.linear(self.silu(temb))
-        temb = temb.float()
+        temb = self.linear(self.silu(temb))[0]
         if self.sequence_parallel:
             temb = tensor_parallel.mappings.all_gather_last_dim_from_tensor_parallel_region(temb)
         else:
             temb = tensor_parallel.mappings.gather_from_tensor_model_parallel_region(temb)
+        temb = temb.float()
+        
         # x shape: (S B H), temb shape: (B, H)
         shift, scale = temb.chunk(2, dim=1)
         shift = shift[None, :, :]
@@ -821,23 +841,20 @@ class OpenSoraNormZero(nn.Module):
             self.norm_cls = FP32LayerNorm
 
         self.silu = nn.SiLU()
+        config.sequence_parallel = False
         self.linear = tensor_parallel.ColumnParallelLinear(
             timestep_embed_dim,
             6 * embedding_dim,
             config=config,
             init_method=config.init_method,
-            gather_output=True
+            gather_output=False
         )
+        config.sequence_parallel = self.sequence_parallel
         self.norm = self.norm_cls(embedding_dim, eps=eps, sequence_parallel=self.sequence_parallel)
         self.norm_enc = None
         if not context_pre_only:
             self.norm_enc = self.norm_cls(embedding_dim, eps=eps, sequence_parallel=self.sequence_parallel)
-
-        # set label "sequence_parallel", for all_reduce the grad
-        for module in [self.norm, self.norm_enc]:
-            for param in module.parameters():
-                setattr(param, "sequence_parallel", self.sequence_parallel)
-
+            
     def forward(
         self, hidden_states: torch.Tensor, encoder_hidden_states: torch.Tensor, temb: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor]:
