@@ -64,7 +64,9 @@ def main():
 
     prompts = load_prompts(args.prompt)
 
-    images = load_images(args.image) if hasattr(args, "image") else None
+    if not hasattr(args, "dual_image"):
+        args.dual_image = False
+    images = load_images(args.image, args.dual_image) if hasattr(args, "image") else None
 
     # Generate args.num_inference_videos_per_sample inference videos for the same prompt.
     if hasattr(args, "num_inference_videos_per_sample") and args.num_inference_videos_per_sample > 1:
