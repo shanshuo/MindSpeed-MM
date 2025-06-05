@@ -45,7 +45,7 @@ from tqdm import tqdm
 
 from checkpoint.operator import create_qwen2vl_ops, create_qwen2_5_vl_ops, create_qwen2_5_omni_ops, create_qwen3_vl_ops, \
     qwen2vl_tp_patterns, qwen2_5_vl_tp_patterns, qwen3_vl_tp_patterns, Operator
-from checkpoint.utils import ConvertVppMMConfig, load_from_hf, merge_vpp_index, split_by_ep, split_model_by_pipeline, \
+from checkpoint.utils import ConvertVppMMConfig, filter_vit_keys, load_from_hf, merge_vpp_index, split_by_ep, split_model_by_pipeline, \
     save_by_vpp, split_by_tp, convert_hf_to_mm, merge_llm_weights_to_state_dict
 
 
@@ -63,11 +63,16 @@ def convert(convert_config: ConvertVppMMConfig, config: Any, ops: list[Operator]
     # 加载权重字典
     state_dict = load_from_hf(convert_config.hf_config.hf_dir)
 
+    # 如果有llm_config，则加载llm权重并合并到state_dict中
     if llm_config is not None:
         llm_state_dict = load_from_hf(llm_config.hf_dir)
         state_dict = merge_llm_weights_to_state_dict(state_dict, llm_state_dict)
         num_experts = getattr(llm_config.config, 'num_experts', 0)
     
+    if convert_config.save_vit_only:
+        # 如果只保存vit权重，则过滤掉非vit的权重
+        filter_vit_keys(state_dict)
+
     # 权重转换、合并
     state_dict = convert_hf_to_mm(state_dict, ops, config.tie_word_embeddings, parallel_config.is_pp())
    

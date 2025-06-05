@@ -192,6 +192,9 @@ class ConvertVppMMConfig(BaseModel):
     llm_hf_config: Optional[HfConfig] = None
     """hf下载的llm权重路径配置"""
 
+    save_vit_only: Optional[bool] = False
+    """是否只保存vit部分（包含projector）的权重，默认为False，同时保存llm和vit的权重"""
+
     trust_remote_code: bool = False
     """trust_remote_code 默认设为False, 需要用户手动设为True"""
 
@@ -651,3 +654,10 @@ def merge_llm_weights_to_state_dict(vl_state_dict: STATE_DICT_T, llm_state_dict:
     vl_state_dict.update(llm_state_dict)
     
     return vl_state_dict
+
+
+def filter_vit_keys(_state_dict: STATE_DICT_T) -> STATE_DICT_T:
+    """过滤掉llm相关的键，只保留vit部分的键"""
+    for key in list(_state_dict.keys()):
+        if not key.startswith("visual"):
+            _state_dict.pop(key)
