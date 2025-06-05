@@ -144,7 +144,7 @@ class MinicpmImageVideoPreprocess(MultiModalImageVideoPreprocessBase):
 
 
 def get_multimodal_image_video_preprocessor(template_name, **kwargs):
-    if template_name in ("internlm2-chat", "internvl2_5"):
+    if template_name in ("internlm2-chat", "internvl2_5", "internvit_qwen3"):
         return InternvlImageVideoPreprocess(**kwargs)
     elif template_name in ("llava-plain"):
         return LlavaImageVideoPreprocess(**kwargs)

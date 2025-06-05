@@ -193,6 +193,17 @@ register_conv_template(
 
 register_conv_template(
     Conversation(
+        name='internvit_qwen3',
+        system_template='<|im_start|>system\n{system_message}',
+        system_message='',
+        roles=('<|im_start|>user\n', '<|im_start|>assistant\n'),
+        sep_style=SeparatorStyle.MPT,
+        sep='<|im_end|>\n',
+    )
+)
+
+register_conv_template(
+    Conversation(
         name="deepseek",
         system_template="{system_message}",
         # system_message："You are a helpful assistant. Please answer truthfully and write out your "

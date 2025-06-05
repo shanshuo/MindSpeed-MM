@@ -56,5 +56,10 @@ MODEL_CONSTANTS = {
     "deepseekvl2": {
         "IGNORE_INDEX": -100,
         "IMAGE_TOKEN": "<image>"
+    },
+    "internvit_qwen3": {
+        'IMG_CONTEXT_TOKEN': '<|image_pad|>',
+        'IMG_START_TOKEN': '<|vision_start|>',
+        'IMG_END_TOKEN': '<|vision_end|>',
     }
 }

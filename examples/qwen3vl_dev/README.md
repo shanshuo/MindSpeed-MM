@@ -254,7 +254,7 @@ dataset_param->basic_parameters->dataset
     ...
 }
 ```
-**注意**：若运行internvit+qwen3模型，请参考`data_internvit_qwen3.json`配置相应参数。
+**注意**：若运行internvit+qwen3模型，请参考`data_internvit.json`配置相应参数。
 
 【模型保存加载及日志信息配置】
 

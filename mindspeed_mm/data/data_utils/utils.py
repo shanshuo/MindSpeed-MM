@@ -1442,9 +1442,9 @@ def preprocess_internvl2_5(
         system_prompt = conv.system_message
 
     if not text_only:
-        IMG_START_TOKEN_ = MODEL_CONSTANTS['internvl2_5']['IMG_START_TOKEN']
-        IMG_CONTEXT_TOKEN_ = MODEL_CONSTANTS['internvl2_5']['IMG_CONTEXT_TOKEN']
-        IMG_END_TOKEN_ = MODEL_CONSTANTS['internvl2_5']['IMG_END_TOKEN']
+        IMG_START_TOKEN_ = MODEL_CONSTANTS[template_name]['IMG_START_TOKEN']
+        IMG_CONTEXT_TOKEN_ = MODEL_CONSTANTS[template_name]['IMG_CONTEXT_TOKEN']
+        IMG_END_TOKEN_ = MODEL_CONSTANTS[template_name]['IMG_END_TOKEN']
         new_conversations = []
         current_image_idx = 0
         for conversation in conversations:
@@ -1591,7 +1591,7 @@ def preprocess(
                                   tokenizer, num_image_token_list,
                                   group_by_length=group_by_length,
                                   num_image=num_image)
-    elif template_name == "internvl2_5":
+    elif template_name in ("internvl2_5", "internvit_qwen3"):
         ret = preprocess_internvl2_5(template_name, sources,
                                      tokenizer, num_image_token_list,
                                      group_by_length=group_by_length,
