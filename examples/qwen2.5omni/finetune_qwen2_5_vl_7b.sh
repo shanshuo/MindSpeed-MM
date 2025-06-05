@@ -51,7 +51,7 @@ GPT_ARGS="
     --global-batch-size ${GBS} \
     --tokenizer-type NullTokenizer \
     --vocab-size 152064 \
-    --seq-length 1024 \
+    --seq-length 3072 \
     --make-vocab-size-divisible-by 1 \
     --normalization RMSNorm \
     --use-fused-rmsnorm \
@@ -76,6 +76,9 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --num-workers 8 \
+    --distributed-timeout-minutes 600 \
+    --use-flash-attn \
+    --enable-dummy-optimizer \
 "
 
 MM_ARGS="

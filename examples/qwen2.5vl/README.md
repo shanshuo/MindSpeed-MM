@@ -477,7 +477,7 @@ LOAD_PATH="ckpt/mm_path/Qwen2.5-VL-7B-Instruct"
 评测支持多卡DP评测需要更改的配置,为NPU卡数量
 
 ```shell
-NPUS_PER_NODE=1
+NPUS_PER_NODE=8
 ```
 
 <a id="jump7.3"></a>

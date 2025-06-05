@@ -10,7 +10,7 @@
             "video_max_pixels": 16384,
             "video_min_pixels": 0,
             "video_fps": 2.0,
-            "video_maxlen": 64
+            "video_maxlen": 128
         },
         "basic_parameters": {
             "template": "qwen2_omni",

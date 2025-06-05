@@ -152,7 +152,7 @@ def dot_product_attention_forward(
         attn_mask_type,
         packed_seq_params,
 ):
-    is_vit = (getattr(self.config, 'model_id', None) == 'qwen2vit')
+    is_vit = (getattr(self.config, 'model_id', None) in ['qwen2vit', 'qwen_omni'])
     use_remove_padding = getattr(self.config, 'use_remove_padding', False)
     seq_length, bsz, n_head, head_dim = query.shape[0], query.shape[1], query.shape[2], query.shape[3]
     if not is_vit:
