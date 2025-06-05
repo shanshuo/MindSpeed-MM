@@ -190,7 +190,7 @@ class SharegptDatasetConverter(DatasetConverter):
                 },
                 {
                     "role": tag_mapping.get(rejected.get(self.dataset_attr.role_tag)),
-                    "content": rejected(self.dataset_attr.content_tag),
+                    "content": rejected.get(self.dataset_attr.content_tag),
                 },
             ]
         else:  # normal example
