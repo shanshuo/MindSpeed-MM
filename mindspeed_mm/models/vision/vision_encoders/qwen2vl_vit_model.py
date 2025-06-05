@@ -76,6 +76,11 @@ def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor, use_f
 class Qwen2VLRotaryEmbedding_llm(Qwen2VLRotaryEmbedding):
     def __init__(self, config: Optional[TransformerConfig] = None):
         super().__init__(config=config)
+        # head_dim 默认是 hidden_size // num_attention_heads，这里传入kv_channels来覆盖默认值
+        self.config.head_dim = self.config.kv_channels
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
 
     @torch.no_grad()
     def forward(self, x_device, x_dtype, position_ids):
