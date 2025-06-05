@@ -5,7 +5,7 @@ export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
 export TASK_QUEUE_ENABLE=2
 export COMBINED_ENABLE=1
-export CPU_AFFINITY_CONF=1
+export CPU_AFFINITY_CONF=2
 export HCCL_CONNECT_TIMEOUT=1200
 export NPU_ASD_ENABLE=0
 export ASCEND_LAUNCH_BLOCKING=0
@@ -13,7 +13,7 @@ export ACLNN_CACHE_LIMIT=100000
 export PYTORCH_NPU_ALLOC_CONF="expandable_segments:True"
 
 # 当前脚本多机拉起配置仅作参考，请根据实际情况修改
-NPUS_PER_NODE=8
+NPUS_PER_NODE=16
 # 注意，当前为多机运行，根据实际的机器ip创建examples/qwen2.5vl/hostfile.txt文件，其中每行为一台机器的ip地址
 HOSTFILE="examples/qwen2.5vl/hostfile.txt"
 MASTER_ADDR=$(head -n1 $HOSTFILE | awk '{print $1;}')  # 获取hostfile第一行为masteraddr
@@ -84,6 +84,8 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --num-workers 8 \
+    --use-flash-attn \
+    --swap-attention \
 "
 
 MM_ARGS="
