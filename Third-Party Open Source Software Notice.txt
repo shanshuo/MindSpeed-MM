@@ -494,6 +494,8 @@ For the full text of the license, please go to the above.
 Copyright Notice included in the software:
 Copyright 2024 Vchitect/LiteGen
 
+Copyright 2024 Black Forest Labs
+
 Copyright 2025 StepFun Inc
 
 Software Notice

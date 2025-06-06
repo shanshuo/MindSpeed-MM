@@ -166,7 +166,8 @@ class ModulateDiT(nn.Module):
         factor: int,
         act_layer: Callable,
         enable_tensor_parallel: bool = False,
-        gather_tensor_parallel_output: bool = True
+        gather_tensor_parallel_output: bool = True,
+        zero_initialize: bool = True,
     ):
         super().__init__()
         self.enable_tensor_parallel = enable_tensor_parallel
@@ -190,9 +191,11 @@ class ModulateDiT(nn.Module):
             self.linear = nn.Linear(
                 hidden_size, factor * hidden_size, bias=True
             )
-        # Zero-initialize the modulation
-        nn.init.zeros_(self.linear.weight)
-        nn.init.zeros_(self.linear.bias)
+
+        if zero_initialize:
+            # Zero-initialize the modulation
+            nn.init.zeros_(self.linear.weight)
+            nn.init.zeros_(self.linear.bias)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.enable_tensor_parallel:

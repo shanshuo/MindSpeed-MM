@@ -21,7 +21,7 @@ class TimestepEmbedder(nn.Module):
         self.frequency_embedding_size = frequency_embedding_size
 
     @staticmethod
-    def timestep_embedding(t, dim, max_period=10000):
+    def timestep_embedding(t, dim, max_period=10000, time_factor=None):
         """
         Create sinusoidal timestep embeddings.
         :param t: a 1-D Tensor of N indices, one per batch element.
@@ -30,6 +30,8 @@ class TimestepEmbedder(nn.Module):
         :param max_period: controls the minimum frequency of the embeddings.
         :return: an (N, D) Tensor of positional embeddings.
         """
+        if time_factor:
+            t = time_factor * t
         half = dim // 2
         freqs = torch.exp(
             -math.log(max_period)
@@ -42,10 +44,12 @@ class TimestepEmbedder(nn.Module):
             embedding = torch.cat(
                 [embedding, torch.zeros_like(embedding[:, :1])], dim=-1
             )
+        if time_factor:
+            embedding = embedding.to(t)
         return embedding
 
-    def forward(self, t, dtype=None):
-        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
+    def forward(self, t, dtype=None, time_factor=None):
+        t_freq = self.timestep_embedding(t, self.frequency_embedding_size, time_factor=time_factor)
         if dtype is not None:
             if t_freq.dtype != dtype:
                 t_freq = t_freq.to(dtype)

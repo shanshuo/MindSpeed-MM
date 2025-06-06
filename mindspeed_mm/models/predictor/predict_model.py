@@ -15,7 +15,8 @@ from .dits import (
     HunyuanVideoDiT,
     WanDiT,
     StepVideoDiT,
-    SparseUMMDiT
+    SparseUMMDiT,
+    MMDiT
 )
 
 
@@ -31,7 +32,8 @@ PREDICTOR_MODEL_MAPPINGS = {
     "hunyuanvideodit": HunyuanVideoDiT,
     "wandit": WanDiT,
     "stepvideodit": StepVideoDiT,
-    "SparseUMMDiT": SparseUMMDiT
+    "SparseUMMDiT": SparseUMMDiT,
+    "mmdit": MMDiT
 }
 
 
