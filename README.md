@@ -639,10 +639,10 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     <tr>
       <td><a href="https://huggingface.co/Qwen/Qwen2.5-VL-72B-Instruct">72B</a></td>
       <td> 微调 </td>
-      <td> 8x8 </td>
+      <td> 4x8 (A3) </td>
       <td> BF16 </td>
-      <td> / </td>
-      <td> / </td>
+      <td> 322.96 (TPS) </td>
+      <td> 256.28 (TPS) </td>
       <td> 563 </td>
       <td>【Test】</td>
     </tr>
