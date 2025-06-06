@@ -41,7 +41,7 @@ def split_to_even_chunks(indices, lengths, num_chunks, batch_size):
                 chunks_lengths[shortest_chunk] = float("inf")
 
     pad_chunks = []
-    for idx, chunk in enumerate(chunks):
+    for _, chunk in enumerate(chunks):
         if batch_size != len(chunk):
             if batch_size <= len(chunk):
                 raise AssertionError(
@@ -54,7 +54,6 @@ def split_to_even_chunks(indices, lengths, num_chunks, batch_size):
                 ]
             else:
                 chunk = random.choice(pad_chunks)
-                print(chunks[idx], "->", chunk)
         pad_chunks.append(chunk)
     return pad_chunks
 
@@ -70,7 +69,7 @@ def split_data_to_even_chunks(megabatch, lengths, world_size, batch_size):
     chunks = [megabatch[i::world_size] for i in range(world_size)]
 
     pad_chunks = []
-    for idx, chunk in enumerate(chunks):
+    for _, chunk in enumerate(chunks):
         if batch_size != len(chunk):  
             if batch_size <= len(chunk):
                 raise AssertionError("batch_size must greater than len_chunk !")
@@ -78,7 +77,6 @@ def split_data_to_even_chunks(megabatch, lengths, world_size, batch_size):
                 chunk = chunk + [random.choice(chunk) for _ in range(batch_size - len(chunk))]
             else:
                 chunk = random.choice(pad_chunks)  # [[1], []] -> [[1], [1]]
-                print(chunks[idx], '->', chunk)
         pad_chunks.append(chunk)
     return pad_chunks
 
