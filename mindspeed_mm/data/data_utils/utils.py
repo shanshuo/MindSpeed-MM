@@ -20,7 +20,7 @@ import copy
 import random
 import urllib.parse as ul
 from fractions import Fraction
-from collections import Counter
+from collections import Counter, defaultdict
 from logging import getLogger
 from typing import Any, Dict, Optional, Tuple, Union, Sequence, Type, Callable
 
@@ -573,6 +573,28 @@ class VideoProcesser:
                 # 8, 8: y in [57]
                 return y
         return -1
+
+
+class DataStats:
+    def __init__(self):
+        self.counters = defaultdict(int)
+        self.collections = defaultdict(list)
+    
+    def increment(self, key, value=1):
+        self.counters[key] += value
+
+    def collect(self, key, item):
+        self.collections[key].append(item)
+
+    def print_report(self):
+        report = ["\n=== Data Processing Report ==="]
+        for k, v in self.counters.items():
+            print(f"{k.replace('_', ' ').title():<25}: {v}")
+        if self.counters:
+            for k, v in sorted(self.counters.items()):
+                report.append(f"  {k}: {v}")
+
+        return "\n".join(report)
 
 
 class ImageProcesser:
