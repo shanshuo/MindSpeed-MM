@@ -124,32 +124,11 @@ class LlavaImageVideoPreprocess(MultiModalImageVideoPreprocessBase):
         return {"pixel_values": pixel_values}
 
 
-class MinicpmImageVideoPreprocess(MultiModalImageVideoPreprocessBase):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def __call__(self, image_path, mode="", num_image=1, **kwargs):
-        image = self.image_reader(image_path)
-        max_num = self.max_dynamic_patch // num_image if mode == "multi_image" else self.max_dynamic_patch
-        if self.dynamic_image_size:
-            images, image_placeholder = dynamic_preprocess_minicpm(image,
-                                                                   max_num=max_num,
-                                                                   image_size=self.image_size,
-                                                                   tokenizer=self.tokenizer,
-                                                                   patch_size=self.patch_size)
-        else:
-            images = [image]
-        pixel_values = [self.image_transforms(image) for image in images]
-        return {"pixel_values": pixel_values, "image_placeholder": image_placeholder}
-
-
 def get_multimodal_image_video_preprocessor(template_name, **kwargs):
     if template_name in ("internlm2-chat", "internvl2_5", "internvit_qwen3"):
         return InternvlImageVideoPreprocess(**kwargs)
     elif template_name in ("llava-plain"):
         return LlavaImageVideoPreprocess(**kwargs)
-    elif template_name in ("minicpmv26"):
-        return MinicpmImageVideoPreprocess(**kwargs)
     else:
         raise ValueError(f"Unsupported template_name: {template_name}")
 
@@ -217,27 +196,6 @@ def dynamic_preprocess(image, min_num=1, max_num=6, image_size=448, use_thumbnai
         thumbnail_img = image.resize((image_size, image_size))
         processed_images.append(thumbnail_img)
     return processed_images
-
-
-def dynamic_preprocess_minicpm(image, max_num, image_size, tokenizer, patch_size=14, new_schema=True, use_image_id=True):
-    default_image_placeholder = (
-            tokenizer.im_start + tokenizer.unk_token * 64 + tokenizer.im_end
-    )
-    images = []
-    image_id_cnt = 0
-    source_image, patches, best_grid = slice_image(image, max_num, image_size, patch_size)
-    images.append(source_image)
-    image_placeholder = default_image_placeholder
-    if len(patches) > 0:
-        for row in patches:
-            for patch in row:
-                images.append(patch)
-        if use_image_id:
-            image_placeholder = f'{tokenizer.im_id_start}{image_id_cnt}{tokenizer.im_id_end}' + image_placeholder
-            image_id_cnt += 1
-        image_placeholder += get_grid_placeholder(tokenizer, best_grid, 64, new_schema=new_schema)
-
-    return images, image_placeholder
 
 
 def slice_image(

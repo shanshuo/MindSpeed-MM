@@ -8,7 +8,6 @@ from .projectors.internvl_mlp import InternVLMLP
 from .projectors.multimodal_projector import MultimodalProjector
 from .vision_encoders.clip_vit_model import CLIPViT
 from .vision_encoders.internvit_model import InternViT
-from .vision_encoders.minicpm_vit_model import MiniCPMViT
 from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
 from .vision_encoders.siglip_vit_model import create_siglip_vit
 
@@ -17,7 +16,6 @@ VISION_ENCODER_MAPPINGS = {
     "InternViT": InternViT,
     "qwen2vit": Qwen2VLViT,
     "qwen2_5_vit": Qwen2VLViT,
-    "MiniCPMViT": MiniCPMViT,
     "SigLip": create_siglip_vit
 }
 
