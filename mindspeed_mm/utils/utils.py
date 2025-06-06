@@ -16,11 +16,70 @@
 import os
 import importlib
 from functools import lru_cache
+from typing import Type, Any, Dict
 from einops import rearrange
 
 import torch
 import torch.distributed
 import numpy as np
+
+
+class Registry:
+    """A generic class registry system that automatically uses class names as registration keys.
+    
+    Features:
+    - Automatic registration using class names
+    - Prohibition of manual name specification
+    - Class name conflict detection
+    """
+    
+    _REGISTRY: Dict[str, Type[Any]] = {}
+    """Internal registry storage mapping class names to their corresponding class objects"""
+
+    @classmethod
+    def register(cls, target_class: Type[Any]) -> Type[Any]:
+        """Class decorator for automatic registration using the class name.
+        
+        Args:
+            target_class: Target class to be registered
+            
+        Returns:
+            The original class object to preserve class definition
+            
+        Raises:
+            ValueError: If class name is already registered
+        """
+        class_name = target_class.__name__
+        
+        if class_name in cls._REGISTRY:
+            existing = cls._REGISTRY[class_name]
+            raise ValueError(
+                f"Class name conflict: '{class_name}' already registered by {existing}, "
+                f"attempting to register: {target_class}"
+            )
+            
+        cls._REGISTRY[class_name] = target_class
+        return target_class
+
+    @classmethod
+    def get_class(cls, name: str) -> Type[Any]:
+        """Retrieve a registered class by its name.
+        
+        Args:
+            name: Name of the class to retrieve
+            
+        Returns:
+            The registered class object
+            
+        Raises:
+            ValueError: If the class is not found in registry
+        """
+        if name not in cls._REGISTRY:
+            available = list(cls._REGISTRY.keys())
+            raise ValueError(
+                f"Class '{name}' not found in registry. Available classes: {available}"
+            )
+        return cls._REGISTRY[name]
 
 
 @lru_cache

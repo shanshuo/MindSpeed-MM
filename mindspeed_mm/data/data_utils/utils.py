@@ -22,7 +22,7 @@ import urllib.parse as ul
 from fractions import Fraction
 from collections import Counter
 from logging import getLogger
-from typing import Any, Dict, Optional, Tuple, Union, Sequence
+from typing import Any, Dict, Optional, Tuple, Union, Sequence, Type, Callable
 
 try:
     import decord
@@ -161,146 +161,6 @@ class DecordInit:
         return repr_str
 
 
-class VideoReader:
-    """support some methods to read video"""
-
-    def __init__(self, video_reader_type=None, num_threads=1):
-        self.video_reader_type = video_reader_type
-        if self.video_reader_type == "decoder":
-            self.v_decoder = DecordInit(num_threads)
-
-    def __call__(self, video_path):
-        is_decord_read = False
-        info = None
-
-        if self.video_reader_type == "decoder":
-            vframes = self.v_decoder(video_path)
-            is_decord_read = True
-        elif self.video_reader_type == "torchvision":
-            vframes, aframes, info = torchvision.io.read_video(
-                filename=video_path, pts_unit="sec", output_format="TCHW"
-            )  # [T: temporal, C: channel, H: height, W: width]
-        elif self.video_reader_type == "av":
-            vframes, aframes, info = read_video_av(filename=video_path, pts_unit="sec", output_format="TCHW")
-        else:
-            raise NotImplementedError(
-                f"Unsupported video reader type: {self.video_reader_type}"
-            )
-        return vframes, info, is_decord_read
-
-
-def read_video_av(
-        filename: str,
-        start_pts: Union[float, Fraction] = 0,
-        end_pts: Optional[Union[float, Fraction]] = None,
-        pts_unit: str = "pts",
-        output_format: str = "THWC",
-) -> Tuple[torch.Tensor, torch.Tensor, Dict[str, Any]]:
-    """
-    Reads a video from a file, returning both the video frames and the audio frames
-
-    Args:
-        filename (str): path to the video file
-        start_pts (int if pts_unit = "pts", float / Fraction if pts_unit = "sec", optional):
-            The start presentation time of the video
-        end_pts (int if pts_unit = "pts", float / Fraction if pts_unit = "sec", optional):
-            The end presentation time
-        pts_unit (str, optional): unit in which start_pts and end_pts values will be interpreted,
-            either "pts" or "sec". Defaults to "pts".
-        output_format (str, optional): The format of the output video tensors. Can be either "THWC" (default) or "TCHW".
-
-    Returns:
-        vframes (Tensor[T, H, W, C] or Tensor[T, C, H, W]): the `T` video frames
-        aframes (Tensor[K, L]): the audio frames, where `K` is the number of channels and `L` is the number of points
-        info (Dict): metadata for the video and audio. Can contain the fields video_fps (float) and audio_fps (int)
-    """
-    output_format = output_format.upper()
-    if output_format not in ("THWC", "TCHW"):
-        raise ValueError(f"output_format should be either 'THWC' or 'TCHW', got {output_format}.")
-
-    if not os.path.exists(filename):
-        raise RuntimeError(f"File not found: {filename}")
-
-    if get_video_backend() != "pyav":
-        vframes, aframes, info = _video_opt._read_video(filename, start_pts, end_pts, pts_unit)
-    else:
-        _check_av_available()
-
-        if end_pts is None:
-            end_pts = float("inf")
-
-        if end_pts < start_pts:
-            raise ValueError(
-                f"end_pts should be larger than start_pts, got start_pts={start_pts} and end_pts={end_pts}"
-            )
-
-        info = {}
-        video_frames = []
-        audio_frames = []
-        audio_timebase = _video_opt.default_timebase
-
-        container = av.open(filename, metadata_errors="ignore")
-        try:
-            if container.streams.audio:
-                audio_timebase = container.streams.audio[0].time_base
-            if container.streams.video:
-                video_frames = _read_from_stream(
-                    container,
-                    start_pts,
-                    end_pts,
-                    pts_unit,
-                    container.streams.video[0],
-                    {"video": 0},
-                )
-                video_fps = container.streams.video[0].average_rate
-                # guard against potentially corrupted files
-                if video_fps is not None:
-                    info["video_fps"] = float(video_fps)
-
-            if container.streams.audio:
-                audio_frames = _read_from_stream(
-                    container,
-                    start_pts,
-                    end_pts,
-                    pts_unit,
-                    container.streams.audio[0],
-                    {"audio": 0},
-                )
-                info["audio_fps"] = container.streams.audio[0].rate
-        except av.AVError as ex:
-            raise ex
-        finally:
-            container.close()
-            del container
-            # NOTE: manually garbage collect to close pyav threads
-            gc.collect()
-
-        vframes_list = [frame.to_rgb().to_ndarray() for frame in video_frames]
-        aframes_list = [frame.to_ndarray() for frame in audio_frames]
-
-        if vframes_list:
-            vframes = torch.as_tensor(np.stack(vframes_list))
-        else:
-            vframes = torch.empty((0, 1, 1, 3), dtype=torch.uint8)
-
-        if aframes_list:
-            aframes = np.concatenate(aframes_list, 1)
-            aframes = torch.as_tensor(aframes)
-            if pts_unit == "sec":
-                start_pts = int(math.floor(start_pts * (1 / audio_timebase)))
-                if end_pts != float("inf"):
-                    end_pts = int(math.ceil(end_pts * (1 / audio_timebase)))
-            aframes = _align_audio_frames(aframes, audio_frames, start_pts, end_pts)
-        else:
-            aframes = torch.empty((1, 0), dtype=torch.float32)
-
-    if output_format == "TCHW":
-        # [T,H,W,C] --> [T,C,H,W]
-        vframes = vframes.permute(0, 3, 1, 2)
-
-    return vframes, aframes, info
-
-
 class VideoProcesser:
     """Used for video data preprocessing"""
 
@@ -367,7 +227,7 @@ class VideoProcesser:
             self.min_num_frames = min_num_frames
 
 
-    def __call__(self, vframes, num_frames=None, frame_interval=None, image_size=None, is_decord_read=False,
+    def __call__(self, vframes, num_frames=None, frame_interval=None, image_size=None,
                  predefine_num_frames=13, start_frame_idx=0, clip_total_frames=-1, resolution_crop=(None, None, None, None)
     ):
         if image_size:
@@ -380,7 +240,7 @@ class VideoProcesser:
             if self.data_process_type == "CogvideoX":
                 return self.cog_data_process(vframes)
 
-            total_frames = len(vframes)
+            total_frames = vframes.get_len()
             if num_frames:
                 self.num_frames = num_frames
                 self.temporal_sample = TemporalRandomCrop(num_frames * frame_interval)
@@ -390,13 +250,7 @@ class VideoProcesser:
             frame_indice = np.linspace(
                 start_frame_ind, end_frame_ind - 1, self.num_frames, dtype=int
             )
-            if is_decord_read:
-                video = vframes.get_batch(frame_indice).asnumpy()
-                video = torch.from_numpy(video)
-                # THWC -> TCHW,  [T: temporal, C: channel, H: height, W: width]
-                video = video.permute(0, 3, 1, 2)
-            else:
-                video = vframes[frame_indice]  # TCHW
+            video = vframes.get_batch(frame_indice) # TCHW
 
             video = self.video_transforms(video)
             # TCHW -> CTHW
@@ -404,7 +258,6 @@ class VideoProcesser:
         else:
             video = self.combine_data_video_process(
                 vframes,
-                is_decord_read=is_decord_read,
                 predefine_num_frames=predefine_num_frames,
                 start_frame_idx=start_frame_idx,
                 clip_total_frames=clip_total_frames,
@@ -414,8 +267,8 @@ class VideoProcesser:
 
 
     def cog_data_process(self, video_frames):
-        actual_fps = video_frames.get_avg_fps()
-        ori_video_len = len(video_frames)
+        actual_fps = video_frames.get_video_fps()
+        ori_video_len = video_frames.get_len()
 
         if ori_video_len / actual_fps * self.fps > self.num_frames:
             num_frames = self.num_frames
@@ -423,10 +276,7 @@ class VideoProcesser:
             end = int(start + num_frames / self.fps * actual_fps)
             end_safety = min(int(start + num_frames / self.fps * actual_fps), int(ori_video_len))
             indices = np.arange(start, end, (end - start) // num_frames).astype(int)
-            temp_frames = video_frames.get_batch(np.arange(start, end_safety)).asnumpy()
-            if temp_frames is None:
-                raise ValueError("temp_frames is unexpectedly None")
-            tensor_frames = torch.from_numpy(temp_frames)
+            tensor_frames = video_frames.get_batch(np.arange(start, end_safety)) # T C H W
             tensor_frames = tensor_frames[torch.tensor((indices - start).tolist())]
         else:
             if ori_video_len > self.num_frames:
@@ -434,10 +284,7 @@ class VideoProcesser:
                 start = int(self.skip_frame_num)
                 end = int(ori_video_len - self.skip_frame_num)
                 indices = np.arange(start, end, max((end - start) // num_frames, 1)).astype(int)
-                temp_frames = video_frames.get_batch(np.arange(start, end)).asnumpy()
-                if temp_frames is None:
-                    raise ValueError("temp_frames is unexpectedly None")
-                tensor_frames = torch.from_numpy(temp_frames)
+                tensor_frames = video_frames.get_batch(np.arange(start, end)) # T C H W
                 tensor_frames = tensor_frames[torch.tensor((indices - start).tolist())]
             else:
 
@@ -453,17 +300,12 @@ class VideoProcesser:
                 # 3D VAE requires the number of frames to be 4k+1
                 num_frames = nearest_smaller_4k_plus_1(end - start)
                 end = int(start + num_frames)
-                temp_frames = video_frames.get_batch(np.arange(start, end)).asnumpy()
-                if temp_frames is None:
-                    raise ValueError("temp_frames is unexpectedly None")
-                tensor_frames = torch.from_numpy(temp_frames)
+                tensor_frames = video_frames.get_batch(np.arange(start, end)) # T C H W
 
         # the len of indices may be less than num_frames, due to round error
         tensor_frames = pad_last_frame(
             tensor_frames, self.num_frames
         )
-        # [T, H, W, C] -> [T, C, H, W]
-        tensor_frames = tensor_frames.permute(0, 3, 1, 2)
         tensor_frames = resize_for_rectangle_crop(tensor_frames, [self.max_height, self.max_width],
                                                   reshape_mode="center")
         tensor_frames = (tensor_frames - 127.5) / 127.5
@@ -471,11 +313,11 @@ class VideoProcesser:
 
 
     def combine_data_video_process(
-            self, vframes, is_decord_read=True, predefine_num_frames=13,
+            self, vframes, predefine_num_frames=13,
             start_frame_idx=0, clip_total_frames=-1, resolution_crop=(None, None, None, None)
     ):
-        total_frames = len(vframes) if clip_total_frames == -1 else clip_total_frames
-        fps = vframes.get_avg_fps() if vframes.get_avg_fps() > 0 else 30.0
+        total_frames = vframes.get_len() if clip_total_frames == -1 else clip_total_frames
+        fps = vframes.get_video_fps() if vframes.get_video_fps() > 0 else 30.0
         s_x, e_x, s_y, e_y = resolution_crop
 
         if self.auto_interval:
@@ -522,10 +364,7 @@ class VideoProcesser:
             raise IndexError(
                 f"video has {total_frames} frames, but need to sample {len(frame_indices)} frames ({frame_indices})"
             )
-        video = vframes.get_batch(frame_indices).asnumpy()
-        video = torch.from_numpy(video)
-        # (T, H, W, C) -> (T C H W)
-        video = video.permute(0, 3, 1, 2)
+        video = vframes.get_batch(frame_indices) # T C H W
         if s_y is not None:
             video = video[:, :, s_y: e_y, s_x: e_x]
 

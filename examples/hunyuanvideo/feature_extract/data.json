@@ -7,7 +7,7 @@
             "data_storage_mode": "combine"
         },
         "preprocess_parameters": {
-            "video_reader_type": "decoder",
+            "video_reader_type": "DecordVideo",
             "image_reader_type": "Image",
             "num_frames": 93,
             "frame_interval": 1,

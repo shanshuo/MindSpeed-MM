@@ -15,7 +15,7 @@ from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MM
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.generation_mixin import GenerationMixin
 from mindspeed_mm.data.data_utils.conversation import get_conv_template
-from mindspeed_mm.data.data_utils.utils import VideoReader
+from mindspeed_mm.data.data_utils.video_reader import VideoReader
 from mindspeed_mm.data.data_utils.multimodal_image_video_preprocess import dynamic_preprocess
 
 
@@ -91,15 +91,15 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         return pixel_values
     
     def _prepare_video(self, video_path, bound=None, input_size=448, max_num=1, num_segments=32):
-        video_reader, _, _ = VideoReader(video_reader_type="decoder", num_threads=1)(video_path)
-        max_frame = len(video_reader) - 1
-        fps = float(video_reader.get_avg_fps())
+        video_reader = VideoReader(video_reader_type="DecordVideo")(video_path, layout="THWC", array_type="numpy")
+        max_frame = video_reader.get_len() - 1
+        fps = float(video_reader.get_video_fps())
 
         pixel_values_list, num_patches_list = [], []
         transform = build_infer_transform(input_size=input_size)
         frame_indices = get_index(bound, fps, max_frame, first_idx=0, num_segments=num_segments)
         for frame_index in frame_indices:
-            img = Image.fromarray(video_reader[frame_index].asnumpy()).convert('RGB')
+            img = Image.fromarray(video_reader.get_batch([frame_index])[0]).convert('RGB')
             img = dynamic_preprocess(img, image_size=input_size, use_thumbnail=True, max_num=max_num)
             pixel_values = [transform(tile) for tile in img]
             pixel_values = torch.stack(pixel_values)

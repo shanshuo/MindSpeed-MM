@@ -32,9 +32,9 @@ from mindspeed_mm.data.data_utils.utils import (
     DataSetProg,
     ImageProcesser,
     TextProcesser,
-    VideoProcesser,
-    VideoReader
+    VideoProcesser
 )
+from mindspeed_mm.data.data_utils.video_reader import VideoReader
 from mindspeed_mm.data.datasets.mm_base_dataset import MMBaseDataset
 from mindspeed_mm.models import Tokenizer
 from mindspeed_mm.data.data_utils.utils import get_value_from_args, cal_gradient_accumulation_size
@@ -326,10 +326,9 @@ class T2VDataset(MMBaseDataset):
         file_type = self.get_type(file_path)
         if file_type == "video":
             frame_indice = sample["sample_frame_index"]
-            vframes, _, is_decord_read = self.video_reader(file_path)
+            vframes = self.video_reader(file_path)
             video = self.video_processer(
                 vframes,
-                is_decord_read=is_decord_read,
                 predefine_num_frames=len(frame_indice),
             )
             examples[VIDEO] = video
@@ -362,13 +361,12 @@ class T2VDataset(MMBaseDataset):
         file_type = self.get_type(file_path)
         if file_type == "video":
             frame_indice = sample["sample_frame_index"]
-            vframes, _, is_decord_read = self.video_reader(file_path)
+            vframes = self.video_reader(file_path)
             start_frame_idx = sample.get("start_frame_idx", 0)
             clip_total_frames = sample.get("num_frames", -1)
             resolution_crop = tuple(sample.get("crop", (None, None, None, None)))
             video = self.video_processer(
                 vframes,
-                is_decord_read=is_decord_read,
                 predefine_num_frames=len(frame_indice),
                 start_frame_idx=start_frame_idx,
                 clip_total_frames=clip_total_frames,
@@ -400,15 +398,15 @@ class T2VDataset(MMBaseDataset):
     def get_value_from_vid_or_img(self, path):
         file_type = self.get_type(path)
         if file_type == "video":
-            vframes, _, is_decord_read = self.video_reader(path)
-            video_value = self.video_processer(vframes=vframes, is_decord_read=is_decord_read)
+            vframes = self.video_reader(path)
+            video_value = self.video_processer(vframes=vframes)
         elif file_type == "image":
             video_value = self.image_processer(path)
         return video_value
 
     def get_vid_img_fusion(self, path):
-        vframes, _, is_decord_read = self.video_reader(path)
-        video_value = self.video_processer(vframes=vframes, is_decord_read=is_decord_read)
+        vframes = self.video_reader(path)
+        video_value = self.video_processer(vframes=vframes)
         if self.use_img_num != 0 and self.use_img_from_vid:
             select_image_idx = np.linspace(
                 0, self.num_frames - 1, self.use_img_num, dtype=int
@@ -537,8 +535,8 @@ class DynamicVideoTextDataset(MMBaseDataset):
         video_fps = 24  # default fps
         if file_type == "video":
             # loading
-            vframes, vinfo, _ = self.video_reader(video_or_image_path)
-            video_fps = vinfo["video_fps"] if "video_fps" in vinfo else 24
+            vframes = self.video_reader(video_or_image_path)
+            video_fps = vframes.get_video_fps()
 
             video_fps = video_fps // self.frame_interval
 
@@ -589,7 +587,7 @@ class DynamicVideoTextDataset(MMBaseDataset):
             text_len = 50
             ret["prompt_ids"] = torch.zeros((1, text_len, 1152))
             ret["prompt_mask"] = text_len
-
+        ret[FILE_INFO] = video_or_image_path
         return ret
 
     def get_text_processer(self, texts):

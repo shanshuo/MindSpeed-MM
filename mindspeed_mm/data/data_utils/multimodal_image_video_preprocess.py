@@ -11,7 +11,7 @@ from torchvision.datasets.folder import pil_loader
 
 from mindspeed_mm.data.data_utils.transform_pipeline import get_transforms
 from mindspeed_mm.data.data_utils.data_transform import Expand2Square
-from mindspeed_mm.data.data_utils.utils import VideoReader
+from mindspeed_mm.data.data_utils.video_reader import VideoReader
 
 
 class MultiModalImageVideoPreprocessBase(ABC):
@@ -342,9 +342,9 @@ def get_grid_placeholder(tokenizer, grid, query_num, new_schema=False):
 def read_frames_decord(
         video_path, num_frames, sample='rand', fix_start=None, client=None, clip=None, min_num_frames=4
 ):
-    video_reader, _, _ = VideoReader(video_reader_type="decoder", num_threads=1)(video_path)
-    vlen = len(video_reader)
-    fps = video_reader.get_avg_fps()
+    video_reader = VideoReader(video_reader_type="DecordVideo")(video_path, layout="THWC", array_type="numpy")
+    vlen = video_reader.get_len()
+    fps = video_reader.get_video_fps()
     duration = vlen / float(fps)
     if clip:
         start, end = clip
@@ -360,7 +360,7 @@ def read_frames_decord(
     )
     if clip:
         frame_indices = [f + start_index for f in frame_indices]
-    frames = video_reader.get_batch(frame_indices).asnumpy()  # (T, H, W, C), np.uint8
+    frames = video_reader.get_batch(frame_indices)  # (T, H, W, C), np.uint8
     frames = [Image.fromarray(frames[i]) for i in range(frames.shape[0])]
     return frames
 

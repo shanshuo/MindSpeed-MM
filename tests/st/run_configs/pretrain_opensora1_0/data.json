@@ -6,7 +6,7 @@
             "data_folder": "/home/ci_resource/data/MSRVTT/videos/all"
         },
         "preprocess_parameters": {
-            "video_reader_type": "torchvision",
+            "video_reader_type": "TorchvisionVideo",
             "image_reader_type": "torchvision",
             "num_frames": 120,
             "frame_interval": 3,

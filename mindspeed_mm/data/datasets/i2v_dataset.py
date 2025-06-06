@@ -27,7 +27,6 @@ from mindspeed_mm.data.data_utils.utils import (
     ImageProcesser,
     TextProcesser,
     VideoProcesser,
-    VideoReader,
 )
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset
 from mindspeed_mm.utils.mask_utils import STR_TO_TYPE, MaskProcessor
@@ -166,13 +165,12 @@ class I2VDataset(T2VDataset):
         file_type = self.get_type(file_path)
         if file_type == "video":
             frame_indice = sample["sample_frame_index"]
-            vframes, _, is_decord_read = self.video_reader(file_path)
+            vframes = self.video_reader(file_path)
             start_frame_idx = sample.get("start_frame_idx", 0)
             clip_total_frames = sample.get("num_frames", -1)
             resolution_crop = tuple(sample.get("crop", (None, None, None, None)))
             video = self.video_processer(
                 vframes,
-                is_decord_read=is_decord_read,
                 predefine_num_frames=len(frame_indice),
                 start_frame_idx=start_frame_idx,
                 clip_total_frames=clip_total_frames,
@@ -217,4 +215,7 @@ class I2VDataset(T2VDataset):
                     text = [add_aesthetic_notice_image(text[0], aes)]
         prompt_ids, prompt_mask = self.get_text_processer(text)
         examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
+
+        # For feature extract, trace source file name
+        examples[FILE_INFO] = file_path
         return examples
