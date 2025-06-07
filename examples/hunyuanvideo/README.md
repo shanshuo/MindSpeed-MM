@@ -1,5 +1,6 @@
 # HunyuanVideo使用指南
 - [HunyuanVideo使用指南](#hunyuanvideo使用指南)
+  - [参考实现](#参考实现)
   - [环境安装](#环境安装)
     - [仓库拉取](#仓库拉取)
     - [环境搭建](#环境搭建)
@@ -30,6 +31,13 @@
     - [参数配置](#参数配置-2)
     - [启动推理](#启动推理)
   - [环境变量声明](#环境变量声明)
+
+## 参考实现
+
+```
+url=https://github.com/hao-ai-lab/FastVideo
+commit_id=a33581186973e6d7355f586fa065b6abb29b97fb
+```
 
 ## 环境安装
 
@@ -125,7 +133,7 @@ HunyuanVideo
     │  ├──lora
     │  │  ├──embrace_kohaya_weights.safetensors
     │  │  ├──hair_growth_kohaya_weights.safetensors
-  ```
+```
 其中`HunyuanVideo/hunyuan-video-t2v-720p/transformers`和`HunyuanVideo-I2V/hunyuan-video-i2v-720p/transformers`是transformer部分的权重，`HunyuanVideo/hunyuan-video-t2v-720p/vae`和`HunyuanVideo-I2V/hunyuan-video-i2v-720p/vae`是VAE部分的权重，`HunyuanVideo-I2V/hunyuan-video-i2v-720p/lora`是lora权重
 
 ### 权重转换
