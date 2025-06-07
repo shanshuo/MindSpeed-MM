@@ -15,6 +15,7 @@ from megatron.core.transformer.enums import AttnMaskType, ModelType
 from megatron.core.transformer.spec_utils import ModuleSpec
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.training import get_args
 
 from mindspeed.core.context_parallel.unaligned_cp.mapping import cal_split_sizes, split_forward_gather_backward, gather_forward_split_backward
 from mindspeed.utils import set_actual_seq_len
@@ -59,7 +60,11 @@ class MMGPTModel(LanguageModule):
         seq_len_interpolation_factor: Optional[float] = None,
     ) -> None:
         super().__init__(config=config)
-
+        generation_config = getattr(get_args().mm.model, 'generation_config', None)
+        if getattr(generation_config, "kv_cache", None):
+            setattr(config, "inference_attention", True)
+        if not getattr(self.config, 'use_remove_padding', False):
+            setattr(self.config, "use_unpad_input_attention", True)
         self.transformer_layer_spec: ModuleSpec = transformer_layer_spec
         self.vocab_size = vocab_size
         self.max_sequence_length = max_sequence_length

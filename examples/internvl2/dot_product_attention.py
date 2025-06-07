@@ -242,9 +242,15 @@ def dot_product_attention_forward(
                 actual_seq_kvlen=actual_seq_len
             )[0]
         else:
+            # when sparse_mode is 0, the next_tockens and pre_tockens should coincide with the shape of attention_mask.
+            # or will make some precision problems.
+            # in vit, the attention_mask is general, so set next_tokens to default value 2147483647,
+            # in llm， the attention_mask is causal, so set next_tokens to 0.
+            next_tokens = 2147483647 if getattr(self.config, "use_general_mask_attention", False) else 0
             output = torch_npu.npu_fusion_attention(query, key, value, n_head, "BSND",
                                                     keep_prob=1. - self.attention_dropout.p,
                                                     scale=scale,
+                                                    next_tockens=next_tokens,
                                                     atten_mask=attention_mask, )[0]
         output = output.transpose(0, 1).reshape(seq_length, bsz, -1)
     return output
