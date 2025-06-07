@@ -79,6 +79,7 @@
         "qk_norm": true,
         "qk_norm_type": "rmsnorm",
         "guidance_embed": true,
+        "embeded_guidance_scale": 1.0,
         "text_projection": "single_refiner",
         "text_states_dim": [4096, 768],
         "use_attention_mask": true 
