@@ -34,19 +34,6 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 1 \
-    --hidden-size 3072 \
-    --num-attention-heads 48 \
-    --seq-length 24 \
-    --max-position-embeddings 24 \
-    --attention-dropout 0.0 \
-    --hidden-dropout 0.0 \
-    --tokenizer-type NullTokenizer \
-    --vocab-size 0 \
-    --position-embedding-type rope \
-    --rotary-base 500000 \
-    --swiglu \
-    --no-masked-softmax-fusion \
     --lr 5e-6 \
     --min-lr 5e-6 \
     --train-iters 5010 \
@@ -60,8 +47,7 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --bf16 \
-    --normalization RMSNorm \
-    --use-fused-rmsnorm \
+    --seed 42 \
     --load $LOAD_PATH \
 "
 

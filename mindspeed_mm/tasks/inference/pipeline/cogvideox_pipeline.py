@@ -46,7 +46,7 @@ class CogVideoXPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         config = config.to_dict()
         self.num_frames, self.height, self.width = config.get("input_size", [49, 480, 720])
-        self.generator = torch.Generator().manual_seed(config.get("seed", 42))
+        self.generator = torch.Generator().manual_seed(config.get("seed", 1234))
         self.num_videos_per_prompt = 1
         self.guidance_scale = config.get("guidance_scale", 6.0)
 

@@ -30,7 +30,7 @@ class HunyuanVideoPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.scheduler = scheduler
 
         config = config.to_dict()
-        self.generator = torch.Generator().manual_seed(config.get("seed", 42))
+        self.generator = torch.Generator().manual_seed(config.get("seed", 1234))
         self.frames, self.height, self.width = config.get("input_size", [65, 256, 256])
         self.generate_params_checks(self.frames, self.height, self.width)
         self.guidance_scale = config.get("guidance_scale", 7.5)

@@ -4,8 +4,8 @@
         "from_pretrained": null,
         "dtype": "bf16",
         "num_layers" : 48,
-        "num_attention_heads": 48,
-        "attention_head_dim": 128,
+        "num_heads": 48,
+        "head_dim": 128,
         "channel_split": [64, 32, 32],
         "in_channels": 64,
         "out_channels": 64,
@@ -68,11 +68,9 @@
         "use_attention_mask": true,
         "input_size": [204, 544, 992],
         "guidance_scale": 9.0,
-        "model_type": "t2v",
-        "seed": 1234
+        "model_type": "t2v"
     },
     "unload_text_encoder": true,
-    "micro_batch_size": 1,
     "frame_interval":1,
     "save_path":"examples/stepvideo/t2v/t2v_result/",
     "fps":25,

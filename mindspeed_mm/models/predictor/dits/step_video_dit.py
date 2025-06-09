@@ -37,8 +37,8 @@ from mindspeed_mm.models.common.communications import split_forward_gather_backw
 class StepVideoDiT(MultiModalModule):
     def __init__(
         self,
-        num_attention_heads: int = 48,
-        attention_head_dim: int = 128,
+        num_heads: int = 48,
+        head_dim: int = 128,
         channel_split: list = None,
         in_channels: int = 64,
         out_channels: Optional[int] = 64,
@@ -62,9 +62,9 @@ class StepVideoDiT(MultiModalModule):
         args = get_args()
         self.pre_process = pre_process
         self.post_process = post_process
-        self.num_attention_heads = num_attention_heads
-        self.attention_head_dim = attention_head_dim
-        self.inner_dim = num_attention_heads * attention_head_dim
+        self.num_attention_heads = num_heads
+        self.attention_head_dim = head_dim
+        self.inner_dim = num_heads * head_dim
         self.out_channels = in_channels if out_channels is None else out_channels
         self.in_channels = in_channels
         self.num_layers = num_layers
@@ -336,8 +336,8 @@ class StepVideoDiT(MultiModalModule):
 
         model_cfg = args.mm.model
         data_cfg = args.mm.data.dataset_param.preprocess_parameters
-        num_attention_heads = model_cfg.predictor.num_attention_heads
-        attention_head_dim = model_cfg.predictor.attention_head_dim
+        num_attention_heads = model_cfg.predictor.num_heads
+        attention_head_dim = model_cfg.predictor.head_dim
         hidden_size = num_attention_heads * attention_head_dim
         height = getattr(data_cfg, "max_height", 544)
         width = getattr(data_cfg, "max_width", 992)

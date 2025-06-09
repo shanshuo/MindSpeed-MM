@@ -691,7 +691,7 @@ class WanDiTBlock(nn.Module):
 
         # i2v & flf2v
         if self.model_type in ["i2v", "flf2v"]:
-            img_clip_token_len = 2 * self.clip_token_len if self.model_type == "flf2v" else self.clip_token_lenzhangseh
+            img_clip_token_len = 2 * self.clip_token_len if self.model_type == "flf2v" else self.clip_token_len
             img = prompt[:, :img_clip_token_len]
             txt = prompt[:, img_clip_token_len:]
             crs_attn_out = self.cross_attn(

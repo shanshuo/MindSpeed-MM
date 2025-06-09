@@ -43,6 +43,52 @@ def validate_args(args, defaults=None):
             args.mm.model.text_decoder.sequence_parallel = safe_getattr(args.mm.model.text_decoder, 'sequence_parallel', args.sequence_parallel)
             args.mm.model.text_decoder.expert_model_parallel_size = safe_getattr(args.mm.model.text_decoder, 'expert_model_parallel_size', args.expert_model_parallel_size)
 
+    # use model.json to fill predictor arg
+    if hasattr(args.mm.model, 'predictor'):
+        if hasattr(args.mm.model.predictor, 'mm_single_blocks_depth') and hasattr(args.mm.model.predictor, 'mm_double_blocks_depth'):
+            mm_double_blocks_depth = getattr(args.mm.model.predictor, 'mm_double_blocks_depth', 0)
+            if mm_double_blocks_depth <= 0:
+                raise AssertionError(f"MindSpeed-MM Error: mm_double_blocks_depth must > 0, actually:{mm_double_blocks_depth}")
+            args.num_layers = safe_getattr(args.mm.model.predictor, 'mm_single_blocks_depth', args.num_layers)
+        args.num_layers = safe_getattr(args.mm.model.predictor, 'num_layers', args.num_layers)
+        args.num_attention_heads = safe_getattr(args.mm.model.predictor, 'num_heads', args.num_attention_heads)
+        head_dim = getattr(args.mm.model.predictor, 'head_dim', 1)
+        if isinstance(head_dim, int):
+            hidden_size = args.num_attention_heads * head_dim
+            print_rank_0(f"[INFO] the original value of normalization is {args.hidden_size}, now changed as {hidden_size} which comes from model.json")
+            args.hidden_size = hidden_size
+        args.hidden_size = safe_getattr(args.mm.model.predictor, 'hidden_size', args.hidden_size)
+        args.seq_length = safe_getattr(args.mm.model.predictor, 'max_seq_len', 24)
+        args.attention_dropout = safe_getattr(args.mm.model.predictor, 'dropout', args.attention_dropout)
+        args.hidden_dropout = safe_getattr(args.mm.model.predictor, 'hidden_dropout', args.hidden_dropout)
+        args.swiglu = safe_getattr(args.mm.model.predictor, 'swiglu', args.swiglu)
+        args.masked_softmax_fusion = safe_getattr(args.mm.model.predictor, 'masked_softmax_fusion', args.masked_softmax_fusion)
+        norm_type = getattr(args.mm.model.predictor, 'qk_norm_type', "")
+        if isinstance(norm_type, str) and norm_type == "rmsnorm":
+            print_rank_0(f"[INFO] the original value of normalization is {args.normalization}, now changed as RMSNorm which comes from model.json")
+            args.normalization = "RMSNorm"
+            args.use_fused_rmsnorm = safe_getattr(args.mm.model.predictor, 'use_fused_rmsnorm', args.use_fused_rmsnorm)
+        args.max_position_embeddings = safe_getattr(args.mm.model.predictor, 'max_position_embeddings', args.seq_length)
+        args.position_embedding_type = safe_getattr(args.mm.model.predictor, 'position_embedding_type', 'rope')
+        args.rotary_base = safe_getattr(args.mm.model.predictor, 'rotary_base', 500000)
+        args.tokenizer_type = safe_getattr(args.mm.model.predictor, 'tokenizer_type', "NullTokenizer")
+        args.vocab_size = safe_getattr(args.mm.model.predictor, "vocab_size", 0)
+
+    # use default value to fill feature_extration arg
+    elif hasattr(args.mm.model, 'ae'):
+        args.num_layers = 1
+        args.hidden_size = 3072
+        args.num_attention_heads = 48
+        args.seq_length = 24
+        args.attention_dropout = 0.0
+        args.hidden_dropout = 0.0
+        args.swiglu = True
+        args.masked_softmax_fusion = False
+        args.max_position_embeddings = 24
+        args.position_embedding_type = "rope"
+        args.rotary_base = 500000
+        args.tokenizer_type = 'NullTokenizer'
+        args.vocab_size = 0
 
     # Load saved args from Retro (if applicable).
     load_retro_args(args)

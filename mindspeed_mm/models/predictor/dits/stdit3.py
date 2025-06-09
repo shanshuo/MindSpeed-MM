@@ -184,7 +184,7 @@ class STDiT3(MultiModalModule):
         in_channels=4,
         patch_size=(1, 2, 2),
         hidden_size=1152,
-        depth=28,
+        num_layers=28,
         num_heads=16,
         mlp_ratio=4.0,
         class_dropout_prob=0.1,
@@ -205,7 +205,7 @@ class STDiT3(MultiModalModule):
         self.out_channels = in_channels * 2 if pred_sigma else in_channels
 
         # model size related
-        self.depth = depth
+        self.depth = num_layers
         self.mlp_ratio = mlp_ratio
         self.hidden_size = hidden_size
         self.num_heads = num_heads
@@ -257,12 +257,12 @@ class STDiT3(MultiModalModule):
                     enable_flashattn=enable_flashattn,
                     enable_sequence_parallelism=enable_sequence_parallelism,
                 )
-                for i in range(depth)
+                for i in range(num_layers)
             ]
         )
 
         # temporal blocks
-        drop_path = [x.item() for x in torch.linspace(0, self.drop_path, depth)]
+        drop_path = [x.item() for x in torch.linspace(0, self.drop_path, num_layers)]
         self.temporal_blocks = nn.ModuleList(
             [
                 STDiT3Block(
@@ -277,7 +277,7 @@ class STDiT3(MultiModalModule):
                     temporal=True,
                     rope=self.rope.rotate_queries_or_keys,
                 )
-                for i in range(depth)
+                for i in range(num_layers)
             ]
         )
 

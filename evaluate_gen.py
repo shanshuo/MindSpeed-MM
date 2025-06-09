@@ -25,6 +25,7 @@ if is_npu_available():
 
 def init_eval_pipline(args):
     ori_args = get_args()
+    args.pipeline_config.seed = ori_args.seed
     device = get_device(args.device)
     vae = AEModel(args.ae).get_model().to(device, args.ae.dtype).eval()
     text_encoder = TextEncoder(args.text_encoder).get_model().to(device).eval()
@@ -47,6 +48,7 @@ def main():
     PatchesManager.apply_patches_from_config()
     args = get_args()
     merge_mm_args(args)
+    args.mm.model.micro_batch_size = args.micro_batch_size
     args = args.mm.model
 
     # prepare arguments

@@ -27,6 +27,7 @@
     "predictor": {
         "dtype": "bf16",
         "model_id": "stdit3",
+        "num_layers": 28,
         "hidden_size" : 1152,
         "num_heads": 16,
         "input_size": [16, 32, 32],
@@ -50,7 +51,6 @@
         "input_size": [102, 720, 1280]
     },
     "frame_interval": 1,
-    "micro_batch_size": 1,
     "save_path":"./opensora_samples/samples/",
     "fps":24,
     "prompt":"examples/opensora1.0/samples_prompts.txt",

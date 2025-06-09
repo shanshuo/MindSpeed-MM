@@ -92,7 +92,6 @@
         "input_size": [29, 480, 640],
         "model_type": "t2v"
     },
-    "micro_batch_size": 1,
     "frame_interval":1,
     "save_path":"./opensora_samples/samples/",
     "fps":24,

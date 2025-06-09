@@ -34,6 +34,7 @@ if is_npu_available():
 
 def prepare_pipeline(args, device):
     ori_args = get_args()
+    args.pipeline_config.seed = ori_args.seed
     vae = AEModel(args.ae).get_model().to(device, args.ae.dtype).eval()
     text_encoder = TextEncoder(args.text_encoder).get_model().to(device).eval()
     predict_model = PredictModel(args.predictor).get_model()
@@ -56,6 +57,7 @@ def main():
     merge_mm_args(args)
     if not hasattr(args, "dist_train"):
         args.dist_train = False
+    args.mm.model.micro_batch_size = args.micro_batch_size
     args = args.mm.model
     # prepare arguments
     torch.set_grad_enabled(False)

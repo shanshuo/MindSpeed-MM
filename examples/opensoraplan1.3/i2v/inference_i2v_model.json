@@ -67,7 +67,6 @@
         "input_size": [93, 352, 640],
         "model_type": "i2v"
     },
-    "micro_batch_size": 1,
     "frame_interval":1,
     "save_path":"examples/opensoraplan1.3/i2v/samples/",
     "fps":18,

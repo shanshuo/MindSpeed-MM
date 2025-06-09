@@ -483,8 +483,8 @@ class PTDiTDiffuser(ModelMixin, ConfigMixin):
     @register_to_config
     def __init__(
         self,
-        num_attention_heads: int = 16, 
-        attention_head_dim: int = 88, 
+        num_heads: int = 16, 
+        head_dim: int = 88, 
         in_channels: Optional[int] = None, 
         out_channels: Optional[int] = None, 
         num_layers: int = 1, 
@@ -509,9 +509,9 @@ class PTDiTDiffuser(ModelMixin, ConfigMixin):
         **kwargs
     ):
         super().__init__()
-        self.num_attention_heads = num_attention_heads
-        self.attention_head_dim = attention_head_dim
-        inner_dim = num_attention_heads * attention_head_dim
+        self.num_attention_heads = num_heads
+        self.attention_head_dim = head_dim
+        inner_dim = num_heads * head_dim
         self.norm_type = norm_type
 
         self.compress_ratios = [1, 8, 8] if compress_ratios is None else compress_ratios
@@ -544,8 +544,8 @@ class PTDiTDiffuser(ModelMixin, ConfigMixin):
             [
                 ProxyTokensTransformerBlock(
                     inner_dim,
-                    num_attention_heads,
-                    attention_head_dim,
+                    num_heads,
+                    head_dim,
                     dropout=dropout,
                     cross_attention_dim=cross_attention_dim,
                     activation_fn=activation_fn,

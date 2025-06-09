@@ -151,7 +151,7 @@ class STDiT(MultiModalModule):
         in_channels=4,
         patch_size=(1, 2, 2),
         hidden_size=1152,
-        depth=28,
+        num_layers=28,
         num_heads=16,
         mlp_ratio=4.0,
         class_dropout_prob=0.1,
@@ -182,7 +182,7 @@ class STDiT(MultiModalModule):
         self.num_heads = num_heads
         self.dtype = dtype
         self.no_temporal_pos_emb = no_temporal_pos_emb
-        self.depth = depth
+        self.depth = num_layers
         self.mlp_ratio = mlp_ratio
         self.enable_flashattn = enable_flashattn
         self.space_scale = space_scale
@@ -210,8 +210,8 @@ class STDiT(MultiModalModule):
             self.t_block = None
             self.y_embedder = None
 
-        drop_path = [x.item() for x in torch.linspace(0, drop_path, depth)]
-        self.num_layers = self._get_num_layers(depth)
+        drop_path = [x.item() for x in torch.linspace(0, drop_path, num_layers)]
+        self.num_layers = self._get_num_layers(num_layers)
 
         args = get_args()
         if args.virtual_pipeline_model_parallel_size is not None:

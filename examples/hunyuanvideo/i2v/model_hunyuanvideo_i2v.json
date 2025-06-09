@@ -110,6 +110,7 @@
         "text_projection": "single_refiner",
         "text_states_dim": [4096, 768],
         "use_attention_mask": true,
-        "i2v_condition_type": "token_replace"
+        "i2v_condition_type": "token_replace",
+        "use_fused_rmsnorm": true
     }
 }

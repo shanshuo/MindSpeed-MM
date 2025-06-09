@@ -58,8 +58,8 @@
     "predictor": {
         "dtype": "bf16",
         "model_id": "ptdit",
-        "num_attention_heads": 16,
-        "attention_head_dim": 72,
+        "num_heads": 16,
+        "head_dim": 72,
         "in_channels": 4,
         "out_channels": 8,
         "num_layers": 28,
@@ -96,7 +96,6 @@
         "input_size": [1, 1024, 1024]
     },
     "frame_interval": 1,
-    "micro_batch_size": 1,
     "model_max_length":200,
     "save_path":"./samples/test/image/",
     "fps":24,

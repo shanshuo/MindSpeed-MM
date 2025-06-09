@@ -139,7 +139,6 @@
 
     "pipeline_config": {
         "use_dynamic_cfg": true,
-        "seed": 42,
         "input_size": [49, 480, 720],
         "guidance_scale": 6.0,
         "use_tiling": true,
@@ -147,7 +146,6 @@
     },
 
     "frame_interval": 1,
-    "micro_batch_size": 1,
     "save_path":"./cogvideox_samples/",
     "fps": 8,
     "prompt":"examples/cogvideox/samples_prompts.txt",

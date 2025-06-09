@@ -20,6 +20,7 @@
     "predictor": {
         "dtype": "bf16",
         "model_id": "stdit",
+        "num_layers": 28,
         "hidden_size": 1152,
         "num_heads": 16,
         "input_size": [120, 32, 32],

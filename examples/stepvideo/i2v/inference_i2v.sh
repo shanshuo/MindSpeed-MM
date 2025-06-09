@@ -37,19 +37,6 @@ SORA_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 28 \
-    --hidden-size 1152 \
-    --num-attention-heads 16 \
-    --seq-length 1024\
-    --max-position-embeddings 1024 \
-    --attention-dropout 0.0 \
-    --hidden-dropout 0.0 \
-    --tokenizer-type NullTokenizer \
-    --vocab-size 0 \
-    --position-embedding-type rope \
-    --rotary-base 500000 \
-    --swiglu \
-    --no-masked-softmax-fusion \
     --lr 2e-5 \
     --min-lr 2e-5 \
     --train-iters 5010 \
@@ -63,6 +50,7 @@ SORA_ARGS="
     --no-save-optim \
     --no-save-rng \
     --bf16 \
+    --seed 1234 \
     --load $LOAD_PATH \
     --distributed-timeout-minutes 20 \
 "

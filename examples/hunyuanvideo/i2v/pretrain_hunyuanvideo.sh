@@ -44,19 +44,6 @@ GPT_ARGS="
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
     --num-workers 8 \
-    --num-layers 1 \
-    --hidden-size 3072 \
-    --num-attention-heads 48 \
-    --seq-length 24 \
-    --max-position-embeddings 24 \
-    --attention-dropout 0.0 \
-    --hidden-dropout 0.0 \
-    --tokenizer-type NullTokenizer \
-    --vocab-size 0 \
-    --position-embedding-type rope \
-    --rotary-base 500000 \
-    --swiglu \
-    --no-masked-softmax-fusion \
     --lr 5e-6 \
     --min-lr 5e-6 \
     --adam-beta1 0.9 \
@@ -78,8 +65,6 @@ GPT_ARGS="
     --recompute-method block \
     --recompute-num-layers 42 \
     --use-distributed-optimizer \
-    --normalization RMSNorm \
-    --use-fused-rmsnorm \
     --sequence-parallel \
 "
 

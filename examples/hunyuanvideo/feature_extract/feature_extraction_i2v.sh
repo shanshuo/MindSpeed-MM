@@ -41,20 +41,7 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
-    --num-layers 1 \
     --num-workers 8 \
-    --hidden-size 3072 \
-    --num-attention-heads 48 \
-    --seq-length 24 \
-    --max-position-embeddings 24 \
-    --attention-dropout 0.0 \
-    --hidden-dropout 0.0 \
-    --tokenizer-type NullTokenizer \
-    --vocab-size 0 \
-    --position-embedding-type rope \
-    --rotary-base 500000 \
-    --swiglu \
-    --no-masked-softmax-fusion \
 "
 
 MM_ARGS="

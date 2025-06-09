@@ -4,8 +4,8 @@
         "from_pretrained": null,
         "dtype": "bf16",
         "num_layers" : 48,
-        "num_attention_heads": 48,
-        "attention_head_dim": 128,
+        "num_heads": 48,
+        "head_dim": 128,
         "channel_split": [64, 32, 32],
         "in_channels": 64,
         "out_channels": 64,
@@ -21,7 +21,8 @@
         "attention_norm_type": "rmsnorm",
         "attention_norm_elementwise_affine": true,
         "attention_norm_eps": 1e-6,
-        "fa_layout": "bsnd"
+        "fa_layout": "bsnd",
+        "masked_softmax_fusion": false
     },
     "ae": {
         "model_id": "stepvideovae",
@@ -74,11 +75,9 @@
         "input_size": [102, 544, 992],
         "guidance_scale": 9.0,
         "model_type": "i2v",
-        "seed": 1234,
         "motion_score": 5.0
     },
     "unload_text_encoder": true,
-    "micro_batch_size": 1,
     "frame_interval":1,
     "save_path":"examples/stepvideo/i2v/i2v_result/",
     "fps":25,

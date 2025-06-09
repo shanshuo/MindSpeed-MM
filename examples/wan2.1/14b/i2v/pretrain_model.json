@@ -31,6 +31,7 @@
         "eps": 1e-6,
         "max_seq_len": 1024,
         "attention_async_offload": false,
-        "clip_token_len": 257
+        "clip_token_len": 257,
+        "use_fused_rmsnorm":true
     }
 }

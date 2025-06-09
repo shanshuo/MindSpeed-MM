@@ -1,6 +1,5 @@
 {
     "pipeline_class": "WanPipeline",
-    "micro_batch_size": 1,
     "prompt": "examples/wan2.1/samples_flf2v_prompts.txt",
     "image": "examples/wan2.1/samples_flf2v_images.txt",
     "save_path": "examples/wan2.1/samples/14b/flf2v/",
@@ -12,8 +11,7 @@
     "fps": 16,
     "pipeline_config": {
         "input_size": [81, 960, 960],
-        "cpu_offload": true,
-        "seed": 0
+        "cpu_offload": true
     },
     "ae": {
         "model_id": "wan_video_vae",
@@ -59,7 +57,8 @@
         "cross_attn_norm": true,
         "eps": 1e-6,
         "max_seq_len": 1024,
-        "fp32_calculate": true
+        "fp32_calculate": true,
+        "use_fused_rmsnorm":true
     },
     "diffusion": {
         "model_id": "UniPCMultistepScheduler",
