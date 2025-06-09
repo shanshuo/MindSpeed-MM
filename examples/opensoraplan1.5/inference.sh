@@ -21,6 +21,7 @@ MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP/$TP))
 
 MM_MODEL="examples/opensoraplan1.5/inference_model.json"
+LOAD_PATH="ckpt/opensoraplan1.5/"
 
 DISTRIBUTED_ARGS="
     --nproc_per_node $NPUS_PER_NODE \
@@ -54,6 +55,7 @@ SORA_ARGS="
     --no-masked-softmax-fusion \
     --sequence-parallel \
     --fp16 \
+    --load $LOAD_PATH \
 "
 
-torchrun $DISTRIBUTED_ARGS  inference_sora.py  $MM_ARGS $SORA_ARGS 2>&1 | tee logs/inference_test.log
+torchrun $DISTRIBUTED_ARGS  inference_sora.py  $MM_ARGS $SORA_ARGS 2>&1

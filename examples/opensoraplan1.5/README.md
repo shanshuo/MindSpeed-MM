@@ -80,7 +80,11 @@ pip install decord==0.6.0
 
 ## 权重下载及转换
 
-权重下载链接：[opensoraplan1.5](https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.5.0)
+权重下载链接：
+
+VAE和DiT： [opensoraplan1.5](https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.5.0)
+
+Text Encoder：[t5](https://huggingface.co/google/t5-v1_1-xl) 和 [CLIP](https://huggingface.co/laion/CLIP-ViT-bigG-14-laion2B-39B-b160k)
 
 需要对下载后的opensoraplan1.5模型 `vae`部分进行权重转换，运行权重转换脚本
 
@@ -88,7 +92,7 @@ pip install decord==0.6.0
 python examples/opensoraplan1.5/convert_ckpt_to_mm.py --module vae --source_path <your_source_path> --target_path <your_target_path>
 ```
 
-需要对下载后的opensoraplan1.5模型 `transformer`部分进行权重转换，运行权重转换脚本
+需要对下载后的opensoraplan1.5模型 `DiT`部分进行权重转换，运行权重转换脚本
 
 ```bash
 python examples/opensoraplan1.5/convert_ckpt_to_mm.py --module dit --source_path <your_source_path> --target_path <your_target_path> --tp_size <tp_size>
@@ -210,11 +214,13 @@ bash examples/opensoraplan1.5/inference.sh
 
 ## 环境变量声明
 
-ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏
-ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志
-TASK_QUEUE_ENABLE： 用于控制开启task_queue算子下发队列优化的等级，0：关闭，1：开启Level 1优化，2：开启Level 2优化
-COMBINED_ENABLE： 设置combined标志。设置为0表示关闭此功能；设置为1表示开启，用于优化非连续两个算子组合类场景
-CPU_AFFINITY_CONF： 控制CPU端算子任务的处理器亲和性，即设定任务绑核，设置0或未设置：表示不启用绑核功能， 1：表示开启粗粒度绑核， 2：表示开启细粒度绑核
-HCCL_CONNECT_TIMEOUT:  用于限制不同设备之间socket建链过程的超时等待时间，需要配置为整数，取值范围[120,7200]，默认值为120，单位s
-PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为
-NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量
+ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
+ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
+TASK_QUEUE_ENABLE： 用于控制开启task_queue算子下发队列优化的等级，0：关闭，1：开启Level 1优化，2：开启Level 2优化  
+COMBINED_ENABLE： 设置combined标志。设置为0表示关闭此功能；设置为1表示开启，用于优化非连续两个算子组合类场景  
+CPU_AFFINITY_CONF： 控制CPU端算子任务的处理器亲和性，即设定任务绑核，设置0或未设置：表示不启用绑核功能， 1：表示开启粗粒度绑核， 2：表示开启细粒度绑核  
+HCCL_CONNECT_TIMEOUT:  用于限制不同设备之间socket建链过程的超时等待时间，需要配置为整数，取值范围[120,7200]，默认值为120，单位s  
+PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为  
+NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量  
+GPUS_PER_NODE： 配置一个计算节点上使用的GPU数量  
+MULTI_STREAM_MEMORY_REUSE: 配置多流内存复用是否开启，0：关闭多流内存复用，1：开启多流内存复用
