@@ -54,7 +54,7 @@
 
 #### 2. 环境搭建
 
-请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/install_guide.md)
+请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/user-guide/installation.md)
 
 ```bash
     # python3.10

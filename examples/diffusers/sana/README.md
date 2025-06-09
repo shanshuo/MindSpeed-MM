@@ -37,7 +37,7 @@ Sana是由NVIDIA、麻省理工学院和清华大学共同推出的文生图模�
 
 【模型开发时推荐使用配套的环境版本】
 
-请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/install_guide.md)
+请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/user-guide/installation.md)
 
 1. 软件与驱动安装
 

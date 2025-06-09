@@ -110,13 +110,13 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 # 环境部署
 
-具体部署步骤请查看[部署文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/install_guide.md)
+具体部署步骤请查看[部署文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/user-guide/installation.md)
 
 ---
 
 # 快速上手
 
-快速上手操作请查看[快速上手文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/quick_start.md)
+快速上手操作请查看[快速上手文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/user-guide/getting_start.md)
 
 ---
 
