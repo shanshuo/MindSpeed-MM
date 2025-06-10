@@ -10,10 +10,13 @@ import os
 import re
 import shutil
 from copy import deepcopy
+from dataclasses import dataclass
 from functools import cached_property
+from itertools import accumulate
 from pathlib import Path
-from typing import Optional, List, Union, Any, Tuple
+from typing import Optional, List, Any, Tuple
 
+import numpy as np
 import torch
 from pydantic import BaseModel, DirectoryPath, PositiveInt, NonNegativeInt, model_validator, computed_field
 from safetensors.torch import save_file, load_file
@@ -23,6 +26,8 @@ from transformers import PretrainedConfig, AutoConfig
 from checkpoint.operator import Operator, TieOp, STATE_DICT_T, TP_PATTERN_T
 
 LATEST_TXT = "latest_checkpointed_iteration.txt"
+PP_LAYER_NUM_T = list[int]
+VPP_LAYER_NUM_T = list[PP_LAYER_NUM_T]
 
 
 class ParallelConfig(BaseModel):
@@ -368,34 +373,52 @@ def merge_pp_index(vit_pipeline_num_layers: list[int], llm_pipeline_num_layers: 
     return split_method
 
 
-def merge_vpp_index(vit_pipeline_num_layers: list[list[int]], llm_pipeline_num_layers: list[list[int]],
-                    audio_pipeline_num_layers: list[list[int]]) -> list[tuple[int, ...]]:
-    # Flatten the vit and llm layers for VPP
-    vit_pipeline_num_layers_flat = [
-        item
-        for sublist in vit_pipeline_num_layers
-        for item in sublist
-    ]
-    llm_pipeline_num_layers_flat = [
-        item
-        for sublist in llm_pipeline_num_layers
-        for item in sublist
-    ]
-    """返回每张卡上vit和llm各自的层数"""
-    split_method = []
-    if audio_pipeline_num_layers is None:
-        for vit_num, llm_num in zip(vit_pipeline_num_layers_flat, llm_pipeline_num_layers_flat):
-            split_method.append((vit_num, llm_num))
-    else:
-        audio_pipeline_num_layers_flat = [
-            item
-            for sublist in audio_pipeline_num_layers
-            for item in sublist
-        ]
-        for vit_num, llm_num, audio_num in zip(vit_pipeline_num_layers_flat, llm_pipeline_num_layers_flat,
-                                               audio_pipeline_num_layers_flat):
-            split_method.append((vit_num, llm_num, audio_num))
-    return split_method
+@dataclass
+class PPRange:
+    """For each rank of the pp group, we need know which layers of transformers correspond to it
+    start. Each value in start defines the layer index at which the rank pp starts
+    end. Each value in 'end' defines the layer index at which the rank pp ends
+    Pp_first_rank. Defines the global pp_rank corresponding to the first layer of the transformer
+    Pp_1ast_rank. Defines the global pp_rank corresponding to the last layer of the transformer
+    """
+    start: list[int]
+    end: list[int]
+    first_layer_rank: int
+    last_layer_rank: int
+
+    @property
+    def pp_size(self) -> int:
+        return len(self.start)
+
+
+@dataclass
+class PPStageSchema:
+    """When splitting different modules such as vit/lm/audio, the corresponding weight names are different,
+    and it is necessary to distinguish between the first and last layers and the middle layer
+    """
+    firsts: List[str]
+    lasts: List[str]
+    middle: str
+
+
+def merge_vpp_index(vit_pipeline_num_layers: VPP_LAYER_NUM_T,
+                    llm_pipeline_num_layers: VPP_LAYER_NUM_T,
+                    audio_pipeline_num_layers: VPP_LAYER_NUM_T) -> list[PPRange]:
+
+    modalities_pp_range = []
+    for modality in [vit_pipeline_num_layers, llm_pipeline_num_layers, audio_pipeline_num_layers]:
+        modality_pp_flat = [item
+                            for sublist in modality
+                            for item in sublist]
+        if not modality_pp_flat:
+            continue
+        modality_pp_acc = list(accumulate(modality_pp_flat))
+        first_layer_rank, last_layer_rank = np.nonzero(np.array(modality_pp_flat))[0][[0, -1]]
+        modalities_pp_range.append(PPRange(start=[0] + modality_pp_acc[:-1],
+                                           end=modality_pp_acc,
+                                           first_layer_rank=first_layer_rank,
+                                           last_layer_rank=last_layer_rank))
+    return modalities_pp_range
 
 
 def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, ...]]) -> list[STATE_DICT_T]:
@@ -502,6 +525,40 @@ def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, 
         audio_start_idx = audio_end_idx
         return_dicts.append(new_dict)
     return return_dicts
+
+
+def partition_state_dict_by_pp(state_dict: STATE_DICT_T,
+                               pp_ranges: List[PPRange],
+                               stages: List[PPStageSchema]) -> list[STATE_DICT_T]:
+    """For transformer structures of different modalities, use a universal PP splitting logic to split the
+    model parameter state-dict into different PP ranks and reset the corresponding layer numbers
+    """
+    if pp_ranges[0].pp_size <= 1:
+        return [state_dict]
+
+    pp_weights = []
+    for pp_rank in range(pp_ranges[0].pp_size):
+        pp_weight = {}
+        for weight_name, weight_value in state_dict.items():
+            for modality_stage, modality_pp_range in zip(stages, pp_ranges):
+                # 该模态首卡对应的权重
+                if modality_pp_range.first_layer_rank == pp_rank:
+                    for name_start in modality_stage.firsts:
+                        if weight_name.startswith(name_start):
+                            pp_weight[weight_name] = weight_value
+                # 该模态尾卡对应的权重
+                if modality_pp_range.last_layer_rank == pp_rank:
+                    for name_start in modality_stage.lasts:
+                        if weight_name.startswith(name_start):
+                            pp_weight[weight_name] = weight_value
+                if weight_name.startswith(modality_stage.middle):
+                    raw_layer_num, *remains = weight_name.replace(modality_stage.middle, "").split(".")
+                    new_layer_num = int(raw_layer_num) - modality_pp_range.start[pp_rank]
+                    new_weight_name = ".".join([modality_stage.middle[:-1], str(new_layer_num), *remains])
+                    if int(raw_layer_num) in range(modality_pp_range.start[pp_rank], modality_pp_range.end[pp_rank]):
+                        pp_weight[new_weight_name] = weight_value
+        pp_weights.append(pp_weight)
+    return pp_weights
 
 
 def save_by_pp(state_dicts: list[dict[str, torch.Tensor]],
