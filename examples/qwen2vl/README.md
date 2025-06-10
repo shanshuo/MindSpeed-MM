@@ -12,10 +12,10 @@
   - [权重下载](#jump2.1)
   - [权重转换hf2mm](#jump2.2)
   - [权重转换mm2hf](#jump2.3)
-  - [权重重切分](#jump2.4) 
+  - [权重重切分](#jump2.4)
 - [数据集准备及处理](#jump3)
   - [数据集下载](#jump3.1)
-  - [混合数据集处理](#jump3.2)  
+  - [混合数据集处理](#jump3.2)
 - [微调](#jump4)
   - [准备工作](#jump4.1)
   - [配置参数](#jump4.2)
@@ -136,7 +136,7 @@ mm-convert  Qwen2VLConverter hf_to_mm \
   --cfg.parallel_config.llm_pp_layers [[1,10,10,7]] \
   --cfg.parallel_config.vit_pp_layers [[32,0,0,0]] \
   --cfg.parallel_config.tp_size 1
-  
+
 # 7b vpp
 mm-convert  Qwen2VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2-VL-7B-Instruct-vpp" \
@@ -338,8 +338,8 @@ dataset_param->basic_parameters->dataset
     }
 }
 ```
-如果需要计算validation loss，需要在shell脚本中修改`eval-interval`参数和`eval-iters`参数；需要在`data.json`中的`basic_parameters`内增加字段：    
-对于非流式数据有两种方式：①根据实际情况增加`val_dataset`验证集路径，②增加`val_rate`字段对训练集进行切分；    
+如果需要计算validation loss，需要在shell脚本中修改`eval-interval`参数和`eval-iters`参数；需要在`data.json`中的`basic_parameters`内增加字段：
+对于非流式数据有两种方式：①根据实际情况增加`val_dataset`验证集路径，②增加`val_rate`字段对训练集进行切分；
 对于流式数据，仅支持增加`val_dataset`字段进行计算。
 
 
@@ -520,7 +520,7 @@ https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
 
 - 下载数据集：[RLHF-V](https://huggingface.co/datasets/llamafactory/RLHF-V)
 
-- 处理数据集：在examples/qwen2vl/rlhfv_2_sharegpt_demo_format.py文件中，修改下方所述的三个路径、然后运行脚本。   
+- 处理数据集：在examples/qwen2vl/rlhfv_2_sharegpt_demo_format.py文件中，修改下方所述的三个路径、然后运行脚本。
 
   ```python
   # 将其设置为图片保存的路径
@@ -528,7 +528,7 @@ https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
   # 将其设置为处理好的json路径
   OUTPUT_JSON_PATH = "./data/rlhf-v.json"
   # 将其设置为从huggingface下载的数据集路径
-  DATASET_NAME = "./data/datasets/rlhf-v"  
+  DATASET_NAME = "./data/datasets/rlhf-v"
   ```
 
 <a id="jump7.2"></a>
@@ -575,11 +575,11 @@ https://github.com/hiyouga/LLaMA-Factory/blob/main/data/mllm_demo_data/1.mp4
           "vision_encoder": {
               "model_id": "qwen2vit",
               "num_layers": 32,
-              
+
               ...
-              
+
               "pipeline_num_layers": [32, 0, 0, 0],
-              
+
               ...
           },
   	...
@@ -704,19 +704,19 @@ LoRA为框架通用能力，当前功能已支持，可参考[LoRA特性文档](
 
 <a id="jump10"></a>
 ## 环境变量声明
-ASCEND_RT_VISIBLE_DEVICES： 指定NPU设备的索引值  
-ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
-ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
-TASK_QUEUE_ENABLE： 用于控制开启task_queue算子下发队列优化的等级，0：关闭，1：开启Level 1优化，2：开启Level 2优化  
-COMBINED_ENABLE： 设置combined标志。设置为0表示关闭此功能；设置为1表示开启，用于优化非连续两个算子组合类场景  
-CPU_AFFINITY_CONF： 控制CPU端算子任务的处理器亲和性，即设定任务绑核，设置0或未设置：表示不启用绑核功能， 1：表示开启粗粒度绑核， 2：表示开启细粒度绑核  
-HCCL_CONNECT_TIMEOUT:  用于限制不同设备之间socket建链过程的超时等待时间，需要配置为整数，取值范围[120,7200]，默认值为120，单位s  
-HCCL_EXEC_TIMEOUT： 控制设备间执行时同步等待的时间，在该配置时间内各设备进程等待其他设备执行通信同步  
-NPU_ASD_ENABLE： 控制是否开启Ascend Extension for PyTorch的特征值检测功能，未设置或0：关闭特征值检测，1：表示开启特征值检测，只打印异常日志，不告警，2：开启特征值检测，并告警，3：开启特征值检测，并告警，同时会在device侧info级别日志中记录过程数据  
-ASCEND_LAUNCH_BLOCKING： 控制算子执行时是否启动同步模式，0：采用异步方式执行，1：强制算子采用同步模式运行  
-ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条目个数  
-PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为  
-TOKENIZERS_PARALLELISM： 用于控制Hugging Face的transformers库中的分词器（tokenizer）在多线程环境下的行为  
+ASCEND_RT_VISIBLE_DEVICES： 指定NPU设备的索引值
+ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏
+ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志
+TASK_QUEUE_ENABLE： 用于控制开启task_queue算子下发队列优化的等级，0：关闭，1：开启Level 1优化，2：开启Level 2优化
+COMBINED_ENABLE： 设置combined标志。设置为0表示关闭此功能；设置为1表示开启，用于优化非连续两个算子组合类场景
+CPU_AFFINITY_CONF： 控制CPU端算子任务的处理器亲和性，即设定任务绑核，设置0或未设置：表示不启用绑核功能， 1：表示开启粗粒度绑核， 2：表示开启细粒度绑核
+HCCL_CONNECT_TIMEOUT:  用于限制不同设备之间socket建链过程的超时等待时间，需要配置为整数，取值范围[120,7200]，默认值为120，单位s
+HCCL_EXEC_TIMEOUT： 控制设备间执行时同步等待的时间，在该配置时间内各设备进程等待其他设备执行通信同步
+NPU_ASD_ENABLE： 控制是否开启Ascend Extension for PyTorch的特征值检测功能，未设置或0：关闭特征值检测，1：表示开启特征值检测，只打印异常日志，不告警，2：开启特征值检测，并告警，3：开启特征值检测，并告警，同时会在device侧info级别日志中记录过程数据
+ASCEND_LAUNCH_BLOCKING： 控制算子执行时是否启动同步模式，0：采用异步方式执行，1：强制算子采用同步模式运行
+ACLNN_CACHE_LIMIT： 配置单算子执行API在Host侧缓存的算子信息条目个数
+PYTORCH_NPU_ALLOC_CONF： 控制缓存分配器行为
+TOKENIZERS_PARALLELISM： 用于控制Hugging Face的transformers库中的分词器（tokenizer）在多线程环境下的行为
 NPUS_PER_NODE： 配置一个计算节点上使用的NPU数量
 
 ---

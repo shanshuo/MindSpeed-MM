@@ -11,7 +11,6 @@ from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin im
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.generation_mixin import GenerationMixin
 from mindspeed_mm.data.data_utils.constants import MODEL_CONSTANTS
 from mindspeed_mm.models.text_encoder import Tokenizer
-from pretrain_llava import model_provider
 
 
 class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
@@ -22,6 +21,7 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         self.tokenizer = Tokenizer(infer_config.tokenizer).get_tokenizer()
         self.tokenizer.add_tokens([MODEL_CONSTANTS["llava"]["IMAGE_PATCH_TOKEN"]], special_tokens=True)
         self.image_processor = CLIPImageProcessor.from_pretrained(infer_config.image_processer_path, local_files_only=True)
+        from pretrain_llava import model_provider
         self.vlmodel = model_provider()
         self.device = infer_config.device
         self.dtype = infer_config.dtype
@@ -196,7 +196,7 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
                                                                             cur_inputs_embeds.device).unsqueeze(0).unsqueeze(0)
             kwargs["decoder_input"] = torch.cat([kwargs["decoder_input"], cur_inputs_embeds], dim=0)
             kwargs["position_ids"] = None
-        
+
         kwargs_dict = {"input_ids": input_ids,
                        "attention_mask": kwargs["attention_mask"],
                        "decoder_input": kwargs["decoder_input"],

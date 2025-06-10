@@ -9,7 +9,6 @@ import torchvision.transforms as T
 from torchvision.transforms.functional import InterpolationMode
 from transformers.generation.streamers import TextStreamer
 
-from pretrain_internvl import model_provider
 from mindspeed_mm.models.text_encoder import Tokenizer
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.encode_mixin import MMEncoderMixin
 from mindspeed_mm.tasks.inference.pipeline.pipeline_mixin.inputs_checks_mixin import InputsCheckMixin
@@ -75,6 +74,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
     def prepare_model(self, device, dtype):
         self.tokenizer = Tokenizer(self.infer_config.tokenizer).get_tokenizer()
+        from pretrain_internvl import model_provider
         self.infer_model = model_provider()
         model_state_dict = torch.load(self.infer_config.from_pretrained, map_location="cpu")
         self.infer_model.load_state_dict(state_dict=model_state_dict["model"])
@@ -89,7 +89,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         pixel_values = [transform(image) for image in images]
         pixel_values = torch.stack(pixel_values)
         return pixel_values
-    
+
     def _prepare_video(self, video_path, bound=None, input_size=448, max_num=1, num_segments=32):
         video_reader = VideoReader(video_reader_type="DecordVideo")(video_path, layout="THWC", array_type="numpy")
         max_frame = video_reader.get_len() - 1
@@ -129,7 +129,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
             prompt = self.infer_config.prompts
         if self.infer_data_type == "image":
             pixel_values = self._prepare_images(
-                image_path=input_path, 
+                image_path=input_path,
                 input_size=self.image_size
             )
             num_patches_list = [pixel_values.shape[0]] if pixel_values is not None else []
@@ -155,7 +155,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         attention_mask = torch.ones(B, S).npu()
         attention_mask = self.infer_model._prepare_decoder_attention_mask(attention_mask)
         position_ids = kwargs.get("position_ids", None)
-        
+
         if attention_mask is not None and position_ids is None:
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
@@ -178,7 +178,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
             "input_ids": input_ids,
         }
         return model_inputs
-    
+
     def _update_model_kwargs_for_generation(self, model_kwargs:Dict[str, Any], model_inputs:Dict[str, Any]):
         # update position_ids
         if "position_ids" in model_kwargs:
