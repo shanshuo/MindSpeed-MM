@@ -34,9 +34,9 @@ MM_TOOL="./mindspeed_mm/tools/tools.json"
 LOAD_PATH="ckpt/mm_path/Qwen3VL-30B-A3B-dev"
 SAVE_PATH="save_dir"
 
-TP=1
+TP=4
 PP=1
-EP=8
+EP=2
 CP=1
 MBS=1
 GRAD_ACC_STEP=32
