@@ -56,7 +56,7 @@ class LigerRopeFunction(torch.autograd.Function):
         # save the information needed for backpropagation
         ctx.save_for_backward(cos, sin)
 
-        return q_embed, k_embed
+        return q_embed.to(q.dtype), k_embed.to(k.dtype)
 
     def backward(self, dq, dk):
         """
@@ -82,8 +82,8 @@ class LigerRopeFunction(torch.autograd.Function):
         # Returns 6 values, corresponding to 6 inputs for forward
         # q, k, cos, sin, position_ids, unsqueeze_dim
         return (
-            dq_rotated,
-            dk_rotated,
+            dq_rotated.to(dq.dtype),
+            dk_rotated.to(dk.dtype),
             None,  # cos does not require gradients
             None,  # sin does not require gradients
             None,  # position_ids does not require gradients
@@ -305,7 +305,7 @@ class MMDiT(MultiModalModule):
 
     def process_prompt(self, prompt):
         for i, _ in enumerate(prompt):
-            prompt[i] = prompt[i].squeeze(0)
+            prompt[i] = prompt[i].squeeze(1)
         return prompt
 
     def prepare_block_inputs(
@@ -458,7 +458,7 @@ class DoubleStreamBlock(nn.Module):
             img_mod2_shift,
             img_mod2_scale,
             img_mod2_gate
-        ) = self.img_mod(vec).chunk(6, dim=-1)
+        ) = self.img_mod(vec)[:, None, :].chunk(6, dim=-1)
 
         (
             txt_mod1_shift,
@@ -467,7 +467,7 @@ class DoubleStreamBlock(nn.Module):
             txt_mod2_shift,
             txt_mod2_scale,
             txt_mod2_gate
-        ) = self.txt_mod(vec).chunk(6, dim=-1)
+        ) = self.txt_mod(vec)[:, None, :].chunk(6, dim=-1)
 
         # prepare image for attention
         img_modulated = self.img_norm1(img)
@@ -557,7 +557,7 @@ class SingleStreamBlock(nn.Module):
         )
 
     def forward(self, x: Tensor, vec: Tensor, pe: Tensor, **kwargs):
-        mod_shift, mod_scale, mod_gate = self.modulation(vec).chunk(3, dim=-1)
+        mod_shift, mod_scale, mod_gate = self.modulation(vec)[:, None, :].chunk(3, dim=-1)
         x_mod = (1 + mod_scale) * self.pre_norm(x) + mod_shift
         if self.fused_qkv:
             qkv, mlp = torch.split(self.linear1(x_mod), [3 * self.hidden_size, self.mlp_hidden_dim], dim=-1)
