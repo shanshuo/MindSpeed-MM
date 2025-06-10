@@ -194,6 +194,27 @@ def resize_crop_to_fill(clip, target_size):
     return crop(clip, i, j, th, tw)
 
 
+def rand_size_crop_arr(pil_image, image_size):
+    """
+    Randomly crop image for height and width, ranging from image_size[0] to image_size[1]
+    """
+    arr = np.array(pil_image)
+
+    # get random target h w
+    height = random.randint(image_size[0], image_size[1])
+    width = random.randint(image_size[0], image_size[1])
+    # ensure that h w are factors of 8
+    height = height - height % 8
+    width = width - width % 8
+
+    # get random start pos
+    h_start = random.randint(0, max(len(arr) - height, 0))
+    w_start = random.randint(0, max(len(arr[0]) - height, 0))
+
+    # crop
+    return Image.fromarray(arr[h_start: h_start + height, w_start: w_start + width])
+
+
 def longsideresize(h, w, size, skip_low_resolution):
     if h <= size[0] and w <= size[1] and skip_low_resolution:
         return h, w
@@ -337,19 +358,56 @@ class ResizeCropToFill:
         return f"{self.__class__.__name__}(size={self.size})"
 
 
-class ResizeCrop:
+class BaseCrop:
     def __init__(self, size):
         if isinstance(size, numbers.Number):
             self.size = (int(size), int(size))
         else:
             self.size = size
 
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(size={self.size})"
+
+
+class ResizeCrop(BaseCrop):
     def __call__(self, clip):
         clip = resize_crop_to_fill(clip, self.size)
         return clip
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}(size={self.size})"
+
+class RandSizeCropArr(BaseCrop):
+    def __call__(self, clip):
+        clip = rand_size_crop_arr(clip, self.size)
+        return clip
+
+
+class RandomSizedCrop(BaseCrop):
+    def __call__(self, clip):
+        i, j, h, w = self.get_params(clip)
+        return crop(clip, i, j, h, w)
+
+    def get_params(self, clip, multiples_of=8):
+        h, w = clip.shape[-2:]
+
+        # get random target h w
+        th = random.randint(self.size[0], self.size[1])
+        tw = random.randint(self.size[0], self.size[1])
+        # ensure that h w are factors of 8
+        th = th - th % multiples_of
+        tw = tw - tw % multiples_of
+
+        if h < th:
+            th = h - h % multiples_of
+        if w < tw:
+            tw = w - w % multiples_of
+
+        if w == tw and h == th:
+            return 0, 0, h, w
+
+        # get random start pos
+        i = random.randint(0, h - th)
+        j = random.randint(0, w - tw)
+        return i, j, th, tw
 
 
 class ToTensorVideo:

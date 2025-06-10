@@ -438,6 +438,7 @@ def prepare_variable_dataloader(
         dataset,
         shuffle=False,
         seed=1024,
+        auto_gen_bucket=False,
         drop_last=False,
         pin_memory=False,
         num_workers=0,
@@ -463,6 +464,7 @@ def prepare_variable_dataloader(
             drop_last=drop_last,
             verbose=True,
             num_bucket_build_workers=num_bucket_build_workers,
+            auto_gen_bucket=auto_gen_bucket,
             consumed_samples=consumed_samples,
         )
 

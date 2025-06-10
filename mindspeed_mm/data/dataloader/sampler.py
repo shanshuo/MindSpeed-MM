@@ -16,7 +16,7 @@ from transformers import AutoProcessor
 
 from mindspeed_mm.data.datasets.t2v_dataset import DynamicVideoTextDataset
 from mindspeed_mm.data.data_utils.bucket import Bucket
-from mindspeed_mm.data.data_utils.aspect_ratio import get_num_pixels
+from mindspeed_mm.data.data_utils.aspect_ratio import get_num_pixels, get_resolution_with_aspect_ratio
 from mindspeed_mm.data.data_utils.utils import format_numel_str
 from mindspeed_mm.data.dataloader.bucket_manager import BucketManager_qwen2vl, BucketManager_internvl2
 
@@ -629,13 +629,15 @@ class BucketBatchSampler(BaseRandomBatchSampler):
 
 # use pandarallel to accelerate bucket processing
 # NOTE: pandarallel should only access local variables
-def apply(data, method=None, frame_interval=None, seed=None, num_bucket=None):
+def apply(data, method=None, frame_interval=None, seed=None, num_bucket=None, fps_max=None):
     return method(
         data["num_frames"],
         data["height"],
         data["width"],
+        data["fps"],
         frame_interval,
         seed + data["id"] * num_bucket,
+        fps_max,
     )
 
 
@@ -652,6 +654,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         verbose: bool = False,
         num_bucket_build_workers: int = 1,
         consumed_samples: int = 0,
+        auto_gen_bucket: bool = False,
     ) -> None:
         super().__init__(
             dataset=dataset, num_replicas=num_replicas, rank=rank, shuffle=shuffle, seed=seed, drop_last=drop_last
@@ -659,7 +662,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         self.dataset = dataset
         for resolution, configs in bucket_config.items():
             bucket_config[resolution] = {int(k):tuple(v) for k, v in configs.items()}
-        self.bucket = Bucket(bucket_config)
+        self.bucket = Bucket(bucket_config, auto_gen_bucket)
         self.verbose = verbose
         self.last_micro_batch_access_index = 0
         self.approximate_num_batch = None
@@ -667,6 +670,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         self._get_num_batch_cached_bucket_sample_dict = None
         self.num_bucket_build_workers = num_bucket_build_workers
         self.last_micro_batch_access_index += consumed_samples
+        self.auto_gen_bucket = auto_gen_bucket
 
     def __iter__(self) -> Iterator[List[int]]:
         if self._get_num_batch_cached_bucket_sample_dict is not None:
@@ -787,6 +791,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             frame_interval=self.dataset.frame_interval,
             seed=self.seed + self.epoch,
             num_bucket=self.bucket.num_bucket,
+            fps_max=self.dataset.fps_max
         )
 
         # group by bucket
@@ -829,9 +834,17 @@ class VariableVideoBatchSampler(DistributedSampler):
 
         # sort
         num_aspect_dict = dict(sorted(num_aspect_dict.items(), key=lambda x: x[0]))
-        num_hwt_dict = dict(
-            sorted(num_hwt_dict.items(), key=lambda x: (get_num_pixels(x[0][0]), x[0][1]), reverse=True)
-        )
+        if self.auto_gen_bucket:
+            keylist = [key[0] for key in num_hwt_dict.keys() if isinstance(key, tuple) and len(key) > 0]
+            aspect_ratios = {key: get_resolution_with_aspect_ratio(key) for key in keylist}
+            num_hwt_dict = dict(
+                sorted(num_hwt_dict.items(), key=lambda x: (aspect_ratios[x[0][0]]), reverse=True)
+            )
+        else:
+            num_hwt_dict = dict(
+                sorted(num_hwt_dict.items(), key=lambda x: (get_num_pixels(x[0][0]), x[0][1]), reverse=True)
+            )
+
         num_hwt_img_dict = {k: v for k, v in num_hwt_dict.items() if k[1] == 1}
         num_hwt_vid_dict = {k: v for k, v in num_hwt_dict.items() if k[1] > 1}
 

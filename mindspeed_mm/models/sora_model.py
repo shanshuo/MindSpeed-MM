@@ -174,6 +174,7 @@ class SoRAModel(nn.Module):
                             if isinstance(prompt_ids, list) or isinstance(prompt_ids, tuple):
                                 prompt = [p.npu() for p in prompt]
                         else:
+                            kwargs.update({"shape": latents.shape})
                             prompt, prompt_mask = self.text_encoder.encode(prompt_ids, prompt_mask, **kwargs)
             
             if self.interleaved:
@@ -390,3 +391,4 @@ class SoRAModel(nn.Module):
         prompt_mask_batch = prompt_mask_batch.to(cur_device)
 
         return video_batch, prompt_ids_batch, video_mask_batch, prompt_mask_batch
+

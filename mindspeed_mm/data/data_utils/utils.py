@@ -60,7 +60,7 @@ from megatron.training import get_args
 from megatron.core import mpu
 
 from mindspeed_mm.data.data_utils.data_transform import (
-    TemporalRandomCrop, 
+    TemporalRandomCrop,
     Expand2Square,
     get_params,
     calculate_statistics,
@@ -1541,3 +1541,27 @@ def cal_gradient_accumulation_size():
                 args.global_batch_size / dit_cfg.world_size / args.micro_batch_size * dit_cfg.tensor_model_parallel_size
                 * dit_cfg.context_parallel_size * dit_cfg.pipeline_model_parallel_size)
     return acc
+
+
+def map_target_fps(
+    fps: float,
+    max_fps: float,
+) -> Tuple[float, int]:
+    """
+    Map fps to a new fps that is less than max_fps.
+
+    Args:
+        fps (float): Original fps.
+        max_fps (float): Maximum fps.
+
+    Returns:
+        tuple[float, int]: New fps and sampling interval.
+    """
+    if math.isnan(fps):
+        return 0.0, 1
+    if fps < max_fps:
+        return fps, 1
+    sampling_interval = math.ceil(fps / max_fps)
+    new_fps = math.floor(fps / sampling_interval)
+    return new_fps, sampling_interval
+

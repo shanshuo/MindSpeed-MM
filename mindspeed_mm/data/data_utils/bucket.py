@@ -3,20 +3,25 @@ from collections import OrderedDict
 
 import numpy as np
 
-from mindspeed_mm.data.data_utils.aspect_ratio import ASPECT_RATIOS, get_closest_ratio
+from mindspeed_mm.data.data_utils.aspect_ratio import ASPECT_RATIOS, get_closest_ratio, get_resolution_with_aspect_ratio, get_closest_ratio_sora2
+from .utils import map_target_fps
 
 
 class Bucket:
-    def __init__(self, bucket_config):
+    def __init__(self, bucket_config, auto_gen_bucket=False):
+        if auto_gen_bucket:
+            aspect_ratios = {key: get_resolution_with_aspect_ratio(key) for key in bucket_config.keys()}
+        else:
+            aspect_ratios = ASPECT_RATIOS
         for key in bucket_config:
-            if key not in ASPECT_RATIOS:
+            if key not in aspect_ratios:
                 raise AssertionError(f"Aspect ratio {key} not found.")
         # wrap config with OrderedDict
         bucket_probs = OrderedDict()
         bucket_bs = OrderedDict()
-        bucket_names = sorted(bucket_config.keys(), key=lambda x: ASPECT_RATIOS[x][0], reverse=True)
+        bucket_names = sorted(bucket_config.keys(), key=lambda x: aspect_ratios[x][0], reverse=True)
         for key in bucket_names:
-            bucket_time_names = sorted(bucket_config[key].keys(), key=lambda x: x, reverse=True)
+            bucket_time_names = sorted(bucket_config[key].keys(), key=lambda x: int(x), reverse=True)
             bucket_probs[key] = OrderedDict({k: bucket_config[key][k][0] for k in bucket_time_names})
             bucket_bs[key] = OrderedDict({k: bucket_config[key][k][1] for k in bucket_time_names})
 
@@ -28,7 +33,7 @@ class Bucket:
         bucket_id = OrderedDict()
         bucket_id_cnt = 0
         for k1, v1 in bucket_probs.items():
-            hw_criteria[k1] = ASPECT_RATIOS[k1][0]
+            hw_criteria[k1] = aspect_ratios[k1][0]
             t_criteria[k1] = dict()
             ar_criteria[k1] = dict()
             bucket_id[k1] = dict()
@@ -37,7 +42,7 @@ class Bucket:
                 bucket_id[k1][k2] = bucket_id_cnt
                 bucket_id_cnt += 1
                 ar_criteria[k1][k2] = dict()
-                for k3, v3 in ASPECT_RATIOS[k1][1].items():
+                for k3, v3 in aspect_ratios[k1][1].items():
                     ar_criteria[k1][k2][k3] = v3
                     num_bucket += 1
 
@@ -48,12 +53,15 @@ class Bucket:
         self.t_criteria = t_criteria
         self.ar_criteria = ar_criteria
         self.num_bucket = num_bucket
+        self.auto_gen_bucket = auto_gen_bucket
         logging.info("Number of buckets: %s", num_bucket)
 
-    def get_bucket_id(self, T, H, W, frame_interval=1, seed=None):
+    def get_bucket_id(self, T, H, W, fps, frame_interval=1, seed=None, fps_max: int = 16):
         resolution = H * W
         approx = 0.8
-
+        if self.auto_gen_bucket:
+            _, sampling_interval = map_target_fps(fps, fps_max)
+            T = T // sampling_interval
         fail = True
         for hw_id, t_criteria in self.bucket_probs.items():
             if resolution < self.hw_criteria[hw_id] * approx:
@@ -95,7 +103,10 @@ class Bucket:
 
         # get aspect ratio id
         ar_criteria = self.ar_criteria[hw_id][t_id]
-        ar_id = get_closest_ratio(H, W, ar_criteria)
+        if self.auto_gen_bucket:
+            ar_id = get_closest_ratio_sora2(H, W, ar_criteria)
+        else:
+            ar_id = get_closest_ratio(H, W, ar_criteria)
         return hw_id, t_id, ar_id
 
     def get_thw(self, bucket_id):

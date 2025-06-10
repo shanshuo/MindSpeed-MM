@@ -1,4 +1,7 @@
 import math
+import os
+
+from typing import Dict, Tuple
 
 
 # computation
@@ -491,3 +494,123 @@ def get_num_frames(num_frames):
         return NUM_FRAMES_MAP[num_frames]
     else:
         return int(num_frames)
+
+
+ASPECT_RATIO_LD_LIST = [  # width:height
+    "2.39:1",  # cinemascope, 2.39
+    "2:1",  # rare, 2
+    "16:9",  # rare, 1.89
+    "1.85:1",  # american widescreen, 1.85
+    "9:16",  # popular, 1.78
+    "5:8",  # rare, 1.6
+    "3:2",  # rare, 1.5
+    "4:3",  # classic, 1.33
+    "1:1",  # square
+]
+
+
+def get_ratio(name: str) -> float:
+    width, height = map(float, name.split(":"))
+    return height / width
+
+
+def get_aspect_ratios_dict_sora2(
+        total_pixels: int = 256 * 256, training: bool = True
+) -> Dict[str, Tuple[int, int]]:
+    spatial_compression = int(os.environ.get("AE_SPATIAL_COMPRESSION", 16))
+    aspect_ratios_dict = {}
+    aspect_ratios_vertical_dict = {}
+    for ratio in ASPECT_RATIO_LD_LIST:
+        width_ratio, height_ratio = map(float, ratio.split(":"))
+        width = int(math.sqrt(total_pixels * (width_ratio / height_ratio)) // spatial_compression) * spatial_compression
+        height = int((total_pixels / width) // spatial_compression) * spatial_compression
+
+        if training:
+            # adjust aspect ratio to match total pixels
+            diff = abs(height * width - total_pixels)
+            candidate = [
+                (height - spatial_compression, width),
+                (height + spatial_compression, width),
+                (height, width - spatial_compression),
+                (height, width + spatial_compression),
+            ]
+            for h, w in candidate:
+                if abs(h * w - total_pixels) < diff:
+                    height, width = h, w
+                    diff = abs(h * w - total_pixels)
+
+        # remove duplicated aspect ratio
+        if (height, width) not in aspect_ratios_dict.values() or not training:
+            aspect_ratios_dict[ratio] = (height, width)
+            vertial_ratios = ":".join(ratio.split(":")[::-1])
+            aspect_ratios_vertical_dict[vertial_ratios] = (width, height)
+
+    aspect_ratios_dict.update(aspect_ratios_vertical_dict)
+
+    return aspect_ratios_dict
+
+
+def get_num_pixels_from_name(resolution: str) -> int:
+    resolution = resolution.split("_")[0]
+    if resolution.endswith("px"):
+        size = int(resolution[:-2])
+        num_pexels = size * size
+    elif resolution.endswith("p"):
+        size = int(resolution[:-1])
+        num_pexels = int(size * (size / 9) * 16)  # The default aspect ratio for videos is 16:9
+    else:
+        raise ValueError(f"Invalid resolution {resolution}")
+    return num_pexels
+
+
+def get_resolution_with_aspect_ratio(
+        resolution: str,
+) -> Tuple[int, Dict[str, Tuple[int, int]]]:
+    """Get resolution with aspect ratio
+
+    Args:
+        resolution (str): resolution name. The format is name only or "{name}_{setting}".
+            name supports "256px" or "360p". setting supports "ar1:1" or "max".
+
+    Returns:
+        tuple[int, dict[str, tuple[int, int]]]: resolution with aspect ratio
+    """
+    keys = resolution.split("_")
+    if len(keys) <= 0:
+        raise ValueError(f"Invalid setting resolution.")
+    if len(keys) == 1:
+        resolution = keys[0]
+        setting = ""
+    else:
+        resolution, setting = keys
+        if not (setting == "max" or setting.startswith("ar")):
+            raise ValueError(f"Invalid setting {setting}")
+
+    # get resolution
+    num_pixels = get_num_pixels_from_name(resolution)
+
+    # get aspect ratio
+    aspect_ratio_dict = get_aspect_ratios_dict_sora2(num_pixels)
+
+    # handle setting
+    if setting == "max":
+        aspect_ratio = max(
+            aspect_ratio_dict,
+            key=lambda x: aspect_ratio_dict[x][0] * aspect_ratio_dict[x][1],
+        )
+        aspect_ratio_dict = {aspect_ratio: aspect_ratio_dict[aspect_ratio]}
+    elif setting.startswith("ar"):
+        aspect_ratio = setting[2:]
+        if aspect_ratio not in aspect_ratio_dict:
+            raise ValueError(f"Aspect ratio {aspect_ratio} not found")
+        aspect_ratio_dict = {aspect_ratio: aspect_ratio_dict[aspect_ratio]}
+
+    return num_pixels, aspect_ratio_dict
+
+
+def get_closest_ratio_sora2(height: float, width: float, ratios: dict) -> str:
+    aspect_ratio = height / width
+    closest_ratio = min(
+        ratios.keys(), key=lambda ratio: abs(aspect_ratio - get_ratio(ratio))
+    )
+    return closest_ratio

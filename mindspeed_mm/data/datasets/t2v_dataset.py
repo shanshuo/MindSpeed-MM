@@ -7,10 +7,13 @@ from typing import Union, List, Optional
 from concurrent.futures import ThreadPoolExecutor
 import warnings
 import copy
+import sys
 
 import torch
 import numpy as np
 from megatron.core import mpu
+from mindspeed_mm.data.data_utils.utils import map_target_fps
+
 
 from mindspeed_mm.data.data_utils.constants import (
     CAPTIONS,
@@ -478,6 +481,8 @@ class DynamicVideoTextDataset(MMBaseDataset):
         use_img_num: int = 0,
         use_img_from_vid: bool = True,
         dummy_text_feature=False,
+        text_add_fps: bool = False,
+        fps_max: int = sys.maxsize,
         **kwargs,
     ):
         super().__init__(**basic_param)
@@ -495,6 +500,8 @@ class DynamicVideoTextDataset(MMBaseDataset):
         self.video_reader_type = vid_img_process.get("video_reader_type", "torchvision")
         self.image_reader_type = vid_img_process.get("image_reader_type", "torchvision")
         self.video_reader = VideoReader(video_reader_type=self.video_reader_type)
+        self.text_add_fps = text_add_fps
+        self.fps_max = fps_max
 
         self.video_processer = VideoProcesser(
             num_frames=self.num_frames,
@@ -529,7 +536,7 @@ class DynamicVideoTextDataset(MMBaseDataset):
         H = self.data.iloc[index]["height"]
         W = self.data.iloc[index]["width"]
 
-    def get_value_from_vid_or_img(self, num_frames, video_or_image_path, image_size):
+    def get_value_from_vid_or_img(self, num_frames, video_or_image_path, image_size, frame_interval):
         file_type = self.get_type(video_or_image_path)
 
         video_fps = 24  # default fps
@@ -538,9 +545,9 @@ class DynamicVideoTextDataset(MMBaseDataset):
             vframes = self.video_reader(video_or_image_path)
             video_fps = vframes.get_video_fps()
 
-            video_fps = video_fps // self.frame_interval
+            video_fps = video_fps // frame_interval
 
-            video = self.video_processer(vframes, num_frames=num_frames, frame_interval=self.frame_interval,
+            video = self.video_processer(vframes, num_frames=num_frames, frame_interval=frame_interval,
                                          image_size=image_size)  # T C H W
         else:
             # loading
@@ -558,11 +565,12 @@ class DynamicVideoTextDataset(MMBaseDataset):
     def __getitem__(self, index):
         index, num_frames, height, width = [int(val) for val in index.split("-")]
         sample = self.data_samples.iloc[index]
+        frame_interval = self.get_frame_interval(sample)
         video_or_image_path = sample["path"]
         if self.data_folder:
             video_or_image_path = os.path.join(self.data_folder, video_or_image_path)
             
-        video, video_fps = self.get_value_from_vid_or_img(num_frames, video_or_image_path, image_size=(height, width))
+        video, video_fps = self.get_value_from_vid_or_img(num_frames, video_or_image_path, image_size=(height, width), frame_interval=frame_interval)
         ar = height / width
 
         ret = {
@@ -593,3 +601,16 @@ class DynamicVideoTextDataset(MMBaseDataset):
     def get_text_processer(self, texts):
         prompt_ids, prompt_mask = self.text_processer(texts)
         return prompt_ids, prompt_mask
+
+    def get_frame_interval(self, sample):
+        if self.text_add_fps:
+            new_fps, frame_interval = map_target_fps(sample["fps"], self.fps_max)
+            if "text" in sample:
+                postfixs = []
+                if new_fps != 0 and self.fps_max < 999:
+                    postfixs.append(f"{new_fps} FPS")
+                postfix = " " + ", ".join(postfixs) + "." if postfixs else ""
+                sample["text"] = sample["text"] + postfix
+        else:
+            frame_interval = self.frame_interval
+        return frame_interval
