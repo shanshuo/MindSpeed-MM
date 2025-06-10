@@ -19,6 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 # 🔥🔥🔥Latest News
 
+* [Jun. 05, 2025]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.5模型 
 * [Apr. 03, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-32B模型 【Prototype】
 * [Mar. 27, 2025]: 🚀 MindSpeed-MM支持Wan2.1-1.3B/14B模型 【Prototype】
 * [Mar. 26, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-3B/7B/72B模型 【Prototype】
@@ -43,20 +44,22 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 # 效果展示
 
-## 图生视频： OpensoraPlan 1.3 I2V
+## 文生视频： OpensoraPlan 1.5 T2V
 
 <table border="0" style="width: 100%; text-align: left; margin-top: 20px;">
   <tr>
       <td>
-          <p>输入图片：</p>
-          <img src="sources/images/rocket.jpg" width="500" height="100%"></img>
+          <img src="sources/videos/video_osp15mini_1.gif" width="100%" controls autoplay loop></video>
+          <p>Prompt: A fluffy white rabbit with soft, velvety fur and twitching pink nose sits curiously near a rustic wooden fence, surrounded by a lush garden of vibrant wildflowers and tall grasses swaying gently in the breeze. The rabbit's large, expressive eyes scan the environment, reflecting the golden hues of the setting sun. As it nibbles on a patch of clover, its ears perk up at the distant sound of chirping birds. The fence, weathered and covered in patches of moss, adds a charming, pastoral backdrop to this serene scene, capturing the essence of a peaceful countryside moment.</p>
       </td>
       <td>
-          <img src="sources/videos/video_ops_I2V.gif" width="100%" controls autoplay loop></video>
-          <p>Prompt: A rocket ascends slowly into the sky</p>
+          <img src="sources/videos/video_osp15mini_2.gif" width="100%" controls autoplay loop></video>
+          <p>Prompt: A majestic Berlin tower stands tall against the night sky, its structure bathed in a mesmerizing array of vibrant lights, casting a kaleidoscope of colors across the cityscape. The tower's intricate architectural details are highlighted by the illumination, creating a stunning contrast against the deep indigo sky. As the camera pans upward, the lights shift, revealing a dynamic play of shadows and hues that dance across the tower's surface. The surrounding city lights twinkle in harmony, enhancing the tower's grandeur and creating a breathtaking visual symphony that captures the essence of Berlin's vibrant nightlife.</p>
       </td>
   </tr>
 </table>
+
+
 
 ## 图生视频： Wan 2.1 I2V
 
@@ -126,6 +129,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 |       模型 \ 特性       | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
 |:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
+| OpenSoraPlan1.5-T2V | ✔ | ✔ |  |  |  |  | ✔ |  |
 |       Wan2.1        |  |  |  |  | CP (Ulysses) | ✔ | ✔ | Prototype |
 |    HunyuanVideo     | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
 |   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | Prototype |
@@ -199,8 +203,19 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="30"> 多模态生成 </td>
+      <td rowspan="31"> 多模态生成 </td>
       </tr>
+      <tr>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/blob/master/examples/opensoraplan1.5/">OpenSoraPlan1.5</a></td>
+      <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.5.0">8.5B</a></td>
+      <td> 预训练 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.93 (SPS) </td>
+      <td> / </td>
+      <td> / </td>
+      <td>【北大贡献】</td>
+    </tr>
       <td rowspan="4"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-T2V</a></td>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers">1.3B</a></td>
       <td> 预训练 </td>
@@ -661,6 +676,8 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tbody>
 </table>
 
+
+
 ---
 
 <table>
@@ -819,6 +836,7 @@ MindSpeed-MM已发布版本维护策略：
 4. [基于昇腾原生训练！中大和360联合打造多模态任务新范式Qihoo-T2X](https://mp.weixin.qq.com/s/zQAy_hbL9cR3c8-NO6lKnA)
 5. [基于昇腾MindSpeed MM玩转Wan2.1视频生成SOTA模型](https://mp.weixin.qq.com/s/g2ShV2F6YpoVAniw6CBN_w)
 6. [多模态理解SOTA模型开箱即用，MindSpeed MM支持Qwen2.5-VL最佳实践](https://mp.weixin.qq.com/s/ac7RUWw79stunwQIyC-ykQ)
+7. [联创首发-基于昇腾MindSpeed MM玩转Open-Sora Plan V1.5模型](https://mp.weixin.qq.com/s/3cgO8yqrOIEHYqW69VQQcQ)
 
 ---
 
