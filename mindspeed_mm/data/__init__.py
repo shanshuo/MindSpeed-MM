@@ -18,7 +18,7 @@ from mindspeed_mm.data.datasets.multimodal_dataset import DeepSeekVLDataset, Mul
 from mindspeed_mm.data.datasets.t2i_dataset import T2IDataset
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset, DynamicVideoTextDataset
 from mindspeed_mm.data.datasets.i2v_dataset import I2VDataset
-from mindspeed_mm.data.datasets.video_dataset import VideoDataset
+from mindspeed_mm.data.datasets.feature_dataset import FeatureDataset
 from mindspeed_mm.data.datasets.audio_dataset import AudioDataset
 from mindspeed_mm.data.datasets.qwen2vl_dataset import get_qwen2vl_dataset
 from mindspeed_mm.data.datasets.ae_dataset import TrainVideoDataset
@@ -51,8 +51,8 @@ def build_mm_dataset(dataset_param):
         return T2IDataset(basic_param, preprocess_param, **dataset_param)
     elif dataset_type == "dt2v":  # 构建动态分辨率数据集
         return DynamicVideoTextDataset(basic_param, preprocess_param, **dataset_param)
-    elif dataset_type == "video":
-        return VideoDataset(basic_param, preprocess_param, **dataset_param)
+    elif dataset_type == "feature":
+        return FeatureDataset(basic_param)
     elif dataset_type == "multimodal":
         if not isinstance(basic_param, list):
             basic_param = [basic_param]

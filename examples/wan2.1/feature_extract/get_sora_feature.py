@@ -76,28 +76,17 @@ class WanTextVideoDataset(T2VDataset):
 
     def __getitem__(self, index):
         example = {}
-        sample = self.dataset_prog.cap_list[index]
+        sample = self.data_samples[index]
         file_path = sample["path"]
         if not os.path.exists(file_path):
             raise AssertionError(f"file {file_path} do not exist!")
 
-        frame_indice = sample["sample_frame_index"]
-        vframes, info, is_decord_read = self.video_reader(file_path)
-        start_frame_idx = sample.get("start_frame_idx", 0)
-        video = self.video_processer(
-            vframes,
-            info,
-            is_decord_read=is_decord_read,
-            predefine_num_frames=len(frame_indice),
-            start_frame_idx=start_frame_idx,
-        )
+        vframes = self.video_reader(file_path)
+        video = self.video_processer(vframes=vframes, **sample)
 
         if self.task == "i2v":
-            if is_decord_read:
-                first_frame = video[:, 0, :, :] # c t h w 
-                example["first_frame"] = first_frame               
-            else:
-                raise NotImplementedError(f"Only support video_reader_type: decoder.")
+            first_frame = video[:, 0, :, :] # c t h w 
+            example["first_frame"] = first_frame
         
         video = self.video_only_preprocess(video)
         example[VIDEO] = video
