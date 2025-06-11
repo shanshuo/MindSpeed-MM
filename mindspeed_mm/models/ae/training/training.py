@@ -1,6 +1,8 @@
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
 import os
 import time
+from datetime import datetime, timezone
+import pytz
 
 import torch
 import torch.distributed as dist
@@ -9,6 +11,7 @@ from tqdm import tqdm
 
 from megatron.training.utils import print_rank_0
 from megatron.training.training import print_datetime
+from megatron.core.timers import Timers
 
 from mindspeed_mm.configs.config import MMConfig
 from mindspeed_mm.tools.profiler import Profiler
@@ -146,21 +149,15 @@ def pretrain_ae(
     print_rank_0("done with setup ...")
 
     # Training Loop
-    bar_desc = ""
-    bar = None
-    if global_rank == 0:
-        train_iters = (
-            args.epochs * len(train_dataloader) if args.train_iters is None else args.train_iters
-        )
-        bar = tqdm(total=train_iters, desc=bar_desc.format(current_epoch=0, loss=0))
-        bar.update(current_step)
-        bar_desc = "Epoch: {current_epoch}, Loss: {loss}"
-        print_rank_0("Training Details: ")
-        print_rank_0(f" Max steps: {train_iters}")
-        print_rank_0(f" Dataset Samples: {len(train_dataloader)}")
-        print_rank_0(
-            f" Total Batch Size: {train_dataloader.batch_size} * {args.world_size}"
-        )
+    args.train_iters = (
+        args.epochs * len(train_dataloader) if args.train_iters is None else args.train_iters
+    )
+    print_rank_0("Training Details: ")
+    print_rank_0(f" Max steps: {args.train_iters}")
+    print_rank_0(f" Dataset Samples: {len(train_dataloader)}")
+    print_rank_0(
+        f" Total Batch Size: {train_dataloader.batch_size} * {args.world_size}"
+    )
     dist.barrier()
 
     print_rank_0("training ...")
@@ -169,11 +166,19 @@ def pretrain_ae(
 
     args.current_step = current_step
     args.current_epoch = start_epoch
+    timers = Timers(log_level=0, log_option="minmax")
+    timers("discriminator-interval-time", log_level=0).start(barrier=True)
+    timers("generator-interval-time", log_level=0).start(barrier=True)
     for epoch in range(args.epochs):
+        if current_step >= args.train_iters:
+            break
         for module in modules_to_train:
             module.train()
         train_dataloader.sampler.set_epoch(epoch)  # Shuffle data at every epoch
-        for batch in train_dataloader:
+        for _, batch in enumerate(train_dataloader):
+            if current_step >= args.train_iters:
+                break
+
             if (
                 current_step % 2 == 1
                 and current_step >= discrim_model.module.discriminator_iter_start
@@ -181,10 +186,12 @@ def pretrain_ae(
                 set_modules_requires_grad(modules_to_train, False)
                 args.step_gen = False
                 args.step_disc = True
+                timers("discriminator-interval-time", log_level=0).elapsed(barrier=True)
             else:
                 set_modules_requires_grad(modules_to_train, True)
                 args.step_gen = True
                 args.step_disc = False
+                timers("generator-interval-time", log_level=0).elapsed(barrier=True)
 
             # Forward
             gen_loss, discrim_loss = forward_step_func(batch, ae_model, discrim_model)
@@ -200,8 +207,8 @@ def pretrain_ae(
                 if args.ema:
                     ema.update()
 
-                if current_step % args.log_interval == 0:
-                    print_rank_0(f"train/generator_loss: {gen_loss.item()}, step={current_step}")
+                elapsed_time_per_iteration = timers("generator-interval-time").elapsed(barrier=True)
+                training_log(current_step, gen_loss.item(), ae_optim.param_groups[0]["lr"], scaler.get_scale(), elapsed_time_per_iteration)
             # Discriminator Step
             if args.step_disc:
                 discrim_optim.zero_grad()
@@ -211,13 +218,9 @@ def pretrain_ae(
                 scaler.step(discrim_optim)
                 scaler.update()
 
-                if current_step % args.log_interval == 0:
-                    print_rank_0(f"train/discriminator_loss: {discrim_loss.item()}, step={current_step}")
-            
-            # update bar
-            if global_rank == 0:
-                bar.desc = bar_desc.format(current_epoch=epoch, loss=f"-")
-                bar.update()
+                elapsed_time_per_iteration = timers("discriminator-interval-time").elapsed(barrier=True)
+                training_log(current_step, discrim_loss.item(), discrim_optim.param_groups[0]["lr"], scaler.get_scale(), elapsed_time_per_iteration)
+
             current_step += 1
             args.current_step = current_step
 
@@ -241,7 +244,32 @@ def pretrain_ae(
                     ema_state_dict=ema.shadow if args.ema else {},
                 )
                 print_rank_0(f"Checkpoint has been saved to `{file_path}`.")
+
             prof.step()
     prof.stop()
 
     print_datetime("after training is done")
+
+
+def training_log(
+    iteration,
+    loss,
+    learning_rate,
+    grad_scale,
+    elapsed_time_per_iteration
+):
+    args = get_ae_args()
+    loss_name = ""
+    if args.step_gen:
+        loss_name = "generator     loss"
+    else:
+        loss_name = "discriminator loss"
+    
+    log_string = f" [{datetime.now(timezone.utc).astimezone(pytz.timezone('Asia/Shanghai')).strftime('%Y-%m-%d %H:%M:%S')}]"
+    log_string += ' iteration {:8d}/{:8d} |'.format(iteration, args.train_iters)
+    log_string += ' elapsed time per iteration (s): {:.6f} |'.format(
+            elapsed_time_per_iteration)
+    log_string += ' learning rate: {:.6E} |'.format(learning_rate)
+    log_string += ' {}: {:.6E} |'.format(loss_name, loss)
+    log_string += ' loss scale: {:.1f} |'.format(grad_scale)
+    print_rank_0(log_string)

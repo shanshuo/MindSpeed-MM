@@ -144,7 +144,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="19"> 多模态生成 </td>
+      <td rowspan="20"> 多模态生成 </td>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/hunyuanvideo">HunyuanVideo</a></td>
       <td><a href="https://huggingface.co/tencent/HunyuanVideo">13B</a></td>
       <td> 预训练 </td>
@@ -202,6 +202,16 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> BF16 </td>
       <td> 1.17 (SPS) </td>
       <td> 1.15 (SPS) </td>
+      <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/vae">WFVAE</a></td>
+      <td><a href="https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.3.0/tree/main/vae"> 0.18B </a></td>
+      <td> 预训练 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 23.860 (SPS) </td>
+      <td> 26.091 (SPS) </td>
       <td>【Pass】</td>
     </tr>
     <tr>
