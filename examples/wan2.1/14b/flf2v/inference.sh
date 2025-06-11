@@ -54,7 +54,7 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --bf16 \
-    --seed 0 \
+    --seed 1234 \
     --load $LOAD_PATH \
 "
 

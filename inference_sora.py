@@ -88,9 +88,9 @@ def main():
     if hasattr(args, "video"):
         if args.start_frame or args.num_frames is None:
             raise ValueError("Please select both starting frame index and total number of frames")
-        videos = load_videos(args.video, args.start_frame, args.num_frames) if hasattr(args, "video") else None
+        input_videos = load_videos(args.video, args.start_frame, args.num_frames) if hasattr(args, "video") else None
     else:
-        videos = None
+        input_videos = None
     conditional_pixel_values_path = load_conditional_pixel_values(args.conditional_pixel_values_path) if hasattr(args, "conditional_pixel_values_path") else None
     mask_type = args.mask_type if hasattr(args, "mask_type") else None
     crop_for_hw = args.crop_for_hw if hasattr(args, "crop_for_hw") else None
@@ -100,8 +100,8 @@ def main():
     if images is not None and len(prompts) != len(images):
         raise AssertionError(f'The number of images {len(images)} and the numbers of prompts {len(prompts)} do not match')
 
-    if videos is not None and len(prompts) != len(videos):
-        raise AssertionError(f'The number of videos {len(videos)} and the numbers of prompts {len(prompts)} do not match')
+    if input_videos is not None and len(prompts) != len(input_videos):
+        raise AssertionError(f'The number of videos {len(input_videos)} and the numbers of prompts {len(prompts)} do not match')
 
     if len(prompts) % args.micro_batch_size != 0:
         raise AssertionError(f'The number of  prompts {len(prompts)} is not divisible by the batch size {args.micro_batch_size}')
@@ -132,8 +132,8 @@ def main():
         else:
             batch_images = None
 
-        if videos is not None:
-            batch_videos = videos[i: i + args.micro_batch_size]
+        if input_videos is not None:
+            batch_videos = input_videos[i: i + args.micro_batch_size]
         else:
             batch_videos = None
 

@@ -96,7 +96,8 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         if negative_prompt is None or negative_prompt == "":
             if self.model_type == "flf2v":
                 negative_prompt = "Lens switching, lens shaking, b" + NEGATIVE_PROMOPT[1:]
-            negative_prompt = NEGATIVE_PROMOPT
+            else:
+                negative_prompt = NEGATIVE_PROMOPT
         self.check_inputs(
             prompt,
             negative_prompt,
