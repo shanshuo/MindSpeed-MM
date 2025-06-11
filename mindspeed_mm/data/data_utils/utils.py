@@ -26,8 +26,8 @@ from typing import Any, Dict, Optional, Tuple, Union, Sequence, Type, Callable
 
 try:
     import decord
-except ImportError:
-    print("Failed to import decord module.")
+except Exception as e:
+    print(f"Failed to import decord module. The reason of decord unavailable is {e}")
 
 import av
 import ftfy
