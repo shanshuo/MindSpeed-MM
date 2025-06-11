@@ -1,6 +1,5 @@
 #!/bin/bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
-# 该变量只用于规避megatron对其校验，对npu无效
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
 export ASCEND_GLOBAL_LOG_LEVEL=3
@@ -11,23 +10,33 @@ export HCCL_CONNECT_TIMEOUT=1200
 export NPU_ASD_ENABLE=0
 export ASCEND_LAUNCH_BLOCKING=0
 export ACLNN_CACHE_LIMIT=100000
+export PYTORCH_NPU_ALLOC_CONF="expandable_segments:True"
 
+# The current configuration is for reference only. Please modify it according to your actual needs.
 NPUS_PER_NODE=8
-MASTER_ADDR=localhost
+# Note: For multi-machine situation, please create file hostfile.txt based on the actual IP with one IP per line.
+HOSTFILE="examples/mindspore/qwen2.5vl/hostfile.txt"
+export MASTER_ADDR=$(head -n1 $HOSTFILE | awk '{print $1;}')  # The first line is master address.
 MASTER_PORT=6000
-NNODES=1
-NODE_RANK=0
+NODE_ADDR=`hostname -I | awk '{for(i=1;i<=NF;i++)print $i}' | grep ${MASTER_ADDR%.*}. | awk -F " " '{print$1}'`
+NODE_RANK=$(awk '{ranks[$1]=(FNR-1);}END{print ranks["'$NODE_ADDR'"];}' $HOSTFILE)
+NNODES=$(cat $HOSTFILE | wc -l)
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
-export LOCAL_WORLD_SIZE=8
+export LOCAL_WORLD_SIZE=$NPUS_PER_NODE
+echo $MASTER_ADDR
+echo $NODE_ADDR
+echo $NODE_RANK
+echo $NNODES
 
-MM_DATA="./examples/mindspore/qwen2.5vl/data_7b.json"
-MM_MODEL="./examples/mindspore/qwen2.5vl/model_7b.json"
+
+MM_DATA="./examples/mindspore/qwen2.5vl/data_72b.json"
+MM_MODEL="./examples/mindspore/qwen2.5vl/model_72b.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
-LOAD_PATH="ckpt/mm_path/Qwen2.5-VL-7B-Instruct"
+LOAD_PATH="ckpt/mm_path/Qwen2.5-VL-72B-Instruct"
 SAVE_PATH="save_dir"
 
-TP=1
-PP=4
+TP=2
+PP=8
 CP=1
 MBS=1
 GRAD_ACC_STEP=96
@@ -44,7 +53,6 @@ DISTRIBUTED_ARGS="
     --bind_core=True
 "
 
-# GPT_ARGS中模型相关参数具体配置在example/mindspore/qwen2.5vl/model_7b.json中，训练相关参数配置在这里
 GPT_ARGS="
     --use-mcore-models \
     --tensor-model-parallel-size ${TP} \
@@ -78,6 +86,7 @@ GPT_ARGS="
     --no-save-optim \
     --no-save-rng \
     --num-workers 8 \
+    --use-flash-attn \
 "
 
 MM_ARGS="
@@ -93,7 +102,7 @@ OUTPUT_ARGS="
     --eval-iters 5000 \
     --save $SAVE_PATH \
 "
-logfile=$(date +%Y%m%d)_$(date +%H%M%S)
+logfile=train_$(date +%Y%m%d)_$(date +%H%M%S)
 mkdir -p logs
 msrun $DISTRIBUTED_ARGS pretrain_vlm.py \
     $GPT_ARGS \
@@ -101,16 +110,16 @@ msrun $DISTRIBUTED_ARGS pretrain_vlm.py \
     $OUTPUT_ARGS \
     --distributed-backend nccl \
     --ai-framework mindspore \
-    2>&1 | tee logs/train_${logfile}.log
-chmod 440 logs/train_${logfile}.log
+    2>&1 | tee logs/${logfile}.log
+chmod 440 logs/${logfile}.log
 chmod -R 640 $SAVE_PATH
-STEP_TIME=`grep "elapsed time per iteration" logs/train_${logfile}.log | awk -F ':' '{print$5}' | awk -F '|' '{print$1}' | head -n 150 | tail -n 100 | awk '{sum+=$1} END {if (NR != 0) printf("%.1f",sum/NR)}'`
+STEP_TIME=`grep "elapsed time per iteration" logs/${logfile}.log | awk -F ':' '{print$5}' | awk -F '|' '{print$1}' | head -n 150 | tail -n 100 | awk '{sum+=$1} END {if (NR != 0) printf("%.1f",sum/NR)}'`
 SAMPLES_PER_SECOND=`awk 'BEGIN{printf "%.3f\n", '${GBS}'*1000/'${STEP_TIME}'}'`
 echo "Elapsed Time Per iteration: $STEP_TIME"
 echo "Average Samples per Second: $SAMPLES_PER_SECOND"
-LOG_TOKENS_PER_SECOND=`grep "tokens per sample" logs/train_${logfile}.log`
+LOG_TOKENS_PER_SECOND=`grep "tokens per sample" logs/${logfile}.log`
 if [ "$LOG_TOKENS_PER_SECOND" ]; then
-    AVERAGE_TOKENS=`grep "tokens per sample" logs/train_${logfile}.log | awk -F 'tokens per sample:' '{print$2}' | awk -F '|' '{print$1}' | head -n 150 | tail -n 100 | awk '{sum+=$1} END {if (NR != 0) printf("%.1f",sum/NR)}'`
+    AVERAGE_TOKENS=`grep "tokens per sample" logs/${logfile}.log | awk -F 'tokens per sample:' '{print$2}' | awk -F '|' '{print$1}' | head -n 150 | tail -n 100 | awk '{sum+=$1} END {if (NR != 0) printf("%.1f",sum/NR)}'`
     TOKENS_PER_SECOND=`awk 'BEGIN{printf "%.3f\n", '${SAMPLES_PER_SECOND}'*'${AVERAGE_TOKENS}'}'`
     echo "Consumed Tokens per Second: $TOKENS_PER_SECOND"
 fi
