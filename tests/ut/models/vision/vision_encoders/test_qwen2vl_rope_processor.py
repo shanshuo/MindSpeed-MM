@@ -57,10 +57,10 @@ class TestQwen2vlROPE:
         """
         Test apply_multimodal_rotary_pos_emb function.
         """
-        test_q = torch.load(LLM_QUERY, map_location="cpu")
-        test_k = torch.load(LLM_KEY, map_location="cpu")
-        sin = torch.load(LLM_SIN, map_location="cpu")
-        cos = torch.load(LLM_COS, map_location="cpu")
+        test_q = torch.load(LLM_QUERY, map_location="cpu").permute(2, 0, 1, 3).contiguous()
+        test_k = torch.load(LLM_KEY, map_location="cpu").permute(2, 0, 1, 3).contiguous()
+        sin = torch.load(LLM_SIN, map_location="cpu").permute(2, 0, 1, 3).contiguous()
+        cos = torch.load(LLM_COS, map_location="cpu").permute(2, 0, 1, 3).contiguous()
         mrope_section = MROPE_SECTION
         use_fused_rope = False
         q_embed, k_embed = apply_multimodal_rotary_pos_emb(test_q.npu(), test_k.npu(), cos.npu(), sin.npu(), mrope_section, unsqueeze_dim=1, use_fused_rope=use_fused_rope)
@@ -71,10 +71,10 @@ class TestQwen2vlROPE:
         """
         Test apply_multimodal_rotary_pos_emb function based on npu_rotary_mul fusion operator.
         """
-        test_q = torch.load(LLM_QUERY, map_location="cpu")
-        test_k = torch.load(LLM_KEY, map_location="cpu")
-        sin = torch.load(LLM_SIN, map_location="cpu")
-        cos = torch.load(LLM_COS, map_location="cpu")
+        test_q = torch.load(LLM_QUERY, map_location="cpu").permute(2, 0, 1, 3).contiguous()
+        test_k = torch.load(LLM_KEY, map_location="cpu").permute(2, 0, 1, 3).contiguous()
+        sin = torch.load(LLM_SIN, map_location="cpu").permute(2, 0, 1, 3).contiguous()
+        cos = torch.load(LLM_COS, map_location="cpu").permute(2, 0, 1, 3).contiguous()
         mrope_section = MROPE_SECTION
         use_fused_rope = True
         q_embed, k_embed = apply_multimodal_rotary_pos_emb(test_q.npu(), test_k.npu(), cos.npu(), sin.npu(), mrope_section, unsqueeze_dim=1, use_fused_rope=use_fused_rope)

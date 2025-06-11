@@ -40,15 +40,14 @@ def rotate_half(x):
 # Modified based on transformers.models.qwen2_vl.modeling_qwen2_vl
 def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1, use_fused_rope=True):
     mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
+    cos = torch.cat([m[:, i % 3, :, :] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
         unsqueeze_dim
     )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
+    sin = torch.cat([m[:, i % 3, :, :] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
         unsqueeze_dim
     )
     if use_fused_rope:
         import torch_npu
-        cos, sin = cos[:1], sin[:1]
         q_embed = torch_npu.npu_rotary_mul(q, cos, sin)
         k_embed = torch_npu.npu_rotary_mul(k, cos, sin)
     else:
@@ -96,8 +95,8 @@ class Qwen2VLRotaryEmbedding_llm(Qwen2VLRotaryEmbedding):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
+        cos = (cos * self.attention_scaling).permute(2, 0, 1, 3).contiguous()
+        sin = (sin * self.attention_scaling).permute(2, 0, 1, 3).contiguous()
         return torch.concat((cos, sin), dim=-1).to(dtype=x_dtype)
 
 
@@ -136,9 +135,6 @@ class Qwen2vlSelfAttention(SelfAttention):
             value = value.repeat_interleave(
                 query.shape[2] // value.shape[2], dim=2
             )
-            
-        query = query.permute(1, 2, 0, 3).contiguous()  # b h s d
-        key = key.permute(1, 2, 0, 3).contiguous()  # b h s d
 
         if packed_seq_params is not None:
             query = query.squeeze(1)
@@ -157,8 +153,6 @@ class Qwen2vlSelfAttention(SelfAttention):
             cos, sin = rotary_pos_emb[..., :half_dim], rotary_pos_emb[..., half_dim:]
             query, key = apply_multimodal_rotary_pos_emb(query, key, cos, sin, self.mrope_section,
                                                          use_fused_rope=self.config.use_fused_rotary_pos_emb)  # b h s d
-        query = query.permute(2, 0, 1, 3).contiguous()  # s b h d
-        key = key.permute(2, 0, 1, 3).contiguous()  # s b h d
         # ===================================================
         # Adjust key, value for inference
         # ===================================================
