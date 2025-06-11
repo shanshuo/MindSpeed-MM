@@ -19,6 +19,7 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 # 🔥🔥🔥Latest News
 
+* [Jun. 05, 2025]: 🚀 MindSpeed-MM支持Qwen2.5Omni-7B模型 【Prototype】
 * [Jun. 05, 2025]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.5模型 
 * [Apr. 03, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-32B模型 【Prototype】
 * [Mar. 27, 2025]: 🚀 MindSpeed-MM支持Wan2.1-1.3B/14B模型 【Prototype】
