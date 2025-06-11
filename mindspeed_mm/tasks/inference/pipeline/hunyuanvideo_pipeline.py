@@ -1,5 +1,6 @@
 import inspect
 from typing import Optional, Union, List
+import os
 from PIL.Image import Image
 import torch
 from accelerate import cpu_offload_with_hook
@@ -42,7 +43,8 @@ class HunyuanVideoPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
         self.eta = config.get("eta", 0.0)
         self.cpu_offload = config.get("cpu_offload", False)
         if self.cpu_offload:
-            self.enable_model_cpu_offload(torch.distributed.get_rank())
+            local_rank = int(os.getenv("LOCAL_RANK"))
+            self.enable_model_cpu_offload(local_rank)
 
     @staticmethod
     def generate_params_checks(frames, height, width):

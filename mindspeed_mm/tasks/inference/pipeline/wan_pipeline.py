@@ -15,6 +15,7 @@
 from typing import List, Optional, Union
 import html
 import math
+import os
 
 from PIL.Image import Image
 import ftfy
@@ -76,7 +77,8 @@ class WanPipeline(MMPipeline, InputsCheckMixin, MMEncoderMixin):
 
         self.cpu_offload = getattr(config, "cpu_offload", False)
         if self.cpu_offload:
-            self.enable_model_cpu_offload(torch.distributed.get_rank())
+            local_rank = int(os.getenv("LOCAL_RANK"))
+            self.enable_model_cpu_offload(local_rank)
 
     @torch.no_grad()
     def __call__(
