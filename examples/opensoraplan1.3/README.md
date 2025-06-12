@@ -269,12 +269,17 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
   - 使用场景：视频分辨率/帧数设置的很大时，训练过程中，单卡无法完成vae的encode计算，需要开启VAE-CP。
   - 使能方式：在xxx_model.json中设置vae_cp_size, vae_cp_size为大于1的整数时生效, 建议设置等于Dit部分cp_size。
   - 限制条件：暂不兼容PP。
-  
 
 + Encoder-DP：Encoder数据并行
-  - 使用场景：在开启TP、CP时，DP较小，存在vae和text_encoder的冗余encode计算。开启以减小冗余计算，但会增加通信，需要按场景开启。
+  - 使用场景：在开启TP、CP时，DP较小，存在vae和text_encoder的冗余encode计算。开启以减小冗余计算，但会增加通信，需要按场景开启。T2V、I2V任务均支持。
   - 使能方式：在xxx_model.json中设置"enable_encoder_dp": true。
-  - 限制条件：暂不兼容PP、VAE-CP。
+  - 限制条件：暂不兼容PP、VAE-CP。支持与Encoder Interleaved Offload功能同时开启。
+
++ Encoder Interleaved Offload: Encoder 交替卸载
+  - 使用场景：在NPU内存瓶颈的训练场景中，可以一次性编码多步训练输入数据然后卸载编码器至cpu上，使得文本编码器无需常驻内存，减少内存占用。
+    故可在不增加内存消耗的前提下实现在线训练，避免手动离线提取特征。T2V、I2V任务均支持。
+  - 使能方式：在xxx_model.json中，设置 encoder_offload_interval > 1. 建议设置根据实际场景设置大于10，可以极小化卸载带来的性能损耗
+  - 限制条件：启用时建议调大num_worker以达最佳性能; 支持与Encoder-DP同时开启。
 
 
 + DiT-RingAttention：DiT RingAttention序列并行

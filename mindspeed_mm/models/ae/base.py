@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+from collections import defaultdict
 
 import torch.nn as nn
 
@@ -62,14 +62,39 @@ class AEModel(nn.Module):
         return self.model
 
     def encode(self, x, **kwargs):
-        video_latents = self.model.encode(x)
-        if self.i2v_processor is None:
-            return video_latents, None
-        else:
-            i2v_results = self.i2v_processor(
-                vae_model=self.model, videos=x, video_latents=video_latents, **kwargs
+        if not isinstance(x, (list, tuple)):
+            return self._single_encode(x, **kwargs)
+
+        video_latents = []
+        i2v_results = defaultdict(list)
+
+        for i, _ in enumerate(x):
+            kwargs_i = {
+                key: value[i] if isinstance(value, (list, tuple)) and len(value) == len(x) else value
+                for key, value in kwargs.items()
+            }
+            _video_latents, _i2v_results = self._single_encode(x[i], **kwargs_i)
+            video_latents.append(_video_latents)
+            if _i2v_results is None:
+                continue
+            for key, value in _i2v_results.items():
+                i2v_results[key].append(value)
+
+        return video_latents, i2v_results
+
+    def _single_encode(self, x, **kwargs):
+        _video_latents = self.model.encode(x)
+        _i2v_results = None
+
+        if self.i2v_processor is not None:
+            _i2v_results = self.i2v_processor(
+                vae_model=self.model,
+                videos=x,
+                video_latents=_video_latents,
+                **kwargs
             )
-            return video_latents, i2v_results
+
+        return _video_latents, _i2v_results
 
     def decode(self, x):
         return self.model.decode(x)

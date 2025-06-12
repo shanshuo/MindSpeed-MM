@@ -1,5 +1,6 @@
 # Copyright (c) 2023, NVIDIA CORPORATION.  All rights reserved.
 """Pretrain SoRA."""
+from collections import defaultdict
 
 import torch
 import torch_npu
@@ -78,78 +79,55 @@ def loss_func(output_tensor):
 
 def get_batch_for_step(data_iterator):
     args = get_args()
+    enable_encoder_dp = getattr(args.mm.model, "enable_encoder_dp", False)
+    encoder_offload_interval = getattr(args.mm.model, "encoder_offload_interval", 1)
     args.curr_forward_iteration += 1
-    enable_encoder_dp = args.mm.model.enable_encoder_dp if hasattr(args.mm.model, "enable_encoder_dp") else False
-    tp_cp_group_size = None
-    if enable_encoder_dp:
-        tp_cp_group_size = torch.distributed.get_world_size(mpu.get_tensor_and_context_parallel_group())
 
-    if tp_cp_group_size is None or not enable_encoder_dp or tp_cp_group_size <= 1:
-        return get_batch(data_iterator)
-
-    # Only the first step of a round needs to get batch when enable encoder dp
-    batch = get_batch(data_iterator) if args.curr_forward_iteration % tp_cp_group_size == 1 else {}
-
-    return batch
-
-
-def get_interleaved_batch_for_step(data_iterator):
-    """Generate batches with interleaved steps."""
-    args = get_args()
-    args.curr_forward_iteration += 1
-    interleaved_steps = args.mm.model.interleaved_steps \
-        if hasattr(args.mm.model, "interleaved_steps") else 1
-    if interleaved_steps < 1 or not isinstance(interleaved_steps, int):
-        raise AssertionError("interleaved_steps should be an integer greater than or equal to 1.")
-
+    tp_cp_group_size = torch.distributed.get_world_size(mpu.get_tensor_and_context_parallel_group())
+    encoder_dp_interval = tp_cp_group_size if enable_encoder_dp else 1
+    get_batch_interval = encoder_dp_interval * encoder_offload_interval
     batches = []
-    if interleaved_steps == 1:
-        batch = get_batch(data_iterator)
-        batches.append(batch)
 
-    elif args.curr_forward_iteration % interleaved_steps == 1:
-        # When interleaved is enabled, the get_batch needs to be obtained for every interleaving step.
-        for _ in range(interleaved_steps):
+    if get_batch_interval == 1 or args.curr_forward_iteration % get_batch_interval == 1:
+        for _ in range(encoder_offload_interval):
             batch = get_batch(data_iterator)
-            # When the length of dataiter is not divided by interleaved_steps,  dataiter return None 
             if batch is not None:
                 batches.append(batch)
 
-    return batches
+    return batches, get_batch_interval
 
 
 def forward_step(data_iterator, model):
     """Forward step."""
-    args = get_args()
-    interleaved = args.mm.model.interleaved \
-        if hasattr(args.mm.model, "interleaved") else False
-
     batch, video, prompt_ids, video_mask, prompt_mask = {}, None, None, None, None
+    skip_encode = False
     if mpu.is_pipeline_first_stage():
-        if not interleaved:        
-            batch = get_batch_for_step(data_iterator)
+        batches, get_batch_interval = get_batch_for_step(data_iterator)
+        skip_encode = not batches
+        i2v_params = defaultdict(list)
+        # while encoder dp or encoder interleave offload is enabled. reconstruct data as list: [step_1, ... step_n]
+        if get_batch_interval > 1 and len(batches) >= 1:
+            video, prompt_ids, video_mask, prompt_mask = [], [], [], []
+            for single_batch in batches:
+                _prompt_ids = single_batch.pop(PROMPT_IDS, None)
+                _prompt_mask = single_batch.pop(PROMPT_MASK, None)
+                _prompt_ids = _prompt_ids if isinstance(_prompt_ids, (list, tuple)) else [_prompt_ids]
+                _prompt_mask = _prompt_mask if isinstance(_prompt_mask, (list, tuple)) else [_prompt_mask]
+                video.append(single_batch.pop(VIDEO, None))
+                video_mask.append(single_batch.pop(VIDEO_MASK, None))
+                prompt_ids.append(_prompt_ids)
+                prompt_mask.append(_prompt_mask)
+                for key, value in single_batch.items():
+                    i2v_params[key].append(value)
+            batch = i2v_params
+        elif len(batches) == 1:
+            batch = batches[0]
             video = batch.pop(VIDEO, None)
             prompt_ids = batch.pop(PROMPT_IDS, None)
             video_mask = batch.pop(VIDEO_MASK, None)
             prompt_mask = batch.pop(PROMPT_MASK, None)
-        else:
-            batches = get_interleaved_batch_for_step(data_iterator)
-            
-            if len(batches) > 0:
-                video, prompt_ids, video_mask, prompt_mask = [], [], [], []
-                # List for these params when interleaved is enabled.
-                for batch in batches:
-                    video_batch = batch.pop(VIDEO, None)
-                    prompt_ids_batch = batch.pop(PROMPT_IDS, None)
-                    video_mask_batch = batch.pop(VIDEO_MASK, None)
-                    prompt_mask_batch = batch.pop(PROMPT_MASK, None)
-                    
-                    video.append(video_batch)
-                    prompt_ids.append(prompt_ids_batch)
-                    video_mask.append(video_mask_batch)
-                    prompt_mask.append(prompt_mask_batch)
 
-    output_tensor_list = model(video, prompt_ids, video_mask, prompt_mask=prompt_mask, **batch)
+    output_tensor_list = model(video, prompt_ids, video_mask, prompt_mask=prompt_mask, skip_encode=skip_encode, **batch)
     return output_tensor_list, loss_func
 
 

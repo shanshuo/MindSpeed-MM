@@ -328,8 +328,14 @@ def dist_sort(image_num_list):
         if image_num_list[d] == target[d]:
             deficit.pop()
     return transfer, target
- 
- 
+
+
+def unwrap_single(x: list):
+    while isinstance(x, list) and len(x) == 1:
+        x = x[0]
+    return x
+
+
 class EncoderBalanceComm(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input_tensor, group, transfer=None, nopadding=False, skip=False):

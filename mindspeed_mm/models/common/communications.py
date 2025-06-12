@@ -376,36 +376,37 @@ def _conv_gather(input_, dim, kernel_size):
     return output
 
 
-def collect_tensors_across_ranks(tensor, group=None):
+def collect_tensors_across_ranks(tensor, group=None, dynamic_shape: bool = False):
     if group is None:
         group = dist.group.WORLD
-
-    world_size = dist.get_world_size(group)
-
-    if world_size == 1:
+    group_size = dist.get_world_size(group)
+    if group_size == 1:
         return [tensor]
 
-    def broadcast_shapes(tensor, world_size, group):
+    def broadcast_shapes(tensor, group_size, group):
         shape = tensor.shape
-        shape_list = [torch.Size([]) for _ in range(world_size)]
+        shape_list = [torch.Size([]) for _ in range(group_size)]
         dist.all_gather_object(shape_list, [shape], group=group)
         return shape_list
 
-    if isinstance(tensor, tuple) or isinstance(tensor, list):
-        recv_tensors = [[None for _ in range(len(tensor))] for _ in range(world_size)]
+    def get_fixed_shape_list(tensor, group_size):
+        return [tensor.shape for _ in range(group_size)]
+
+    if isinstance(tensor, (tuple, list)):
+        recv_tensors = [[None for _ in range(group_size)] for _ in range(len(tensor))]
         for i, tensor_i in enumerate(tensor):
             if tensor_i is None:
                 continue
-            shapes = broadcast_shapes(tensor_i, world_size, group)
-            recv_tensors_i = [torch.empty(*shape, dtype=tensor_i.dtype).to(tensor_i.device) for shape in shapes]
+            shapes = broadcast_shapes(tensor_i, group_size, group) if dynamic_shape else get_fixed_shape_list(tensor_i, group_size)
+            recv_tensors_i = [torch.empty(*shape, dtype=tensor_i.dtype, device=tensor_i.device) for shape in shapes]
             dist.all_gather(recv_tensors_i, tensor_i, group=group)
-            for rank in range(world_size):
-                recv_tensors[rank][i] = recv_tensors_i[rank]
+            for rank in range(group_size):
+                recv_tensors[i][rank] = recv_tensors_i[rank]
     else:
-        shapes = broadcast_shapes(tensor, world_size, group)
-        recv_tensors = [torch.empty(*shape, dtype=tensor.dtype).to(tensor.device) for shape in shapes]
+        shapes = broadcast_shapes(tensor, group_size, group) if dynamic_shape else get_fixed_shape_list(tensor, group_size)
+        recv_tensors = [torch.empty(*shape, dtype=tensor.dtype, device=tensor.device) for shape in shapes]
         dist.all_gather(recv_tensors, tensor, group=group)
-        
+
     return recv_tensors
 
 

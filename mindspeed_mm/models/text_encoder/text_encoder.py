@@ -1,6 +1,7 @@
 import importlib
 
 import torch
+import torch_npu
 import torch.nn as nn
 
 from mindspeed_mm.models.text_encoder.hunyuan_mllm_text_encoder import HunyuanMLLmModel
@@ -45,6 +46,7 @@ class TextEncoder(nn.Module):
         - If `config` is a list of dictionaries, each dictionary in the list will be used to instantiate a separate Text Encoder Model instance,
             effectively allowing the creation of multiple Text Encoder based on different configurations.
     """
+
     def __init__(self, config):
         super().__init__()
 
@@ -59,19 +61,74 @@ class TextEncoder(nn.Module):
     def get_model(self):
         return self.text_encoders
 
-    def encode(self, input_ids, mask, **kwargs):
-        if isinstance(self.text_encoders, nn.ModuleList):
-            outputs = []
-            masks = []
-            for i, text_encoder_i in enumerate(self.text_encoders):
-                input_ids_i = input_ids[i]
-                mask_i = mask[i]
-                output, att_mask = self._single_encode(text_encoder_i, input_ids_i, mask_i, **kwargs)
-                outputs.append(output)
-                masks.append(att_mask)
-        else:
-            outputs, masks = self._single_encode(self.text_encoders, input_ids, mask)
-        return outputs, masks
+    def encode(self, input_ids, mask, offload_cpu=False, **kwargs):
+        """
+        Encode input sequences with encoder-wise offload in different scenarios.
+
+        Scenarios:
+        1. Single encoder + single input tensor -> (Tensor outputs, Tensor masks)
+        2. Multiple encoders + single-step inputs (List[Tensor]) -> (List[Tensor] outputs, List[Tensor] masks)
+        (Each encoder processes its corresponding input tensor)
+        3. Single/multiple encoders + multi-step inputs (List[List[Tensor]]) -> (List[List[Tensor]] outputs, List[List[Tensor]] masks)
+        (Each encoder processes its corresponding input tensor in each step)
+
+        Args:
+            input_ids (Union[Tensor, List[Tensor], List[List[Tensor]]]): Input token IDs matching scenario structures
+            mask (Union[Tensor, List[Tensor], List[List[Tensor]]]): Attention masks matching input_ids structure
+            **kwargs: Contains 'offload_cpu' (bool, optional) - only used in scenario 3
+
+        Returns:
+            Tuple[Union[Tensor, List[Tensor], List[List[Tensor]]], Union[Tensor, List[Tensor], List[List[Tensor]]]]:
+                - outputs: Encoded outputs matching input structure
+                - masks: Corresponding attention masks
+        """
+        encoders = self.text_encoders
+        is_multi_encoder = isinstance(encoders, nn.ModuleList)
+        num_encoders = len(encoders) if is_multi_encoder else 1
+
+        # Scenario 1: Single encoder + single input tensor
+        if not is_multi_encoder and isinstance(input_ids, torch.Tensor):
+            return self._single_encode(encoders, input_ids, mask, **kwargs)
+
+        # Scenario 2: Multiple encoders + single-step inputs (List[Tensor])
+        if is_multi_encoder and isinstance(input_ids, list) and not isinstance(input_ids[0], list):
+            outputs, masks = [], []
+            for encoder, inp, msk in zip(encoders, input_ids, mask):
+                out, att = self._single_encode(encoder, inp, msk, **kwargs)
+                outputs.append(out)
+                masks.append(att)
+            return outputs, masks
+
+        # Scenario 3: Multiple encoders + multi-step inputs (List[List[Tensor]])
+        num_steps = len(input_ids)
+        if not is_multi_encoder:
+            encoders = [encoders]
+
+        # Initialize outputs/masks with [num_steps][num_encoders] structure
+        outputs = [[None for _ in range(num_encoders)] for _ in range(num_steps)]
+        result_masks = [[None for _ in range(num_encoders)] for _ in range(num_steps)]
+
+        # Process each encoder sequentially (handle all steps for current encoder)
+        for encoder_idx, encoder in enumerate(encoders):
+            # Move encoder to device once before processing all steps
+            if offload_cpu:
+                encoder.to(torch_npu.npu.current_device())
+
+            # Process all steps for current encoder
+            for step in range(num_steps):
+                # Get the input/mask for this encoder in current step
+                step_input = input_ids[step][encoder_idx]
+                step_mask = mask[step][encoder_idx]
+                out, att = self._single_encode(encoder, step_input, step_mask, **kwargs)
+                outputs[step][encoder_idx] = out  # Fill [step][encoder] position
+                result_masks[step][encoder_idx] = att  # Fill masks correspondingly
+
+            # Offload encoder after processing all steps
+            if offload_cpu:
+                encoder.to(torch.device('cpu'))
+                torch_npu.npu.empty_cache()
+
+        return outputs, result_masks
 
     def _single_encode(self, text_encoder, input_ids, attention_mask, **kwargs):
         *BN, L = input_ids.shape

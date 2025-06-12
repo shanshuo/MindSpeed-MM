@@ -183,11 +183,16 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 
 需根据实际情况修改`model_opensoraplan1_2.json`和`data.json`中的权重和数据集路径，包括`from_pretrained`、`data_path`、`data_folder`字段。
 
-【interleaved特性】
++ Encoder-DP：Encoder数据并行
+  - 使用场景：在开启TP、CP时，DP较小，存在vae和text_encoder的冗余encode计算。开启以减小冗余计算，但会增加通信，需要按场景开启。
+  - 使能方式：在xxx_model.json中设置"enable_encoder_dp": true。
+  - 限制条件：暂不兼容PP、VAE-CP。支持与Encoder Interleaved Offload功能同时开启。
 
-在`model_opensoraplan1_2.json`文件中，启用`interleaved`参数可以在DIT进行forward前，批量完成`interleaved_steps`个batch的数据encode。从而在DIT的forward过程中，卸载`encoder`到cpu上，降低显存峰值。
-该特性默认关闭，适用于模型规模较大或视频序列较长的自定义训练场景，可以有效降低内存占用。
-特性启用后，由于`encoder`会根据`interleaved_steps`数值大小，随着数据的批量处理反复从CPU加载到NPU上，再从NPU上卸载，所以`interleaved_steps`的数值应足够大以避免因为模型的反复加载影响训练性能。经测试以OpenSoraPlan1.2为例，`interleaved_steps`大于10后对整体性能影响较小。
++ Encoder Interleaved Offload: Encoder 交替卸载
+  - 使用场景：在NPU内存瓶颈的训练场景中，可以一次性编码多步训练输入数据然后卸载编码器至cpu上，使得文本编码器无需常驻内存，减少内存占用。
+    故可在不增加内存消耗的前提下实现在线训练，避免手动离线提取特征。
+  - 使能方式：在xxx_model.json中，设置 encoder_offload_interval > 1. 建议设置根据实际场景设置大于10，可以极小化卸载带来的性能损耗
+  - 限制条件：启用时建议调大num_worker以达最佳性能; 支持与Encoder-DP同时开启。
 
 【单机运行】
 
