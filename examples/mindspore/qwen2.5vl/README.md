@@ -86,7 +86,7 @@ mm-convert  Qwen2_5_VLConverter hf_to_mm \
 mm-convert  Qwen2_5_VLConverter hf_to_mm \
   --cfg.mm_dir "ckpt/mm_path/Qwen2.5-VL-32B-Instruct" \
   --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2.5-VL-32B-Instruct" \
-  --cfg.parallel_config.llm_pp_layers [[4,9,9,9,9,9,9,6]] \
+  --cfg.parallel_config.llm_pp_layers [[1,9,9,9,9,9,9,9]] \
   --cfg.parallel_config.vit_pp_layers [[32,0,0,0,0,0,0,0]] \
   --cfg.parallel_config.tp_size 2
 
