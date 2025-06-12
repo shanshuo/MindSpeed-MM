@@ -1,4 +1,3 @@
-import pytest
 import transformers
 
 from mindspeed_mm import Tokenizer
