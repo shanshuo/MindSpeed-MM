@@ -12,14 +12,14 @@ export HCCL_CONNECT_TIMEOUT=1200
 export TORCH_EXTENSIONS_DIR="../cache"
 rm -rf "$TORCH_EXTENSIONS_DIR"/*
 
-GPUS_PER_NODE=8
+GPUS_PER_NODE=4
 MASTER_ADDR=localhost
 MASTER_PORT=29505
 NNODES=1
 NODE_RANK=0
 WORLD_SIZE=$(($GPUS_PER_NODE*$NNODES))
 
-TP=4
+TP=2
 PP=1
 CP=2
 MBS=2
@@ -53,7 +53,7 @@ GPT_ARGS="
     --lr-decay-style constant \
     --weight-decay 1e-2 \
     --clip-grad 1.0 \
-    --train-iters 10 \
+    --train-iters 3 \
     --no-gradient-accumulation-fusion \
     --no-load-optim \
     --no-load-rng \

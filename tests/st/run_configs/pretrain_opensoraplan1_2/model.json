@@ -5,7 +5,7 @@
         "model_id": "videodit",
         "from_pretrained": "/home/ci_resource/data/OpenSoraPlan/v1.2/weights/93x480p/videodit_statedict.pth",
         "dtype": "bf16",
-        "num_layers": 16,
+        "num_layers": 8,
         "num_heads": 24,
         "head_dim": 96,
         "in_channels": 4,
@@ -33,9 +33,9 @@
         "guidance_scale": 4.5
     },
     "text_encoder": {
-        "model_id": "MT5",
+        "model_id": "UMT5",
         "hub_backend": "hf",
-        "from_pretrained":"/home/ci_resource/data/OpenSoraPlan/v1.2/weights/google/mt5-xxl",
+        "from_pretrained":"/mnt/disk0/ci_resource/models/text_encoder_mini/umt5_mini/",
         "dtype": "bf16",
         "load_in_8bit": false,
         "low_cpu_mem_usage": true

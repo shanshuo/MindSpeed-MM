@@ -10,7 +10,7 @@ export CPU_AFFINITY_CONF=1
 export HCCL_CONNECT_TIMEOUT=1200
 export PYTORCH_NPU_ALLOC_CONF=expandable_segments:True
 
-NPUS_PER_NODE=8
+NPUS_PER_NODE=4
 MASTER_ADDR=localhost
 MASTER_PORT=29505
 NNODES=1
@@ -28,7 +28,6 @@ BASEPATH=$(cd `dirname $0`; cd ../../../; pwd)
 MM_DATA="$BASEPATH/tests/st/run_configs/pretrain_wan2.1_t2v/data.json"
 MM_MODEL="$BASEPATH/tests/st/run_configs/pretrain_wan2.1_t2v/model.json"
 MM_TOOL="$BASEPATH/mindspeed_mm/tools/tools.json"
-LOAD_PATH="/home/ci_resource/models/wan2.1/wan2.1-t2v-14B-transformer"
 layerzero_config="$BASEPATH/examples/wan2.1/zero_config.yaml"
 
 DISTRIBUTED_ARGS="
@@ -47,7 +46,6 @@ GPT_ARGS="
     --global-batch-size ${GBS} \
     --lr 5e-6 \
     --min-lr 5e-6 \
-    
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
     --adam-eps 1e-8 \
@@ -58,7 +56,6 @@ GPT_ARGS="
     --clip-grad 1.0 \
     --train-iters 3 \
     --no-gradient-accumulation-fusion \
-    --load $LOAD_PATH \
     --no-load-optim \
     --no-load-rng \
     --no-save-optim \

@@ -62,7 +62,7 @@
     "text_encoder": {
         "model_id": "T5",
         "hub_backend": "hf",
-        "from_pretrained": "/home/ci_resource/models/cogvideox1_0/text_encoder",
+        "from_pretrained": "/home/ci_resource/models/text_encoder_mini/t5_v1_1-xxl_mini/",
         "dtype": "float16",
         "low_cpu_mem_usage": true,
         "use_attention_mask": false

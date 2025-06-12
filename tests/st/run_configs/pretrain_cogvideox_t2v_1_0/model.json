@@ -9,7 +9,7 @@
         "model_id": "satdit",
         "from_pretrained": null,
         "dtype": "bf16",
-        "num_layers": 42,
+        "num_layers": 4,
         "num_heads": 48,
         "head_dim": 64,
         "in_channels": 16,
@@ -52,7 +52,7 @@
     "text_encoder": {
         "model_id": "T5",
         "hub_backend": "hf",
-        "from_pretrained": "/home/ci_resource/models/cogvideox1_0/text_encoder",
+        "from_pretrained": "/home/ci_resource/models/text_encoder_mini/t5_v1_1-xxl_mini/",
         "dtype": "bf16",
         "load_in_8bit": false,
         "low_cpu_mem_usage": true,

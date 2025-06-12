@@ -27,7 +27,7 @@
         "img_dim": 1280,
         "out_dim": 16,
         "num_heads": 40,
-        "num_layers": 40,
+        "num_layers": 8,
         "qk_norm": true,
         "qk_norm_type": "rmsnorm",
         "cross_attn_norm": true,

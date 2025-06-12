@@ -51,7 +51,7 @@ GPT_ARGS="
     --lr-warmup-init 1e-4 \
     --lr-warmup-iters 0 \
     --clip-grad 1.0 \
-    --train-iters 2 \
+    --train-iters 3 \
     --no-gradient-accumulation-fusion \
     --no-load-optim \
     --no-load-rng \

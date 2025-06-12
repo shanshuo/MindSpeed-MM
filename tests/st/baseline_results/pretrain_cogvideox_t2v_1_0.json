@@ -1,62 +1,35 @@
 {
     "loss": [
-        1.199191E+00,
-        1.959037E+00,
-        1.612408E+00
+        1.219304E+00,
+        6.915510E-01,
+        9.007375E-01
     ],
     "time": [
-        35012.0,
-        6696.1,
-        6246.3,
-        5590.0,
-        5146.7,
-        4436.6,
-        4249.3,
-        3433.4,
-        3307.5,
-        3213.8
+        47900.2,
+        1398.7,
+        1384.1
     ],
     "memo info": [
         {
             "rank": 0,
-            "allocated memory": 25620.30419921875,
-            "max allocated memory": 27991.20654296875
+            "allocated memory": 4293.5869140625,
+            "max allocated memory": 9298.53271484375
         },
         {
             "rank": 1,
-            "allocated memory": 25620.30419921875,
-            "max allocated memory": 27482.97900390625
+            "allocated memory": 4293.5869140625,
+            "max allocated memory": 9298.53271484375
         },
         {
             "rank": 2,
-            "allocated memory": 25620.30419921875,
-            "max allocated memory": 27991.20654296875
+            "allocated memory": 4293.5869140625,
+            "max allocated memory": 9298.53271484375
         },
         {
             "rank": 3,
-            "allocated memory": 25620.30419921875,
-            "max allocated memory": 27482.97900390625
-        },
-        {
-            "rank": 4,
-            "allocated memory": 25620.1240234375,
-            "max allocated memory": 27991.146484375
-        },
-        {
-            "rank": 5,
-            "allocated memory": 25620.1240234375,
-            "max allocated memory": 27482.9189453125
-        },
-        {
-            "rank": 6,
-            "allocated memory": 25620.1240234375,
-            "max allocated memory": 27991.146484375
-        },
-        {
-            "rank": 7,
-            "allocated memory": 25620.1240234375,
-            "max allocated memory": 27482.9189453125
+            "allocated memory": 4293.5869140625,
+            "max allocated memory": 9298.53271484375
         }
     ],
-    "warm_up": 8
+    "warm_up": 1
 }

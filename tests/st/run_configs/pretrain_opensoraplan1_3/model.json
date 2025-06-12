@@ -5,7 +5,7 @@
         "model_id": "videoditsparse",
         "from_pretrained": null,
         "dtype": "bf16",
-        "num_layers" : 32,
+        "num_layers": 8,
         "num_heads": 24,
         "head_dim":96,
         "in_channels":8,
@@ -35,9 +35,9 @@
         "t_sample_method": "explicit_uniform"
     },
     "text_encoder": {
-        "model_id": "MT5",
+        "model_id": "UMT5",
         "hub_backend": "hf",
-        "from_pretrained": "/home/ci_resource/data/OpenSoraPlan/v1.2/weights/google/mt5-xxl",
+        "from_pretrained": "/home/ci_resource/models/text_encoder_mini/umt5_mini/",
         "low_cpu_mem_usage": false,
         "dtype": "bf16"
     },
