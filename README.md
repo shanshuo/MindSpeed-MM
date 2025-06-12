@@ -1,4 +1,4 @@
-  <p align="center"> <img src="sources/images/logo.png" height="103px" width="700px"> </p>
+  <p align="center"> <img src="sources/images/mm_logo.png" height="103px" width="700px"> </p>
 
 <p align="center">
     <a href="https://gitee.com/ascend/MindSpeed/blob/master/LICENSE">
@@ -13,31 +13,31 @@
     </a>
 </p>
 
-MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件，同时支持多模态生成及多模态理解，旨在为华为 [昇腾芯片](https://www.hiascend.com/) 提供端到端的多模态训练解决方案, 包含预置业界主流模型，数据工程，分布式训练及加速，预训练、微调、在线推理任务等特性。
+MindSpeed MM是面向大规模分布式训练的昇腾多模态大模型套件，同时支持多模态生成及多模态理解，旨在为华为 [昇腾芯片](https://www.hiascend.com/) 提供端到端的多模态训练解决方案, 包含预置业界主流模型，数据工程，分布式训练及加速，预训练、微调、在线推理任务等特性。
 
 ---
 
 # 🔥🔥🔥Latest News
 
-* [Jun. 05, 2025]: 🚀 MindSpeed-MM支持Qwen2.5Omni-7B模型 【Prototype】
-* [Jun. 05, 2025]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.5模型 
-* [Apr. 03, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-32B模型 【Prototype】
-* [Mar. 27, 2025]: 🚀 MindSpeed-MM支持Wan2.1-1.3B/14B模型 【Prototype】
-* [Mar. 26, 2025]: 🚀 MindSpeed-MM支持Qwen2.5VL-3B/7B/72B模型 【Prototype】
-* [Feb. 20, 2025]: 🚀 MindSpeed-MM支持InternVL2.5-78B模型 【Prototype】
-* [Feb. 18, 2025]: 🚀 MindSpeed-MM支持HunyuanVideo模型
-* [Feb. 17, 2025]: 🔥 MindSpeed-MM支持Mindspeed-Core & Megatron 0.8.0版本
-* [Feb. 15, 2025]: 🚀 MindSpeed-MM支持Sana模型
-* [Jan. 24, 2025]: 🚀 MindSpeed-MM支持CogVideoX 1.5模型
-* [Dec. 30, 2024]: 🔥 MindSpeed-MM版本1.0.0发布
-* [Dec. 16, 2024]: 🚀 MindSpeed-MM支持Qihoo-T2X模型
-* [Dec. 03, 2024]: 🚀 MindSpeed-MM支持SD3.5模型
-* [Nov. 30, 2024]: 🎉 MindSpeed-MM支持多模态理解测评
-* [Nov. 22, 2024]: 🚀 MindSpeed-MM支持CogVideoX模型
-* [Nov. 06, 2024]: 🚀 MindSpeed-MM支持FLUX模型
-* [Oct. 30, 2024]: 🚀 MindSpeed-MM支持OpenSoraPlan 1.3模型
-* [Oct. 21, 2024]: 🚀 MindSpeed-MM支持InternVL2、以及Qwen2VL模型
-* [Oct. 16, 2024]: 🌱 MindSpeed-MM首版本1.0.RC3发布
+* [Jun. 05, 2025]: 🚀 MindSpeed MM支持Qwen2.5Omni-7B模型 【Prototype】
+* [Jun. 05, 2025]: 🚀 MindSpeed MM支持OpenSoraPlan 1.5模型
+* [Apr. 03, 2025]: 🚀 MindSpeed MM支持Qwen2.5VL-32B模型 【Prototype】
+* [Mar. 27, 2025]: 🚀 MindSpeed MM支持Wan2.1-1.3B/14B模型 【Prototype】
+* [Mar. 26, 2025]: 🚀 MindSpeed MM支持Qwen2.5VL-3B/7B/72B模型 【Prototype】
+* [Feb. 20, 2025]: 🚀 MindSpeed MM支持InternVL2.5-78B模型 【Prototype】
+* [Feb. 18, 2025]: 🚀 MindSpeed MM支持HunyuanVideo模型
+* [Feb. 17, 2025]: 🔥 MindSpeed MM支持Mindspeed-Core & Megatron 0.8.0版本
+* [Feb. 15, 2025]: 🚀 MindSpeed MM支持Sana模型
+* [Jan. 24, 2025]: 🚀 MindSpeed MM支持CogVideoX 1.5模型
+* [Dec. 30, 2024]: 🔥 MindSpeed MM版本1.0.0发布
+* [Dec. 16, 2024]: 🚀 MindSpeed MM支持Qihoo-T2X模型
+* [Dec. 03, 2024]: 🚀 MindSpeed MM支持SD3.5模型
+* [Nov. 30, 2024]: 🎉 MindSpeed MM支持多模态理解测评
+* [Nov. 22, 2024]: 🚀 MindSpeed MM支持CogVideoX模型
+* [Nov. 06, 2024]: 🚀 MindSpeed MM支持FLUX模型
+* [Oct. 30, 2024]: 🚀 MindSpeed MM支持OpenSoraPlan 1.3模型
+* [Oct. 21, 2024]: 🚀 MindSpeed MM支持InternVL2、以及Qwen2VL模型
+* [Oct. 16, 2024]: 🌱 MindSpeed MM首版本1.0.RC3发布
 
 > 注： **Prototype**特性未经过充分验证，可能存在不稳定和bug问题，**beta**表示非商用特性
 
@@ -59,8 +59,6 @@ MindSpeed-MM是面向大规模分布式训练的昇腾多模态大模型套件�
       </td>
   </tr>
 </table>
-
-
 
 ## 图生视频： Wan 2.1 I2V
 
@@ -187,7 +185,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
 
 <table>
   <a id="jump1"></a>
-  <caption>MindSpeed-MM模型列表</caption>
+  <caption>MindSpeed MM模型列表</caption>
   <thead>
     <tr>
       <th>模型任务</th>
@@ -677,8 +675,6 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tbody>
 </table>
 
-
-
 ---
 
 <table>
@@ -788,7 +784,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
 
 ## 昇腾Profiling采集工具
 
-MindSpeed-MM集成了昇腾profiling采集工具，以提供对模型运行情况的分析。该工具能够依照配置采集模型的算子、显存等关键信息，同时支持动静态两种采集方式，协助开发者分析模型瓶颈，并可根据实际场景需求选择使用。
+MindSpeed MM集成了昇腾profiling采集工具，以提供对模型运行情况的分析。该工具能够依照配置采集模型的算子、显存等关键信息，同时支持动静态两种采集方式，协助开发者分析模型瓶颈，并可根据实际场景需求选择使用。
 
   具体方法见 [README](./mindspeed_mm/tools/README.md) 的profiling章节
 
@@ -803,19 +799,19 @@ MindStudio Insight提供了包括Timeline视图、通信分析、计算耗时等
 
 # 版本维护
 
-MindSpeed-MM版本有以下五个维护阶段：
+MindSpeed MM版本有以下五个维护阶段：
 
 | **状态**            | **时间** | **说明**                                                               |
 | ------------------- | -------- |----------------------------------------------------------------------|
 | 计划                | 1—3 个月 | 计划特性                                                                 |
 | 开发                | 3 个月   | 开发特性                                                                 |
-| 维护                | 6-12 个月| 合入所有已解决的问题并发布版本，针对不同的MindSpeed-MM版本采取不同的维护策略，常规版本和长期支持版本维护周期分别为6个月和12个月 |
+| 维护                | 6-12 个月| 合入所有已解决的问题并发布版本，针对不同的MindSpeed MM版本采取不同的维护策略，常规版本和长期支持版本维护周期分别为6个月和12个月 |
 | 无维护              | 0—3 个月 | 合入所有已解决的问题，无专职维护人员，无版本发布                                             |
 | 生命周期终止（EOL） | N/A      | 分支不再接受任何修改                                                           |
 
-MindSpeed-MM已发布版本维护策略：
+MindSpeed MM已发布版本维护策略：
 
-| **MindSpeed-MM版本** | **维护策略** | **当前状态** | **发布时间**   | **后续状态**         | **EOL日期** |
+| **MindSpeed MM版本** | **维护策略** | **当前状态** | **发布时间**   | **后续状态**         | **EOL日期** |
 |-----------------|-----------|--------|------------|-----------------------|-----------|
 | 2.0.0             |  常规版本  | 维护   | 2025/03/30 | 预计2025/09/30起无维护  |
 | 1.0.0             |  常规版本  | 维护   | 2024/12/30 | 预计2025/06/30起无维护  |           |
@@ -833,7 +829,7 @@ MindSpeed-MM已发布版本维护策略：
 
 1. [面向大规模分布式训练的多模态套件](https://mp.weixin.qq.com/s/Qiw_qThKA72T0lLOSpjkKw)
 2. [凭借昇腾澎湃算力，Open-Sora Plan实现电影级视频生成](https://mp.weixin.qq.com/s/KY2tLthhre-SRbuWka3c2w)
-3. [MindSpeed-MM支持主流多模态理解大模型，性能实现大幅提升！](https://mp.weixin.qq.com/s/3pZRy24ITyKl3nGc33Sq7w)
+3. [MindSpeed MM支持主流多模态理解大模型，性能实现大幅提升！](https://mp.weixin.qq.com/s/3pZRy24ITyKl3nGc33Sq7w)
 4. [基于昇腾原生训练！中大和360联合打造多模态任务新范式Qihoo-T2X](https://mp.weixin.qq.com/s/zQAy_hbL9cR3c8-NO6lKnA)
 5. [基于昇腾MindSpeed MM玩转Wan2.1视频生成SOTA模型](https://mp.weixin.qq.com/s/g2ShV2F6YpoVAniw6CBN_w)
 6. [多模态理解SOTA模型开箱即用，MindSpeed MM支持Qwen2.5-VL最佳实践](https://mp.weixin.qq.com/s/ac7RUWw79stunwQIyC-ykQ)
@@ -849,25 +845,25 @@ MindSpeed-MM已发布版本维护策略：
 
 # 免责声明
 
-## 致MindSpeed-MM使用者
+## 致MindSpeed MM使用者
 
-1. MindSpeed-MM提供的模型仅供您用于非商业目的。
-2. 对于各模型，MindSpeed-MM平台仅提示性地向您建议可用于训练的数据集，华为不提供任何数据集，如您使用这些数据集进行训练，请您特别注意应遵守对应数据集的License，如您因使用数据集而产生侵权纠纷，华为不承担任何责任。
-3. 如您在使用MindSpeed-MM模型过程中，发现任何问题（包括但不限于功能问题、合规问题），请在Gitee提交issue，我们将及时审视并解决。
+1. MindSpeed MM提供的模型仅供您用于非商业目的。
+2. 对于各模型，MindSpeed MM平台仅提示性地向您建议可用于训练的数据集，华为不提供任何数据集，如您使用这些数据集进行训练，请您特别注意应遵守对应数据集的License，如您因使用数据集而产生侵权纠纷，华为不承担任何责任。
+3. 如您在使用MindSpeed MM模型过程中，发现任何问题（包括但不限于功能问题、合规问题），请在Gitee提交issue，我们将及时审视并解决。
 
 ## 致数据集所有者
 
-如果您不希望您的数据集在MindSpeed-MM中的模型被提及，或希望更新MindSpeed-MM中的模型关于您的数据集的描述，请在Gitee提交issue，我们将根据您的issue要求删除或更新您的数据集描述。衷心感谢您对MindSpeed-MM的理解和贡献。
+如果您不希望您的数据集在MindSpeed MM中的模型被提及，或希望更新MindSpeed MM中的模型关于您的数据集的描述，请在Gitee提交issue，我们将根据您的issue要求删除或更新您的数据集描述。衷心感谢您对MindSpeed MM的理解和贡献。
 
 ## License声明
 
-Ascend MindSpeed-MM提供的模型，如模型目录下存在License的，以该License为准。如模型目录下不存在License的，以Apache 2.0许可证许可，对应许可证文本可查阅Ascend MindSpeed-MM根目录。
+Ascend MindSpeed MM提供的模型，如模型目录下存在License的，以该License为准。如模型目录下不存在License的，以Apache 2.0许可证许可，对应许可证文本可查阅Ascend MindSpeed MM根目录。
 
 ---
 
 # 致谢
 
-MindSpeed-MM 由华为公司的下列部门及昇腾生态合作伙伴联合贡献：
+MindSpeed MM 由华为公司的下列部门及昇腾生态合作伙伴联合贡献：
 
 华为公司：
 
@@ -882,6 +878,6 @@ MindSpeed-MM 由华为公司的下列部门及昇腾生态合作伙伴联合贡�
 * 北大OpenSoraPlan团队
 * 微信技术架构部基础架构中心
 
-感谢来自社区的每一个PR，欢迎贡献 MindSpeed-MM
+感谢来自社区的每一个PR，欢迎贡献 MindSpeed MM
 
 ---

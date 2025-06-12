@@ -1,14 +1,17 @@
 # 安装指南
+
 ## 版本配套表
+
 MindSpeed MM支持Atlas 800T A2等昇腾训练硬件形态。软件版本配套表如下：
+
 |MindSpeed MM版本 | MindSpeed版本             | Megatron版本      | PyTorch版本   | torch_npu版本 | CANN版本  | Python版本                               |
 |--------------|-------------------------|-----------------|------------- |-------------|---------|----------------------------------------|
 |master（主线） | 2.0.0_core_r0.8.0           | Core 0.8.0      |   2.1.0 | 在研版本        | 在研版本    | Python3.8, Python3.10|
 |2.0.0（商用） | 2.0.0_core_r0.8.0         | Core 0.8.0      |   2.1.0     | 7.0.0       | 8.1.RC1    | Python3.8, Python3.10|
 |1.0.0（商用） | 1.0.0_core_r0.6.0         | Core 0.6.0      |   2.1.0     | 6.0.0       | 8.0.0    | Python3.8, Python3.10 |
 
-
 ## 昇腾软件安装
+
 ### 1. 模型开发时推荐使用配套的环境版本
 
 <table border="0">
@@ -63,8 +66,11 @@ bash Ascend-hdk-*-npu-driver_*.run --full --force
 # 因为版本迭代，包名存在出入，根据实际修改
 bash Ascend-cann-toolkit_8.1.RC1_linux-aarch64.run --install
 bash Ascend-cann-kernels-*_8.1.RC1_linux-aarch64.run --install
+source /usr/local/Ascend/ascend-toolkit/set_env.sh # 安装nnal包需要source环境变量
+bash Ascend-cann-nnal_8.1.RC1_linux-aarch64.run --install
 # 设置环境变量
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
+source /usr/local/Ascend/nnal/atb/set_env.sh
 ```
 
 ### 4. PTA安装
