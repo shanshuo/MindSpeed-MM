@@ -151,6 +151,7 @@ class SoRAModel(nn.Module):
                             latents, i2v_results = self.ae.encode(video, **kwargs)
                         else:
                             raise NotImplementedError(f"Task {self.task} is not Implemented!")
+                    kwargs.update({"shape": latents.shape})
 
             # Gather the results after encoding of ae and text_encoder
             if self.enable_encoder_dp or self.interleaved_steps > 1:
