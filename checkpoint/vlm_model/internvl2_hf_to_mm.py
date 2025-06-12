@@ -6,12 +6,11 @@
 @Desc    : internvl2 huggingface模型转换成mindspeed-mm模型
 """
 import os
-from copy import deepcopy
 import stat
 
 import torch
 
-from checkpoint.utils import ConvertVppMMConfig, load_from_hf
+from checkpoint.vlm_model.utils import ConvertVppMMConfig, load_from_hf
 
 
 def merge_pp_index(vit_pipeline_num_layers, llm_pipeline_num_layers):

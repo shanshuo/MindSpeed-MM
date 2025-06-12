@@ -9,7 +9,7 @@ from typing import Any, Dict, List
 import mindspeed.megatron_adaptor  # noqa
 import torch
 from safetensors.torch import load_file as safe_load
-from checkpoint.utils import copy_files_except_suffix, load_from_hf, save_by_index_json
+from checkpoint.vlm_model.utils import copy_files_except_suffix, load_from_hf, save_by_index_json
 
 DIT_CONVERSION_MAPPING = {
     "condition_embedder.text_embedder.linear_1.bias": "text_embedding.linear_1.bias",

@@ -362,7 +362,7 @@ bash examples/hunyuanvideo/i2v/pretrain_hunyuanvideo_lora.sh
 训练完成后保存的权重仅为lora微调部分，如果需要合并到原始权重中，可以执行以下脚本完成合并（配置仅供参考）：
 
 ```bash
-python  checkpoint/merge_base_lora_weight.py --base_save_dir './converted_transformer' --lora_save_dir './my_ckpt' --merge_save_dir './merge_base_lora_target' --lora-target-modules linear fc1 fc2 img_attn_qkv img_attn_proj txt_attn_qkv txt_attn_proj linear1_qkv linear1_mlp linear2 proj_out --lora-alpha 64 --lora-r 64 --pp_size 1 --tp_size 1
+python  checkpoint/common/merge_base_lora_weight.py --base_save_dir './converted_transformer' --lora_save_dir './my_ckpt' --merge_save_dir './merge_base_lora_target' --lora-target-modules linear fc1 fc2 img_attn_qkv img_attn_proj txt_attn_qkv txt_attn_proj linear1_qkv linear1_mlp linear2 proj_out --lora-alpha 64 --lora-r 64 --pp_size 1 --tp_size 1
 ```
 
 ## 推理

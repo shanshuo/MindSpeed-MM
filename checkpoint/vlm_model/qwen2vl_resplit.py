@@ -7,8 +7,8 @@
 """
 from tqdm import tqdm
 
-from checkpoint.qwen2vl_mm_to_hf import merge_by_tp
-from checkpoint.utils import (ConvertResplitConfig, merge_pp_index, split_model_by_pipeline, save_by_pp, load_from_mm,
+from checkpoint.vlm_model.qwen2vl_mm_to_hf import merge_by_tp
+from checkpoint.vlm_model.utils import (ConvertResplitConfig, merge_pp_index, split_model_by_pipeline, save_by_pp, load_from_mm,
                               split_by_tp)
 
 

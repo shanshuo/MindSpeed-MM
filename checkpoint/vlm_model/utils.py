@@ -9,12 +9,13 @@ import json
 import os
 import re
 import shutil
+
 from copy import deepcopy
 from dataclasses import dataclass
 from functools import cached_property
 from itertools import accumulate
 from pathlib import Path
-from typing import Optional, List, Any, Tuple
+from typing import Dict, Optional, List, Any, Tuple, Union
 
 import numpy as np
 import torch
@@ -23,20 +24,20 @@ from safetensors.torch import save_file, load_file
 from tqdm import tqdm
 from transformers import PretrainedConfig, AutoConfig
 
-from checkpoint.operator import Operator, TieOp, STATE_DICT_T, TP_PATTERN_T
+from checkpoint.vlm_model.operator import Operator, TieOp, STATE_DICT_T, TP_PATTERN_T
 
 LATEST_TXT = "latest_checkpointed_iteration.txt"
-PP_LAYER_NUM_T = list[int]
-VPP_LAYER_NUM_T = list[PP_LAYER_NUM_T]
+PP_LAYER_NUM_T = List[int]
+VPP_LAYER_NUM_T = List[PP_LAYER_NUM_T]
 
 
 class ParallelConfig(BaseModel):
     """权模型切分配置，包括tp的size，以及pp切分时vit和llm在pp域每张卡上切分的层数"""
 
-    llm_pp_layers: list[NonNegativeInt]
+    llm_pp_layers: List[NonNegativeInt]
     """llm模块pipeline parallel切分每张卡上切分几层"""
 
-    vit_pp_layers: list[NonNegativeInt]
+    vit_pp_layers: List[NonNegativeInt]
     """vit模块pipeline parallel切分每张卡上切分几层"""
 
     tp_size: PositiveInt = 1
@@ -64,13 +65,13 @@ class ParallelConfig(BaseModel):
 class VppParallelConfig(BaseModel):
     """权模型切分配置，包括tp的size，以及pp切分时vit和llm在pp域每张卡上切分的层数"""
 
-    llm_pp_layers: list[list[NonNegativeInt]]
+    llm_pp_layers: List[List[NonNegativeInt]]
     """llm模块pipeline parallel切分每张卡上切分几层, vpp切分配置参考docs/features/virtual_pipeline_parallel.md"""
 
-    vit_pp_layers: list[list[NonNegativeInt]]
+    vit_pp_layers: List[List[NonNegativeInt]]
     """vit模块pipeline parallel切分每张卡上切分几层, vpp切分配置参考docs/features/virtual_pipeline_parallel.md"""
 
-    audio_pp_layers: Optional[list[list[NonNegativeInt]]] = None
+    audio_pp_layers: Optional[List[List[NonNegativeInt]]] = None
     """audio模块pipeline parallel切分每张卡上切分几层, vpp切分配置参考docs/features/virtual_pipeline_parallel.md"""
 
     tp_size: PositiveInt = 1
@@ -330,7 +331,7 @@ def save_by_index_json(_state_dicts, _save_dir):
         save_file(state_dict, Path(_save_dir).joinpath(name), metadata=metadata)
 
 
-def split_by_index_json(state_dict: STATE_DICT_T, hf_dir: Path) -> list[STATE_DICT_T]:
+def split_by_index_json(state_dict: STATE_DICT_T, hf_dir: Path) -> List[STATE_DICT_T]:
     index_json_path = hf_dir.joinpath('model.safetensors.index.json')
     if not os.path.exists(index_json_path):
         raise ValueError(f"safetensors.index.json not in {index_json_path}")
@@ -365,7 +366,7 @@ def load_from_hf(hf_dir: Path) -> STATE_DICT_T:
     return state_dict
 
 
-def merge_pp_index(vit_pipeline_num_layers: list[int], llm_pipeline_num_layers: list[int]) -> list[tuple[int, int]]:
+def merge_pp_index(vit_pipeline_num_layers: List[int], llm_pipeline_num_layers: List[int]) -> List[Tuple[int, int]]:
     """返回每张卡上vit和llm各自的层数"""
     split_method = []
     for vit_num, llm_num in zip(vit_pipeline_num_layers, llm_pipeline_num_layers):
@@ -381,8 +382,8 @@ class PPRange:
     Pp_first_rank. Defines the global pp_rank corresponding to the first layer of the transformer
     Pp_1ast_rank. Defines the global pp_rank corresponding to the last layer of the transformer
     """
-    start: list[int]
-    end: list[int]
+    start: List[int]
+    end: List[int]
     first_layer_rank: int
     last_layer_rank: int
 
@@ -403,7 +404,7 @@ class PPStageSchema:
 
 def merge_vpp_index(vit_pipeline_num_layers: VPP_LAYER_NUM_T,
                     llm_pipeline_num_layers: VPP_LAYER_NUM_T,
-                    audio_pipeline_num_layers: VPP_LAYER_NUM_T) -> list[PPRange]:
+                    audio_pipeline_num_layers: VPP_LAYER_NUM_T) -> List[PPRange]:
 
     modalities_pp_range = []
     for modality in [vit_pipeline_num_layers, llm_pipeline_num_layers, audio_pipeline_num_layers]:
@@ -421,7 +422,7 @@ def merge_vpp_index(vit_pipeline_num_layers: VPP_LAYER_NUM_T,
     return modalities_pp_range
 
 
-def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, ...]]) -> list[STATE_DICT_T]:
+def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: List[Tuple[int, ...]]) -> List[STATE_DICT_T]:
     if len(pp_split) <= 1:
         return [state_dict]
 
@@ -529,7 +530,7 @@ def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, 
 
 def partition_state_dict_by_pp(state_dict: STATE_DICT_T,
                                pp_ranges: List[PPRange],
-                               stages: List[PPStageSchema]) -> list[STATE_DICT_T]:
+                               stages: List[PPStageSchema]) -> List[STATE_DICT_T]:
     """For transformer structures of different modalities, use a universal PP splitting logic to split the
     model parameter state-dict into different PP ranks and reset the corresponding layer numbers
     """
@@ -561,9 +562,9 @@ def partition_state_dict_by_pp(state_dict: STATE_DICT_T,
     return pp_weights
 
 
-def save_by_pp(state_dicts: list[dict[str, torch.Tensor]],
+def save_by_pp(state_dicts: List[Dict[str, torch.Tensor]],
                save_root_dir: Path,
-               iteration: str | int = 'release',
+               iteration: Optional[Union[str, int]] = 'release',
                tp_rank: int = 0):
     for pp_rank, state_dict in enumerate(tqdm(state_dicts, desc="pp step")):
         name_parts = ["mp", "rank", f"{tp_rank:02d}"]
@@ -576,10 +577,10 @@ def save_by_pp(state_dicts: list[dict[str, torch.Tensor]],
     save_root_dir.joinpath(LATEST_TXT).write_text(str(iteration))
 
 
-def save_by_vpp(state_dicts: list[dict[str, torch.Tensor]],
+def save_by_vpp(state_dicts: List[Dict[str, torch.Tensor]],
                 save_root_dir: Path,
-                iteration: str | int = 'release',
-                pp_and_vpp_size: tuple[int, int] = (1, 1),
+                iteration: Optional[Union[str, int]] = 'release',
+                pp_and_vpp_size: Tuple[int, int] = (1, 1),
                 ep_size: int = 1,
                 tp_rank: int = 0,
                 ep_rank: int = 0):
@@ -607,8 +608,8 @@ def save_by_vpp(state_dicts: list[dict[str, torch.Tensor]],
 
 
 def rename_pp_parameter(param_name: str,
-                        vit_pp_list: list[int],
-                        llm_pp_list: list[int],
+                        vit_pp_list: List[int],
+                        llm_pp_list: List[int],
                         pp_index: int = 0) -> str:
     index = pp_index
     llm_pp_list = [sum(llm_pp_list[:i + 1]) for i in range(len(llm_pp_list))]
@@ -628,7 +629,7 @@ def rename_pp_parameter(param_name: str,
     return param_name
 
 
-def load_from_mm(load_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int], tp_size: int = 1) -> list[dict]:
+def load_from_mm(load_dir: Path, vit_pp_list: List[int], llm_pp_list: List[int], tp_size: int = 1) -> List[dict]:
     save_iteration = load_dir.joinpath(LATEST_TXT).read_text()
     save_dir = load_dir.joinpath(f"iter_{int(save_iteration):07}" if save_iteration != "release" else save_iteration)
     state_dicts = []
@@ -650,7 +651,7 @@ def load_from_mm(load_dir: Path, vit_pp_list: list[int], llm_pp_list: list[int],
     return state_dicts
 
 
-def split_by_tp(state_dict: STATE_DICT_T, patterns: TP_PATTERN_T, tp_size: int = 1) -> list[STATE_DICT_T]:
+def split_by_tp(state_dict: STATE_DICT_T, patterns: TP_PATTERN_T, tp_size: int = 1) -> List[STATE_DICT_T]:
     if tp_size == 1:
         return [state_dict]
     return_dicts = []
@@ -666,7 +667,7 @@ def split_by_tp(state_dict: STATE_DICT_T, patterns: TP_PATTERN_T, tp_size: int =
     return return_dicts
 
 
-def split_by_ep(_state_dict: STATE_DICT_T, _ep_size: int = 1, _num_experts: int = 0) -> list[dict[str, torch.Tensor]]:
+def split_by_ep(_state_dict: STATE_DICT_T, _ep_size: int = 1, _num_experts: int = 0) -> List[Dict[str, torch.Tensor]]:
     if _ep_size == 1 or _num_experts == 0:
         return [_state_dict]
 
@@ -691,7 +692,7 @@ def split_by_ep(_state_dict: STATE_DICT_T, _ep_size: int = 1, _num_experts: int 
     return ep_state_dicts
 
 
-def convert_hf_to_mm(state_dict: STATE_DICT_T, ops: list[Operator], is_tie: bool, is_pp: bool) -> STATE_DICT_T:
+def convert_hf_to_mm(state_dict: STATE_DICT_T, ops: List[Operator], is_tie: bool, is_pp: bool) -> STATE_DICT_T:
     if is_tie and is_pp:
         # pp1时，output_layer从word_embedding处获取共享权重。pp>1时，流水线后面的卡无法获得word_embedding，因此需要加上该权重
         ops.append(TieOp(raw_name='text_decoder.embedding.word_embeddings.weight',

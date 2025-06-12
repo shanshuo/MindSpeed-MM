@@ -8,13 +8,13 @@
 """
 from copy import deepcopy
 from pathlib import Path
-from typing import cast
+from typing import cast, Optional, Union, List, Dict, Tuple
 
 import torch
 from tqdm import tqdm
 
-from checkpoint.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_by_ep, split_by_tp
-from checkpoint.operator import deepseekvl_tp_patterns, STATE_DICT_T
+from checkpoint.vlm_model.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_by_ep, split_by_tp
+from checkpoint.vlm_model.operator import deepseekvl_tp_patterns, STATE_DICT_T
 
 LATEST_TXT = "latest_checkpointed_iteration.txt"
 
@@ -44,9 +44,9 @@ def merge_llm_state_dict(vl_state_dict, llm_state_dict):
     return merged_state_dict
 
 
-def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
+def convert_hf_to_mm(_state_dict: Dict[str, torch.Tensor],
                      _num_layers: int,
-                     _num_experts: int) -> dict[str, torch.Tensor]:
+                     _num_experts: int) -> Dict[str, torch.Tensor]:
     new_params = {}
     for key, value in tqdm(_state_dict.items(), desc="convert weights"):
         new_key = None
@@ -154,9 +154,9 @@ def convert_hf_to_mm(_state_dict: dict[str, torch.Tensor],
     return new_params
 
 
-def save_by_rank(state_dicts: list[dict[str, torch.Tensor]],
+def save_by_rank(state_dicts: List[Dict[str, torch.Tensor]],
                save_root_dir: Path,
-               iteration: str | int = 'release',
+               iteration: Optional[Union[str, int]] = 'release',
                ep_size: int = 1,
                tp_rank: int = 0,
                ep_rank: int = 1):
@@ -174,7 +174,7 @@ def save_by_rank(state_dicts: list[dict[str, torch.Tensor]],
     save_root_dir.joinpath(LATEST_TXT).write_text(str(iteration))
 
 
-def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: list[tuple[int, int]]) -> list[STATE_DICT_T]:
+def split_model_by_pipeline(state_dict: STATE_DICT_T, pp_split: List[Tuple[int, int]]) -> List[STATE_DICT_T]:
     if len(pp_split) <= 1:
         return [state_dict]
 

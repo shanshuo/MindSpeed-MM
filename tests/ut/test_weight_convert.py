@@ -3,7 +3,7 @@ from typing import Dict, List
 import pytest
 import torch
 
-from checkpoint.operator import (
+from checkpoint.vlm_model.operator import (
     interleaved_qkv_to_concated,
     concated_qkv_to_interleaved,
     merge_to_interleaved_qkv,

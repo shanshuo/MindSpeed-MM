@@ -39,13 +39,13 @@ Qwen2-VL-7B-Instruct/
         └── model_optim_rng.pt
 
 """
-from typing import Callable, Any, cast, List
+from typing import Callable, Any, cast, List, Dict
 
 from tqdm import tqdm
 
-from checkpoint.operator import create_qwen2vl_ops, create_qwen2_5_vl_ops, create_qwen2_5_omni_ops, create_qwen3_vl_ops, \
+from checkpoint.vlm_model.operator import create_qwen2vl_ops, create_qwen2_5_vl_ops, create_qwen2_5_omni_ops, create_qwen3_vl_ops, \
     qwen2vl_tp_patterns, qwen2_5_vl_tp_patterns, qwen3_vl_tp_patterns, Operator
-from checkpoint.utils import ConvertVppMMConfig, filter_vit_keys, load_from_hf, merge_vpp_index, split_by_ep, \
+from checkpoint.vlm_model.utils import ConvertVppMMConfig, filter_vit_keys, load_from_hf, merge_vpp_index, split_by_ep, \
     save_by_vpp, split_by_tp, convert_hf_to_mm, merge_llm_weights_to_state_dict, PPStageSchema, \
     partition_state_dict_by_pp
 
@@ -66,8 +66,8 @@ audio_schema = PPStageSchema(
 )
 
 
-def convert(convert_config: ConvertVppMMConfig, config: Any, ops: list[Operator],
-            tp_patterns: dict[str, Callable],
+def convert(convert_config: ConvertVppMMConfig, config: Any, ops: List[Operator],
+            tp_patterns: Dict[str, Callable],
             stages: List[PPStageSchema]):
     parallel_config = convert_config.parallel_config
     llm_config = convert_config.llm_hf_config

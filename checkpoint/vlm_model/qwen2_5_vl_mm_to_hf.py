@@ -6,14 +6,14 @@
 @Desc    : qwen2.5vl mindspeed-mm模型转换成huggingface模型
 """
 from pathlib import Path
-from typing import cast
+from typing import cast, List, Dict
 
 import torch
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 # 注意mindspeed-mm训练后保存的checkpoint中存储了patch相关信息，在load时需要加下面这行以支持反序列化
 import mindspeed.megatron_adaptor  # noqa
 
-from checkpoint.utils import LATEST_TXT, ConvertHFConfig, copy_files_except_suffix, save_by_index_json, \
+from checkpoint.vlm_model.utils import LATEST_TXT, ConvertHFConfig, copy_files_except_suffix, save_by_index_json, \
     split_by_index_json, load_from_mm
 
 
@@ -33,7 +33,7 @@ def qkv_regroup(value, num_heads, q_size, k_size, v_size):
     return q_res, k_res, v_res
 
 
-def merge_by_tp(_state_dicts: list[dict[str, torch.Tensor]], _tp_size: int) -> dict:
+def merge_by_tp(_state_dicts: List[Dict[str, torch.Tensor]], _tp_size: int) -> dict:
     if len(_state_dicts) == 0:
         raise AssertionError(f'_state_dicts is empty.')
     if len(_state_dicts) == 1:
@@ -57,7 +57,7 @@ def merge_by_tp(_state_dicts: list[dict[str, torch.Tensor]], _tp_size: int) -> d
     return return_state_dict
 
 
-def convert_mm_to_hf(_state_dict: dict[str, torch.Tensor], cfg: Qwen2_5_VLConfig) -> dict:
+def convert_mm_to_hf(_state_dict: Dict[str, torch.Tensor], cfg: Qwen2_5_VLConfig) -> dict:
     vit_head_hidden_size = cfg.vision_config.hidden_size // cfg.vision_config.num_heads
     llm_head_hidden_size = cfg.hidden_size // cfg.num_attention_heads
     q_size = llm_head_hidden_size * cfg.num_attention_heads // cfg.num_key_value_heads
@@ -109,8 +109,7 @@ def convert_mm_to_hf(_state_dict: dict[str, torch.Tensor], cfg: Qwen2_5_VLConfig
                 q = f'model.layers.{layer}.self_attn.q_proj.{name}'
                 k = f'model.layers.{layer}.self_attn.k_proj.{name}'
                 v = f'model.layers.{layer}.self_attn.v_proj.{name}'
-                new_params[q], new_params[k], new_params[v] = qkv_regroup(value, cfg.num_key_value_heads, q_size,
-                                                                          k_size, v_size)
+                new_params[q], new_params[k], new_params[v] = qkv_regroup(value, cfg.num_key_value_heads, q_size, k_size, v_size)
 
             elif 'mlp.linear_fc1.weight' in key:
                 gate_up_chunks = torch.chunk(value, 2, dim=0)

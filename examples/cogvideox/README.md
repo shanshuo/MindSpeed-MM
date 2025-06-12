@@ -6,6 +6,7 @@
 ## 目录
 - [CogVideoX 使用指南](#cogvideox-使用指南)
   - [目录](#目录)
+  - [- 环境变量声明](#--环境变量声明)
   - [支持任务列表](#支持任务列表)
   - [环境安装](#环境安装)
       - [仓库拉取](#仓库拉取)
@@ -494,7 +495,7 @@ bash examples/cogvideox/i2v_1.5/finetune_cogvideox_lora_i2v_1.5.sh
 训练完成后保存的权重仅为lora微调部分，如果需要合并到原始权重中，可以执行以下脚本完成合并（配置仅供参考）：
 
 ```bash
-python  checkpoint/merge_base_lora_weight.py --base_save_dir './converted_transformer' --lora_save_dir './my_ckpt' --merge_save_dir './merge_base_lora_target' --lora_target_modules proj_qkv proj_out --lora_alpha 64 --lora_r 128 --pp_size 1 --tp_size 1
+python  checkpoint/common/merge_base_lora_weight.py --base_save_dir './converted_transformer' --lora_save_dir './my_ckpt' --merge_save_dir './merge_base_lora_target' --lora_target_modules proj_qkv proj_out --lora_alpha 64 --lora_r 128 --pp_size 1 --tp_size 1
 ```
 
 ---

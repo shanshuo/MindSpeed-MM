@@ -5,18 +5,18 @@
 @Time    : 2025/01/14
 @Desc    : qwen2vl mindspeed-mm模型转换成huggingface模型
 """
-from typing import cast
+from typing import cast, List, Dict
 
 import torch
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 # 注意mindspeed-mm训练后保存的checkpoint中存储了patch相关信息，在load时需要加下面这行以支持反序列化
 import mindspeed.megatron_adaptor # noqa
 
-from checkpoint.utils import ConvertHFConfig, copy_files_except_suffix, save_by_index_json, \
+from checkpoint.vlm_model.utils import ConvertHFConfig, copy_files_except_suffix, save_by_index_json, \
     split_by_index_json, load_from_mm
 
 
-def merge_by_tp(_state_dicts: list[dict[str, torch.Tensor]], _tp_size: int) -> dict:
+def merge_by_tp(_state_dicts: List[Dict[str, torch.Tensor]], _tp_size: int) -> dict:
     if len(_state_dicts) == 0:
         raise AssertionError(f'_state_dicts is empty.')
     if len(_state_dicts) == 1:
@@ -44,7 +44,7 @@ def merge_by_tp(_state_dicts: list[dict[str, torch.Tensor]], _tp_size: int) -> d
     return return_state_dict
 
 
-def convert_mm_to_hf(_state_dict: dict[str, torch.Tensor], cfg: Qwen2VLConfig) -> dict:
+def convert_mm_to_hf(_state_dict: Dict[str, torch.Tensor], cfg: Qwen2VLConfig) -> dict:
     vit_head_hidden_size = cfg.vision_config.embed_dim // cfg.vision_config.num_heads
     llm_head_hidden_size = cfg.hidden_size // cfg.num_attention_heads
     q_size = llm_head_hidden_size * cfg.num_attention_heads // cfg.num_key_value_heads
