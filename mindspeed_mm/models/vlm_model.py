@@ -60,9 +60,7 @@ class VLMModel(MultiModalModule):
         self.text_decoder = None
 
         self.share_embeddings_and_output_weights = not getattr(config.text_decoder, 'untie_embeddings_and_output_weights', True)
-        self.position_embedding_type = config.text_decoder.position_embedding_type
         self.img_context_token_id = config.img_context_token_id
-        self.vocab_size = config.text_decoder.vocab_size
         
 
         # initialize pipeline parallel configs
@@ -80,6 +78,8 @@ class VLMModel(MultiModalModule):
         if self.add_video_encoder:
             raise NotImplementedError("Not support video_encoder now")
         if self.add_text_decoder:
+            self.position_embedding_type = config.text_decoder.position_embedding_type
+            self.vocab_size = config.text_decoder.vocab_size
             self.text_decoder = self._build_text_decoder_model(config.text_decoder)
         if self.add_audio_encoder:
             self.audio_encoder = self._build_audio_encoder_model(config.audio_encoder)

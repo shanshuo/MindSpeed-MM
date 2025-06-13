@@ -23,8 +23,11 @@ if hasattr(mindspeed_args, "ai_framework") and mindspeed_args.ai_framework == "m
     import mindspeed_mm.mindspore.mindspore_adaptor 
 
 
-def model_provider(pre_process=True, post_process=True):
+def model_provider(pre_process=True, post_process=True, modules=None):
     """Builds the model."""
+    if modules is None:
+        modules = ['image_encoder', 'audio_encoder', 'text_decoder']
+
     args = get_args()
     print_rank_0("building VLMModel ...")
     vlm_config = deepcopy(args.mm.model)
@@ -33,22 +36,60 @@ def model_provider(pre_process=True, post_process=True):
     vlm_config.pre_process = pre_process
     vlm_config.post_process = post_process
 
-    if vlm_config.image_encoder:
-        vlm_config.image_encoder.vision_encoder = get_model_config(vlm_config.image_encoder.vision_encoder)
-        vlm_config.image_encoder.vision_projector = get_model_config(vlm_config.image_encoder.vision_projector)
-        vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
-        if hasattr(vlm_config, "audio_encoder"):
-            vlm_config.audio_encoder.audio_encoder = get_model_config(vlm_config.audio_encoder.audio_encoder)
-        model = VLMModel(vlm_config)
-        model.freeze(freeze_image_encoder=getattr(vlm_config.image_encoder.vision_encoder, 'freeze', True),
-                     freeze_image_projection=getattr(vlm_config.image_encoder.vision_projector, 'freeze', False),
-                     freeze_audio_encoder=hasattr(vlm_config, "audio_encoder") and getattr(
-                         vlm_config.audio_encoder.audio_encoder, 'freeze', True))
-    else:
-        vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
-        model = VLMModel(vlm_config)
+    _configure_modules(vlm_config, modules)
+
+    model = VLMModel(vlm_config)
+
+    _apply_freezing(model, vlm_config)
 
     return model
+
+
+def _configure_modules(vlm_config, modules):
+    """Configure each module based on the modules list."""
+    module_configs = {
+        'image_encoder': _configure_image_encoder,
+        'audio_encoder': _configure_audio_encoder,
+        'text_decoder': _configure_text_decoder
+    }
+
+    for module_name, config_func in module_configs.items():
+        if module_name in modules and hasattr(vlm_config, module_name):
+            config_func(vlm_config)
+        else:
+            setattr(vlm_config, module_name, None)
+
+
+def _configure_image_encoder(vlm_config):
+    """Configure image encoder module."""
+    vlm_config.image_encoder.vision_encoder = get_model_config(vlm_config.image_encoder.vision_encoder)
+    vlm_config.image_encoder.vision_projector = get_model_config(vlm_config.image_encoder.vision_projector)
+
+
+def _configure_audio_encoder(vlm_config):
+    """Configure audio encoder module."""
+    vlm_config.audio_encoder.audio_encoder = get_model_config(vlm_config.audio_encoder.audio_encoder)
+
+
+def _configure_text_decoder(vlm_config):
+    """Configure text decoder module."""
+    vlm_config.text_decoder = get_model_config(vlm_config.text_decoder)
+
+
+def _apply_freezing(model, vlm_config):
+    """Apply freezing settings to the model."""
+    has_image = hasattr(vlm_config, 'image_encoder') and vlm_config.image_encoder is not None
+    freeze_image_encoder = has_image and getattr(vlm_config.image_encoder.vision_encoder, 'freeze', True)
+    freeze_image_projection = has_image and getattr(vlm_config.image_encoder.vision_projector, 'freeze', False)
+
+    has_audio = hasattr(vlm_config, 'audio_encoder') and vlm_config.audio_encoder is not None
+    freeze_audio_encoder = has_audio and getattr(vlm_config.audio_encoder.audio_encoder, 'freeze', True)
+
+    model.freeze(
+        freeze_image_encoder=freeze_image_encoder,
+        freeze_image_projection=freeze_image_projection,
+        freeze_audio_encoder=freeze_audio_encoder
+    )
 
 
 def move_to_device(batch: Dict[str, Any], float_dtype: str):
