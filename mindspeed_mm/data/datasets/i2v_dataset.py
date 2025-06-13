@@ -21,13 +21,6 @@ from mindspeed_mm.data.data_utils.data_transform import (
     add_aesthetic_notice_video,
 )
 from mindspeed_mm.data.data_utils.transform_pipeline import get_transforms
-from mindspeed_mm.data.data_utils.utils import (
-    VID_EXTENSIONS,
-    DataSetProg,
-    ImageProcesser,
-    TextProcesser,
-    VideoProcesser,
-)
 from mindspeed_mm.data.datasets.t2v_dataset import T2VDataset
 from mindspeed_mm.utils.mask_utils import STR_TO_TYPE, MaskProcessor
 
@@ -70,6 +63,34 @@ class I2VDataset(T2VDataset):
         max_clear_ratio: float = 1.0,
         **kwargs,
     ):
+
+        if vid_img_process.get("num_frames") != 1:
+            self.mask_type_ratio_dict_video = mask_type_ratio_dict_video if mask_type_ratio_dict_video is not None else {
+                'i2v': 1.0}
+            self.mask_type_ratio_dict_video = {STR_TO_TYPE[k]: v for k, v in self.mask_type_ratio_dict_video.items()}
+            self.mask_type_ratio_dict_video = type_ratio_normalize(self.mask_type_ratio_dict_video)
+
+        self.mask_type_ratio_dict_image = mask_type_ratio_dict_image if mask_type_ratio_dict_image is not None else {
+            'clear': 1.0}
+        self.mask_type_ratio_dict_image = {STR_TO_TYPE[k]: v for k, v in self.mask_type_ratio_dict_image.items()}
+        self.mask_type_ratio_dict_image = type_ratio_normalize(self.mask_type_ratio_dict_image)
+
+        self.mask_processor = MaskProcessor(
+            max_height=vid_img_process.get("max_height"),
+            max_width=vid_img_process.get("max_width"),
+            min_clear_ratio=min_clear_ratio,
+            max_clear_ratio=max_clear_ratio,
+        )
+
+        self.train_pipeline_after_resize = vid_img_process.pop("train_pipeline_after_resize", None)
+        self.video_transforms_after_resize = get_transforms(is_video=True, train_pipeline=self.train_pipeline_after_resize)
+        self.image_transforms_after_resize = get_transforms(
+            is_video=False, train_pipeline=self.train_pipeline_after_resize
+        )
+
+        self.default_text_ratio = default_text_ratio
+
+        # t2v dataset config
         super().__init__(
             basic_param=basic_param,
             vid_img_process=vid_img_process,
@@ -83,32 +104,6 @@ class I2VDataset(T2VDataset):
             use_img_from_vid=use_img_from_vid,
             **kwargs,
         )
-
-        if self.num_frames != 1:
-            self.mask_type_ratio_dict_video = mask_type_ratio_dict_video if mask_type_ratio_dict_video is not None else {
-                'i2v': 1.0}
-            self.mask_type_ratio_dict_video = {STR_TO_TYPE[k]: v for k, v in self.mask_type_ratio_dict_video.items()}
-            self.mask_type_ratio_dict_video = type_ratio_normalize(self.mask_type_ratio_dict_video)
-
-        self.mask_type_ratio_dict_image = mask_type_ratio_dict_image if mask_type_ratio_dict_image is not None else {
-            'clear': 1.0}
-        self.mask_type_ratio_dict_image = {STR_TO_TYPE[k]: v for k, v in self.mask_type_ratio_dict_image.items()}
-        self.mask_type_ratio_dict_image = type_ratio_normalize(self.mask_type_ratio_dict_image)
-
-        self.mask_processor = MaskProcessor(
-            max_height=self.max_height,
-            max_width=self.max_width,
-            min_clear_ratio=min_clear_ratio,
-            max_clear_ratio=max_clear_ratio,
-        )
-
-        self.train_pipeline_after_resize = vid_img_process.get("train_pipeline_after_resize", None)
-        self.video_transforms_after_resize = get_transforms(is_video=True, train_pipeline=self.train_pipeline_after_resize)
-        self.image_transforms_after_resize = get_transforms(
-            is_video=False, train_pipeline=self.train_pipeline_after_resize
-        )
-
-        self.default_text_ratio = default_text_ratio
 
     def getitem(self, index):
         # init output data
@@ -158,7 +153,7 @@ class I2VDataset(T2VDataset):
         return dict(text=text)
 
     def get_merge_data(self, examples, index):
-        sample = self.dataset_prog.cap_list[index]
+        sample = self.data_samples[index]
         file_path = sample["path"]
         if not os.path.exists(file_path):
             raise AssertionError(f"file {file_path} do not exist!")
@@ -216,6 +211,6 @@ class I2VDataset(T2VDataset):
         prompt_ids, prompt_mask = self.get_text_processer(text)
         examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
 
-        # For feature extract, trace source file name
+        # for feature extract, trace source file name
         examples[FILE_INFO] = file_path
         return examples

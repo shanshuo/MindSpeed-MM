@@ -171,6 +171,11 @@ def prepare_sampler_dataloader(
             raise AssertionError(
                 "group_data and (group_frame or group_resolution) cannot be true at the same time!"
             )
+        sample_num_frames = []
+        sample_sizes = []
+        for data_sample in dataset.data_samples:
+            sample_num_frames.append(data_sample["sample_num_frames"])
+            sample_sizes.append(data_sample["sample_size"])
         sampler = (
             LengthGroupedSampler(
                 batch_size,
@@ -179,7 +184,7 @@ def prepare_sampler_dataloader(
                 rank=process_group.rank(),
                 gradient_accumulation_size=gradient_accumulation_size,
                 initial_global_step=initial_global_step_for_sampler,
-                lengths=dataset.sample_num_frames if not group_data else dataset.sample_size,
+                lengths=sample_num_frames if not group_data else sample_sizes,
                 group_frame=group_frame,
                 group_resolution=group_resolution,
                 group_data=group_data,

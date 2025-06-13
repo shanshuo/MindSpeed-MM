@@ -7,6 +7,7 @@
             "return_type": "dict"
         },
         "preprocess_parameters": {
+            "video_processor_type": "OpensoraVideoProcessor",
             "video_reader_type": "AvVideo",
             "image_reader_type": "torchvision",
             "train_pipeline": {

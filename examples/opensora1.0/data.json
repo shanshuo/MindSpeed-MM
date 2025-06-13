@@ -6,11 +6,11 @@
             "data_folder": "/your_data_folder/"
         },
         "preprocess_parameters": {
+            "video_processor_type": "OpensoraVideoProcessor",
             "video_reader_type": "TorchvisionVideo",
             "image_reader_type": "torchvision",
             "num_frames": 120,
             "frame_interval": 3,
-            "resolution": [120, 256, 256],
             "train_pipeline": {
                 "video": [
                     {"trans_type": "ToTensorVideo"},

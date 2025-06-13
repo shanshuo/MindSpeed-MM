@@ -31,16 +31,13 @@ from mindspeed_mm.data.data_utils.constants import (
     SORA_MODEL_PROTECTED_KEYS
 )
 from mindspeed_mm.data.data_utils.utils import (
-    VID_EXTENSIONS,
-    DataSetProg,
     ImageProcesser,
-    TextProcesser,
-    VideoProcesser
+    TextProcesser
 )
 from mindspeed_mm.data.data_utils.video_reader import VideoReader
+from mindspeed_mm.data.data_utils.video_processor import VideoProcessor
 from mindspeed_mm.data.datasets.mm_base_dataset import MMBaseDataset
 from mindspeed_mm.models import Tokenizer
-from mindspeed_mm.data.data_utils.utils import get_value_from_args, cal_gradient_accumulation_size
 from mindspeed_mm.data.data_utils.data_transform import (
     MaskGenerator,
     add_aesthetic_notice_image,
@@ -95,50 +92,24 @@ class T2VDataset(MMBaseDataset):
         self.use_img_num = use_img_num
         self.use_img_from_vid = use_img_from_vid
 
-        self.num_frames = vid_img_process.get("num_frames", 16)
-        self.frame_interval = vid_img_process.get("frame_interval", 1)
-        self.auto_interval = vid_img_process.get("auto_interval", True)
-        self.resolution = vid_img_process.get("resolution", (256, 256))
+        self.cfg = vid_img_process.pop("cfg", 0.1)
+        self.image_processer_type = vid_img_process.pop("image_processer_type", "image2video")
+        self.use_aesthetic = vid_img_process.pop("use_aesthetic", False)
+        self.video_reader_type = vid_img_process.pop("video_reader_type", "torchvision")
+        self.image_reader_type = vid_img_process.pop("image_reader_type", "torchvision")
 
+        # Initialize processing components
+        self.video_reader = VideoReader(video_reader_type=self.video_reader_type)
+        self.video_processer = VideoProcessor.create(**vid_img_process)
+
+        self.num_frames = vid_img_process.get("num_frames", 16)
         self.max_height = vid_img_process.get("max_height", 480)
         self.max_width = vid_img_process.get("max_width", 640)
         self.max_hxw = vid_img_process.get("max_hxw", None)
         self.min_hxw = vid_img_process.get("min_hxw", None)
-        self.train_fps = vid_img_process.get("train_fps", 24)
-        self.speed_factor = vid_img_process.get("speed_factor", 1.0)
-        self.drop_short_ratio = vid_img_process.get("drop_short_ratio", 1.0)
-        self.cfg = vid_img_process.get("cfg", 0.1)
-        self.image_processer_type = vid_img_process.get(
-            "image_processer_type", "image2video"
-        )
-        self.data_process_type = vid_img_process.get("data_process_type", "")
-        self.skip_frame_num = vid_img_process.get("skip_frame_num", 0)
-        self.fps = vid_img_process.get("fps", None)
-
-        self.hw_stride = vid_img_process.get("hw_stride", 32)
-        self.batch_size = get_value_from_args("micro_batch_size")
-        self.force_resolution = vid_img_process.get("force_resolution", True)
-        self.sp_size = mpu.get_context_parallel_world_size()
-        self.ae_stride_t = kwargs.get("vae_scale_factor", [4, 8, 8])[0]
-        self.train_sp_batch_size = vid_img_process.get("train_sp_batch_size", 1)
-        self.gradient_accumulation_size = cal_gradient_accumulation_size()
-        self.seed = vid_img_process.get("seed", 42)
-        self.hw_aspect_thr = vid_img_process.get("hw_aspect_thr", 1.5)
-        self.hw_aspect_thr = 1.5 if self.hw_aspect_thr == 0 else self.hw_aspect_thr
-        self.min_num_frames = vid_img_process.get("min_num_frames", 29)
-        self.use_aesthetic = vid_img_process.get("use_aesthetic", False) 
-
-        max_workers = vid_img_process.get("max_workers", 1)
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
-        self.timeout = vid_img_process.get("timeout", 60) 
-        
         if self.max_hxw is not None and self.min_hxw is None:
             self.min_hxw = self.max_hxw // 4
         self.train_pipeline = vid_img_process.get("train_pipeline", None)
-        self.video_reader_type = vid_img_process.get("video_reader_type", "torchvision")
-        self.image_reader_type = vid_img_process.get("image_reader_type", "torchvision")
-        self.video_reader = VideoReader(video_reader_type=self.video_reader_type)
-
         transform_size = {
             "max_height": self.max_height,
             "max_width": self.max_width,
@@ -146,34 +117,7 @@ class T2VDataset(MMBaseDataset):
             "min_hxw": self.min_hxw
         }
 
-        self.video_processer = VideoProcesser(
-            num_frames=self.num_frames,
-            frame_interval=self.frame_interval,
-            auto_interval=self.auto_interval,
-            train_pipeline=self.train_pipeline,
-            data_storage_mode=self.data_storage_mode,
-            data_process_type=self.data_process_type,
-            skip_frame_num=self.skip_frame_num,
-            fps=self.fps,
-            train_fps=self.train_fps,
-            speed_factor=self.speed_factor,
-            drop_short_ratio=self.drop_short_ratio,
-            max_height=self.max_height,
-            max_width=self.max_width,
-            max_hxw=self.max_hxw,
-            min_hxw=self.min_hxw,
-            force_resolution=self.force_resolution,
-            seed=self.seed,
-            ae_stride_t=self.ae_stride_t,
-            hw_stride=self.hw_stride,
-            hw_aspect_thr=self.hw_aspect_thr,
-            sp_size=self.sp_size,
-            train_sp_batch_size=self.train_sp_batch_size,
-            gradient_accumulation_size=self.gradient_accumulation_size,
-            batch_size=self.batch_size,
-            min_num_frames=self.min_num_frames,
-            transform_size=transform_size
-        )
+        # Create image processor with configuration
         self.image_processer = ImageProcesser(
             num_frames=self.num_frames,
             train_pipeline=self.train_pipeline,
@@ -181,6 +125,8 @@ class T2VDataset(MMBaseDataset):
             image_processer_type=self.image_processer_type,
             transform_size=transform_size
         )
+
+        # Initialize text processing components if enabled
         if self.use_text_processer and tokenizer_config is not None:
             self.tokenizer = Tokenizer(tokenizer_config).get_tokenizer()
             self.text_processer = TextProcesser(
@@ -192,22 +138,21 @@ class T2VDataset(MMBaseDataset):
                 cfg=self.cfg,
             )
         
+        # Feature usage flags
         self.use_text_feature = basic_param.get("use_text_feature", False)
         self.use_video_feature = basic_param.get("use_video_feature", False)
 
+        # Thread pool configuration for data loading
+        max_workers = kwargs.get("max_workers", 1)
+        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.timeout = kwargs.get("timeout", 60)
+
+         # Data validation for specific storage modes
         if self.data_storage_mode == "combine" or self.data_storage_mode == "sorafeatured":
-            if vid_img_process.get("skip_define_frame_index", False):
+            if basic_param.get("skip_define_frame_index", False):
                 return
-            self.dataset_prog = DataSetProg()
-            dataloader_num_workers = vid_img_process.get("dataloader_num_workers", 1)
-            self.data_samples, self.sample_num_frames, self.sample_size = (
-                self.video_processer.define_frame_index(self.data_samples)
-            )
-            self.lengths = self.sample_num_frames
-            n_elements = len(self.data_samples)
-            self.dataset_prog.set_cap_list(
-                dataloader_num_workers, self.data_samples, n_elements
-            )
+
+            self.data_samples = self.video_processer.select_valid_data(self.data_samples)
 
     def __getitem__(self, index):
         try:
@@ -322,7 +267,7 @@ class T2VDataset(MMBaseDataset):
         raise NotImplementedError("Not implemented.")
 
     def get_video_data(self, examples, index):
-        sample = self.dataset_prog.cap_list[index]
+        sample = self.data_samples[index]
         file_path = sample["path"]
         if not os.path.exists(file_path):
             raise AssertionError(f"file {file_path} do not exist!")
@@ -357,7 +302,7 @@ class T2VDataset(MMBaseDataset):
         return examples
         
     def get_merge_data(self, examples, index):
-        sample = self.dataset_prog.cap_list[index]
+        sample = self.data_samples[index]
         file_path = sample["path"]
         if not os.path.exists(file_path):
             raise AssertionError(f"file {file_path} do not exist!")
@@ -492,6 +437,7 @@ class DynamicVideoTextDataset(MMBaseDataset):
         self.use_img_num = use_img_num
         self.use_img_from_vid = use_img_from_vid
 
+        self.video_processor_type = vid_img_process.get("video_processor_type")
         self.num_frames = vid_img_process.get("num_frames", 16)
         self.frame_interval = vid_img_process.get("frame_interval", 1)
         self.resolution = vid_img_process.get("resolution", (256, 256))
@@ -503,7 +449,8 @@ class DynamicVideoTextDataset(MMBaseDataset):
         self.text_add_fps = text_add_fps
         self.fps_max = fps_max
 
-        self.video_processer = VideoProcesser(
+        self.video_processer = VideoProcessor.create(
+            video_processor_type=self.video_processor_type,
             num_frames=self.num_frames,
             frame_interval=self.frame_interval,
             train_pipeline=self.train_pipeline,

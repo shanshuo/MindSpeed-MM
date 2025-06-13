@@ -244,32 +244,29 @@ def shortsideresize(h, w, size, skip_low_resolution):
     return h, w
 
 
-def calculate_statistics(data):
-    if len(data) == 0:
-        return None
-    data = np.array(data)
-    mean = np.mean(data)
-    variance = np.var(data)
-    std_dev = np.std(data)
-    minimum = np.min(data)
-    maximum = np.max(data)
+def calculate_centered_alignment(h: int, w: int, stride: int) -> tuple:
+    """Calculate centered crop parameters for stride alignment.
+    
+    Computes crop dimensions and offsets to maintain center position while
+    ensuring the output dimensions are multiples of the specified stride.
 
-    return {
-        'mean': mean,
-        'variance': variance,
-        'std_dev': std_dev,
-        'min': minimum,
-        'max': maximum
-    }
+    Args:
+        h: Original height of the input
+        w: Original width of the input 
+        stride: Alignment requirement (must be > 0)
 
-
-def get_params(h, w, stride):
-    th, tw = h // stride * stride, w // stride * stride
-
-    i = (h - th) // 2
-    j = (w - tw) // 2
-
-    return (i, j, th, tw)
+    Returns:
+        tuple: (vertical_offset, horizontal_offset, aligned_height, aligned_width)
+    """
+    # Calculate aligned dimensions
+    aligned_h = h // stride * stride
+    aligned_w = w // stride * stride
+    
+    # Compute centering offsets
+    vertical_offset = (h - aligned_h) // 2
+    horizontal_offset = (w - aligned_w) // 2
+    
+    return (vertical_offset, horizontal_offset, aligned_h, aligned_w)
 
 
 def maxhwresize(ori_height, ori_width, max_hxw):
@@ -494,7 +491,7 @@ class SpatialStrideCropVideo:
                 size is (T, C, OH, OW)
         """
         h, w = clip.shape[-2:] 
-        i, j, h, w = get_params(h, w, self.stride)
+        i, j, h, w = calculate_centered_alignment(h, w, self.stride)
         return crop(clip, i, j, h, w)
 
     def __repr__(self) -> str:

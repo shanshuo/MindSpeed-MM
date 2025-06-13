@@ -8,20 +8,19 @@
             "use_video_feature": true
         },
         "preprocess_parameters": {
-            "data_process_type": "CogvideoX",
-            "video_reader_type": "DecordVideo",
-            "fps": 8,
+            "video_processor_type": "CogVideoXProcessor",
+			"video_reader_type": "DecordVideo",
+            "train_fps": 8,
             "skip_frame_num": 0,
             "num_frames": 102,
             "max_height": 544,
             "max_width": 992,
-            "dataloader_num_workers": 0,
             "train_pipeline": {
                 "video": [],
                 "image": []
-            },
-            "skip_define_frame_index": true
+            }
         },
+        "skip_define_frame_index": true,
         "use_text_processer": true,
         "enable_text_preprocessing": false,
         "tokenizer_config": [

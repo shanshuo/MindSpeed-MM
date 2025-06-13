@@ -7,6 +7,7 @@
             "data_storage_mode": "combine"
         },
         "preprocess_parameters": {
+            "video_processor_type": "OpensoraplanVideoProcessor",
             "video_reader_type": "DecordVideo",
             "image_reader_type": "Image",
             "num_frames": 93,
@@ -20,7 +21,6 @@
             "cfg": 0.0,
             "hw_stride": 8,
             "force_resolution": false,
-            "dataloader_num_workers": 8,
             "hw_aspect_thr": 2.0,
             "train_pipeline": {
                 "video": [

@@ -8,14 +8,13 @@
 			"data_storage_mode": "standard"
 		},
 		"preprocess_parameters": {
-            "data_process_type": "CogvideoX",
+            "video_processor_type": "CogVideoXProcessor",
 			"video_reader_type": "DecordVideo",
-            "fps": 8,
+            "train_fps": 8,
             "skip_frame_num": 3,
 			"num_frames": 17,
 			"max_height": 480,
 			"max_width": 720,
-			"dataloader_num_workers": 8,
 			"train_pipeline": {
 				"video": [],
 				"image": []
