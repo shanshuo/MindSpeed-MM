@@ -47,6 +47,7 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
+    --num-workers 8 \
     --lr 1e-5 \
     --min-lr 1e-5 \
     --adam-beta1 0.9 \

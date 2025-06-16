@@ -41,6 +41,7 @@ GPT_ARGS="
     --context-parallel-size ${CP} \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
+    --num-workers 8 \
 "
 
 MM_ARGS="
