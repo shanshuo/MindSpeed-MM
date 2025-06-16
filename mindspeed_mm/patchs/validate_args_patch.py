@@ -58,7 +58,6 @@ def validate_args(args, defaults=None):
             print_rank_0(f"[INFO] the original value of normalization is {args.hidden_size}, now changed as {hidden_size} which comes from model.json")
             args.hidden_size = hidden_size
         args.hidden_size = safe_getattr(args.mm.model.predictor, 'hidden_size', args.hidden_size)
-        args.seq_length = safe_getattr(args.mm.model.predictor, 'max_seq_len', 24)
         args.attention_dropout = safe_getattr(args.mm.model.predictor, 'dropout', args.attention_dropout)
         args.hidden_dropout = safe_getattr(args.mm.model.predictor, 'hidden_dropout', args.hidden_dropout)
         args.swiglu = safe_getattr(args.mm.model.predictor, 'swiglu', args.swiglu)
@@ -68,6 +67,7 @@ def validate_args(args, defaults=None):
             print_rank_0(f"[INFO] the original value of normalization is {args.normalization}, now changed as RMSNorm which comes from model.json")
             args.normalization = "RMSNorm"
             args.use_fused_rmsnorm = safe_getattr(args.mm.model.predictor, 'use_fused_rmsnorm', args.use_fused_rmsnorm)
+        args.seq_length = safe_getattr(args.mm.model.predictor, 'seq_length', 3072)
         args.max_position_embeddings = safe_getattr(args.mm.model.predictor, 'max_position_embeddings', args.seq_length)
         args.position_embedding_type = safe_getattr(args.mm.model.predictor, 'position_embedding_type', 'rope')
         args.rotary_base = safe_getattr(args.mm.model.predictor, 'rotary_base', 500000)

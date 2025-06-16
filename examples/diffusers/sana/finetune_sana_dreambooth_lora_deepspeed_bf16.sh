@@ -88,16 +88,28 @@ e2e_time=$(($end_time - $start_time))
 echo "------------------ Final result ------------------"
 
 #输出性能FPS，需要模型审视修改
-AverageIts=$(grep -o "[0-9.]*s/it, " ${output_path}/train_${mixed_precision}_sana_dreambooth_lora.log | sed -n '100,299p' | awk '{a+=$1}END{print a/NR}')
+AverageIts=$(grep -oE '[0-9.]+(it/s|s/it), ' "${output_path}/train_${mixed_precision}_sana_dreambooth_lora.log" | \
+  sed -n '100,399p' | \
+  awk '
+  {
+    match($0, /^([0-9.]+)(it\/s|s\/it)/, arr)
+    num = arr[1]
+    unit = arr[2]
+    if (unit == "it/s") {
+      value = num
+    } else {
+      value = 1.0 / num
+    }
+    sum += value
+    count++
+  }
+  END {
+      print sum / count
+    }
+  ')
 
-if [ -z "$AverageIts" ] || [ "$(echo "$AverageIts == 0" | bc)" -eq 1 ]; then
-  AverageIts=$(grep -o "[0-9.]*it/s, " ${output_path}/train_${mixed_precision}_sana_dreambooth_lora.log | sed -n '100,299p' | awk '{a+=$1}END{print a/NR}')
-  echo "Average it/s: ${AverageIts}"
-  FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'*'${AverageIts}'}')
-else
-  echo "Average s/it: ${AverageIts}"
-  FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'/'${AverageIts}'}')
-fi
+echo "Average it/s: ${AverageIts}"
+FPS=$(awk 'BEGIN{printf "%.2f\n",'${batch_size}'*'${num_processors}'*'${AverageIts}'}')
 
 #获取性能数据，不需要修改
 #吞吐量

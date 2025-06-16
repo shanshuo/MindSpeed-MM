@@ -376,7 +376,7 @@ def _conv_gather(input_, dim, kernel_size):
     return output
 
 
-def collect_tensors_across_ranks(tensor, group=None, dynamic_shape: bool = False):
+def collect_tensors_across_ranks(tensor, group=None, dynamic_shape: bool = True):
     if group is None:
         group = dist.group.WORLD
     group_size = dist.get_world_size(group)

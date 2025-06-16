@@ -383,6 +383,8 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 | 竞品A | 8p |  Finetune  | 164.66 |     24     | fp16 | 2.1 | ✔ |
 | Atlas 900 A2 PODc |8p |  Finetune  | 166.71 |     24     | fp16 | 2.1 | ✔ |
 
+**注**：Finetune任务中的FPS会在散热器性能较弱时波动幅度增大
+
 ## 推理
 
 ### 环境搭建及运行
@@ -441,6 +443,7 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
   ```
 
 <a id="jump4"></a>
+
 ### 性能
 
 | 芯片 | 卡数 |     任务     |  E2E（it/s）  |  AMP_Type | Torch_Version | deepspeed |
@@ -455,6 +458,7 @@ SDXL 在 **昇腾芯片** 和 **参考芯片** 上的性能对比：
 | Atlas 900 A2 PODc |1p |  图生图  | 3.94 | fp16 | 2.1 | ✔ |
 
 ## 环境变量声明
+
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
 ASCEND_GLOBAL_EVENT_ENABLE： 设置应用类日志是否开启Event日志，0：关闭Event日志，1：开启Event日志  
