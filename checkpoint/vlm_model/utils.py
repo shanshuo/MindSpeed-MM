@@ -40,6 +40,9 @@ class ParallelConfig(BaseModel):
     vit_pp_layers: List[NonNegativeInt]
     """vit模块pipeline parallel切分每张卡上切分几层"""
 
+    audio_pp_layers: Optional[List[NonNegativeInt]] = None
+    """audio模块pipeline parallel切分每张卡上切分几层"""
+
     tp_size: PositiveInt = 1
     """tensor parallel张量并行组，模型转换时不同的tp组要切分到不同的目录下"""
 
@@ -610,26 +613,41 @@ def save_by_vpp(state_dicts: List[Dict[str, torch.Tensor]],
 def rename_pp_parameter(param_name: str,
                         vit_pp_list: List[int],
                         llm_pp_list: List[int],
+                        audio_pp_list: List[int] = None,
                         pp_index: int = 0) -> str:
-    index = pp_index
-    llm_pp_list = [sum(llm_pp_list[:i + 1]) for i in range(len(llm_pp_list))]
-    vit_pp_list = [sum(vit_pp_list[:i + 1]) for i in range(len(vit_pp_list))]
-    llm_pp_list = [0] + llm_pp_list[0:-1]
-    vit_pp_list = [0] + vit_pp_list[0:-1]
-    if param_name.startswith('image_encoder.encoder.blocks.layers'):
-        index = vit_pp_list[index]
-        name_li = param_name.split('.')
-        name_li[4] = str(index + int(name_li[4]))
-        param_name = '.'.join(name_li)
-    elif param_name.startswith('text_decoder.decoder.layers'):
-        index = llm_pp_list[index]
-        name_li = param_name.split('.')
-        name_li[3] = str(index + int(name_li[3]))
-        param_name = '.'.join(name_li)
+    # 计算偏移量：当前分片前的总层数
+    def compute_offset(pp_list: List[int]) -> int:
+        return sum(pp_list[:pp_index]) if pp_index > 0 else 0
+
+    # 计算各模态的偏移量
+    vit_offset = compute_offset(vit_pp_list)
+    llm_offset = compute_offset(llm_pp_list)
+    audio_offset = compute_offset(audio_pp_list) if audio_pp_list is not None else 0
+
+    # 定义模式列表：正则表达式和对应的偏移量
+    patterns = [
+        (r'^image_encoder\.encoder\.blocks\.layers\.(\d+)', vit_offset),
+        (r'^text_decoder\.decoder\.layers\.(\d+)', llm_offset),
+        (r'^audio_encoder\.encoder\.blocks\.layers\.(\d+)', audio_offset)
+    ]
+
+    # 统一处理所有参数
+    for pattern, offset in patterns:
+        match = re.match(pattern, param_name)
+        if match:
+            # 提取原始层号
+            layer_num = int(match.group(1))
+            # 计算新层号
+            new_layer_num = offset + layer_num
+            # 替换层号
+            return re.sub(r'\.\d+', f'.{new_layer_num}', param_name, count=1)
+
+    # 不匹配任何模式则返回原参数名
     return param_name
 
 
-def load_from_mm(load_dir: Path, vit_pp_list: List[int], llm_pp_list: List[int], tp_size: int = 1) -> List[dict]:
+def load_from_mm(load_dir: Path, vit_pp_list: List[int], llm_pp_list: List[int], tp_size: int = 1,
+                 audio_pp_list: List[int] = None) -> List[dict]:
     save_iteration = load_dir.joinpath(LATEST_TXT).read_text()
     save_dir = load_dir.joinpath(f"iter_{int(save_iteration):07}" if save_iteration != "release" else save_iteration)
     state_dicts = []
@@ -644,27 +662,69 @@ def load_from_mm(load_dir: Path, vit_pp_list: List[int], llm_pp_list: List[int],
             print(str(pt_path).center(100, '_'))
             # 注意output_layer存在_extra_state其值为None
             pp_state_dict.update(
-                {rename_pp_parameter(param, vit_pp_list, llm_pp_list, pp_rank): tensor
+                {rename_pp_parameter(param, vit_pp_list, llm_pp_list, audio_pp_list, pp_rank): tensor
                  for param, tensor in torch.load(pt_path, map_location='cpu')['model'].items() if tensor is not None})
         state_dicts.append(pp_state_dict)
 
     return state_dicts
 
 
-def split_by_tp(state_dict: STATE_DICT_T, patterns: TP_PATTERN_T, tp_size: int = 1) -> List[STATE_DICT_T]:
+
+def merge_by_tp(tp_state_dicts: List[STATE_DICT_T], patterns: TP_PATTERN_T) -> STATE_DICT_T:
+    """将多个TP分片的权重合并回完整权重"""
+    if not tp_state_dicts:
+        return {}
+    merged_dict = {}
+    tp_size = len(tp_state_dicts)
     if tp_size == 1:
-        return [state_dict]
-    return_dicts = []
-    for tp_rank in range(tp_size):
-        new_state_dict = {}
-        for key, value in state_dict.items():
-            for pattern, tp_split_func in patterns.items():
-                if re.match(pattern, key):
-                    value = tp_split_func(tp_size, tp_rank, value)
-                    break
-            new_state_dict[key] = value
-        return_dicts.append(new_state_dict)
-    return return_dicts
+        return tp_state_dicts[0]
+    for key in tp_state_dicts[0].keys():
+        # 收集所有分片的对应权重
+        tp_values = [sd[key] for sd in tp_state_dicts]
+
+        # 查找匹配的拆分函数，并获取其反向合并方法
+        for pattern, merger in patterns.items():
+            if re.match(pattern, key):
+                merged_dict[key] = merger.merge(tp_values)
+                break
+        else:
+            merged_dict[key] = tp_values[0]
+    return merged_dict
+
+
+# ===================== 状态字典切分函数 =====================
+def split_by_tp(state_dict: STATE_DICT_T, patterns: TP_PATTERN_T, tp_size: int = 1) -> List[STATE_DICT_T]:
+    """
+    将状态字典按 TP 并行度切分
+    :param state_dict: 原始状态字典
+    :param patterns: 匹配模式到切分类的映射
+    :param tp_size: TP 并行度
+    :return: 切分后的状态字典列表
+    """
+    if tp_size == 1:
+        return [state_dict.copy()]
+
+    # 初始化 TP 状态字典列表
+    tp_dicts = [dict() for _ in range(tp_size)]
+
+    # 遍历原始状态字典的每个键值对
+    for key, value in state_dict.items():
+        matched = False
+
+        # 检查是否匹配任何模式
+        for pattern, splitter in patterns.items():
+            if re.match(pattern, key):
+                # 一次性获取所有 TP 的切分结果
+                split_values = splitter.split(tp_size, value)
+                for tp_dict, val in zip(tp_dicts, split_values):
+                    tp_dict[key] = val
+                break
+        else:
+            # 未匹配任何模式的值直接复制到所有 TP
+            for tp_dict in tp_dicts:
+                tp_dict[key] = value.clone()  # 避免共享内存
+
+    return tp_dicts
 
 
 def split_by_ep(_state_dict: STATE_DICT_T, _ep_size: int = 1, _num_experts: int = 0) -> List[Dict[str, torch.Tensor]]:
@@ -698,7 +758,14 @@ def convert_hf_to_mm(state_dict: STATE_DICT_T, ops: List[Operator], is_tie: bool
         ops.append(TieOp(raw_name='text_decoder.embedding.word_embeddings.weight',
                          new_name='text_decoder.output_layer.weight'))
     for op in ops:
-        op.handle(state_dict)
+        op.apply(state_dict)
+    return state_dict
+
+
+#  mm权重转回hf
+def convert_mm_to_hf(state_dict: STATE_DICT_T, ops: List[Operator], is_tie: bool, is_pp: bool) -> STATE_DICT_T:
+    for op in ops:
+        op.revert(state_dict)  # 执行逆操作
     return state_dict
 
 
@@ -714,7 +781,7 @@ def merge_llm_weights_to_state_dict(vl_state_dict: STATE_DICT_T, llm_state_dict:
     return vl_state_dict
 
 
-def filter_vit_keys(_state_dict: STATE_DICT_T) -> STATE_DICT_T:
+def filter_vit_keys(_state_dict: STATE_DICT_T):
     """过滤掉llm相关的键，只保留vit部分的键"""
     for key in list(_state_dict.keys()):
         if not key.startswith("visual"):

@@ -39,12 +39,11 @@ Qwen2-VL-7B-Instruct/
         └── model_optim_rng.pt
 
 """
-from typing import Callable, Any, cast, List, Dict
+from typing import Callable, Any, List, Dict
 
 from tqdm import tqdm
 
-from checkpoint.vlm_model.operator import create_qwen2vl_ops, create_qwen2_5_vl_ops, create_qwen2_5_omni_ops, create_qwen3_vl_ops, \
-    qwen2vl_tp_patterns, qwen2_5_vl_tp_patterns, qwen3_vl_tp_patterns, Operator
+from checkpoint.vlm_model.operator import Operator
 from checkpoint.vlm_model.utils import ConvertVppMMConfig, filter_vit_keys, load_from_hf, merge_vpp_index, split_by_ep, \
     save_by_vpp, split_by_tp, convert_hf_to_mm, merge_llm_weights_to_state_dict, PPStageSchema, \
     partition_state_dict_by_pp
@@ -114,49 +113,3 @@ def convert(convert_config: ConvertVppMMConfig, config: Any, ops: List[Operator]
             save_by_vpp(pp_state_dicts, convert_config.mm_dir, pp_and_vpp_size=(parallel_config.pp_size, parallel_config.vpp_size), ep_size=parallel_config.ep_size, ep_rank=ep_rank, tp_rank=tp_rank)
 
 
-def convert_qwen2vl(convert_config: ConvertVppMMConfig):
-    from transformers.models.qwen2_vl import Qwen2VLConfig
-    config = convert_config.hf_config.config
-    config = cast(Qwen2VLConfig, config)
-    ops = create_qwen2vl_ops(config.vision_config.embed_dim,
-                             config.vision_config.num_heads,
-                             config.num_key_value_heads)
-    convert(convert_config, config, ops, qwen2vl_tp_patterns, [vision_schema, text_schema])
-
-
-def convert_qwen2_5_vl(convert_config: ConvertVppMMConfig):
-    from transformers.models.qwen2_5_vl import Qwen2_5_VLConfig
-    config = convert_config.hf_config.config
-    config = cast(Qwen2_5_VLConfig, config)
-    # qwen2.5vl和qwen2vl的差异主要在权重转换的算子以及tp转换时的模式
-    ops = create_qwen2_5_vl_ops(config.vision_config.hidden_size,
-                                config.vision_config.num_heads,
-                                config.num_key_value_heads)
-    convert(convert_config, config, ops, qwen2_5_vl_tp_patterns, [vision_schema, text_schema])
-
-
-def convert_qwen3_vl(convert_config: ConvertVppMMConfig):
-    from transformers.models.qwen2_5_vl import Qwen2_5_VLConfig
-    config = convert_config.hf_config.config
-    llm_config = convert_config.llm_hf_config
-    config = cast(Qwen2_5_VLConfig, config)
-
-    num_key_value_heads = llm_config.config.num_key_value_heads if llm_config is not None else config.num_key_value_heads
-    ops = create_qwen3_vl_ops(config.vision_config.hidden_size,
-                              config.vision_config.num_heads,
-                              num_key_value_heads)
-    convert(convert_config, config, ops, qwen3_vl_tp_patterns, [vision_schema, text_schema])
-
-
-def convert_qwen2_5_omni(convert_config: ConvertVppMMConfig):
-    from transformers.models.qwen2_5_omni import Qwen2_5OmniConfig
-    config = convert_config.hf_config.config
-    config = cast(Qwen2_5OmniConfig, config)
-    ops = create_qwen2_5_omni_ops(config.thinker_config.vision_config.num_heads,
-                                config.thinker_config.text_config.num_key_value_heads,
-                                config.thinker_config.audio_config.encoder_attention_heads,
-                                config.thinker_config.audio_config.d_model,
-                                config.thinker_config.audio_config.encoder_layers
-                                )
-    config.tie_word_embeddings = config.thinker_config.text_config.tie_word_embeddings
-    convert(convert_config, config, ops, qwen2_5_vl_tp_patterns, [vision_schema, text_schema, audio_schema])

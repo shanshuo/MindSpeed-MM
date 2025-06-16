@@ -13,11 +13,10 @@ from checkpoint.vlm_model.operator import (
     QKVMergeOp,
     RelocateOp,
     TieOp,
-    tp_split_col_weight,
-    tp_split_row_bias,
-    tp_split_row_weight,
-    tp_split_glu_weight,
-    tp_split_glu_bias,
+    ColWeightSplit,
+    RowBiasSplit,
+    RowWeightSplit,
+    GLUSplit,
 )
 
 
@@ -89,7 +88,7 @@ def test_rename_op() -> None:
     weights = {'visual.blocks.0.attn.proj.bias': torch.randn(2, 3),
                'visual.blocks.10.attn.proj.bias': torch.randn(2, 3)}
     rename_op = RenameOp(((r'^visual\.blocks\.(\d+)\.', r'image_encoder.encoder.blocks.layers.\1.'),))
-    rename_op.handle(weights)
+    rename_op.apply(weights)
     assert 'image_encoder.encoder.blocks.layers.0.attn.proj.bias' in weights
     assert 'image_encoder.encoder.blocks.layers.10.attn.proj.bias' in weights
     assert 'visual.blocks.0.attn.proj.bias' not in weights
@@ -101,7 +100,7 @@ def test_up_gate_merge_op() -> None:
         'layer.0.up': torch.tensor([3, 4]),
     }
     up_gate_merge_op = UpGateMergeOp([r'layer.(\d+).gate', r'layer.(\d+).up'], r'layer.(\d+).mlp')
-    up_gate_merge_op.handle(weights)
+    up_gate_merge_op.apply(weights)
     assert 'layer.0.mlp' in weights
     assert 'layer.0.gate' not in weights
     assert 'layer.0.up' not in weights
@@ -113,8 +112,8 @@ def test_qkv_merge_op() -> None:
         'layer.0.k': torch.tensor([5, 6, 7, 8]),
         'layer.0.v': torch.tensor([9, 10, 11, 12]),
     }
-    qkv_merge_op = QKVMergeOp([r'layer.(\d+).q', r'layer.(\d+).k', r'layer.(\d+).v'], r'layer.(\d+).qkv', group=4)
-    qkv_merge_op.handle(weights)
+    qkv_merge_op = QKVMergeOp((r'layer.(\d+).q', r'layer.(\d+).k', r'layer.(\d+).v'), r'layer.(\d+).qkv', 4, 1, 1, 1)
+    qkv_merge_op.apply(weights)
     assert 'layer.0.qkv' in weights
     assert 'layer.0.q' not in weights
     assert 'layer.0.k' not in weights
@@ -123,15 +122,15 @@ def test_qkv_merge_op() -> None:
 
 def test_relocate_op() -> None:
     weights = {'layer.0.qkv': torch.tensor([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])}
-    relocate_op = RelocateOp(r'layer.(\d+).qkv', group=4, split_size=[3, 3, 3, 3])
-    relocate_op.handle(weights)
+    relocate_op = RelocateOp(r'layer.(\d+).qkv', r'new_layer.(\d+).qkv', group=4, split_size=[3, 3, 3, 3])
+    relocate_op.apply(weights)
     assert 'layer.0.qkv' in weights
 
 
 def test_tie_op() -> None:
     weights = {'word_embeddings.weight': torch.randn(10, 5)}
     tie_op = TieOp('word_embeddings.weight', 'output_layer.weight')
-    tie_op.handle(weights)
+    tie_op.apply(weights)
     assert 'output_layer.weight' in weights
     assert torch.allclose(weights.get('output_layer.weight'), weights.get('word_embeddings.weight'))
 
@@ -146,8 +145,8 @@ def test_tp_split_col_weight(
         value: torch.Tensor,
         expected_shape: torch.Size,
 ) -> None:
-    result = tp_split_col_weight(tp_size, tp_rank, value)
-    assert result.shape == expected_shape
+    result = ColWeightSplit.split(tp_size, value)
+    assert result[tp_rank].shape == expected_shape
 
 
 @pytest.mark.parametrize("tp_size, tp_rank, value, expected_shape", [
@@ -160,8 +159,8 @@ def test_tp_split_row_bias(
         value: torch.Tensor,
         expected_shape: torch.Size,
 ) -> None:
-    result = tp_split_row_bias(tp_size, tp_rank, value)
-    assert result.shape == expected_shape
+    result = RowBiasSplit.split(tp_size, value)
+    assert result[tp_rank].shape == expected_shape
 
 
 @pytest.mark.parametrize("tp_size, tp_rank, value, expected_shape", [
@@ -174,8 +173,8 @@ def test_tp_split_row_weight(
         value: torch.Tensor,
         expected_shape: torch.Size,
 ) -> None:
-    result = tp_split_row_weight(tp_size, tp_rank, value)
-    assert result.shape == expected_shape
+    result = RowWeightSplit.split(tp_size, value)
+    assert result[tp_rank].shape == expected_shape
 
 
 @pytest.mark.parametrize("tp_size, tp_rank, value, expected_shape", [
@@ -188,8 +187,8 @@ def test_tp_split_glu_weight(
         value: torch.Tensor,
         expected_shape: torch.Size,
 ) -> None:
-    result = tp_split_glu_weight(tp_size, tp_rank, value)
-    assert result.shape == expected_shape
+    result = GLUSplit.split(tp_size, value)
+    assert result[tp_rank].shape == expected_shape
 
 
 @pytest.mark.parametrize("tp_size, tp_rank, value, expected_shape", [
@@ -202,5 +201,53 @@ def test_tp_split_glu_bias(
         value: torch.Tensor,
         expected_shape: torch.Size,
 ) -> None:
-    result = tp_split_glu_bias(tp_size, tp_rank, value)
+    result = GLUSplit.split(tp_size, value)
+    assert result[tp_rank].shape == expected_shape
+
+
+@pytest.mark.parametrize("value, expected_shape", [
+    ([torch.randn(4, 6), torch.randn(4, 6)], (8, 6)),
+    ([torch.randn(3, 6), torch.randn(3, 6)], (6, 6)),
+])
+def test_tp_merge_row_weight(
+        value: List[torch.Tensor],
+        expected_shape: torch.Size,
+) -> None:
+    result = RowWeightSplit.merge(value)
+    assert result.shape == expected_shape
+
+
+@pytest.mark.parametrize("value, expected_shape", [
+    ([torch.randn(4,), torch.randn(4,)], (8,)),
+    ([torch.randn(3,), torch.randn(3,)], (6,)),
+])
+def test_tp_merge_row_weight(
+        value: List[torch.Tensor],
+        expected_shape: torch.Size,
+) -> None:
+    result = RowBiasSplit.merge(value)
+    assert result.shape == expected_shape
+
+
+@pytest.mark.parametrize("value, expected_shape", [
+    ([torch.randn(4, 6), torch.randn(4, 6)], (4, 12)),
+    ([torch.randn(3, 6), torch.randn(3, 6)], (3, 12)),
+])
+def test_tp_merge_col_weight(
+        value: List[torch.Tensor],
+        expected_shape: torch.Size,
+) -> None:
+    result = ColWeightSplit.merge(value)
+    assert result.shape == expected_shape
+
+
+@pytest.mark.parametrize("value, expected_shape", [
+    ([torch.randn(4, 6), torch.randn(4, 6)], (8, 6)),
+    ([torch.randn(4,), torch.randn(4,)], (8,)),
+])
+def test_tp_merge_glu(
+        value: List[torch.Tensor],
+        expected_shape: torch.Size,
+):
+    result = GLUSplit.merge(value)
     assert result.shape == expected_shape

@@ -1,13 +1,15 @@
 import re
 from abc import ABC, abstractmethod
-from typing import Callable, Iterable, Dict, List, Tuple
+from typing import Callable, Iterable, Dict, List, Tuple, Any
 
 import torch
 from torch import Tensor
 
 STATE_DICT_T = Dict[str, torch.Tensor]
-TP_PATTERN_T = Dict[str, Callable[[int, int, torch.Tensor], torch.Tensor]]
+TP_PATTERN_T = Dict[str, "BaseSplit"]
 DIGIT_FMT = r'(\d+)'
+QV_NAME_T = Tuple[str, str]
+QKV_NAME_T = Tuple[str, str, str]
 
 
 def interleaved_qkv_to_concated(megatron_qkv: Tensor, num_key_value_heads: int, split_size: List[int]) -> Tensor:
@@ -39,6 +41,14 @@ def merge_to_interleaved_qkv(q: Tensor, k: Tensor, v: Tensor, group: int) -> Ten
     return torch.concat([head for qkv_group in zip(*qkv_chunks) for head in qkv_group], dim=0)
 
 
+def split_to_interleaved_qkv(value: Tensor, num_heads: int, q_size: int, k_size: int, v_size: int) -> Tuple[
+    Tensor, Tensor, Tensor]:
+    # 分块 + zip 重组逻辑（逆向操作）
+    qkv_chunks = torch.chunk(value, num_heads, dim=0)
+    q_parts, k_parts, v_parts = zip(*[torch.split(chunk, [q_size, k_size, v_size]) for chunk in qkv_chunks])
+    return torch.cat(q_parts), torch.cat(k_parts), torch.cat(v_parts)
+
+
 def get_layer_num(pattern: str, names: Iterable[str]) -> int:
     """在names中找到pattern正则匹配到的数数字的最大值"""
     layer_ids = [int(re.findall(pattern, k)[0]) for k in names if re.match(pattern, k)]
@@ -55,8 +65,14 @@ def get_layer_and_expert_num(pattern: str, names: Iterable[str]) -> Tuple[int, i
 
 
 class Operator(ABC):
+
     @abstractmethod
-    def handle(self, weights: STATE_DICT_T):
+    def apply(self, weights: STATE_DICT_T):
+        """原地修改weights字典"""
+        pass
+
+    @abstractmethod
+    def revert(self, weights: STATE_DICT_T):
         """原地修改weights字典"""
         pass
 
@@ -81,32 +97,89 @@ class ZeroWeightOp(Operator):
         self.shape = shape
         self.layers = layers
 
-    def handle(self, weights: STATE_DICT_T):
+    def apply(self, weights: STATE_DICT_T):
         """向weights字典中添加权重或修改权重为0"""
         for layer_num in range(self.layers):
             tensor = torch.zeros(self.shape)
             name = self.name.replace(DIGIT_FMT, str(layer_num))
             weights[name] = tensor
 
+    def revert(self, weights: STATE_DICT_T) -> None:
+        """反向操作：删除由 apply 添加的零权重键"""
+        for layer_num in range(self.layers):
+            name = self.name.replace(DIGIT_FMT, str(layer_num))
+            # 安全删除（仅在键存在时移除）
+            weights.pop(name, None)
+
 
 class RenameOp(Operator):
+
     def __init__(self, patterns: Tuple[Tuple[str, str], ...]):
         self.patterns = patterns
 
-    def handle(self, weights: STATE_DICT_T):
+    @staticmethod
+    def replace_parentheses(text):
+        """
+        使用序号替换文本中的括号内容。
+
+        该方法使用正则表达式匹配文本中所有的括号内容，并使用一个递增的序号替换它们。
+        序号以反斜杠开头，如 \1, \2 等。
+
+        参数:
+        text -- 待处理的文本字符串。
+
+        返回:
+        替换后的文本字符串。
+
+        doctest 示例:
+
+        >>> RenameOp.replace_parentheses("这是一个测试 (示例) 和另一个 (例子)")
+        '这是一个测试 \\1 和另一个 \\2'
+
+        >>> RenameOp.replace_parentheses("无括号文本")
+        '无括号文本'
+
+        >>> RenameOp.replace_parentheses("(第一个) 包含多个 (括号内容) 示例")
+        '\\1 包含多个 \\2 示例'
+        """
+        count = 0  # 初始化计数器，用于生成序号
+
+        def repl(match):
+            """
+            替换匹配到的括号内容为序号。
+
+            参数:
+            match -- 正则表达式匹配到的对象。
+
+            返回:
+            包含序号的字符串，如 \1, \2 等。
+            """
+            nonlocal count  # 使用 nonlocal 声明，以便能够修改外部的 count 变量
+            count += 1  # 计数器递增
+            return f'\\{count}'  # 返回如 \1, \2 的字符串
+
+        # 使用正则表达式匹配所有的括号内容，并使用 repl 函数进行替换
+        return re.sub(r'\([^)]*\)', repl, text)
+
+    def apply(self, weights: STATE_DICT_T):
         mapping = {}
         for weight_name in weights:
             new_name = weight_name
             for pattern, replacement in self.patterns:
+                replacement = self.replace_parentheses(replacement)
                 new_name = re.sub(pattern, replacement, new_name)
             if new_name != weight_name:
                 mapping[weight_name] = new_name
         for old_name, new_name in mapping.items():
             weights[new_name] = weights.pop(old_name)
 
+    def revert(self, weights: STATE_DICT_T):
+        self.patterns = tuple((right, left) for left, right in self.patterns)
+        self.apply(weights=weights)
+
 
 class MergeOp(Operator):
-    def __init__(self, raw_names: List[str], new_name: str):
+    def __init__(self, raw_names: Any, new_name: str):
         self.raw_names = raw_names
         self.new_name = new_name
 
@@ -114,11 +187,30 @@ class MergeOp(Operator):
     def merge(self, tensors: List[Tensor]) -> Tensor:
         pass
 
-    def handle(self, weights: STATE_DICT_T):
+    @abstractmethod
+    def split(self, tensor: Tensor) -> List[Tensor]:
+        pass
+
+    def apply(self, weights: STATE_DICT_T):
         layer_num = get_layer_num(self.raw_names[0], weights.keys())
         for num in range(layer_num):
             merged_tensor = self.merge([weights.pop(name.replace(DIGIT_FMT, str(num))) for name in self.raw_names])
             weights[self.new_name.replace(DIGIT_FMT, str(num))] = merged_tensor
+
+    def revert(self, weights: STATE_DICT_T) -> None:
+        """反向操作：拆分合并后的权重并恢复原始键"""
+        layer_num = get_layer_num(self.new_name, weights.keys())
+        for num in range(layer_num):
+            # 获取合并后的张量
+            merged_name = self.new_name.replace(DIGIT_FMT, str(num))
+            merged_tensor = weights.pop(merged_name)  # 移除合并后的键
+            # 拆分回原始小矩阵列表
+            split_tensors = self.split(merged_tensor)
+            if len(split_tensors) != len(self.raw_names):
+                raise ValueError(f"Split tensor count {len(split_tensors)} != raw names count {len(self.raw_names)}")
+            # 将拆分后的张量写回原始键
+            for raw_name, tensor in zip(self.raw_names, split_tensors):
+                weights[raw_name.replace(DIGIT_FMT, str(num))] = tensor
 
 
 class UpGateMergeOp(MergeOp):
@@ -126,6 +218,9 @@ class UpGateMergeOp(MergeOp):
 
     def merge(self, tensors: List[Tensor]) -> Tensor:
         return torch.concat(tensors, dim=0)
+
+    def split(self, tensor: Tensor) -> List[Tensor]:
+        return list(torch.chunk(tensor, chunks=2, dim=0))
 
 
 class ExpertUpGateMergeOp(UpGateMergeOp):
@@ -140,27 +235,76 @@ class ExpertUpGateMergeOp(UpGateMergeOp):
 class QKVMergeOp(MergeOp):
     """qkv中权重合并逻辑，从transformers的q1q2/k1k2/v1v2三个小矩阵到megatron的linear_qkv一个大矩阵是q1k1v1q2k2v2交织拼接的"""
 
-    def __init__(self, raw_names: List[str], new_name: str, group: int):
+    def __init__(self, raw_names: QKV_NAME_T, new_name: str, group: int, q_size: int, k_size: int, v_size: int):
         self.group = group
+        self.q_size = q_size
+        self.k_size = k_size
+        self.v_size = v_size
+        super().__init__(raw_names, new_name)
+
+    def merge(self, tensors: QKV_NAME_T) -> Tensor:
+        return merge_to_interleaved_qkv(*tensors, group=self.group)
+
+    def split(self, tensor: Tensor) -> List[Tensor]:
+        qkv = split_to_interleaved_qkv(tensor, self.group, self.q_size, self.k_size, self.v_size)
+        return list(qkv)
+
+
+class QVToQKVMergeOp(MergeOp):
+    """构造k权重，并执行qkv中权重合并逻辑，从transformers的q1q2/k1k2/v1v2三个小矩阵到megatron的linear_qkv一个大矩阵是q1k1v1q2k2v2交织拼接的"""
+
+    def __init__(self, raw_names: QV_NAME_T, new_name: str, group: int, q_size: int, k_size: int, v_size: int):
+        self.group = group
+        self.q_size = q_size
+        self.k_size = k_size
+        self.v_size = v_size
         super().__init__(raw_names, new_name)
 
     def merge(self, tensors: List[Tensor]) -> Tensor:
+        tensors = [tensors[0], torch.zeros_like(tensors[0]), tensors[1]]
         return merge_to_interleaved_qkv(*tensors, group=self.group)
+
+    def split(self, tensor: Tensor) -> List[Tensor]:
+        qkv = split_to_interleaved_qkv(tensor, self.group, self.q_size, self.k_size, self.v_size)
+        return [qkv[0], qkv[2]]
 
 
 class RelocateOp(Operator):
-    """对于vit，transformers和megatron都是一个大矩阵，但transformer中的qkv是q1q2k1k2v1v2直接拼接，而megatron中是q1k1v1q2k2v2交织拼接"""
+    """处理 QKV 权重在直接拼接和交织结构之间的转换,对于vit，transformers和megatron都是一个大矩阵，但transformer中的qkv是q1q2k1k2v1v2直接拼接，而megatron中是q1k1v1q2k2v2交织拼接"""
 
-    def __init__(self, name: str, group: int, split_size: List[int]):
+    def __init__(self, name: str, new_name: str, group: int, split_size: List[int]):
+        """
+        Args:
+            name: 权重名称模板（如 "decoder.layers.{}.self_attention.linear_qkv.weight"）
+            group: 分组数（如多头注意力的头数）
+            split_size: 拆分维度 [q_size, k_size, v_size]
+        """
         self.name = name
+        self.new_name = new_name
         self.group = group
         self.split_size = split_size
 
-    def handle(self, weights: STATE_DICT_T):
+    def apply(self, weights: STATE_DICT_T) -> None:
+        """正向操作：将直接拼接的 Q/K/V 转换为交织结构"""
+        self._apply_transformation(weights, concated_qkv_to_interleaved)
+
+    def revert(self, weights: STATE_DICT_T) -> None:
+        self.name = self.new_name
+        """反向操作：将交织结构恢复为直接拼接的 Q/K/V"""
+        self._apply_transformation(weights, interleaved_qkv_to_concated)
+
+    def _apply_transformation(
+            self,
+            weights: STATE_DICT_T,
+            transform_func: Callable[[Tensor, int, List[int]], Tensor]
+    ) -> None:
+        """统一处理权重重新排布逻辑"""
         layer_num = get_layer_num(self.name, weights.keys())
         for num in range(layer_num):
             name = self.name.replace(DIGIT_FMT, str(num))
-            weights[name] = concated_qkv_to_interleaved(weights.get(name), self.group, self.split_size)
+            tensor = weights.get(name)
+            if tensor is not None:
+                weights[name] = transform_func(tensor, self.group, self.split_size)
 
 
 class TieOp(Operator):
@@ -170,213 +314,340 @@ class TieOp(Operator):
         self.raw_name = raw_name
         self.new_name = new_name
 
-    def handle(self, weights: STATE_DICT_T):
+    def apply(self, weights: STATE_DICT_T):
         weights[self.new_name] = weights.get(self.raw_name)
 
-
-def tp_split_col_weight(tp_size: int, tp_rank: int, value: Tensor) -> Tensor:
-    size_per_tp = value.shape[1] // tp_size
-    return value[:, tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp]
+    def revert(self, weights: STATE_DICT_T) -> None:
+        pass
 
 
-def tp_split_row_bias(tp_size: int, tp_rank: int, value: Tensor) -> Tensor:
-    size_per_tp = value.shape[0] // tp_size
-    return value[tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp]
+class BaseSplit(ABC):
+    """Abstract base class for tensor splitting strategies."""
+
+    @staticmethod
+    @abstractmethod
+    def split(tp_size: int, value: Tensor) -> List[Tensor]:
+        """Split tensor into TP_SIZE partitions.
+
+        Args:
+            tp_size: Number of tensor parallel partitions
+            value: Tensor to split
+
+        Returns:
+            List of split tensors, one per TP rank
+        """
+        pass
+
+    @staticmethod
+    @abstractmethod
+    def merge(tp_values: List[Tensor]) -> Tensor:
+        """Merge split tensors back into original tensor.
+
+        Args:
+            tp_values: List of tensors from TP ranks
+
+        Returns:
+            Merged tensor
+        """
+        pass
 
 
-def tp_split_row_weight(tp_size: int, tp_rank: int, value: Tensor) -> Tensor:
-    size_per_tp = value.shape[0] // tp_size
-    return value[tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
+class ColWeightSplit(BaseSplit):
+    """按列切分权重"""
+
+    @staticmethod
+    def split(tp_size: int, value: Tensor) -> List[Tensor]:
+        size_per_tp = value.shape[1] // tp_size
+        return [
+            value[:, rank * size_per_tp:(rank + 1) * size_per_tp]
+            for rank in range(tp_size)
+        ]
+
+    @staticmethod
+    def merge(tp_values: List[Tensor]) -> Tensor:
+        return torch.cat(tp_values, dim=1)
 
 
-def tp_split_glu_weight(tp_size: int, tp_rank: int, value: Tensor) -> Tensor:
-    size_per_tp = value.shape[0] // tp_size // 2
-    values = torch.chunk(value, 2, dim=0)
-    gate_tp = values[0][tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
-    up_tp = values[1][tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp, :]
-    tensor = torch.cat((gate_tp, up_tp), dim=0)
-    return tensor
+class RowBiasSplit(BaseSplit):
+    """按行切分偏置"""
+
+    @staticmethod
+    def split(tp_size: int, value: Tensor) -> List[Tensor]:
+        size_per_tp = value.shape[0] // tp_size
+        return [
+            value[rank * size_per_tp:(rank + 1) * size_per_tp]
+            for rank in range(tp_size)
+        ]
+
+    @staticmethod
+    def merge(tp_values: List[Tensor]) -> Tensor:
+        return torch.cat(tp_values, dim=0)
 
 
-def tp_split_glu_bias(tp_size: int, tp_rank: int, value: Tensor) -> Tensor:
-    size_per_tp = value.shape[0] // tp_size // 2
-    values = torch.chunk(value, 2, dim=0)
-    gate_tp = values[0][tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp]
-    up_tp = values[1][tp_rank * size_per_tp:(tp_rank + 1) * size_per_tp]
-    tensor = torch.cat((gate_tp, up_tp), dim=0)
-    return tensor
+class RowWeightSplit(BaseSplit):
+    """按行切分权重"""
+
+    @staticmethod
+    def split(tp_size: int, value: Tensor) -> List[Tensor]:
+        size_per_tp = value.shape[0] // tp_size
+        return [
+            value[rank * size_per_tp:(rank + 1) * size_per_tp, :]
+            for rank in range(tp_size)
+        ]
+
+    @staticmethod
+    def merge(tp_values: List[Tensor]) -> Tensor:
+        return torch.cat(tp_values, dim=0)
 
 
-def create_qwen2vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_groups: int) -> List[Operator]:
+class GLUSplit(BaseSplit):
+    """GLU 通用切分基类"""
+
+    @staticmethod
+    def split(tp_size: int, value: Tensor) -> List[Tensor]:
+        # 统一处理逻辑，自动适应不同维度
+        size_per_tp = value.shape[0] // tp_size // 2
+        gate, up = torch.chunk(value, 2, dim=0)
+
+        return [
+            torch.cat((
+                gate[rank * size_per_tp: (rank + 1) * size_per_tp],
+                up[rank * size_per_tp: (rank + 1) * size_per_tp]
+            ), dim=0)
+            for rank in range(tp_size)
+        ]
+
+    @staticmethod
+    def merge(tp_values: List[Tensor]) -> Tensor:
+        # 统一合并逻辑
+        split_results = [torch.chunk(v, 2, dim=0) for v in tp_values]
+        all_gates = [chunk[0] for chunk in split_results]
+        all_ups = [chunk[1] for chunk in split_results]
+        return torch.cat([
+            torch.cat(all_gates, dim=0),
+            torch.cat(all_ups, dim=0)
+        ], dim=0)
+
+
+def create_qwen2vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_groups: int,
+                       llm_q_size: int, llm_kv_size: int) -> List[Operator]:
     """qwen2vl权重转换逻辑"""
     ops = [
-        UpGateMergeOp(raw_names=["model.layers.(\d+).mlp.gate_proj.weight", "model.layers.(\d+).mlp.up_proj.weight"],
-                      new_name="text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight"),
-        QKVMergeOp(raw_names=["model.layers.(\d+).self_attn.q_proj.weight",
-                              "model.layers.(\d+).self_attn.k_proj.weight",
-                              "model.layers.(\d+).self_attn.v_proj.weight"],
-                   new_name="text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.weight",
-                   group=llm_num_query_groups),
-        QKVMergeOp(raw_names=["model.layers.(\d+).self_attn.q_proj.bias",
-                              "model.layers.(\d+).self_attn.k_proj.bias",
-                              "model.layers.(\d+).self_attn.v_proj.bias"],
-                   new_name="text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.bias",
-                   group=llm_num_query_groups),
+        UpGateMergeOp(raw_names=[r"model.layers.(\d+).mlp.gate_proj.weight", r"model.layers.(\d+).mlp.up_proj.weight"],
+                      new_name=r"text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight"),
+        QKVMergeOp(raw_names=(r"model.layers.(\d+).self_attn.q_proj.weight",
+                              r"model.layers.(\d+).self_attn.k_proj.weight",
+                              r"model.layers.(\d+).self_attn.v_proj.weight"),
+                   new_name=r"text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.weight",
+                   group=llm_num_query_groups,
+                   q_size=llm_q_size,
+                   k_size=llm_kv_size,
+                   v_size=llm_kv_size,
+                   ),
+        QKVMergeOp(raw_names=(r"model.layers.(\d+).self_attn.q_proj.bias",
+                              r"model.layers.(\d+).self_attn.k_proj.bias",
+                              r"model.layers.(\d+).self_attn.v_proj.bias"),
+                   new_name=r"text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.bias",
+                   group=llm_num_query_groups,
+                   q_size=llm_q_size,
+                   k_size=llm_kv_size,
+                   v_size=llm_kv_size,
+                   ),
+        RelocateOp(name=r"visual.blocks.(\d+).attn.qkv.weight",
+                   new_name=r"image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight",
+                   group=vit_num_heads,
+                   split_size=[vit_embed_dim] * 3,  # vit的qkv不是gqa，所以切分的三份是相同的
+                   ),
+        RelocateOp(name=r"visual.blocks.(\d+).attn.qkv.bias",
+                   new_name=r"image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias",
+                   group=vit_num_heads,
+                   split_size=[vit_embed_dim] * 3,  # vit的qkv不是gqa，所以切分的三份是相同的
+                   ),
         RenameOp(
             (
-                # 定义多个正则替换规则（按处理顺序排列）
-                # 处理 visual.blocks.{n} 路径
-                (r'^visual\.blocks\.(\d+)\.', r'image_encoder.encoder.blocks.layers.\1.'),
-                (r'\.attn\.proj\.', '.self_attention.linear_proj.'),
-                (r'\.attn\.qkv\.', '.self_attention.linear_qkv.'),
-                (r'\.mlp\.fc1\.', '.mlp.linear_fc1.'),
-                (r'\.mlp\.fc2\.', '.mlp.linear_fc2.'),
-                (r'\.norm1\.', '.input_layernorm.'),
-                (r'\.norm2\.', '.pre_mlp_layernorm.'),
-                # 处理 model.layers.{n} 路径
-                (r'^model\.layers\.(\d+)\.', r'text_decoder.decoder.layers.\1.'),
-                (r'\.mlp\.down_proj\.', '.mlp.linear_fc2.'),
-                (r'\.post_attention_layernorm\.', '.pre_mlp_layernorm.'),
-                (r'\.self_attn\.o_proj\.', '.self_attention.linear_proj.'),
-                # 处理 visual.merger 相关
-                (r'^visual\.merger\.ln_q', 'image_encoder.projector.layernorm'),
-                (r'^visual\.merger\.mlp\.0', 'image_encoder.projector.encoder.linear_fc1'),
-                (r'^visual\.merger\.mlp\.2', 'image_encoder.projector.encoder.linear_fc2'),
-                # 其他固定映射
-                (r'^visual\.patch_embed\.proj', 'image_encoder.encoder.patch_embed.proj'),
-                (r'^model\.embed_tokens', 'text_decoder.embedding.word_embeddings'),
-                (r'^model\.norm', 'text_decoder.decoder.final_layernorm'),
-                (r'^lm_head', 'text_decoder.output_layer')
+                (r'visual.blocks.(\d+).attn.proj',
+                 r'image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_proj'),
+                (r'visual.blocks.(\d+).attn.qkv',
+                 r'image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv'),
+                (r'visual.blocks.(\d+).mlp.down_proj', r'image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc2'),
+                (r'visual.blocks.(\d+).mlp.fc', r'image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc'),
+                (r'visual.blocks.(\d+).norm1', r'image_encoder.encoder.blocks.layers.(\d+).input_layernorm'),
+                (r'visual.blocks.(\d+).norm2', r'image_encoder.encoder.blocks.layers.(\d+).pre_mlp_layernorm'),
+                (r'visual.merger.ln_q', r'image_encoder.projector.layernorm'),
+                (r'visual.merger.mlp.0', r'image_encoder.projector.encoder.linear_fc1'),
+                (r'visual.merger.mlp.2', r'image_encoder.projector.encoder.linear_fc2'),
+                (r'visual.patch_embed.proj', r'image_encoder.encoder.patch_embed.proj'),
+                (r'model.embed_tokens', r'text_decoder.embedding.word_embeddings'),
+                (r'model.layers.(\d+).input_layernorm', r'text_decoder.decoder.layers.(\d+).input_layernorm'),
+                (r'model.layers.(\d+).mlp.down_proj', r'text_decoder.decoder.layers.(\d+).mlp.linear_fc2'),
+                (
+                    r'model.layers.(\d+).post_attention_layernorm',
+                    r'text_decoder.decoder.layers.(\d+).pre_mlp_layernorm'),
+                (r'model.layers.(\d+).self_attn.o_proj',
+                 r'text_decoder.decoder.layers.(\d+).self_attention.linear_proj'),
+                (r'lm_head', r'text_decoder.output_layer'),
+                (r'model.norm', r'text_decoder.decoder.final_layernorm')
             )
         ),
-        RelocateOp(name="image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight",
-                   group=vit_num_heads,
-                   split_size=[vit_embed_dim] * 3,  # vit的qkv不是gqa，所以切分的三份是相同的
-                   ),
-        RelocateOp(name="image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias",
-                   group=vit_num_heads,
-                   split_size=[vit_embed_dim] * 3,  # vit的qkv不是gqa，所以切分的三份是相同的
-                   ),
     ]
     return ops
 
 
-def create_qwen2_5_vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_groups: int) -> List[Operator]:
+def create_qwen2_5_vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_groups: int,
+                          llm_q_size: int, llm_kv_size: int) -> List[Operator]:
     """qwen2.5vl在qwen2vl的基础上vit的mlp变成了glu模式、需要增加合并处理逻辑"""
     ops = [
               UpGateMergeOp(
-                  raw_names=["visual.blocks.(\d+).mlp.gate_proj.weight", "visual.blocks.(\d+).mlp.up_proj.weight"],
-                  new_name="image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight"),
+                  raw_names=[r"visual.blocks.(\d+).mlp.gate_proj.weight", r"visual.blocks.(\d+).mlp.up_proj.weight"],
+                  new_name=r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight"),
               UpGateMergeOp(
-                  raw_names=["visual.blocks.(\d+).mlp.gate_proj.bias", "visual.blocks.(\d+).mlp.up_proj.bias"],
-                  new_name="image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias")
-          ] + create_qwen2vl_ops(vit_embed_dim, vit_num_heads, llm_num_query_groups)
+                  raw_names=[r"visual.blocks.(\d+).mlp.gate_proj.bias", r"visual.blocks.(\d+).mlp.up_proj.bias"],
+                  new_name=r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias")
+          ] + create_qwen2vl_ops(vit_embed_dim, vit_num_heads, llm_num_query_groups, llm_q_size, llm_kv_size)
     return ops
 
 
-def create_qwen3_vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_groups: int) -> List[Operator]:
+def create_qwen3_vl_ops(vit_embed_dim: int, vit_num_heads: int, llm_num_query_groups: int, llm_q_size: int,
+                        llm_kv_size: int) -> List[Operator]:
     """qwen3vl 在qwen2.5vl的基础上增加了moe相关的专家参数，需要增加映射逻辑"""
     ops = [
-        RenameOp(
-            (
-                # 处理 MoE专家相关
-                (r'\.mlp\.gate\.', '.mlp.router.'),
-                (r'^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.down_proj', r'text_decoder.decoder.layers.\1.mlp.experts.local_experts.\2.linear_fc2'),
-                # 处理 q, k layernorm
-                (r'\.self_attn\.q_norm\.', '.self_attention.q_layernorm.'),
-                (r'\.self_attn\.k_norm\.', '.self_attention.k_layernorm.'),
-            )
-        ),
-        ExpertUpGateMergeOp(
-            raw_names=["model.layers.(\d+).mlp.experts.(\d+).gate_proj.weight", "model.layers.(\d+).mlp.experts.(\d+).up_proj.weight"],
-            new_name="text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight"
-        )
-    ] + create_qwen2_5_vl_ops(vit_embed_dim, vit_num_heads, llm_num_query_groups)
+              RenameOp(
+                  (
+                      # 处理 MoE专家相关
+                      (r'\.mlp\.gate\.', '.mlp.router.'),
+                      (r'^model\.layers\.(\d+)\.mlp\.experts\.(\d+)\.down_proj',
+                       r'text_decoder.decoder.layers.\1.mlp.experts.local_experts.\2.linear_fc2'),
+                      # 处理 q, k layernorm
+                      (r'\.self_attn\.q_norm\.', '.self_attention.q_layernorm.'),
+                      (r'\.self_attn\.k_norm\.', '.self_attention.k_layernorm.'),
+                  )
+              ),
+              ExpertUpGateMergeOp(
+                  raw_names=[r"model.layers.(\d+).mlp.experts.(\d+).gate_proj.weight",
+                             r"model.layers.(\d+).mlp.experts.(\d+).up_proj.weight"],
+                  new_name=r"text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight"
+              )
+          ] + create_qwen2_5_vl_ops(vit_embed_dim, vit_num_heads, llm_num_query_groups, llm_q_size, llm_kv_size)
     return ops
 
 
-def create_qwen2_5_omni_ops(vit_num_heads: int, llm_num_query_groups: int, audio_num_heads: int, audio_d_model: int,
-                            audio_encoder_layers: int) -> List[Operator]:
+def create_qwen2_5_omni_ops(vit_num_heads: int, llm_num_query_groups: int, audio_num_heads: int,
+                            head_sizes: Tuple[int, int, int, int]) -> List[Operator]:
+    """
+    创建qwen2.5-omni的权重转换操作列表
+
+    参数:
+        vit_num_heads: ViT中的注意力头数量
+        llm_num_query_groups: LLM中的查询组数
+        audio_num_heads: 音频处理中的注意力头数量
+        head_sizes: 包含四个整数的元组，依次为:
+                   - vit_head_hidden_size (ViT中每个头的隐藏层大小)
+                   - audio_head_hidden_size (音频处理中每个头的隐藏层大小)
+                   - llm_q_size (LLM中查询向量的大小)
+                   - llm_kv_size (LLM中键/值向量的大小)
+    """
+    vit_head_hidden_size, audio_head_hidden_size, llm_q_size, llm_kv_size = head_sizes
     """qwen2.5-omni 权重转换逻辑"""
     ops = [
+        UpGateMergeOp(
+            raw_names=[r"thinker.visual.blocks.(\d+).mlp.gate_proj.weight",
+                       r"thinker.visual.blocks.(\d+).mlp.up_proj.weight"],
+            new_name=r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight"),
+        UpGateMergeOp(
+            raw_names=[r"thinker.visual.blocks.(\d+).mlp.gate_proj.bias",
+                       r"thinker.visual.blocks.(\d+).mlp.up_proj.bias"],
+            new_name=r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias"),
+        UpGateMergeOp(raw_names=[r"thinker.model.layers.(\d+).mlp.gate_proj.weight",
+                                 r"thinker.model.layers.(\d+).mlp.up_proj.weight"],
+                      new_name=r"text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight"),
+        QKVMergeOp(raw_names=(r"thinker.model.layers.(\d+).self_attn.q_proj.weight",
+                              r"thinker.model.layers.(\d+).self_attn.k_proj.weight",
+                              r"thinker.model.layers.(\d+).self_attn.v_proj.weight"),
+                   new_name=r"text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.weight",
+                   group=llm_num_query_groups,
+                   q_size=llm_q_size,
+                   k_size=llm_kv_size,
+                   v_size=llm_kv_size,
+                   ),
+        QKVMergeOp(raw_names=(r"thinker.model.layers.(\d+).self_attn.q_proj.bias",
+                              r"thinker.model.layers.(\d+).self_attn.k_proj.bias",
+                              r"thinker.model.layers.(\d+).self_attn.v_proj.bias"),
+                   new_name=r"text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.bias",
+                   group=llm_num_query_groups,
+                   q_size=llm_q_size,
+                   k_size=llm_kv_size,
+                   v_size=llm_kv_size,
+                   ),
+        QKVMergeOp(raw_names=(r"thinker.visual.blocks.(\d+).attn.q.weight",
+                              r"thinker.visual.blocks.(\d+).attn.k.weight",
+                              r"thinker.visual.blocks.(\d+).attn.v.weight"),
+                   new_name=r"image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight",
+                   group=vit_num_heads,
+                   q_size=vit_head_hidden_size,
+                   k_size=vit_head_hidden_size,
+                   v_size=vit_head_hidden_size,
+                   ),
+        QKVMergeOp(raw_names=(r"thinker.visual.blocks.(\d+).attn.q.bias",
+                              r"thinker.visual.blocks.(\d+).attn.k.bias",
+                              r"thinker.visual.blocks.(\d+).attn.v.bias"),
+                   new_name=r"image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias",
+                   group=vit_num_heads,
+                   q_size=vit_head_hidden_size,
+                   k_size=vit_head_hidden_size,
+                   v_size=vit_head_hidden_size,
+                   ),
+        QKVMergeOp(raw_names=(r"thinker.audio_tower.layers.(\d+).self_attn.q_proj.weight",
+                              r"thinker.audio_tower.layers.(\d+).self_attn.k_proj.weight",
+                              r"thinker.audio_tower.layers.(\d+).self_attn.v_proj.weight"),
+                   new_name=r"audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight",
+                   group=audio_num_heads,
+                   q_size=audio_head_hidden_size,
+                   k_size=audio_head_hidden_size,
+                   v_size=audio_head_hidden_size,
+                   ),
         # 音频模型中，k没有bias，所以需要将k的bias以全零权重的形式添加到权重字典，以便进行后续的qkv拼接
-        ZeroWeightOp(
-            name="thinker.audio_tower.layers.(\d+).self_attn.k_proj.bias",
-            shape=[audio_d_model],
-            layers=audio_encoder_layers
-        ),
-        UpGateMergeOp(
-            raw_names=["thinker.visual.blocks.(\d+).mlp.gate_proj.weight",
-                       "thinker.visual.blocks.(\d+).mlp.up_proj.weight"],
-            new_name="image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight"),
-        UpGateMergeOp(
-            raw_names=["thinker.visual.blocks.(\d+).mlp.gate_proj.bias",
-                       "thinker.visual.blocks.(\d+).mlp.up_proj.bias"],
-            new_name="image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias"),
-        UpGateMergeOp(raw_names=["thinker.model.layers.(\d+).mlp.gate_proj.weight",
-                                 "thinker.model.layers.(\d+).mlp.up_proj.weight"],
-                      new_name="text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight"),
-        QKVMergeOp(raw_names=["thinker.model.layers.(\d+).self_attn.q_proj.weight",
-                              "thinker.model.layers.(\d+).self_attn.k_proj.weight",
-                              "thinker.model.layers.(\d+).self_attn.v_proj.weight"],
-                   new_name="text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.weight",
-                   group=llm_num_query_groups),
-        QKVMergeOp(raw_names=["thinker.model.layers.(\d+).self_attn.q_proj.bias",
-                              "thinker.model.layers.(\d+).self_attn.k_proj.bias",
-                              "thinker.model.layers.(\d+).self_attn.v_proj.bias"],
-                   new_name="text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.bias",
-                   group=llm_num_query_groups),
-        QKVMergeOp(raw_names=["thinker.visual.blocks.(\d+).attn.q.weight",
-                              "thinker.visual.blocks.(\d+).attn.k.weight",
-                              "thinker.visual.blocks.(\d+).attn.v.weight"],
-                   new_name="image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight",
-                   group=vit_num_heads),
-        QKVMergeOp(raw_names=["thinker.visual.blocks.(\d+).attn.q.bias",
-                              "thinker.visual.blocks.(\d+).attn.k.bias",
-                              "thinker.visual.blocks.(\d+).attn.v.bias"],
-                   new_name="image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias",
-                   group=vit_num_heads),
-        QKVMergeOp(raw_names=["thinker.audio_tower.layers.(\d+).self_attn.q_proj.weight",
-                              "thinker.audio_tower.layers.(\d+).self_attn.k_proj.weight",
-                              "thinker.audio_tower.layers.(\d+).self_attn.v_proj.weight"],
-                   new_name="audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight",
-                   group=audio_num_heads),
-        QKVMergeOp(raw_names=["thinker.audio_tower.layers.(\d+).self_attn.q_proj.bias",
-                              "thinker.audio_tower.layers.(\d+).self_attn.k_proj.bias",
-                              "thinker.audio_tower.layers.(\d+).self_attn.v_proj.bias"],
-                   new_name="audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias",
-                   group=audio_num_heads),
+        QVToQKVMergeOp(raw_names=(r"thinker.audio_tower.layers.(\d+).self_attn.q_proj.bias",
+                                  r"thinker.audio_tower.layers.(\d+).self_attn.v_proj.bias"),
+                       new_name=r"audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias",
+                       group=audio_num_heads,
+                       q_size=audio_head_hidden_size,
+                       k_size=audio_head_hidden_size,
+                       v_size=audio_head_hidden_size,
+                       ),
         RenameOp(
             (
-                # 定义多个正则替换规则（按处理顺序排列）
-                # 处理 visual.blocks.{n} 路径
-                (r'^thinker.visual\.blocks\.(\d+)\.', r'image_encoder.encoder.blocks.layers.\1.'),
-                (r'\.attn\.proj\.', '.self_attention.linear_proj.'),
-                (r'\.attn\.qkv\.', '.self_attention.linear_qkv.'),
-                (r'\.norm1\.', '.input_layernorm.'),
-                (r'\.norm2\.', '.pre_mlp_layernorm.'),
-                # 处理 model.layers.{n} 路径
-                (r'^thinker.model\.layers\.(\d+)\.', r'text_decoder.decoder.layers.\1.'),
-                (r'\.mlp\.down_proj\.', '.mlp.linear_fc2.'),
-                (r'\.post_attention_layernorm\.', '.pre_mlp_layernorm.'),
-                (r'\.self_attn\.o_proj\.', '.self_attention.linear_proj.'),
-                # 处理 visual.merger 相关
-                (r'^thinker.visual\.merger\.ln_q', 'image_encoder.projector.layernorm'),
-                (r'^thinker.visual\.merger\.mlp\.0', 'image_encoder.projector.encoder.linear_fc1'),
-                (r'^thinker.visual\.merger\.mlp\.2', 'image_encoder.projector.encoder.linear_fc2'),
-                # audio_tower相关
-                (r'^thinker.audio_tower\.layers\.(\d+)\.', r'audio_encoder.encoder.blocks.layers.\1.'),
-                (r'\.self_attn\.out_proj\.', '.self_attention.linear_proj.'),
-                (r'\.fc1\.', '.mlp.linear_fc1.'),
-                (r'\.fc2\.', '.mlp.linear_fc2.'),
-                (r'\.self_attn_layer_norm\.', '.input_layernorm.'),
-                (r'\.final_layer_norm\.', '.pre_mlp_layernorm.'),
-                (r'^thinker.audio_tower\.', r'audio_encoder.encoder.'),
-                # 其他固定映射
-                (r'^thinker.visual\.patch_embed\.proj', 'image_encoder.encoder.patch_embed.proj'),
-                (r'^thinker.model\.embed_tokens', 'text_decoder.embedding.word_embeddings'),
-                (r'^thinker.model\.norm', 'text_decoder.decoder.final_layernorm'),
-                (r'^thinker.lm_head', 'text_decoder.output_layer')
+                (r'thinker.visual.blocks.(\d+).attn.proj',
+                 r'image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_proj'),
+                (r'thinker.visual.blocks.(\d+).mlp.down_proj',
+                 r'image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc2'),
+                (r'thinker.visual.blocks.(\d+).norm1', r'image_encoder.encoder.blocks.layers.(\d+).input_layernorm'),
+                (r'thinker.visual.blocks.(\d+).norm2', r'image_encoder.encoder.blocks.layers.(\d+).pre_mlp_layernorm'),
+                (r'thinker.visual.merger.ln_q', r'image_encoder.projector.layernorm'),
+                (r'thinker.visual.merger.mlp.0', r'image_encoder.projector.encoder.linear_fc1'),
+                (r'thinker.visual.merger.mlp.2', r'image_encoder.projector.encoder.linear_fc2'),
+                (r'thinker.visual.patch_embed.proj', r'image_encoder.encoder.patch_embed.proj'),
+                (r'thinker.model.embed_tokens', r'text_decoder.embedding.word_embeddings'),
+                (r'thinker.model.layers.(\d+).input_layernorm', r'text_decoder.decoder.layers.(\d+).input_layernorm'),
+                (r'thinker.model.layers.(\d+).mlp.down_proj', r'text_decoder.decoder.layers.(\d+).mlp.linear_fc2'),
+                (r'thinker.model.layers.(\d+).post_attention_layernorm',
+                 r'text_decoder.decoder.layers.(\d+).pre_mlp_layernorm'),
+                (r'thinker.model.layers.(\d+).self_attn.o_proj',
+                 r'text_decoder.decoder.layers.(\d+).self_attention.linear_proj'),
+                (r'thinker.lm_head', r'text_decoder.output_layer'),
+                (r'thinker.model.norm', r'text_decoder.decoder.final_layernorm'),
+                (r'thinker.audio_tower.layers.(\d+).fc1', r'audio_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1'),
+                (r'thinker.audio_tower.layers.(\d+).fc2', r'audio_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc2'),
+                (r'thinker.audio_tower.layers.(\d+).final_layer_norm',
+                 r'audio_encoder.encoder.blocks.layers.(\d+).pre_mlp_layernorm'),
+                (r'thinker.audio_tower.layers.(\d+).self_attn.out_proj',
+                 r'audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_proj'),
+                (r'thinker.audio_tower.layers.(\d+).self_attn_layer_norm',
+                 r'audio_encoder.encoder.blocks.layers.(\d+).input_layernorm'),
+                (r'thinker.audio_tower.ln_post', r'audio_encoder.encoder.ln_post'),
+                (r'thinker.audio_tower.proj', r'audio_encoder.encoder.proj'),
+                (r'thinker.audio_tower.audio_bos_eos_token', r'audio_encoder.encoder.audio_bos_eos_token'),
+                (r'thinker.audio_tower.conv1', r'audio_encoder.encoder.conv1'),
+                (r'thinker.audio_tower.conv2', r'audio_encoder.encoder.conv2')
             )
         ),
     ]
@@ -384,50 +655,61 @@ def create_qwen2_5_omni_ops(vit_num_heads: int, llm_num_query_groups: int, audio
 
 
 qwen2vl_tp_patterns = {
-    "text_decoder.output_layer.weight": tp_split_row_weight,
-    "text_decoder.embedding.word_embeddings.weight": tp_split_row_weight,
-    'text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight': tp_split_glu_weight,
-    'text_decoder.decoder.layers.(\d+).mlp.linear_fc2.weight': tp_split_col_weight,
-    'text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.weight': tp_split_row_weight,
-    'text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.bias': tp_split_row_bias,
-    'text_decoder.decoder.layers.(\d+).self_attention.linear_proj.weight': tp_split_col_weight,
-    "image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_proj.weight": tp_split_col_weight,
-    "image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias": tp_split_row_bias,
-    "image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight": tp_split_row_bias,
-    "image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias": tp_split_row_bias,
-    "image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight": tp_split_row_weight,
-    "image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc2.weight": tp_split_col_weight,
-    "image_encoder.projector.encoder.linear_fc1.bias": tp_split_row_bias,
-    "image_encoder.projector.encoder.linear_fc1.weight": tp_split_row_weight,
-    "image_encoder.projector.encoder.linear_fc2.weight": tp_split_col_weight
+    r"text_decoder.output_layer.weight": RowWeightSplit,
+    r"text_decoder.embedding.word_embeddings.weight": RowWeightSplit,
+    r'text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight': GLUSplit,
+    r'text_decoder.decoder.layers.(\d+).mlp.linear_fc2.weight': ColWeightSplit,
+    r'text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.weight': RowWeightSplit,
+    r'text_decoder.decoder.layers.(\d+).self_attention.linear_qkv.bias': RowBiasSplit,
+    r'text_decoder.decoder.layers.(\d+).self_attention.linear_proj.weight': ColWeightSplit,
+    r"image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_proj.weight": ColWeightSplit,
+    r"image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias": RowBiasSplit,
+    r"image_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight": RowBiasSplit,
+    r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias": RowBiasSplit,
+    r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight": RowWeightSplit,
+    r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc2.weight": ColWeightSplit,
+    r"image_encoder.projector.encoder.linear_fc1.bias": RowBiasSplit,
+    r"image_encoder.projector.encoder.linear_fc1.weight": RowWeightSplit,
+    r"image_encoder.projector.encoder.linear_fc2.weight": ColWeightSplit
 }
 
 #  qwen2.5vl的tp切分在qwen2vl的tp切分基础上，修改了vit中mlp的tp切分逻辑，适应glu结构
 qwen2_5_vl_tp_patterns = {**qwen2vl_tp_patterns,
-                          **{"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias": tp_split_glu_bias,
-                             "image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight": tp_split_glu_weight}
+                          **{r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias": GLUSplit,
+                             r"image_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight": GLUSplit}
                           }
+
+qwen2_5_omni_tp_patterns = {
+    **qwen2_5_vl_tp_patterns,
+    **{r"audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.bias": RowBiasSplit,
+       r"audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_qkv.weight": RowWeightSplit,
+       r"audio_encoder.encoder.blocks.layers.(\d+).self_attention.linear_proj.weight": ColWeightSplit,
+       r"audio_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.bias": RowBiasSplit,
+       r"audio_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc1.weight": RowWeightSplit,
+       r"audio_encoder.encoder.blocks.layers.(\d+).mlp.linear_fc2.weight": ColWeightSplit,
+       }
+}
 
 # qwen3vl的tp切分在qwen2.5vl的tp切分基础上，增加了expert的tp切分逻辑
 qwen3_vl_tp_patterns = {
     **qwen2_5_vl_tp_patterns,
     **{
-        "text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight": tp_split_glu_weight,
-        "text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc2.weight": tp_split_col_weight,
+        r"text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight": GLUSplit,
+        r"text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc2.weight": ColWeightSplit,
     }
 }
 
 deepseekvl_tp_patterns = {
-    "text_decoder.output_layer.weight": tp_split_row_weight,
-    "text_decoder.embedding.word_embeddings.weight": tp_split_row_weight,
-    'text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight': tp_split_glu_weight,
-    'text_decoder.decoder.layers.(\d+).mlp.linear_fc2.weight': tp_split_col_weight,
-    'text_decoder.decoder.layers.(\d+).self_attention.linear_qb.weight': tp_split_row_weight,
-    'text_decoder.decoder.layers.(\d+).self_attention.linear_kvb.weight': tp_split_row_weight,
-    'text_decoder.decoder.layers.(\d+).self_attention.linear_kvb.bias': tp_split_row_bias,
-    'text_decoder.decoder.layers.(\d+).self_attention.linear_proj.weight': tp_split_col_weight,
-    'text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight': tp_split_glu_weight,
-    "text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc2.weight": tp_split_col_weight,
-    "text_decoder.decoder.layers.(\d+).mlp.shared_experts.linear_fc1.weight": tp_split_glu_weight,
-    "text_decoder.decoder.layers.(\d+).mlp.shared_experts.linear_fc2.weight": tp_split_col_weight
+    r"text_decoder.output_layer.weight": RowWeightSplit,
+    r"text_decoder.embedding.word_embeddings.weight": RowWeightSplit,
+    r'text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight': GLUSplit,
+    r'text_decoder.decoder.layers.(\d+).mlp.linear_fc2.weight': ColWeightSplit,
+    r'text_decoder.decoder.layers.(\d+).self_attention.linear_qb.weight': RowWeightSplit,
+    r'text_decoder.decoder.layers.(\d+).self_attention.linear_kvb.weight': RowWeightSplit,
+    r'text_decoder.decoder.layers.(\d+).self_attention.linear_kvb.bias': RowBiasSplit,
+    r'text_decoder.decoder.layers.(\d+).self_attention.linear_proj.weight': ColWeightSplit,
+    r'text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight': GLUSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc2.weight": ColWeightSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.shared_experts.linear_fc1.weight": GLUSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.shared_experts.linear_fc2.weight": ColWeightSplit
 }
