@@ -9,10 +9,10 @@ import torch
 import torchvision.transforms as TT
 from torchvision.transforms.functional import resize
 from torchvision.transforms import InterpolationMode
-from torchvision.datasets.folder import IMG_EXTENSIONS
 
 from megatron.core import mpu
 from mindspeed_mm.data.data_utils.data_transform import (
+    calculate_centered_alignment,
     TemporalRandomCrop, 
     maxhwresize
 )
@@ -22,6 +22,7 @@ from mindspeed_mm.data.data_utils.utils import (
     cal_gradient_accumulation_size,
     DataStats,
     VID_EXTENSIONS,
+    IMG_EXTENSIONS,
     TENSOR_EXTENSIONS
 )
 from mindspeed_mm.utils.utils import Registry
@@ -99,7 +100,7 @@ class AbstractVideoProcessor(ABC):
 class OpensoraVideoProcessor(AbstractVideoProcessor):
     """Opensora video processing pipeline with temporal sampling and spatial transforms"""
     
-    def __call__(self, vframes, num_frames=None, frame_interval=None, image_size=None):
+    def __call__(self, vframes, num_frames=None, frame_interval=None, image_size=None, **kwargs):
         """Process video frames through standard pipeline
         
         Args:
@@ -171,7 +172,7 @@ class CogVideoXProcessor(AbstractVideoProcessor):
         self.max_height = max_height
         self.max_width = max_width
 
-    def __call__(self, vframes):
+    def __call__(self, vframes, **kwargs):
         """Process video following CogVideoX's temporal specifications"""
 
         # Calculate actual frame characteristics
@@ -310,8 +311,7 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
         seed: int = 42,
         **base_args
     ):
-        """Initialize OpenSoraPlan specific parameters
-        """
+        """Initialize OpenSoraPlan specific parameters"""
         super().__init__(**base_args)
 
         self.train_fps = train_fps
@@ -357,7 +357,8 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
         predefine_num_frames=13,
         start_frame_idx=0,
         clip_total_frames=-1,
-        resolution_crop=(None, None, None, None)
+        resolution_crop=(None, None, None, None),
+        **kwargs
     ):
         """Process video with temporal speed adjustment and spatial validation"""
         total_frames = vframes.get_len() if clip_total_frames == -1 else clip_total_frames
@@ -481,8 +482,7 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
             sample["sample_size"] = sample_size
             sample_sizes.append(sample_size)
             valid_samples.append(sample)
-            path = sample["path"]
-            print(f"{path}, {random.getstate()[1][-5:]}")
+
         valid_samples, sample_sizes = self._apply_final_filters(valid_samples, sample_sizes, stats)
 
         return valid_samples
@@ -494,14 +494,6 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
             return False
         else:
             return True
-
-    def _get_params(self, h, w, stride):
-        th, tw = h // stride * stride, w // stride * stride
-
-        i = (h - th) // 2
-        j = (w - tw) // 2
-
-        return (i, j, th, tw)
     
     def _process_resolution(self, sample, stats):
         """Handle resolution validation and processing"""
@@ -515,7 +507,7 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
         if not self.force_resolution:
             # Dynamic resolution
             tr_h, tr_w = maxhwresize(height, width, self.max_hxw)
-            _, _, sample_h, sample_w = self._get_params(tr_h, tr_w, self.hw_stride)
+            _, _, sample_h, sample_w = calculate_centered_alignment(tr_h, tr_w, self.hw_stride)
 
             if sample_h <= 0 or sample_w <= 0:
                 stats.increment("resolution_mismatch")
@@ -524,18 +516,23 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
                 stats.increment("resolution_too_small")
                 return False
             
-            aspect = 1.0
+            is_pick = self._filter_resolution(
+                sample_h, 
+                sample_w, 
+                max_h_div_w_ratio=self.hw_aspect_thr, 
+                min_h_div_w_ratio=1 / self.hw_aspect_thr
+            )
         else:
             # Static resolution
             aspect = self.max_height / self.max_width
+            is_pick = self._filter_resolution(
+                height, 
+                width, 
+                max_h_div_w_ratio=self.hw_aspect_thr * aspect, 
+                min_h_div_w_ratio=1 / self.hw_aspect_thr * aspect
+            )
             sample_h, sample_w = self.max_height, self.max_width
-        
-        is_pick = self._filter_resolution(
-            sample_h, 
-            sample_w, 
-            max_h_div_w_ratio=self.hw_aspect_thr * aspect, 
-            min_h_div_w_ratio=1 / self.hw_aspect_thr * aspect
-        )
+
         if not is_pick:
             stats.increment("aspect_mismatch")
             return False

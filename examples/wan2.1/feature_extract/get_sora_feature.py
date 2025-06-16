@@ -82,7 +82,13 @@ class WanTextVideoDataset(T2VDataset):
             raise AssertionError(f"file {file_path} do not exist!")
 
         vframes = self.video_reader(file_path)
-        video = self.video_processer(vframes=vframes, **sample)
+        start_frame_idx = sample.get("start_frame_idx", 0)
+        frame_indice = sample["sample_frame_index"]
+        video = self.video_processer(
+            vframes,
+            predefine_num_frames=len(frame_indice),
+            start_frame_idx=start_frame_idx,
+        )
 
         if self.task == "i2v":
             first_frame = video[:, 0, :, :] # c t h w 
