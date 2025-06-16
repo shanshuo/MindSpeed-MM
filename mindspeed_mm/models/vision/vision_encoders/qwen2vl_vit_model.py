@@ -2,7 +2,7 @@
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 
-from typing import Optional
+from typing import Tuple, Optional
 
 import torch
 import torch.nn as nn
@@ -57,13 +57,10 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
 
 
 # Modified based on transformers.models.qwen2_vl.modeling_qwen2_vl
-def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: torch.Tensor, use_fused_rope=True) -> torch.Tensor:
+def apply_rotary_pos_emb_vision(tensor: torch.Tensor, freqs: Tuple[torch.Tensor, torch.Tensor], use_fused_rope=True) -> torch.Tensor:
     orig_dtype = tensor.dtype
     tensor = tensor.float()
-    cos = freqs.cos()
-    sin = freqs.sin()
-    cos = cos.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
-    sin = sin.unsqueeze(1).repeat(1, 1, 2).unsqueeze(0).float()
+    cos, sin = freqs[0], freqs[1]
     if use_fused_rope:
         import torch_npu
         output = torch_npu.npu_rotary_mul(tensor, cos, sin).to(orig_dtype)
@@ -261,10 +258,10 @@ class Qwen2vlVitSelfAttention(SelfAttention):
         # absolute positional embedding.
         # otherwise, only relative positional embedding takes effect
         if rotary_pos_emb is not None:
-            query = apply_rotary_pos_emb_vision(query.transpose(0, 1), rotary_pos_emb[0],
-                                                use_fused_rope=self.config.use_fused_rotary_pos_emb).transpose(0, 1)
-            key = apply_rotary_pos_emb_vision(key.transpose(0, 1), rotary_pos_emb[0],
-                                              use_fused_rope=self.config.use_fused_rotary_pos_emb).transpose(0, 1)
+            query = apply_rotary_pos_emb_vision(query, rotary_pos_emb,
+                                                use_fused_rope=self.config.use_fused_rotary_pos_emb)
+            key = apply_rotary_pos_emb_vision(key, rotary_pos_emb,
+                                                use_fused_rope=self.config.use_fused_rotary_pos_emb)
 
         # ==================================
         # core attention computation
@@ -549,7 +546,10 @@ class Qwen2VLViT(MultiModalModule):
                 split_gather_sizes,
                 "down"
             )
-            
+
+        cos_cache = rotary_pos_emb.cos().unsqueeze(1).repeat(1, 1, 2).unsqueeze(1).float()
+        sin_cache = rotary_pos_emb.sin().unsqueeze(1).repeat(1, 1, 2).unsqueeze(1).float()
+        rotary_pos_emb = (cos_cache, sin_cache)
         hidden_states = self.blocks(
             hidden_states=hidden_states,
             rotary_pos_emb=rotary_pos_emb,

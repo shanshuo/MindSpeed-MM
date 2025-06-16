@@ -16,8 +16,8 @@ LLM_COS = "/home/ci_resource/data/qwen2vl/rope_test/cos.pt"
 LLM_SIN = "/home/ci_resource/data/qwen2vl/rope_test/sin.pt"
 
 MROPE_SECTION = [16, 24, 24]
-VISION_OUTPUT = -5.052933216094971
-VISION_FUSION_OUTPUT = -5.052933216094971
+VISION_OUTPUT = -5.0529327392578125
+VISION_FUSION_OUTPUT = -5.0529327392578125
 QUERY_EMBED_OUTPUT = -9.803374290466309
 KEY_EMBED_OUTPUT = -9.747139930725098
 QUERY_EMBED_FUSION_OUTPUT = -9.803374290466309
@@ -38,9 +38,11 @@ class TestQwen2vlROPE:
         Test apply_rotary_pos_emb_vision function.
         """
         vision_tensor = torch.load(VISION_TENSOR, map_location="cpu")
-        vision_freqs = torch.load(VISION_FREQS, map_location="cpu")
+        cos = torch.load(VISION_FREQS, map_location="cpu").cos().unsqueeze(1).repeat(1, 1, 2).unsqueeze(1).float()
+        sin = torch.load(VISION_FREQS, map_location="cpu").sin().unsqueeze(1).repeat(1, 1, 2).unsqueeze(1).float()
+        vision_freqs = (cos.npu(), sin.npu())
         use_fused_rope = False
-        output = apply_rotary_pos_emb_vision(vision_tensor.npu(), vision_freqs.npu(), use_fused_rope=use_fused_rope)
+        output = apply_rotary_pos_emb_vision(vision_tensor.npu().transpose(0, 1), vision_freqs, use_fused_rope=use_fused_rope)
         judge_expression(output.min().item() == VISION_OUTPUT)
 
     def test_apply_rotary_pos_emb_vision_fusion(self):
@@ -48,9 +50,11 @@ class TestQwen2vlROPE:
         Test apply_rotary_pos_emb_vision function based on npu_rotary_mul fusion operator.
         """
         vision_tensor = torch.load(VISION_TENSOR, map_location="cpu")
-        vision_freqs = torch.load(VISION_FREQS, map_location="cpu")
+        cos = torch.load(VISION_FREQS, map_location="cpu").cos().unsqueeze(1).repeat(1, 1, 2).unsqueeze(1).float()
+        sin = torch.load(VISION_FREQS, map_location="cpu").sin().unsqueeze(1).repeat(1, 1, 2).unsqueeze(1).float()
+        vision_freqs = (cos.npu(), sin.npu())
         use_fused_rope = True
-        output = apply_rotary_pos_emb_vision(vision_tensor.npu(), vision_freqs.npu(), use_fused_rope=use_fused_rope)
+        output = apply_rotary_pos_emb_vision(vision_tensor.npu().transpose(0, 1), vision_freqs, use_fused_rope=use_fused_rope)
         judge_expression(output.min().item() == VISION_FUSION_OUTPUT)
 
     def test_apply_multimodal_rotary_pos_emb(self):
