@@ -8,7 +8,7 @@
         },
         "processor_path": "deepseek-ai/deepseek-vl2",
         "preprocess_parameters": null,
-        "group_by_length": true
+        "group_by_length": false
     },
     "dataloader_param": {
         "dataloader_mode": "sampler",

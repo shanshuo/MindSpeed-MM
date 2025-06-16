@@ -422,7 +422,9 @@ class VLMModel(MultiModalModule):
 
             if len(images_in_this_batch) > 0:
                 images_in_this_batch = torch.cat(images_in_this_batch, dim=0)
-                input_embeds[idx].masked_scatter_(images_seq_mask[idx].unsqueeze(-1), images_in_this_batch)
+                indices_tuple = torch.nonzero(images_seq_mask[idx].unsqueeze(-1), as_tuple=True)
+                input_embeds[indices_tuple] = images_in_this_batch
+        # [b, s, h] -> [s, b, h]
         input_embeds = input_embeds.transpose(0, 1)
         return input_embeds
         

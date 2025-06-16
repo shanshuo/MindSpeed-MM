@@ -14,16 +14,16 @@ export ACLNN_CACHE_LIMIT=100000
 NPUS_PER_NODE=8
 MASTER_ADDR=localhost
 MASTER_PORT=6000
-NNODES=1
+NNODES=64
 NODE_RANK=0
 WORLD_SIZE=$(($NPUS_PER_NODE*$NNODES))
 
 MBS=1
 GRAD_ACC_STEP=64
-TP=1
-PP=1
+TP=8
+PP=8
 CP=1
-EP=1
+EP=8
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
@@ -52,6 +52,7 @@ GPT_ARGS="
     --pipeline-model-parallel-size ${PP} \
     --context-parallel-size ${CP} \
     --expert-model-parallel-size ${EP} \
+    --sequence-parallel \
     --micro-batch-size ${MBS} \
     --global-batch-size ${GBS} \
     --seq-length 4096 \
@@ -82,6 +83,7 @@ GPT_ARGS="
     --no-save-rng \
     --num-workers 4 \
     --trust-remote-code \
+    --use-flash-attn \
 "
 
 MLA_ARGS="
