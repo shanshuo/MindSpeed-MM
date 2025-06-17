@@ -77,16 +77,7 @@ source /usr/local/Ascend/nnal/atb/set_env.sh
 
 准备[torch_npu](https://www.hiascend.com/developer/download/community/result?module=pt)和[apex](https://gitee.com/ascend/apex)，参考[Ascend Extension for PyTorch 配置与安装](https://www.hiascend.com/document/detail/zh/Pytorch/700/configandinstg/instg/insg_0004.html)或执行以下命令安装：
 
-安装torch和torch_npu,以下为python 3.8版本（基于模型需求）
-
-```shell
-conda create -n test python=3.8
-conda activate test
-pip install torch-2.1.0-cp38-cp38*.whl 
-pip install torch_npu-2.1.0*-cp38-cp38*.whl
-```
-
-安装torch和torch_npu,以下为python 3.10版本（基于模型需求）
+安装torch和torch_npu，以下以python 3.10为例：
 
 ```shell
 conda create -n test python=3.10
