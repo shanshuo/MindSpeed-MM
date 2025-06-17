@@ -412,10 +412,9 @@ class VLMModel(MultiModalModule):
                     _input_ids = scatter_to_sequence_parallel_region(_input_ids.transpose(0, 1)).transpose(0, 1)
                 if vit_embeds is not None:
                     input_embeds = input_embeds.transpose(0, 1)  # bsh
-                    image_mask = torch.eq(_input_ids, self.img_context_token_id)
+                    image_mask = torch.eq(_input_ids, self.img_context_token_id).unsqueeze(-1).expand_as(input_embeds)
                     vit_embeds = vit_embeds[:, 0, :]
-                    indices_tuple = torch.nonzero(image_mask, as_tuple=True)
-                    input_embeds[indices_tuple] = vit_embeds
+                    input_embeds = input_embeds.masked_scatter(image_mask, vit_embeds)
                     # 音频模态处理
                     if 'input_features' in kwargs:  # 使用WhisperFeatureExtractor提取音频特征后输出值名为input_feature
                         audio_features = self.audio_encoder(kwargs['input_features'], kwargs['feature_attention_mask'])
