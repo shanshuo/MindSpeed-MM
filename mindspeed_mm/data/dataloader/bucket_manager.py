@@ -190,7 +190,8 @@ class BucketManager:
         """All data is allocated to different buckets based on rules."""
         return ""
 
-    def suggest_thread_count(self, dataset):
+    @staticmethod
+    def suggest_thread_count(dataset):
         cpu_count = os.cpu_count()
         data_size = len(dataset)
         processes_num = 8

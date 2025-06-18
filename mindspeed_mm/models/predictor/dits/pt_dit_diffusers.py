@@ -158,7 +158,7 @@ class ProxyTokensTransformerBlock(nn.Module):
 
         # 2.5 shift windeo attention
         self.shift_window = shift_window
-        if self.shift_window :
+        if self.shift_window:
             self.attn3 = Attention(
                     query_dim=dim,
                     heads=num_attention_heads,
@@ -334,7 +334,7 @@ class ProxyTokensTransformerBlock(nn.Module):
             hidden_states = hidden_states.squeeze(1)
 
         #4.---------------------------shift window Self-Attention------------------------------------
-        if self.shift_window :
+        if self.shift_window:
             after_shift_hidden_states = self.window_shift(hidden_states, window_number,
                                                         compress_ratios, 
                                                         num_frames, height, width)
@@ -777,7 +777,7 @@ class PTDiTDiffuser(ModelMixin, ConfigMixin):
                     **ckpt_kwargs,
                 )
             else:
-                kwargs = {"num_frames":video_length, "height":height, "width":width}
+                kwargs = {"num_frames": video_length, "height": height, "width": width}
                 hidden_states = block(
                     hidden_states,
                     attention_mask=attention_mask,

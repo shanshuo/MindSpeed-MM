@@ -338,7 +338,7 @@ def _conv_split(input_, dim, kernel_size):
         output = input_.transpose(dim, 0)[: dim_size + kernel_size].transpose(dim, 0)
     else:
         output = input_.transpose(dim, 0)[
-            cp_rank * dim_size + kernel_size : (cp_rank + 1) * dim_size + kernel_size
+            cp_rank * dim_size + kernel_size: (cp_rank + 1) * dim_size + kernel_size
         ].transpose(dim, 0)
     output = output.contiguous()
 
@@ -359,7 +359,7 @@ def _conv_gather(input_, dim, kernel_size):
     if cp_rank == 0:
         input_ = input_.transpose(0, dim)[kernel_size:].transpose(0, dim).contiguous()
     else:
-        input_ = input_.transpose(0, dim)[max(kernel_size - 1, 0) :].transpose(0, dim).contiguous()
+        input_ = input_.transpose(0, dim)[max(kernel_size - 1, 0):].transpose(0, dim).contiguous()
 
     tensor_list = [torch.empty_like(torch.cat([input_first_kernel_, input_], dim=dim))] + [
         torch.empty_like(input_) for _ in range(cp_world_size - 1)

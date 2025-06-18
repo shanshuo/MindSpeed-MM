@@ -179,7 +179,7 @@ class InternVLPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
         }
         return model_inputs
 
-    def _update_model_kwargs_for_generation(self, model_kwargs:Dict[str, Any], model_inputs:Dict[str, Any]):
+    def _update_model_kwargs_for_generation(self, model_kwargs: Dict[str, Any], model_inputs: Dict[str, Any]):
         # update position_ids
         if "position_ids" in model_kwargs:
             model_kwargs["position_ids"] = model_inputs["position_ids"]

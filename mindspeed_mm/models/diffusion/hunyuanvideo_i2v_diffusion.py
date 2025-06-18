@@ -47,8 +47,8 @@ class HunyuanVideoI2VDiffusion:
 
         self.snr_type = snr_type
 
+    @staticmethod
     def check_interval(
-            self,
             train_eps,
             sample_eps,
             *,
@@ -163,8 +163,8 @@ class HunyuanVideoI2VDiffusion:
         xt = torch.concat([cond_latents, xt[:, :, 1:, :, :]], dim=2)
         return xt, ut, input_t
 
+    @staticmethod
     def training_losses(
-            self,
             model_output: torch.Tensor,
             x_start: Optional[torch.Tensor] = None,
             x_t: Optional[torch.Tensor] = None,

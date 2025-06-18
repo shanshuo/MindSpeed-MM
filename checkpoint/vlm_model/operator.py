@@ -23,8 +23,8 @@ def interleaved_qkv_to_concated(megatron_qkv: Tensor, num_key_value_heads: int, 
 
 def concated_qkv_to_interleaved(qkv: Tensor, num_key_value_heads: int, split_size: List[int]) -> Tensor:
     """
-    qkv = [nq1,nq2,nq3,nq4,k1,k2,k3,k4]
-    new_qkv =  [nq1,k1,v1,  nq2,k2,v2,  nq3,k3,v3,  nq4,k4,v4]
+    qkv : [nq1,nq2,nq3,nq4,k1,k2,k3,k4]
+    new_qkv : [nq1,k1,v1,  nq2,k2,v2,  nq3,k3,v3,  nq4,k4,v4]
     """
     qkv_split = torch.split(qkv, split_size)
     qkv_chunk_group = [torch.chunk(i, num_key_value_heads) for i in qkv_split]

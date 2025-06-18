@@ -204,7 +204,7 @@ class LlavaPipeline(GenerationMixin, InputsCheckMixin, MMEncoderMixin):
 
         return kwargs_dict
 
-    def _update_model_kwargs_for_generation(self, model_kwargs:Dict[str, Any], model_inputs:Dict[str, Any]):
+    def _update_model_kwargs_for_generation(self, model_kwargs: Dict[str, Any], model_inputs: Dict[str, Any]):
         model_kwargs["attention_mask"] = model_inputs["attention_mask"]
         model_kwargs["decoder_input"] = model_inputs["decoder_input"]
 

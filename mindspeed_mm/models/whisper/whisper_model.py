@@ -53,7 +53,7 @@ class WhisperPositionalEmbedding(nn.Embedding):
     def forward(self, input_ids, past_key_values_length=0, position_ids=None):
         if position_ids is None:
             return self.weight[
-                past_key_values_length : past_key_values_length + input_ids.shape[1]
+                past_key_values_length: past_key_values_length + input_ids.shape[1]
             ]
         else:
             return self.weight[position_ids]

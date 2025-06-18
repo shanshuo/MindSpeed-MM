@@ -941,7 +941,7 @@ def compute_rope1d(pos1d, cos, sin):
 
 
 class PositionGetter3D:
-    """return positions of patches"""
+    """This function returns the positions of image patches."""
 
     def __init__(self, max_t, max_h, max_w, explicit_uniform_rope=False, atten_layout="BSH"):
         self.cache_positions = {}

@@ -364,7 +364,7 @@ class VLMModel(MultiModalModule):
                     global_features = global_features.view(h, w, n_dim)
                     # [D]     -> [h, 1, D]
                     new_lines_in_global = repeat(self.image_newline, "d -> h 1 d", h=h)
-                    # cat([h, w, D], [h, 1, D], dim=1) -> [h, w + 1, D]
+                    # shape: cat([h, w, D], [h, 1, D], dim=1) -> [h, w + 1, D]
                     global_features = torch.cat([global_features, new_lines_in_global], dim=1)
                     # [h, w + 1, D] -> [h * (w + 1), D]
                     global_features = global_features.view(-1, n_dim)

@@ -369,7 +369,7 @@ class ContextParallelCasualVAE(MultiModalModule):
         n_rounds = math.ceil(z.shape[0] / n_samples)
         all_out = []
         for n in range(n_rounds):
-            temp_z = z[n * n_samples : (n + 1) * n_samples, :, :]
+            temp_z = z[n * n_samples: (n + 1) * n_samples, :, :]
             latent_time = temp_z.shape[2]  # check the time latent
             fake_cp_size = min(10, latent_time // 2)
 

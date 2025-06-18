@@ -316,7 +316,7 @@ class Qwen2VlPipeline(GenerationMixin):
 
         return model_inputs
     
-    def _update_model_kwargs_for_generation(self, model_kwargs:Dict[str, Any], model_inputs:Dict[str, Any]):
+    def _update_model_kwargs_for_generation(self, model_kwargs: Dict[str, Any], model_inputs: Dict[str, Any]):
         # updata cache_position
         if model_kwargs.get("use_cache", True):
             model_kwargs["cache_position"] = model_inputs["cache_position"][-1:] + 1

@@ -661,7 +661,7 @@ class VariableVideoBatchSampler(DistributedSampler):
         )
         self.dataset = dataset
         for resolution, configs in bucket_config.items():
-            bucket_config[resolution] = {int(k):tuple(v) for k, v in configs.items()}
+            bucket_config[resolution] = {int(k): tuple(v) for k, v in configs.items()}
         self.bucket = Bucket(bucket_config, auto_gen_bucket)
         self.verbose = verbose
         self.last_micro_batch_access_index = 0
@@ -748,7 +748,7 @@ class VariableVideoBatchSampler(DistributedSampler):
                 bucket_last_consumed[bucket_id] = bucket_bs
 
         for i in range(start_iter_idx, num_iters):
-            bucket_access_list = bucket_id_access_order[i * self.num_replicas : (i + 1) * self.num_replicas]
+            bucket_access_list = bucket_id_access_order[i * self.num_replicas: (i + 1) * self.num_replicas]
             self.last_micro_batch_access_index += self.num_replicas
 
             # compute the data samples consumed by each access
@@ -767,7 +767,7 @@ class VariableVideoBatchSampler(DistributedSampler):
             # compute the range of data accessed by each GPU
             bucket_id = bucket_access_list[self.rank]
             boundary = bucket_access_boundaries[self.rank]
-            cur_micro_batch = bucket_sample_dict[bucket_id][boundary[0] : boundary[1]]
+            cur_micro_batch = bucket_sample_dict[bucket_id][boundary[0]: boundary[1]]
 
             # encode t, h, w into the sample index
             real_t, real_h, real_w = self.bucket.get_thw(bucket_id)

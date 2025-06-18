@@ -37,7 +37,8 @@ class HunyuanVideoI2VProcessor:
         processor_path = config.get("processor_path", None)
         self.processor = CLIPImageProcessor.from_pretrained(processor_path)
 
-    def get_cond_latents(self, latents, vae):
+    @staticmethod
+    def get_cond_latents(latents, vae):
         """get conditioned latent by decode and encode the first frame latents"""
         first_image_latents = latents[:, :, 0, ...] if len(latents.shape) == 5 else latents
         first_image_latents = 1 / vae.scaling_factor * first_image_latents
@@ -59,7 +60,8 @@ class HunyuanVideoI2VProcessor:
 
         return cond_latents
 
-    def get_cond_images(self, latents, vae, is_uncond=False):
+    @staticmethod
+    def get_cond_images(latents, vae, is_uncond=False):
         """get conditioned images by decode the first frame latents"""
         sematic_image_latents = (
             latents[:, :, 0, ...] if len(latents.shape) == 5 else latents

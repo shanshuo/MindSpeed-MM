@@ -394,7 +394,7 @@ class MultiHeadLatentAttention(SelfAttention):
 
             if packed_seq_params is not None:
                 # reshape to same output shape as unpacked case
-                # (t, np, hn) -> (t, b=1, h=np*hn)
+                # shape: (t, np, hn) -> (t, b=1, h=np*hn)
                 # t is the pack size = sum (sq_i)
                 # note that batch is a dummy dimension in the packed case
                 core_attn_out = core_attn_out.reshape(core_attn_out.size(0), 1, -1)

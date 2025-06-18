@@ -54,7 +54,7 @@ class VideoAutoencoderKL(nn.Module):
             bs = self.micro_batch_size
             x_out = []
             for i in range(0, x.shape[0], bs):
-                x_bs = x[i : i + bs]
+                x_bs = x[i: i + bs]
                 x_bs = self.module.encode(x_bs).latent_dist.sample().mul(0.18215)
                 x_out.append(x_bs)
             x = torch.cat(x_out, dim=0)
@@ -76,7 +76,7 @@ class VideoAutoencoderKL(nn.Module):
             bs = self.micro_batch_size
             x_out = []
             for i in range(0, x.shape[0], bs):
-                x_bs = x[i : i + bs]
+                x_bs = x[i: i + bs]
                 x_bs = self.module.decode(x_bs / 0.18215).sample
                 x_out.append(x_bs)
             x = torch.cat(x_out, dim=0)
@@ -146,7 +146,7 @@ class VideoAutoencoder3D(nn.Module):
         else:
             z_list = []
             for i in range(0, x_z.shape[2], self.vae_micro_frame_size):
-                x_z_bs = x_z[:, :, i : i + self.vae_micro_frame_size]
+                x_z_bs = x_z[:, :, i: i + self.vae_micro_frame_size]
                 posterior = self.temporal_vae.encode(x_z_bs)
                 z_list.append(posterior.sample())
             z = torch.cat(z_list, dim=2)
@@ -171,7 +171,7 @@ class VideoAutoencoder3D(nn.Module):
         else:
             x_z_list = []
             for i in range(0, z.size(2), self.micro_z_frame_size):
-                z_bs = z[:, :, i : i + self.micro_z_frame_size]
+                z_bs = z[:, :, i: i + self.micro_z_frame_size]
                 x_z_bs = self.temporal_vae.decode(z_bs, num_frames=min(self.vae_micro_frame_size, num_frames))
                 x_z_list.append(x_z_bs)
                 num_frames -= self.vae_micro_frame_size

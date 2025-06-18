@@ -61,7 +61,7 @@ IMAGE_TRANSFORM_MAPPING = {
 
 
 INTERPOLATIONMODE_MAPPING = {
-    "BICUBIC":  transforms.InterpolationMode.BICUBIC,
+    "BICUBIC": transforms.InterpolationMode.BICUBIC,
     "BILINEAR": transforms.InterpolationMode.BILINEAR,
     "NEAREST": transforms.InterpolationMode.NEAREST,
     "NEAREST_EXACT": transforms.InterpolationMode.NEAREST_EXACT,

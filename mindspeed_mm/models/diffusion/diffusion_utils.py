@@ -132,7 +132,7 @@ def space_timesteps(num_timesteps: Tensor, section_counts: Union[str, List[int]]
     """
     if isinstance(section_counts, str):
         if section_counts.startswith("ddim"):
-            desired_count = int(section_counts[len("ddim") :])
+            desired_count = int(section_counts[len("ddim"):])
             for i in range(1, num_timesteps):
                 if len(range(0, num_timesteps, i)) == desired_count:
                     return set(range(0, num_timesteps, i))
