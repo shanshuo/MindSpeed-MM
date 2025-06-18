@@ -1,4 +1,4 @@
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 import torch
 from megatron.training import get_args
 from megatron.training.checkpointing import load_checkpoint

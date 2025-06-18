@@ -1,6 +1,6 @@
 import torch
 
-import mindspeed.megatron_adaptor # noqa
+import mindspeed.megatron_adaptor
 from mindspeed_mm.models.text_decoder.moe_model import topk_softmax_with_capacity
 from tests.ut.utils import judge_expression
 

@@ -1,13 +1,6 @@
-import argparse
-import os
-import stat
-from pathlib import Path
-
-import mindspeed.megatron_adaptor  # NOqa
-import torch
-import torch_npu  # NOqa
-
 """
+lora模型合并脚本，将基础模型权重和LoRA权重进行合并，生成新的权重文件。
+
 保存lora权重目录:
 your_ckpt_path_to_save
 ├── iter_0005000
@@ -29,6 +22,16 @@ merge_base_lora_weight
     └── mp_rank_00
         └── model_optim_rng.pt
 """
+
+
+import argparse
+import os
+import stat
+from pathlib import Path
+
+import mindspeed.megatron_adaptor
+import torch
+import torch_npu
 
 
 def get_latest_iteration(path: Path) -> str:

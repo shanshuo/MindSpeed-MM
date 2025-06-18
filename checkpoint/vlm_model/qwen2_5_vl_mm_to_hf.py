@@ -11,7 +11,7 @@ from typing import cast, List, Dict
 import torch
 from transformers.models.qwen2_5_vl.configuration_qwen2_5_vl import Qwen2_5_VLConfig
 # 注意mindspeed-mm训练后保存的checkpoint中存储了patch相关信息，在load时需要加下面这行以支持反序列化
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 
 from checkpoint.vlm_model.utils import LATEST_TXT, ConvertHFConfig, copy_files_except_suffix, save_by_index_json, \
     split_by_index_json, load_from_mm
@@ -48,7 +48,7 @@ def merge_by_tp(_state_dicts: List[Dict[str, torch.Tensor]], _tp_size: int) -> d
                 for pair in chunks_0
             ]
             return_state_dict[key] = torch.cat(flattened_tensors, dim=0)
-        elif 'linear_qkv' in key or 'linear_fc1' in key or 'output_layer' in key or 'word_embeddings' in key:
+        elif any(pattern in key for pattern in ['linear_qkv', 'linear_fc1', 'output_layer', 'word_embeddings']):
             return_state_dict[key] = torch.cat([_state_dicts[i][key] for i in range(_tp_size)], dim=0)
         elif 'linear_proj.weight' in key or 'linear_fc2.weight' in key:
             return_state_dict[key] = torch.cat([_state_dicts[i][key] for i in range(_tp_size)], dim=1)

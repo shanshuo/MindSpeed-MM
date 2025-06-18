@@ -1,4 +1,4 @@
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 from mindspeed.megatron_adaptor import get_mindspeed_args
 from megatron.training import get_args
 from megatron.training.initialize import initialize_megatron

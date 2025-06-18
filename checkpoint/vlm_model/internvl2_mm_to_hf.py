@@ -8,7 +8,7 @@
 from pathlib import Path
 
 import torch
-import mindspeed.megatron_adaptor # noqa
+import mindspeed.megatron_adaptor
 
 from checkpoint.vlm_model.utils import ConvertVppHFConfig, copy_files_except_suffix, save_by_index_json, split_by_index_json
 

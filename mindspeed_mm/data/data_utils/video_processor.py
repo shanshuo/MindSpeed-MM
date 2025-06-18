@@ -306,14 +306,15 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
         min_hxw: int = None,
         hw_stride: int = 32,
         hw_aspect_thr: float = 1.5,
-        vae_scale_factor: Optional[List[int]] = [4, 8, 8],
+        vae_scale_factor: Optional[List[int]] = None,
         train_sp_batch_size: int = 1,
         seed: int = 42,
         **base_args
     ):
         """Initialize OpenSoraPlan specific parameters"""
         super().__init__(**base_args)
-
+        if vae_scale_factor is None:
+            vae_scale_factor = [4, 8, 8]
         self.train_fps = train_fps
         self.auto_interval = auto_interval
         self.speed_factor = speed_factor

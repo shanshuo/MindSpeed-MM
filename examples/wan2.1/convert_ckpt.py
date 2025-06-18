@@ -6,7 +6,7 @@ import stat
 from pathlib import Path
 from typing import Any, Dict, List
 
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 import torch
 from safetensors.torch import load_file as safe_load
 from checkpoint.vlm_model.utils import copy_files_except_suffix, load_from_hf, save_by_index_json

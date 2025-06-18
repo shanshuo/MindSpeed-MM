@@ -159,8 +159,8 @@ def process_punctuation(in_text):
         ';', r'/', '[', ']', '"', '{', '}', '(', ')', '=', '+', '\\', '_', '-',
         '>', '<', '@', '`', ',', '?', '!'
     ]
-    comma_strip = re.compile('(\d)(,)(\d)')  # noqa: W605
-    period_strip = re.compile('(?!<=\d)(\.)(?!\d)')  # noqa: W605
+    comma_strip = re.compile('(\d)(,)(\d)')
+    period_strip = re.compile('(?!<=\d)(\.)(?!\d)')
     for p in punctuation:
         if (p + ' ' in in_text or ' ' + p in in_text) or (re.search(
                 comma_strip, in_text) is not None):

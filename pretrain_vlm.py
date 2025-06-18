@@ -5,7 +5,7 @@ from typing import Dict, Any
 
 import torch
 
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 from mindspeed.megatron_adaptor import get_mindspeed_args
 from megatron.core import mpu
 from megatron.core.enums import ModelType
@@ -15,7 +15,7 @@ from mindspeed_mm.configs.config import mm_extra_args_provider
 from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
 from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.models.vlm_model import VLMModel
-from mindspeed_mm.patchs import dummy_optimizer_patch  # noqa
+from mindspeed_mm.patchs import dummy_optimizer_patch
 from mindspeed_mm.training import pretrain
 from mindspeed_mm.utils.transformer_model_config import get_model_config
 mindspeed_args = get_mindspeed_args()

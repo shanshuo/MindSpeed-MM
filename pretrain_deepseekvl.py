@@ -2,7 +2,7 @@
 """Pretrain VLLM (ViT+MLP+LLM) MODEL."""
 from copy import deepcopy
 
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 import torch
 from megatron.core import mpu
 from megatron.core.enums import ModelType
@@ -17,7 +17,7 @@ from mindspeed_mm.models.common.transformer.multi_token_prediction import apply_
 from mindspeed_mm.models.deepseekvl_model import VLMModel
 from mindspeed_mm.training import pretrain
 from mindspeed_mm.utils.transformer_model_config import get_model_config
-from mindspeed_mm.patchs import dummy_optimizer_patch # noqa
+from mindspeed_mm.patchs import dummy_optimizer_patch
 
 
 def model_provider(pre_process=True, post_process=True):

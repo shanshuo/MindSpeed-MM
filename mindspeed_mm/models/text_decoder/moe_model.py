@@ -237,22 +237,22 @@ class MOETopKRouter(TopKRouter):
         else:
             self.local_tokens_per_expert = None
             self.expert_bias = None
-    
-    def gating(self, input):
+
+    def gating(self, input_tensor):
         if self.config.router_gating_in_fp32:
             def to_fp32(_input, weight):
                 return _input.type(torch.float32), weight.type(torch.float32)
             self.fp32_checkpoint_manager = CheckpointWithoutOutput()
-            input, weight = self.fp32_checkpoint_manager.checkpoint(to_fp32, False, input, self.weight)
-            logits = torch.nn.functional.linear(input, weight)
+            input_tensor, weight = self.fp32_checkpoint_manager.checkpoint(to_fp32, False, input_tensor, self.weight)
+            logits = torch.nn.functional.linear(input_tensor, weight)
             self.fp32_checkpoint_manager.discard_output()
             if logits.requires_grad:
                 logits.register_hook(self.fp32_checkpoint_manager.recompute)
         else:
-            logits = torch.nn.functional.linear(input, self.weight)
+            logits = torch.nn.functional.linear(input_tensor, self.weight)
 
         return logits
-    
+
     def routing(self, logits):
         """Top-k routing function
 

@@ -364,13 +364,11 @@ class TextProcesser:
         # urls:
         caption = re.sub(
             r"\b((?:https?:(?:\/{1,3}|[a-zA-Z0-9%])|[a-zA-Z0-9.\-]+[.](?:com|co|ru|net|org|edu|gov|it)[\w/-]*\b\/?(?!@)))",
-            # noqa
             "",
             caption,
         )  # regex for urls
         caption = re.sub(
             r"\b((?:www:(?:\/{1,3}|[a-zA-Z0-9%])|[a-zA-Z0-9.\-]+[.](?:com|co|ru|net|org|edu|gov|it)[\w/-]*\b\/?(?!@)))",
-            # noqa
             "",
             caption,
         )  # regex for urls
@@ -400,7 +398,6 @@ class TextProcesser:
         # all types of dash --> "-"
         caption = re.sub(
             r"[\u002D\u058A\u05BE\u1400\u1806\u2010-\u2015\u2E17\u2E1A\u2E3A\u2E3B\u2E40\u301C\u3030\u30A0\uFE31\uFE32\uFE58\uFE63\uFF0D]+",
-            # noqa
             "-",
             caption,
         )
@@ -996,10 +993,9 @@ def get_value_from_args(key: str, default_value=None):
     Get value from global args
     """
     try:
-        keys = key.split(".")
         config = get_args()
-        for key in keys:
-            config = getattr(config, key)
+        for subkey in key.split("."):
+            config = getattr(config, subkey)
         return config
     except AttributeError as e:
         if default_value is None:

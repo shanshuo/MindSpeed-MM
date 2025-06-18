@@ -4,7 +4,7 @@
 from copy import deepcopy
 import torch
 import torch.distributed
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 
 from megatron.core import mpu
 from megatron.core.enums import ModelType
@@ -18,7 +18,7 @@ from mindspeed_mm.data.data_utils.utils import build_iterations
 from mindspeed_mm.models.internvl_model import InternVLModel
 from mindspeed_mm.utils.transformer_model_config import get_model_config
 from mindspeed_mm.utils.utils import EncoderBalanceComm
-from mindspeed_mm.patchs import dummy_optimizer_patch  # noqa
+from mindspeed_mm.patchs import dummy_optimizer_patch
 
 
 def model_provider(pre_process=True, post_process=True):

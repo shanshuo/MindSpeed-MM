@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from typing import Dict, AnyStr, Type
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 import transformers
 
 from mindspeed_mm import TextEncoder, Tokenizer

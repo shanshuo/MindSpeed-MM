@@ -99,7 +99,7 @@ class Bucket:
                 fail = False
                 break
         if fail:
-            return None
+            return None, None, None
 
         # get aspect ratio id
         ar_criteria = self.ar_criteria[hw_id][t_id]

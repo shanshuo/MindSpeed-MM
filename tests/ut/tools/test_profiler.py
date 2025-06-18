@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch_npu
 
-import mindspeed.megatron_adaptor # noqa
+import mindspeed.megatron_adaptor
 from utils import judge_expression
 from mindspeed_mm.configs.config import ConfigReader
 from mindspeed_mm.tools.profiler import Profiler

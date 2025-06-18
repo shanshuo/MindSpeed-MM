@@ -95,7 +95,6 @@ class VLMModel(MultiModalModule):
 
 
         # image token format 形式
-        # FIXME 目前tile tag & global_view_pos的默认取值都是之前的实验策略；后续应当去掉默认取值，改为没有取值就raise error
         self.tile_tag = config.tile_tag
         self.global_view_pos = config.global_view_pos
 

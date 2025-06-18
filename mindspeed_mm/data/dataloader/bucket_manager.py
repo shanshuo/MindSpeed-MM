@@ -164,6 +164,7 @@ class BucketManager:
         self.bucket_info = {}
         self.total_packages = []
         self.final_results_dict = {}
+        self.buckets = None
 
     @abstractmethod
     def create_buckets(self) -> List[Bucket]:

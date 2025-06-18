@@ -2,7 +2,7 @@
 # Copyright (c) 2024, HUAWEI CORPORATION.  All rights reserved.
 """Posttrain QWEN2VL DPO."""
 
-import mindspeed.megatron_adaptor  # noqa
+import mindspeed.megatron_adaptor
 import torch
 
 from megatron.core import mpu
@@ -11,7 +11,7 @@ from megatron.training import get_args
 from mindspeed_mm.configs.config import mm_extra_args_provider
 from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
 from mindspeed_mm.data.data_utils.utils import build_iterations
-from mindspeed_mm.patchs import dummy_optimizer_patch  # noqa
+from mindspeed_mm.patchs import dummy_optimizer_patch
 from mindspeed_mm.tasks.rl.dpo.qwen2vl_dpo_trainer import Qwen2VLDPOTrainer
 
 

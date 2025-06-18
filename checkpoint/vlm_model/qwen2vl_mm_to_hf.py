@@ -10,7 +10,7 @@ from typing import cast, List, Dict
 import torch
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 # 注意mindspeed-mm训练后保存的checkpoint中存储了patch相关信息，在load时需要加下面这行以支持反序列化
-import mindspeed.megatron_adaptor # noqa
+import mindspeed.megatron_adaptor
 
 from checkpoint.vlm_model.utils import ConvertHFConfig, copy_files_except_suffix, save_by_index_json, \
     split_by_index_json, load_from_mm
