@@ -295,8 +295,38 @@ dataset_param->basic_parameters->dataset
 
 （2）shell文件中的LOAD_PATH的路径为经过权重转换后的模型路径(可PP切分)。
 
-**启动命令**
+**单机启动**
+在单机场景下，直接使能仓上默认脚本即可：
 
 ```shell
 bash examples/qwen2vl/finetune_qwen2vl_7b.sh
 ```
+
+进入到脚本里，在shell脚本最前面，可以通过`NPUS_PER_NODE`来控制实际使用的卡数
+```shell
+NPUS_PER_NODE=8
+MASTER_ADDR=localhost
+MASTER_PORT=6000
+NNODES=1
+NODE_RANK=0
+```
+
+**多机启动**
+在多机场景下，同样可以使用仓上脚本进行启动：
+```shell
+bash examples/qwen2vl/finetune_qwen2vl_7b.sh
+```
+
+不过此时需要注意的是，要对如下参数进行对应调整，对每台机器，同样进入到脚本里，在shell脚本的最前面：
+```shell
+NPUS_PER_NODE=8
+MASTER_ADDR=localhost
+MASTER_PORT=6000
+NNODES=2
+NODE_RANK=0
+```
+调整方法如下：
+`NPUS_PER_NODE`:代表每台机器上使用的卡数，按需设置，一般是1-8，有些类型机器可以是1-16；
+`MASTER_ADDR`：多机场景，需要指明通信的主节点的IP，用于节点间通信，如可以设置`MASTER_ADDR`为12.34.56.78，其他节点均设为相同IP；
+`NNODES`：此变量代表节点数量，如果使用2台机器，就写2；
+`NODE_RANK`：当前节点的序号，主节点为0，其他节点依次增加，如果是2台机器，即主节点为0，次节点为1。
