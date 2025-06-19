@@ -302,7 +302,7 @@ class VLMModel(MultiModalModule):
 
             total_tiles.append(images[idx, :batch_num_tiles[idx]])
 
-        # [batch_all_tiles, 3, height, width]
+        # the shape is: [batch_all_tiles, 3, height, width]
         total_tiles = torch.cat(total_tiles, dim=0)
         if total_tiles.shape[0] != sum(batch_num_tiles):
             raise AssertionError
@@ -347,10 +347,10 @@ class VLMModel(MultiModalModule):
 
                 num_tiles_in_image = num_width_tiles * num_height_tiles
 
-                # [hw, D]
+                # the shape is: [hw, D]
                 global_features = images_embeds[tile_index]
 
-                # [num_height_tiles * num_width_tiles, hw, D]
+                # the shape is: [num_height_tiles * num_width_tiles, hw, D]
                 local_features = images_embeds[tile_index + 1: tile_index + 1 + num_tiles_in_image]
 
                 tile_index += num_tiles_in_image + 1
@@ -363,7 +363,7 @@ class VLMModel(MultiModalModule):
                     global_features = global_features.view(h, w, n_dim)
                     # [D]     -> [h, 1, D]
                     new_lines_in_global = repeat(self.image_newline, "d -> h 1 d", h=h)
-                    # shape: cat([h, w, D], [h, 1, D], dim=1) -> [h, w + 1, D]
+                    # the shape transformation is: cat([h, w, D], [h, 1, D], dim=1) -> [h, w + 1, D]
                     global_features = torch.cat([global_features, new_lines_in_global], dim=1)
                     # [h, w + 1, D] -> [h * (w + 1), D]
                     global_features = global_features.view(-1, n_dim)
@@ -387,10 +387,10 @@ class VLMModel(MultiModalModule):
                         h=h
                     )
 
-                    # [num_height_tiles * h, num_width_tiles * w + 1, D]
+                    # the shape is: [num_height_tiles * h, num_width_tiles * w + 1, D]
                     local_features = torch.cat([local_features, new_lines_in_local], dim=1)
 
-                    # [num_height_tiles * h, num_width_tiles * w + 1, D]
+                    # the shape is: [num_height_tiles * h, num_width_tiles * w + 1, D]
                     #   --> [(num_height_tiles * h) * (num_width_tiles * w + 1), D]
                     local_features = local_features.view(-1, n_dim)
 

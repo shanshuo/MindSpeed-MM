@@ -19,7 +19,7 @@ from mindspeed_mm.models.common.resnet_block import ResnetBlockCausal3D
 from mindspeed_mm.models.common.updownsample import UpsampleCausal3D, DownsampleCausal3D
 
 
-logger = logging.get_logger(__name__)  # This is pylint:disable=invalid-name
+logger = logging.get_logger(__name__)
 
 
 def prepare_causal_attention_mask(n_frame: int, n_hw: int, dtype, device, batch_size: int = None):

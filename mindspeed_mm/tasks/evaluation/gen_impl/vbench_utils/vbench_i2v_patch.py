@@ -46,7 +46,7 @@ def evaluate_i2v(self, videos_path, name, dimension_list=None, custom_image_fold
                 dimension_module = importlib.import_module(f'vbench.{dimension}')
             evaluate_func = getattr(dimension_module, f'compute_{dimension}')
         except Exception as e:
-            raise NotImplementedError(f'UnImplemented dimension {dimension}!, {e}')
+            raise NotImplementedError(f'UnImplemented dimension {dimension}!, {e}') from e
         submodules_list = submodules_dict[dimension]
         print(f'cur_full_info_path: {cur_full_info_path}')
         results = evaluate_func(cur_full_info_path, self.device, submodules_list)

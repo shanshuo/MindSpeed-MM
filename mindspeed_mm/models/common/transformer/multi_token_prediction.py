@@ -50,7 +50,7 @@ except ImportError:
 
 
 try:
-    import apex  # pylint: disable=unused-import
+    import apex
 
     from megatron.core.fusions.fused_layer_norm import FusedLayerNorm
 

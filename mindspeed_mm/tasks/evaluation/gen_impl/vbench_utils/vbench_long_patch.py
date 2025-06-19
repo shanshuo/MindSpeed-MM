@@ -37,7 +37,7 @@ def evaluate_long(self, videos_path, name, prompt_list=None, dimension_list=None
             dimension_module = importlib.import_module(f'vbench2_beta_long.{dimension}')
             evaluate_func = getattr(dimension_module, f'compute_long_{dimension}')
         except Exception as e:
-            raise NotImplementedError(f'UnImplemented dimension {dimension}!, {e}')
+            raise NotImplementedError(f'UnImplemented dimension {dimension}!, {e}') from e
         submodules_list = submodules_dict[dimension]
         print(f'cur_full_info_path: {cur_full_info_path}')
 
