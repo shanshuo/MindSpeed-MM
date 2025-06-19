@@ -19,6 +19,8 @@ def get_model_config(config):
         config_dict['hidden_size'] = 4096
         config_dict['num_attention_heads'] = 1
         config_dict['num_layers'] = 1
+    if 'model_id' in config_dict and config_dict['model_id'] == 'Qwen2.5llm':
+        config_dict['use_repeat_kv'] = True
 
     t_config = dict()
     tfc_variables = get_class_variables(TransformerConfig)
