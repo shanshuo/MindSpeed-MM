@@ -8,15 +8,31 @@
 """
 from copy import deepcopy
 from pathlib import Path
-from typing import cast, Optional, Union, List, Dict, Tuple
+from typing import Optional, Union, List, Dict, Tuple
 
 import torch
 from tqdm import tqdm
 
-from checkpoint.vlm_model.utils import ConvertMMConfig, load_from_hf, merge_pp_index, split_by_ep, split_by_tp
-from checkpoint.vlm_model.operator import deepseekvl_tp_patterns, STATE_DICT_T
+from checkpoint.common.constant import LATEST_TXT
+from checkpoint.common.types import STATE_DICT_T
+from checkpoint.vlm_model.config import ConvertMMConfig
+from checkpoint.vlm_model.hf_to_mm import split_by_tp, split_by_ep, merge_pp_index
+from checkpoint.vlm_model.operator import RowWeightSplit, GLUSplit, ColWeightSplit, RowBiasSplit
 
-LATEST_TXT = "latest_checkpointed_iteration.txt"
+deepseekvl_tp_patterns = {
+    r"text_decoder.output_layer.weight": RowWeightSplit,
+    r"text_decoder.embedding.word_embeddings.weight": RowWeightSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.linear_fc1.weight": GLUSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.linear_fc2.weight": ColWeightSplit,
+    r"text_decoder.decoder.layers.(\d+).self_attention.linear_qb.weight": RowWeightSplit,
+    r"text_decoder.decoder.layers.(\d+).self_attention.linear_kvb.weight": RowWeightSplit,
+    r"text_decoder.decoder.layers.(\d+).self_attention.linear_kvb.bias": RowBiasSplit,
+    r"text_decoder.decoder.layers.(\d+).self_attention.linear_proj.weight": ColWeightSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc1.weight": GLUSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.experts.local_experts.(\d+).linear_fc2.weight": ColWeightSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.shared_experts.linear_fc1.weight": GLUSplit,
+    r"text_decoder.decoder.layers.(\d+).mlp.shared_experts.linear_fc2.weight": ColWeightSplit
+}
 
 
 def load_from_hf(load_dir, trust_remote_code):
@@ -56,7 +72,7 @@ def convert_hf_to_mm(_state_dict: Dict[str, torch.Tensor],
         # projector 部分
         elif key.startswith("projector"):
             new_key = key.replace("projector", "image_encoder.projector")
-        
+
         elif key.startswith("language"):
             new_key = key.replace('language', 'text_decoder')
             new_key = new_key.replace('model.embed_tokens', 'embedding.word_embeddings')
@@ -89,7 +105,7 @@ def convert_hf_to_mm(_state_dict: Dict[str, torch.Tensor],
         if new_key is not None:
             print(f"mapping {key} to {new_key}")
             new_params[new_key] = value
-    
+
     # 合并gate up 权重
     for i in range(_num_layers):
         # 合并self attn的mlp
@@ -155,11 +171,11 @@ def convert_hf_to_mm(_state_dict: Dict[str, torch.Tensor],
 
 
 def save_by_rank(state_dicts: List[Dict[str, torch.Tensor]],
-               save_root_dir: Path,
-               iteration: Optional[Union[str, int]] = 'release',
-               ep_size: int = 1,
-               tp_rank: int = 0,
-               ep_rank: int = 1):
+                 save_root_dir: Path,
+                 iteration: Optional[Union[str, int]] = 'release',
+                 ep_size: int = 1,
+                 tp_rank: int = 0,
+                 ep_rank: int = 1):
     for pp_rank, state_dict in enumerate(tqdm(state_dicts, desc="pp step")):
         # megatron格式权重的命名方式为 "mp_rank_{tp_rank}_{pp_rank}_{ep_rank}"
         name_parts = ["mp", "rank", f"{tp_rank:02d}"]
@@ -284,11 +300,12 @@ def main(convert_config: ConvertMMConfig):
     for ep_state_dict in ep_state_dicts:
         tp_state_dicts = split_by_tp(ep_state_dict, deepseekvl_tp_patterns, tp_size=parallel_config.tp_size)
         ep_tp_state_dicts.append(tp_state_dicts)
-    
+
     # pp索引生成
     pp_split = merge_pp_index(parallel_config.vit_pp_layers, parallel_config.llm_pp_layers)
 
     for ep_rank, tp_state_dicts in enumerate(tqdm(ep_tp_state_dicts, desc="ep step")):
         for tp_rank, tp_state_dict in enumerate(tqdm(tp_state_dicts, desc="tp step")):
             pp_state_dicts = split_model_by_pipeline(tp_state_dict, pp_split)
-            save_by_rank(pp_state_dicts, convert_config.mm_dir, ep_size=parallel_config.ep_size, ep_rank=ep_rank, tp_rank=tp_rank)
+            save_by_rank(pp_state_dicts, convert_config.mm_dir, ep_size=parallel_config.ep_size, ep_rank=ep_rank,
+                         tp_rank=tp_rank)

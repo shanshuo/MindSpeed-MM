@@ -46,14 +46,6 @@ class ProcessorArguments:
         default=128,
         metadata={"help": "Keeps the height or width of video below this resolution."},
     )
-    video_fps: float = field(
-        default=2.0,
-        metadata={"help": "The frames to sample per second for video inputs."},
-    )
-    video_maxlen: int = field(
-        default=64,
-        metadata={"help": "The maximum number of sampled frames for video inputs."},
-    )
     image_max_pixels: int = field(
         default=768 * 768,
         metadata={"help": "The maximum number of pixels of image inputs."},

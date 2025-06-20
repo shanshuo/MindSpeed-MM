@@ -10,7 +10,8 @@ import stat
 
 import torch
 
-from checkpoint.vlm_model.utils import ConvertVppMMConfig, load_from_hf
+from checkpoint.vlm_model.config import ConvertVppMMConfig
+from checkpoint.vlm_model.hf_to_mm import load_from_hf
 
 
 def merge_pp_index(vit_pipeline_num_layers, llm_pipeline_num_layers):
@@ -183,7 +184,6 @@ def convert_hf_to_mm(_state_dict, _num_layers, _llm_arch, _num_key_value_heads):
                 new_dict.pop(k_name)
             if v_name in new_dict:
                 new_dict.pop(v_name)
-
 
         # merge qkv bias
         for i in range(_num_layers):
@@ -366,7 +366,8 @@ def main(convert_config: ConvertVppMMConfig):
     for key, value in state_dict.items():
         print(key, value.shape)
 
-    state_dict = convert_hf_to_mm(state_dict, config.llm_config.num_hidden_layers, config.llm_config.architectures[0], config.llm_config.num_key_value_heads)
+    state_dict = convert_hf_to_mm(state_dict, config.llm_config.num_hidden_layers, config.llm_config.architectures[0],
+                                  config.llm_config.num_key_value_heads)
     pipeline_state_dicts, remains = split_model_by_pipeline(state_dict, pp_split)
 
     if len(remains) > 0:

@@ -1,13 +1,10 @@
 from checkpoint.common.converter import Converter
 
-# sora model converter
-
 # vlm model converter
-from checkpoint.vlm_model.vlm_model import (
-    Qwen2VLConverter,
-    Qwen2_5_VLConverter,
-    Qwen2_5_OmniConverter,
-    Qwen3_VLConverter,
+from checkpoint.vlm_model.converters.qwen2_5vl import Qwen2_5_VLConverter
+from checkpoint.vlm_model.converters.qwen2vl import Qwen2VLConverter
+from checkpoint.vlm_model.converters.qwen3vl import Qwen3_VLConverter
+from checkpoint.vlm_model.converters.vlm_model import (
     InternVLConverter,
     DeepSeekVLConverter,
 )

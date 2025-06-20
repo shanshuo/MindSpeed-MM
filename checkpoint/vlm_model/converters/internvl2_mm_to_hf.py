@@ -8,9 +8,10 @@
 from pathlib import Path
 
 import torch
-import mindspeed.megatron_adaptor
 
-from checkpoint.vlm_model.utils import ConvertVppHFConfig, copy_files_except_suffix, save_by_index_json, split_by_index_json
+import mindspeed.megatron_adaptor  # noqa
+from checkpoint.vlm_model.config import ConvertVppHFConfig
+from checkpoint.vlm_model.mm_to_hf import save_by_index_json, split_by_index_json, copy_files_except_suffix
 
 
 def merge_by_pp(pp_ckpt_file, pp_rank: int, _model_config_dict=None):

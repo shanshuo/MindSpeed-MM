@@ -11,15 +11,15 @@ class Converter(ABC):
 
     @staticmethod
     @abstractmethod
-    def hf_to_mm():
+    def hf_to_mm(cfg):
         pass
 
     @staticmethod
     @abstractmethod
-    def mm_to_hf():
+    def mm_to_hf(cfg):
         pass
 
     @staticmethod
     @abstractmethod
-    def resplit():
+    def resplit(cfg):
         pass
