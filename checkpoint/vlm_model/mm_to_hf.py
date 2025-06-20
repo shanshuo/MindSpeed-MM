@@ -3,7 +3,7 @@ import os
 import re
 import shutil
 from pathlib import Path
-from typing import Any, List
+from typing import List
 
 import torch
 from safetensors.torch import save_file
@@ -134,7 +134,8 @@ def rename_pp_parameter(param_name: str,
     return param_name
 
 
-def convert_mm_to_hf(convert_config: ConvertHFConfig, config: Any, ops: List[Operator],
+def convert_mm_to_hf(convert_config: ConvertHFConfig,
+                     ops: List[Operator],
                      tp_patterns: TP_PATTERN_T):
     parallel_config = convert_config.parallel_config
     # 加载权重字典
@@ -143,7 +144,6 @@ def convert_mm_to_hf(convert_config: ConvertHFConfig, config: Any, ops: List[Ope
     state_dict = merge_by_tp(state_dicts, tp_patterns)
     for op in ops:
         op.revert(state_dict)  # 执行逆操作
-    state_dict = state_dict
     state_dicts = split_by_index_json(state_dict, convert_config.hf_config.hf_dir)
     copy_files_except_suffix(convert_config.hf_config.hf_dir, convert_config.save_hf_dir)
     save_by_index_json(state_dicts, convert_config.save_hf_dir)

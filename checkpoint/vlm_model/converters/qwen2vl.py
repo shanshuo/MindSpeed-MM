@@ -128,7 +128,7 @@ class Qwen2VLConverter(Converter):
     def mm_to_hf(cfg: ConvertHFConfig):
         """mindspeed-mm模型转换huggingface模型权重"""
         ops = Qwen2VLConverter._create_ops(cfg.hf_config.config)
-        convert_mm_to_hf(cfg, cfg.hf_config.config, ops, qwen2vl_tp_patterns)
+        convert_mm_to_hf(cfg, ops, qwen2vl_tp_patterns)
         # 安全管控权限
         os.chmod(cfg.save_hf_dir, SAFE_MODE)
 
