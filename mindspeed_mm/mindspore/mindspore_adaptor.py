@@ -1,6 +1,7 @@
 import mindspore
 from mindspeed.patch_utils import MindSpeedPatchesManager as aspm
 from mindspeed_mm.mindspore.data.datasets.utils import process_in_cpu_wrapper
+from mindspeed_mm.mindspore.data.data_utils.func_utils.convert import preprocess_dataset
 
 
 def masked_scatter_(self, mask, updates):
@@ -19,6 +20,7 @@ def masked_scatter_(self, mask, updates):
 def apply_mindspore_patch():
     aspm.register_patch('mindspeed_mm.data.datasets.qwen2vl_dataset.get_qwen2vl_dataset', process_in_cpu_wrapper) # process dataset on cpu
     aspm.register_patch('torch.Tensor.masked_scatter', masked_scatter_)
+    aspm.register_patch('mindspeed_mm.data.data_utils.func_utils.convert.SupervisedDatasetProcessor.preprocess_dataset', preprocess_dataset)
     aspm.apply_patches()
 
 apply_mindspore_patch()
