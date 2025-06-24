@@ -33,7 +33,7 @@ commit_id=5b542d273cc792971eb66aca07494523be61c58c
 ## 环境安装
 【模型开发时推荐使用配套的环境版本】
 
-请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/user-guide/installation.md)
+请参考[安装指南](../../docs/user-guide/installation.md)
 
 > GRPO场景下，Python版本推荐3.10，torch和torch_npu版本推荐2.5.1版本
 
@@ -77,7 +77,7 @@ cd MindSpeed
 # checkout commit from MindSpeed core_r0.8.0
 git checkout 6f11a6c
 pip install -r requirements.txt
-# 替换MindSpeed中的文件
+# 替换MindSpeed中的文件（必选）
 cp ../MindSpeed-MM/examples/qwen2vl/dot_product_attention.py mindspeed/core/transformer/dot_product_attention.py
 cp -r mindspeed ../MindSpeed-MM/
 cd ..
@@ -89,6 +89,10 @@ git checkout acb2c70
 pip install -r requirements.txt
 cp -r mindspeed_rl ../MindSpeed-MM/
 cd ..
+# MindSpeed RL中性能加速文件替换（必选）
+cd MindSpeed-MM
+bash examples/rl/scripts/copy_performance_to_mindspeed_rl.sh
+cd ..
 ```
 
 <a id="jump1.3"></a>
@@ -97,76 +101,36 @@ cd ..
 > 源码安装，若使用docker，建议源码存放在docker内
 
 ``` shell
-# 安装VLLM
+# 下载vllm
 git clone https://github.com/vllm-project/vllm.git
 cd vllm
 git checkout 5bc1ad6
+cd ../
+
+# 下载vllm-ascend
+git clone https://github.com/vllm-project/vllm-ascend.git
+cd vllm-ascend
+git checkout 75c10ce
+cd ../
+
+# 替换vllm、vllm-ascend中的文件（必选）
+bash MindSpeed-MM/examples/rl/scripts/copy_adaptor_to_vllm.sh
+
+# 安装VLLM
+cd vllm
 VLLM_TARGET_DEVICE=empty pip install -v -e .
 cd ..
 
 # 安装VLLM-ASCEND，需导入CANN及ATB环境变量
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 source /usr/local/Ascend/nnal/atb/set_env.sh
-git clone https://github.com/vllm-project/vllm-ascend.git
 cd vllm-ascend
-git checkout 75c10ce
 python setup.py develop
 cd ..
 
 # 在安装完VLLM及VLLM-ASCEND后，需检查torch及torch_npu版本，若版本被覆盖，需再次安装torch及torch_npu
 ```
-> 在vllm实际安装路径下的`vllm/model_executor/models/qwen2_vl.py`及`vllm/model_executor/models/qwen2_5_vl.py`中作如下修改：
-```python
-from vllm.model_executor.layers.quantization.gptq import GPTQConfig
-# NOTE: 注释如下几行代码
-# from vllm.model_executor.layers.quantization.gptq_marlin import (
-#     GPTQMarlinConfig)
-from vllm.model_executor.model_loader.weight_utils import default_weight_loader
 
-...
-
-def _maybe_ignore_quant_config(self, quant_config: QuantizationConfig):
-    # GPTQ configs do not have a list of ignored modules, however AutoGPTQ
-    # seems to avoid vision encoder sections for some models.
-    # See: https://huggingface.co/Qwen/Qwen2-VL-2B-Instruct-GPTQ-Int4
-
-    # NOTE: 注释如下几行代码
-    # if isinstance(quant_config, (GPTQConfig, GPTQMarlinConfig)):
-    #     return None
-    return quant_config
-```
-> 在vllm_ascend实际安装路径下的`vllm_ascend/models/__init__.py`中作如下修改：
-```python
-ModelRegistry.register_model(
-    "Qwen2VLForConditionalGeneration",
-    "vllm_ascend.models.qwen2_vl:AscendQwen2VLForConditionalGeneration")
-
-# NOTE: 注释如下几行代码
-# if envs.USE_OPTIMIZED_MODEL:
-#     ModelRegistry.register_model(
-#         "Qwen2_5_VLForConditionalGeneration",
-#         "vllm_ascend.models.qwen2_5_vl:AscendQwen2_5_VLForConditionalGeneration"
-#     )
-# else:
-#     ModelRegistry.register_model(
-#         "Qwen2_5_VLForConditionalGeneration",
-#         "vllm_ascend.models.qwen2_5_vl_without_padding:AscendQwen2_5_VLForConditionalGeneration_Without_Padding"
-#     )
-```
-> 在vllm_ascend实际安装路径下的`vllm_ascend/utils.py`中作如下修改：
-```python
-def vllm_version_is(target_vllm_version: str):
-    if envs.VLLM_VERSION is not None:
-        vllm_version = envs.VLLM_VERSION
-    else:
-        import vllm
-        vllm_version = vllm.__version__
-    try:
-        # NOTE: 直接返回True
-        # return Version(vllm_version) == Version(target_vllm_version)
-        return True
-    except InvalidVersion:
-```
 <a id="jump1.4"></a>
 #### 4. 高性能内存库 jemalloc 安装
 为了确保 Ray 进程能够正常回收内存，需要安装并使能 jemalloc 库进行内存管理。
@@ -208,7 +172,7 @@ export LD_PRELOAD="$LD_PRELOAD:/usr/local/lib/libjemalloc.so.2"
 <a id="jump2"></a>
 ## 权重下载及转换
 
-根据具体任务要求，参考Qwen2.5VL[权重下载及转换](https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qwen2.5vl#权重下载及转换)获取相应的权重。
+根据具体任务要求，参考Qwen2.5VL[权重下载及转换](https://gitee.com/ascend/MindSpeed-MM/tree/2.1.0/examples/qwen2.5vl#权重下载及转换)获取相应的权重。
 
 
 <a id="jump3"></a>
@@ -239,7 +203,7 @@ bash examples/rl/data_preprocess/geo3k.py --local_dir=./data/geo3k --local_data=
 
 以 Qwen2.5VL 3B 模型为例,在启动训练之前，需要修改[ 启动脚本 ](../../examples/rl/scripts/grpo_trainer_qwen25vl_3b.sh)的配置：
 1. 根据实际安装路径设置 jemalloc 环境变量，用于更好管理内存，避免长跑过程中内存 OOM ，例如：export LD_PRELOAD="$LD_PRELOAD:/usr/local/lib/libjemalloc.so.2"
-2. 修改 DEFAULT_YAML 为指定的 yaml，目前已支持的配置文件放置在`examples/rl/configs`文件夹下，具体参数说明可见 [配置文件参数介绍](https://gitee.com/ascend/MindSpeed-RL/blob/master/docs/features/grpo_yaml.md)
+2. 修改 DEFAULT_YAML 为指定的 yaml，目前已支持的配置文件放置在`examples/rl/configs`文件夹下，具体参数说明可见 [配置文件参数介绍](https://gitee.com/ascend/MindSpeed-RL/blob/2.1.0/docs/features/grpo_yaml.md)
 需要注意配置以下参数：
   ```yaml
 model: examples/rl/model/qwen2.5vl_3b.json
