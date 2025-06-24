@@ -57,7 +57,7 @@
 
     ```shell
     # 克隆仓库
-    git clone https://gitee.com/ascend/MindSpeed-MM.git
+    git clone --branch 2.1.0 https://gitee.com/ascend/MindSpeed-MM.git
     cd examples/diffusers/kolors
     ```
 
