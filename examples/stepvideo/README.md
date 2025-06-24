@@ -32,7 +32,7 @@
       - [启动dpo训练](#启动dpo训练)
   - [环境变量声明](#环境变量声明)
 ---
-<a id="jump1"></a>
+
 ## 支持任务列表
 支持以下模型任务类型
 
@@ -43,14 +43,12 @@
 | StepVideo | i2v  |预训练  | ✔ |
 | StepVideo | i2v  |在线推理 | ✔ |
 
-<a id="jump2"></a>
 ## 环境安装
 
 【模型开发时推荐使用配套的环境版本】
 
 请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/user-guide/installation.md)
 
-<a id="jump2.1"></a>
 #### 仓库拉取
 
 ```shell
@@ -62,7 +60,7 @@ cp -r megatron ../MindSpeed-MM/
 cd ..
 cd MindSpeed-MM
 ```
-<a id="jump2.2"></a>
+
 #### 环境搭建
 
 ```bash
@@ -92,7 +90,7 @@ cd ..
 # 安装其余依赖库
 pip install -e .
 ```
-<a id="jump2.3"></a>
+
 #### Decord搭建
 
 【X86版安装】
@@ -108,10 +106,9 @@ pip install decord==0.6.0
 `yum`方式安装请[参考脚本](https://github.com/dmlc/decord/blob/master/tools/build_manylinux2010.sh)
 
 ---
-<a id="jump3"></a>
+
 ## 权重下载及转换
 
-<a id="jump3.1"></a>
 #### 权重下载
 StepVideo t2v权重下载(需要下载 VAE、transformer、text_encoder、tokenizer)
 
@@ -153,7 +150,6 @@ StepVideo i2v权重下载(需要下载 VAE、transformer、text_encoder、tokeni
        └── vae_v2.safetensors
 ```
 
-<a id="jump3.2"></a>
 #### 权重转换
 权重转换source_path参数请配置transformer权重文件的路径：
 ```bash
@@ -183,7 +179,7 @@ StepVideo-Converted
 ```
 
 ---
-<a id="jump4"></a>
+
 ## 数据集准备及处理
 
 数据集格式应该如下：
@@ -209,14 +205,12 @@ data.jsonl文件内容如下示例：
 ```
 
 ---
-<a id="jump5"></a>
+
 ## 预训练
 
-<a id="jump5.1"></a>
 #### 准备工作
 配置脚本前需要完成前置准备工作，包括：**环境安装**、**权重下载及转换**、**数据集准备及处理**，详情可查看对应章节。
 
-<a id="jump5.2"></a>
 #### 特征提取
 
 1.配置特征提取参数
@@ -253,7 +247,6 @@ i2v执行命令
 bash examples/stepvideo/feature_extract/feature_extraction_i2v.sh
 ```
 
-<a id="jump5.3"></a>
 #### 配置参数
 stepvideo训练阶段的启动文件为shell脚本，主要分为如下2个：
 
@@ -307,7 +300,6 @@ stepvideo训练阶段的启动文件为shell脚本，主要分为如下2个：
   - 限制条件：num_attention_heads 数量需要能够被TP*CP整除（在`exmaples/stepvideo/{task_name}/pretrain_xx_model.json`中配置，默认为48）
 
 
-<a id="jump5.4"></a>
 #### 启动预训练
 
 t2v 启动预训练
@@ -321,15 +313,12 @@ bash examples/stepvideo/i2v/pretrain_i2v.sh
 ```
 ---
 
-<a id="jump6"></a>
 ## 推理
 
-<a id="jump6.1"></a>
 #### 准备工作
 
 在开始之前，请确认环境准备、模型权重下载已完成
 
-<a id="jump6.2"></a>
 #### 配置参数
 
 StepVideo推理启动文件为shell脚本，主要分为如下2个：
@@ -372,7 +361,6 @@ StepVideo推理启动文件为shell脚本，主要分为如下2个：
 python examples/stepvideo/convert_ckpt_to_mm.py --source_path <your source path> --target_path <target path> --tp_size 2 --pp_size 48 --num_layers 48 --mode merge
 ```
 
-<a id="jump6.3"></a>
 #### 启动推理
 t2v 启动推理脚本
 
@@ -388,17 +376,14 @@ bash examples/stepvideo/i2v/inference_i2v.sh
 
 ---
 
-<a id="jump7"></a>
 ## Dpo训练
 目前仅以t2v穿刺dpo基础训练，更多功能待后续完善。
 
-<a id="jump7.1"></a>
 #### 环境准备
 
 1. 参考docs/features/vbench-evaluate.md中的环境安装指导完成vbench及依赖三方件的安装
 2. 将VBench的 [t2v json](https://github.com/Vchitect/VBench/blob/master/vbench/VBench_full_info.json) 下载到MM代码根路径"./vbench/VBench_full_info.json"
 
-<a id="jump7.2"></a>
 #### 生成视频样本
 
 1. 修改推理配置文件：
@@ -422,7 +407,6 @@ bash examples/stepvideo/{task_name}/inference_{task_name}.sh
 
 3. 删除视频样本保存路径下的video_grid.mp4，最终视频样本数量为：prompt条数 * $num_inference_videos_per_sample
 
-<a id="jump7.3"></a>
 #### 生成偏好数据集
 
 执行如下命令，为生成的视频样本打分，并生成偏好数据文件
@@ -461,7 +445,7 @@ data.jsonl中包含成对的视频偏好数据和文本信息，具体示例如�
     ......
 ]
 ```
-<a id="jump7.4"></a>
+
 #### 训练参数配置
 
 在开始之前，请确认环境准备、模型权重准备、偏好数据准备已完成。
@@ -484,7 +468,6 @@ data.jsonl中包含成对的视频偏好数据和文本信息，具体示例如�
 
   根据实际情况修改`posttrain_t2v_model.json`中的直方图文件路径，即将`histgram_path`的值配置为执行生成偏好数据集脚本后，生成的"video_score_histogram.json"文件路径
 
-<a id="jump7.5"></a>
 #### 启动dpo训练
 
 ```bash
@@ -493,7 +476,6 @@ bash examples/stepvideo/{task_name}/posttrain_*_dpo.sh
 
 ---
 
-<a id="jump8"></a>
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  

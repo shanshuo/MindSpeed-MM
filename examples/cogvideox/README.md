@@ -35,7 +35,7 @@
       - [启动脚本修改](#启动脚本修改)
   - [环境变量声明](#环境变量声明)
 ---
-<a id="jump1"></a>
+
 ## 支持任务列表
 支持以下模型任务类型
 
@@ -46,14 +46,12 @@
 | CogVideoX-5B | i2v  |预训练  | ✔ |
 | CogVideoX-5B | i2v  |在线推理 | ✔ |
 
-<a id="jump2"></a>
 ## 环境安装
 
 【模型开发时推荐使用配套的环境版本】
 
 请参考[安装指南](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/user-guide/installation.md)
 
-<a id="jump2.1"></a>
 #### 仓库拉取
 
 ```shell
@@ -65,7 +63,7 @@ cp -r megatron ../MindSpeed-MM/
 cd ..
 cd MindSpeed-MM
 ```
-<a id="jump2.2"></a>
+
 #### 环境搭建
 
 ```bash
@@ -95,7 +93,7 @@ cd ..
 # 安装其余依赖库
 pip install -e .
 ```
-<a id="jump2.3"></a>
+
 #### Decord搭建
 
 【X86版安装】
@@ -111,22 +109,19 @@ pip install decord==0.6.0
 `yum`方式安装请[参考脚本](https://github.com/dmlc/decord/blob/master/tools/build_manylinux2010.sh)
 
 ---
-<a id="jump3"></a>
+
 ## 权重下载及转换
 
-<a id="jump3.1"></a>
 #### VAE下载
 
 + [VAE下载链接](https://cloud.tsinghua.edu.cn/f/fdba7608a49c463ba754/?dl=1)
 
-<a id="jump3.2"></a>
 #### transformer文件下载
 + [CogVideoX1.0-5B-t2v](https://cloud.tsinghua.edu.cn/d/fcef5b3904294a6885e5/?p=%2F&mode=list)
 + [CogVideoX1.0-5B-i2v](https://cloud.tsinghua.edu.cn/d/5cc62a2d6e7d45c0a2f6/?p=%2F1&mode=list)
 + [CogVideoX1.5-5B-t2v](https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT/tree/main/transformer_t2v)
 + [CogVideoX1.5-5B-i2v](https://huggingface.co/THUDM/CogVideoX1.5-5B-SAT/tree/main/transformer_i2v)
 
-<a id="jump3.3"></a>
 #### T5模型下载
 仅需下载tokenizer和text_encoder目录的内容：[下载链接](https://huggingface.co/THUDM/CogVideoX-5b/tree/main)
 
@@ -151,7 +146,6 @@ pip install decord==0.6.0
        └── 3d-vae.pt
    ```
 
-<a id="jump3.4"></a>
 #### 权重转换
 权重转换source_path参数请配置transformer权重文件的路径：
 ```bash
@@ -196,7 +190,7 @@ CogVideoX-5B-Converted
 ```
 
 ---
-<a id="jump4"></a>
+
 ## 数据集准备及处理
 
 数据集格式应该如下：
@@ -222,16 +216,13 @@ data.jsonl文件内容如下示例：
 ```
 
 ---
-<a id="jump5"></a>
+
 ## 预训练
 
-<a id="jump5.1"></a>
 #### 准备工作
 配置脚本前需要完成前置准备工作，包括：**环境安装**、**权重下载及转换**、**数据集准备及处理**，详情可查看对应章节。
 
-<a id="jump5.2"></a>
 #### 配置参数
-<a id="jump5.2"></a>
 CogvideoX训练阶段的启动文件为shell脚本，主要分为如下4个：
 |            | I2V | T2V |
 |:------------:|:----:|:----:|
@@ -317,7 +308,7 @@ NNODES=1
 NODE_RANK=0  
 WORLD_SIZE=$(($GPUS_PER_NODE * $NNODES))
 ```
-<a id="jump5.3"></a>
+
 #### 启动预训练
 
 t2v 1.0版本任务启动预训练
@@ -338,15 +329,12 @@ bash examples/cogvideox/i2v_1.5/pretrain_cogvideox_i2v_1.5.sh
 ```
 ---
 
-<a id="jump6"></a>
 ## 推理
 
-<a id="jump6.1"></a>
 #### 准备工作
 
 在开始之前，请确认环境准备、模型权重下载已完成
 
-<a id="jump6.2"></a>
 #### 配置参数
 
 CogvideoX推理启动文件为shell脚本，主要分为如下4个：
@@ -387,7 +375,6 @@ CogvideoX推理启动文件为shell脚本，主要分为如下4个：
 python examples/cogvideox/cogvideox_sat_convert_to_mm_ckpt.py --source_path <your source path> --target_path <target path> --task t2v --tp_size 1 --pp_size 42  --num_layers 42 --mode merge
 ```
 
-<a id="jump6.3"></a>
 #### 启动推理
 t2v 1.0版本启动推理脚本
 
@@ -411,10 +398,8 @@ bash examples/cogvideox/i2v_1.5/inference_cogvideox_i2v_1.5.sh
 ```
 ---
 
-<a id="jump7"></a>
 ## lora微调
 
-<a id="jump7.1"></a>
 #### 准备工作
 配置脚本前请确认环境准备已完成。
 
@@ -445,7 +430,6 @@ python examples/cogvideox/cogvideox_hf_convert_to_mm_ckpt.py --source_path <your
 python examples/cogvideox/cogvideox_lora_dataset_convert.py --video_path '/data_path/videos.txt' --prompt_path '/data_path/prompt.txt' --output_path '/data_path/data.jsonl'
 ```
 
-<a id="jump7.2"></a>
 #### 配置参数
 CogvideoX lora微调阶段的启动文件为shell脚本，主要分为如下2个：
 |            | I2V | T2V |
@@ -478,7 +462,6 @@ CogvideoX lora微调阶段的启动文件为shell脚本，主要分为如下2个
 
   请参考预训练相同章节
 
-<a id="jump7.3"></a>
 #### 启动lora微调
 
 
@@ -500,10 +483,8 @@ python  checkpoint/common/merge_base_lora_weight.py --base_save_dir './converted
 
 ---
 
-<a id="jump8"></a>
 ## 预训练模型扩参示例(15B)
 
-<a id="jump8.1"></a>
 #### 模型参数修改
 通过增加扩散模型层数等配置可以模拟15B参数量，如下所示，修改模型参数配置文件（`model_cogvideox_i2v.json`）中`"predictor"`下的`"num_layers"`、`"num_heads"`和`"head_dim"`的值
 
@@ -516,7 +497,6 @@ python  checkpoint/common/merge_base_lora_weight.py --base_save_dir './converted
 }
 ```
 
-<a id="jump8.2"></a>
 #### 启动脚本修改
 
 修改GPT_ARGS参数如下，根据实际分辨率、帧数调整启动脚本中的分布式配置（单机16卡CP4效果较佳）：
@@ -543,7 +523,7 @@ GPT_ARGS="
     ...
 "
 ```
-<a id="jump9"></a>
+
 ## 环境变量声明
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
