@@ -11,6 +11,7 @@ from safetensors.torch import save_file
 from checkpoint.common.constant import LATEST_TXT, MEGATRON_CKPT_NAME
 from checkpoint.common.types import STATE_DICT_T, PP_LAYER_NUM_T
 from checkpoint.vlm_model.config import ConvertHFConfig
+from checkpoint.vlm_model.hf_to_mm import load_from_hf
 from checkpoint.vlm_model.operator import Operator, TP_PATTERN_T
 
 
@@ -136,7 +137,8 @@ def rename_pp_parameter(param_name: str,
 
 def convert_mm_to_hf(convert_config: ConvertHFConfig,
                      ops: List[Operator],
-                     tp_patterns: TP_PATTERN_T):
+                     tp_patterns: TP_PATTERN_T,
+                     merge_source: bool = False):
     parallel_config = convert_config.parallel_config
     # 加载权重字典
     state_dicts = load_from_mm(convert_config.mm_dir, parallel_config.vit_pp_layers, parallel_config.llm_pp_layers,
@@ -144,6 +146,8 @@ def convert_mm_to_hf(convert_config: ConvertHFConfig,
     state_dict = merge_by_tp(state_dicts, tp_patterns)
     for op in ops:
         op.revert(state_dict)  # 执行逆操作
+    if merge_source:
+        state_dict = {**load_from_hf(convert_config.hf_config.hf_dir), **state_dict}
     state_dicts = split_by_index_json(state_dict, convert_config.hf_config.hf_dir)
     copy_files_except_suffix(convert_config.hf_config.hf_dir, convert_config.save_hf_dir)
     save_by_index_json(state_dicts, convert_config.save_hf_dir)
