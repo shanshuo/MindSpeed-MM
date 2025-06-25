@@ -63,7 +63,7 @@ conda activate test
 
 # 安装torch和torch_npu
 pip install torch-2.5.1-cp310-cp310-*.whl
-pip install torch_npu-2.5.1.*.manylinux2014_aarch64.whl
+pip install torch_npu-2.5.1*.manylinux2014_aarch64.whl
 
 # 安装MindSPeed MM依赖
 pip install -r MindSpeed-MM/examples/rl/requirements.txt
@@ -85,13 +85,14 @@ cd ..
 # 下载MindSpeed RL
 git clone https://gitee.com/ascend/MindSpeed-RL.git
 cd MindSpeed-RL
-git checkout acb2c70
+git checkout cc60d94
 pip install -r requirements.txt
 cp -r mindspeed_rl ../MindSpeed-MM/
 cd ..
-# MindSpeed RL中性能加速文件替换（必选）
+
+# MindSpeed RL中文件替换（必选）
 cd MindSpeed-MM
-bash examples/rl/scripts/copy_performance_to_mindspeed_rl.sh
+bash examples/rl/scripts/copy_adaptor_to_mindspeed_rl.sh
 cd ..
 ```
 
@@ -291,4 +292,10 @@ bash examples/rl/scripts/grpo_trainer_qwen25vl_3b.sh
 ```shell
 sudo apt-get install iproute2
 ```
+
 2. 如果安装vllm ascend失败，提示`fatal error: 'cstdint' file not found`，可能是gcc版本问题，可参考[此处](https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha003/softwareinst/instg/instg_0086.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)解决。更多vllm ascend问题可以向[社区](https://github.com/vllm-project/vllm-ascend)求助。
+
+3. 可以使用[Ray Debugger](https://docs.ray.io/en/latest/ray-observability/ray-distributed-debugger.html)对代码进行调试，在安装完插件后，需要在环境中安装依赖：
+```shell
+pip install "ray[default]" debugpy
+```
