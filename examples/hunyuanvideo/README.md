@@ -1,6 +1,8 @@
 # HunyuanVideo使用指南
 - [HunyuanVideo使用指南](#hunyuanvideo使用指南)
-  - [参考实现](#参考实现)
+  - [版本说明](#版本说明)
+    - [参考实现](#参考实现)
+    - [变更记录](#变更记录)
   - [环境安装](#环境安装)
     - [仓库拉取](#仓库拉取)
     - [环境搭建](#环境搭建)
@@ -26,13 +28,21 @@
     - [启动推理](#启动推理)
   - [环境变量声明](#环境变量声明)
 
-## 参考实现
+
+## 版本说明
+
+### 参考实现
 
 ```
 url=https://github.com/hao-ai-lab/FastVideo
 commit_id=a33581186973e6d7355f586fa065b6abb29b97fb
 ```
 
+### 变更记录
+
+2025.06.07：同步FastVideo原仓关键参数修改，将`embeded_guidance_scale`参数默认值设置为1
+
+2025.02.20：首次发布HunyuanVideo T2V
 ## 环境安装
 
 【模型开发时推荐使用配套的环境版本】
@@ -361,6 +371,7 @@ bash examples/hunyuanvideo/{task_name}/inference_hunyuanvideo.sh
 ```
 
 ## 环境变量声明
+
 ASCEND_SLOG_PRINT_TO_STDOUT： 是否开启日志打印， 0：关闭日志打屏，1：开启日志打屏  
 ASCEND_GLOBAL_LOG_LEVEL： 设置应用类日志的日志级别及各模块日志级别，仅支持调试日志。0：对应DEBUG级别，1：对应INFO级别，2：对应WARNING级别，3：对应ERROR级别，4：对应NULL级别，不输出日志  
 TASK_QUEUE_ENABLE： 用于控制开启task_queue算子下发队列优化的等级，0：关闭，1：开启Level 1优化，2：开启Level 2优化  
