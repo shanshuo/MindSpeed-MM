@@ -26,7 +26,7 @@ export TP_SOCKET_IFNAME="Your SOCKET IFNAME"
 export HCCL_SOCKET_IFNAME="Your SOCKET IFNAME"
 
 # 使能 jemalloc（以OpenEuler系统为例）
-# export LD_PRELOAD="$LD_PRELOAD:/usr/local/lib/libjemalloc.so.2
+# export LD_PRELOAD="$LD_PRELOAD:/usr/local/lib/libjemalloc.so.2"
 
 NNODES=2
 NPUS_PER_NODE=16
