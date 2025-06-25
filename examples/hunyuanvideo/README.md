@@ -1,6 +1,8 @@
 # HunyuanVideo使用指南
 - [HunyuanVideo使用指南](#hunyuanvideo使用指南)
-  - [参考实现](#参考实现)
+  - [版本说明](#版本说明)
+    - [参考实现](#参考实现)
+    - [变更记录](#变更记录)
   - [环境安装](#环境安装)
     - [仓库拉取](#仓库拉取)
     - [环境搭建](#环境搭建)
@@ -32,12 +34,28 @@
     - [启动推理](#启动推理)
   - [环境变量声明](#环境变量声明)
 
-## 参考实现
+## 版本说明
+### 参考实现
 
+T2V 任务
 ```
 url=https://github.com/hao-ai-lab/FastVideo
 commit_id=a33581186973e6d7355f586fa065b6abb29b97fb
 ```
+
+I2V 及I2V LoRA微调任务
+```
+url=https://github.com/Tencent-Hunyuan/HunyuanVideo-I2V
+commit_id=2766232ceaafeb680ca32fe0a7e9735c04b561d4
+```
+
+### 变更记录
+
+2025.06.07：T2V任务同步FastVideo原仓关键参数修改，将`embeded_guidance_scale`参数默认值设置为1
+
+2025.04.27：首次发布HunyuanVideo I2V任务及I2V LoRA微调任务
+
+2025.02.20：首次发布HunyuanVideo T2V
 
 ## 环境安装
 
