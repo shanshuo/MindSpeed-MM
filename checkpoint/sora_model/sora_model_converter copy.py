@@ -3,8 +3,6 @@ from typing import Optional
 import os
 import copy
 
-import mindspeed.megatron_adaptor
-
 from checkpoint.common.converter import Converter
 from checkpoint.sora_model.convert_utils.cfg import ConvertConfig, ParallelConfig
 from checkpoint.sora_model.convert_utils.save_load_utils import (
@@ -17,7 +15,8 @@ from checkpoint.sora_model.convert_utils.save_load_utils import (
 from checkpoint.sora_model.convert_utils.utils import (
     flip_mapping,
     replace_name,
-    check_method_support
+    check_method_support,
+    check_parallel_config_support
 )
 from checkpoint.sora_model.convert_utils.tp_patterns import TP_PARTTERN_MAPPING
 
@@ -140,6 +139,7 @@ class SoraModelConverter(Converter):
         state_dicts = self._mm_split(lora_merged_state_dict, cfg.target_parallel_config)
         save_as_mm(cfg.target_path, state_dicts)
 
+    @check_parallel_config_support
     def _mm_split(
         self,
         state_dict: dict,
@@ -169,9 +169,13 @@ class SoraModelConverter(Converter):
                     continue
                 state_dict[new_key] = state_dict.pop(old_key)
         
-        if str_replace_mapping:
-            names = list(state_dict.keys())
-            for name in names:
+        names = list(state_dict.keys())
+        for name in names:
+            if "_extra_state" in name:
+                state_dict.pop(name)
+                continue
+            
+            if str_replace_mapping:
                 weight = state_dict.pop(name)
                 name = replace_name(name, str_replace_mapping)
                 state_dict[name] = weight
@@ -262,7 +266,7 @@ class SoraModelConverter(Converter):
             is_first = vpp_rank == 0
             is_last = vpp_rank == len(pp_sizes_flat) - 1
             start_layer = sum(pp_sizes_flat[:vpp_rank])
-            end_layer = sum(pp_sizes_flat[:vpp_rank + 1]) + sum(pp_sizes_flat[vpp_rank])
+            end_layer = sum(pp_sizes_flat[:vpp_rank]) + pp_sizes_flat[vpp_rank]
 
             for tp_rank, state_dict in enumerate(state_dicts):
                 pp_tp_param = dict()
@@ -338,5 +342,5 @@ class SoraModelConverter(Converter):
                         state_dict = state_dicts[pp_size][tp_rank] 
                     tp_state_dict, max_layer_index = _process_state_dict(state_dict, tp_state_dict, layer_start, self.layer_index_converter)
                     layer_start = max_layer_index + 1
-                    tp_state_dicts.append(tp_state_dict)
+            tp_state_dicts.append(tp_state_dict)
         return tp_state_dicts

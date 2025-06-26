@@ -113,28 +113,31 @@ pip install decord==0.6.0
 
 MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt_to_mm.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分与合并。
 
-首先修改 examples/opensoraplan1.2/convert_ckpt_to_mm.py 传入参数。
-权重转换脚本的参数说明与默认值如下：
+转换vae权重
+
+```bash
+mm-convert OpenSoraPlanConverter --version v1.2 vae_convert \
+	--cfg.source_path <"./raw_ckpt/open-sora-plan/vae/checkpoint.ckpt">
+	--cfg.target_path <"./ckpt/vae/vae.pt">
+```
+
+转换dit部分权重
+
+```bash
+mm-convert OpenSoraPlanConverter --version v1.2 hf_to_mm \
+	--cfg.source_path <"./raw_ckpt/open-sora-plan/93x480p/">
+	--cfg.target_path <"./ckpt/open-sora-plan-12/93x480p/">
+	--cfg.target_parallel_config.tp_size <tp_size>
+```
+
+权重转换工具的参数说明与默认值如下：
+
 |参数| 含义 | 默认值 |
 |:------------|:----|:----|
-| --tp_size | tp size | 1 |
-| --dit_hg_weight_path | dit部分原始权重路径 | "./raw_ckpt/open-sora-plan/93x480p/diffusion_pytorch_model.safetensors"
-| --dit_mm_save_path | dit部分转换或切分后权重保存路径 | "./ckpt/open-sora-plan-12/93x480p" |
-| --vae_convert | 是否转换vae权重 | True |
-| --vae_hg_weight_path | vae部分原始权重路径 | "./raw_ckpt/open-sora-plan/vae/checkpoint.ckpt" |
-| --vae_mm_save_path | vae部分转换后权重保存路径 | "./ckpt/vae" |
-| --dit_mm_weight_path | 用于合并操作的，TP切分的dit权重路径 | "./ckpt/open-sora-plan-12/93x480p" |
-| --dit_merge_save_path | 合并后dit权重保存路径 | "./ckpt/open-sora-plan-12/merge" |
-| --mode | split表示按tp size对权重进行切分， merge表示按tp size对权重进行合并 | "split" |
-
-
-启动脚本
-
-    # 根据实际情况修改 ascend-toolkit 路径
-
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh
-    python examples/opensoraplan1.2/convert_ckpt_to_mm.py   --mode="split" --tp-size=2
-    
+| --version | opensoraplan系列不同版本 | 默认为`v1.5`，需要设置为`v1.2` |
+| --cfg.source_path | 原始权重路径 | / |
+| --cfg.target_path | 转换或切分后权重保存路径 | /                              |
+| --cfg.target_parallel_config.tp_size | dit部分切分时的tp size | 1 |
 
 
 同步修改examples/opensoraplan1.2/pretrain_opensoraplan1_2.sh 中的--load参数，该路径为转换后或者切分后的权重，注意--load配置的是转换到MindSpeed-MM后的dit权重路径，vae权重路径在model_opensoraplan1_2.json中配置
@@ -242,6 +245,14 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`conv
 
 参考上述的权重下载及转换章节，需求的权重需要到huggingface中下载，以及参考上面的权重转换代码进行转换。
 链接参考: [predict_model](https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.2.0/tree/main/29x480p) [VAE](https://huggingface.co/LanguageBind/Open-Sora-Plan-v1.2.0/tree/main/vae) [tokenizer/text_encoder](https://huggingface.co/google/mt5-xxl/tree/main)
+
+如果在训练时对dit部分进行了TP切分，推理时可以运行下面的脚本将该部分权重进行合并
+
+```bash
+mm-convert OpenSoraPlanConverter --version v1.2 resplit \
+	--cfg.source_path <"./ckpt/open-sora-plan-12/93x480p/">
+	--cfg.target_path <"./ckpt/open-sora-plan-12/93x480p_merge/">
+```
 
 <a id="jump5.2"></a>
 

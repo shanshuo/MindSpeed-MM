@@ -117,24 +117,35 @@ pip install decord==0.6.0
 
 #### 2. 权重转换
 
-MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用`convert_ckpt_to_mm.py`脚本进行转换，该脚本实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）权重的切分。
+MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用权重转换工具进行转换，该转换工具实现了从hugging face下载的预训练权重到到MindSpeed-MM权重的转换以及TP（Tensor Parallel）和PP（Pipeline Parallel）权重的切分。
 
-首先修改 examples/opensoraplan1.3/convert_ckpt_to_mm.py 参数
+转换vae部分的权重
 
-    TP_SIZE = 1  # TP（Tensor Parallel）size，需要和训练脚本的TP保持一致
-    PP_SIZE = [] # PP (Pipeline Parallel) size, 需要和训练脚本保持一致
-    dit_hg_weight_path = "raw_ckpt/open-sora-plan/any93x640x640/" #huggingface下载的dit预训练权重路径
-    dit_mm_save_dir = "mm_ckpt/open-sora-plan/pretrained-checkpoint-dit" #转换到MindSpeed-MM的dit权重存放路径
+```bash
+mm-convert OpenSoraPlanConverter --version v1.3 vae_convert \
+	--cfg.source_path <"raw_ckpt/open-sora-plan/any93x640x640/">
+	--cfg.target_path <"mm_ckpt/open-sora-plan/pretrained-checkpoint-wfvae">
+```
 
-    vae_hg_weight_path = "raw_ckpt/vae/wfvae.ckpt"  #huggingface下载的vae预训练权重路径
-    vae_mm_save_dir = "mm_ckpt/open-sora-plan/pretrained-checkpoint-wfvae" #转换到MindSpeed-MM的vae权重存放路径
----
+转换dit部分的权重
 
-启动脚本
+```bash
+mm-convert OpenSoraPlanConverter --version v1.3 hf_to_mm \
+	--cfg.source_path <"./raw_ckpt/open-sora-plan/93x480p/">
+	--cfg.target_path <"mm_ckpt/open-sora-plan/pretrained-checkpoint-dit">
+	--cfg.target_parallel_config.tp_size <tp_size>
+	--cfg.target_parallel_config.pp_layers <pp_layers>
+```
 
-    # 根据实际情况修改 ascend-toolkit 路径
-    source /usr/local/Ascend/ascend-toolkit/set_env.sh
-    python examples/opensoraplan1.3/convert_ckpt_to_mm.py
+权重转换工具的参数说明与默认值如下：
+
+| 参数                                   | 含义                                                         | 默认值           |
+| :------------------------------------- | :----------------------------------------------------------- | :--------------- |
+| --version                              | opensoraplan系列不同版本                                     | 需要设置为`v1.3` |
+| --cfg.source_path                      | 原始权重路径                                                 | /                |
+| --cfg.target_path                      | 转换或切分后权重保存路径                                     | /                |
+| --cfg.target_parallel_config.tp_size   | dit部分切分时的tp size                                       | 1                |
+| --cfg.target_parallel_config.pp_layers | dit部分切分时的pp_layer，`[]`表示不开PP，`[8,8,8,8]`表示PP size为4，每个stage 8层，[[4,4,4,4],[4,4,4,4]]表示PP size为4， vpp size为2 | []      
 ---
 
 同步修改examples/opensoraplan1.3/t2v/pretrain_t2v.sh中的--load参数，该路径为转换后或者切分后的权重，注意--load配置的是转换到MindSpeed-MM后的dit权重路径，vae权重路径在pretrain_t2v_model.json中配置
@@ -391,6 +402,15 @@ i2v(图生视频):
 #### 1. 准备工作
 
 参考上述的权重下载及转换章节，推理所需的预训练权重需要到huggingface中下载，以及参考上面的权重转换步骤进行转换。
+
+如果在训练时对dit部分进行了TP切分，推理时可以运行下面的脚本将该部分权重进行合并
+
+```bash
+mm-convert OpenSoraPlanConverter --version v1.3 resplit \
+	--cfg.source_path <"./raw_ckpt/open-sora-plan/93x480p/">
+	--cfg.target_path <"mm_ckpt/open-sora-plan/pretrained-checkpoint-dit">
+```
+
 
 <a id="jump5.2"></a>
 

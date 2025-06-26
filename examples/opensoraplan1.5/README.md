@@ -89,23 +89,28 @@ Text Encoder：[t5](https://huggingface.co/google/t5-v1_1-xl) 和 [CLIP](https:/
 需要对下载后的opensoraplan1.5模型 `vae`部分进行权重转换，运行权重转换脚本
 
 ```bash
-python examples/opensoraplan1.5/convert_ckpt_to_mm.py --module vae --source_path <your_source_path> --target_path <your_target_path>
+mm-convert OpenSoraPlanConverter --version v1.5 vae_convert \
+	--cfg.source_path <"./raw_ckpt/open-sora-plan/vae/checkpoint.ckpt">
+	--cfg.target_path <"./ckpt/vae/vae.pt">
 ```
 
 需要对下载后的opensoraplan1.5模型 `DiT`部分进行权重转换，运行权重转换脚本
 
 ```bash
-python examples/opensoraplan1.5/convert_ckpt_to_mm.py --module dit --source_path <your_source_path> --target_path <your_target_path> --tp_size <tp_size>
+mm-convert OpenSoraPlanConverter --version v1.5 source_to_mm \
+	--cfg.source_path <"./raw_ckpt/open-sora-plan/model_ema.pt/">
+	--cfg.target_path <"./ckpt/open-sora-plan/">
+	--cfg.target_parallel_config.tp_size <tp_size>
 ```
 
 权重转换脚本的参数说明如下：
 
-| 参数          | 含义                         | 默认值                                        |
-| ------------- | ---------------------------- | --------------------------------------------- |
-| --module      | 需要转换的模块，包括vae和dit | dit                                           |
-| --source_path | 原始权重的路径               | `./transformers/mp_rank_00/model_states.pt` |
-| --target_path | 保存权重的路径               | `./ckpt/opensoraplan_1.5/`                  |
-| --tp_size     | tp size                      | 1                                             |
+| 参数                                 | 含义                     | 默认值           |
+| ------------------------------------ | ------------------------ | ---------------- |
+| --version                            | opensoraplan系列不同版本 | 需要设置为`v1.5` |
+| --cfg.source_path                    | 原始权重路径             | /                |
+| --cfg.target_path                    | 转换或切分后权重保存路径 | /                |
+| --cfg.target_parallel_config.tp_size | dit部分切分时的tp size   | 1                |
 
 ## 预训练
 
@@ -210,6 +215,14 @@ bash examples/opensoraplan1.5/pretrain.sh
 
 ```bash
 bash examples/opensoraplan1.5/inference.sh
+```
+
+如果使用训练后的权重进行推理，且在训练时对dit部分进行了TP切分，推理时可以运行下面的脚本将该部分权重进行合并
+
+```bash
+mm-convert OpenSoraPlanConverter --version v1.5 resplit \
+	--cfg.source_path <"./ckpt/open-sora-plan">
+	--cfg.target_path <"./ckpt/open-sora-plan_merge/">
 ```
 
 ## 环境变量声明

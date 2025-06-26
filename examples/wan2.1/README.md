@@ -121,34 +121,38 @@ pip install decord==0.6.0
 需要对下载后的Wan2.1模型权重`transformer`部分进行权重转换，运行权重转换脚本：
 
 ```shell
-python examples/wan2.1/convert_ckpt.py --source_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> --target_path <./weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> --mode convert_to_mm
+mm-convert WanConverter hf_to_mm \
+	--cfg.source_path <./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/> \
+	--cfg.target_path --target_path <./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
+	--cfg.target_parallel_config.pp_layers <pp_layers>
 ```
 
 权重转换脚本的参数说明如下：
 
-| 参数              | 含义                      | 默认值                                                                |
-|:----------------|:------------------------|:-------------------------------------------------------------------|
-| --source_path   | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/ |
-| --target_path   | 转换后的权重保存路径              | ./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/ |
-| --mode          | 转换模式                    | 需选择convert_to_mm                                                   |
-| --pp_vpp_layers | PP/VPP层数                | 在convert_to_mm时, 使用PP和VPP需要指定各stage的层数并转换, 默认不使用                   |
+| 参数              | 含义                     | 默认值                                                       |
+| :---------------- | :----------------------- | :----------------------------------------------------------- |
+| --cfg.source_path | 原始权重路径             | /                                                            |
+| --cfg.target_path | 转换或切分后权重保存路径 | /                                                            |
+| --pp_vpp_layers   | PP/VPP层数               | 开启PP时, 使用PP和VPP需要指定各stage的层数并转换, 默认为`[]`，即不使用 |
 
 如需转回Hugging Face格式，需运行权重转换脚本：
 
-**注**： 如进行layer zero进行训练，则需首先进行其[训练权重后处理](#jump1)，在进行如下操作：
+**注**： 如进行layer zero进行训练，则需首先进行其[训练权重后处理](#jump1)，再进行如下操作：
 
 ```shell
-python examples/wan2.1/convert_ckpt.py --source_path <path for your saved weight/> --ckpt_path <./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/> --target_path <path for your saved weight/> --mode convert_to_hf
+mm-convert WanConverter mm_to_hf \
+	--cfg.source_path <path for your saved weight/> \
+	--cfg.target_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
+	--cfg.hf_path <weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
 ```
 
 权重转换脚本的参数说明如下：
 
 |参数| 含义 | 默认值 |
 |:------------|:----|:----|
-| --source_path | 训练权重/layer zero训练后处理权重 | path for your saved weight |
-| --ckpt_path | 原始下载权重transformer文件夹的路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/ |
-| --target_path | 转换后的权重保存路径 | ./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2V}-{1.3/14}B-Diffusers/transformer/ |
-| --mode | 转换模式 | 需选择convert_to_hf |
+| --cfg.source_path | MindSpeed MM保存的权重路径                                   | /      |
+| --cfg.target_path | 转换后的Hugging Face权重路径                                 | /      |
+| --cfg.hf_path     | 原始Hugging Face权重路径，需要从该目录下获取原始huggingface配置文件 |    /   |
 
 ---
 
@@ -270,11 +274,9 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 
     ```bash
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
-    # your_mindspeed_path和your_megatron_path分别替换为之前下载的mindspeed和megatron的路径
-    export PYTHONPATH=$PYTHONPATH:<your_mindspeed_path>
-    export PYTHONPATH=$PYTHONPATH:<your_megatron_path>
-    # input_folder为layerzero训练保存权重的路径，output_folder为输出的megatron格式权重的路径
-    python <your_mindspeed_path>/mindspeed/core/distributed/layerzero/state/scripts/convert_to_megatron.py --input_folder ./save_ckpt/wan2.1/iter_000xxxx/ --output_folder ./save_ckpt/wan2.1_megatron_ckpt/iter_000xxxx/ --prefix predictor
+    mm-converter WanConverter layerzero_to_mm \
+    	--cfg.source_path <./save_ckpt/wan2.1/iter_000xxxx/> \
+    	--cfg.target_path --target_path <./save_ckpt/wan2.1_megatron_ckpt/iter_000xxxx/>
     ```
 
 - PP：流水线并行
@@ -365,6 +367,17 @@ bash examples/wan2.1/{model_size}/{task}/pretrain.sh
 
 ```bash
 bash examples/wan2.1/{model_size}/{task}/finetune_lora.sh
+```
+
+微调完成后，可以使用权重转换工具，将训练好的lora权重与原始权重进行合并
+
+```bash
+mm-convert WanConverter merge_lora_to_base \
+	--cfg.source_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> \
+	--cfg.target_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer_merge/> \
+	--cfg.lora_path <lora_save_path> \
+	--lora_alpha 64 \
+	--lora_rank 64
 ```
 
 ## 推理
