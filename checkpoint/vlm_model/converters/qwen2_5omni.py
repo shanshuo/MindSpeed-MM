@@ -183,7 +183,7 @@ class Qwen2_5_OmniConverter(Converter):
     def mm_to_hf(cfg: ConvertHFConfig):
         """mindspeed-mm模型转换huggingface模型权重"""
         ops, config = Qwen2_5_OmniConverter._create_ops(cfg.hf_config.config)
-        mm_to_hf.convert_mm_to_hf(cfg, ops, qwen2_5_omni_tp_patterns)
+        mm_to_hf.convert_mm_to_hf(cfg, ops, qwen2_5_omni_tp_patterns, merge_source=True)
         # 安全管控权限
         os.chmod(cfg.save_hf_dir, SAFE_MODE)
 
