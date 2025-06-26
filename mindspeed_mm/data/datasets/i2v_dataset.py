@@ -52,7 +52,6 @@ class I2VDataset(T2VDataset):
         use_clean_caption: bool = True,
         support_chinese: bool = False,
         tokenizer_config: Union[dict, None] = None,
-        use_feature_data: bool = False,
         vid_img_fusion_by_splicing: bool = False,
         use_img_num: int = 0,
         use_img_from_vid: bool = True,
@@ -98,7 +97,6 @@ class I2VDataset(T2VDataset):
             use_clean_caption=use_clean_caption,
             support_chinese=support_chinese,
             tokenizer_config=tokenizer_config,
-            use_feature_data=use_feature_data,
             vid_img_fusion_by_splicing=vid_img_fusion_by_splicing,
             use_img_num=use_img_num,
             use_img_from_vid=use_img_from_vid,
@@ -110,107 +108,65 @@ class I2VDataset(T2VDataset):
         examples = copy.deepcopy(I2VOutputData)
 
         if self.data_storage_mode == "combine":
-            examples = self.get_merge_data(examples, index)
+            sample = self.data_samples[index]
+            file_path = sample["path"]
+            texts = sample["cap"]
         elif self.data_storage_mode == "standard":
             sample = self.data_samples[index]
-            if self.use_feature_data:
-                video_path, masked_video_path, text_path = sample[FILE_INFO], sample[MASKED_VIDEO], sample[CAPTIONS]
-                if self.data_folder:
-                    video_path = os.path.join(self.data_folder, video_path)
-                    masked_video_path = os.path.join(self.data_folder, masked_video_path)
-                    text_path = os.path.join(self.data_folder, text_path)
-                    video_value = self.get_data_from_feature_data(video_path)
-                    masked_video_value = self.get_data_from_feature_data(masked_video_path)
-                    texts = self.get_data_from_feature_data(text_path)
-                    examples[VIDEO] = video_value
-                    examples[MASKED_VIDEO] = masked_video_value
-                    examples[TEXT] = texts
-                    examples[PROMPT_IDS] = texts
-                    examples[PROMPT_MASK] = texts
-            else:
-                raise NotImplementedError(
-                f"Not support now: data_storage_mode={self.data_storage_mode} and use_feature_data=false"
-            )
+            file_path, texts = sample[FILE_INFO], sample[CAPTIONS]
+            if self.data_folder:
+                file_path = os.path.join(self.data_folder, file_path)
         else:
             raise NotImplementedError(
                 f"Not support now: data_storage_mode={self.data_storage_mode}."
             )
-        return examples
-
-    def drop(self, text, is_video=True):
-        rand_num = random.random()
-        rand_num_text = random.random()
-
-        if rand_num < self.cfg:
-            if rand_num_text < self.default_text_ratio:
-                if not is_video:
-                    text = "The image showcases a scene with coherent and clear visuals."
-                else:
-                    text = "The video showcases a scene with coherent and clear visuals."
-            else:
-                text = ''
-
-        return dict(text=text)
-
-    def get_merge_data(self, examples, index):
-        sample = self.data_samples[index]
-        file_path = sample["path"]
-        if not os.path.exists(file_path):
-            raise AssertionError(f"file {file_path} do not exist!")
+        
+        # get video or img
         file_type = self.get_type(file_path)
-        if file_type == "video":
-            frame_indice = sample["sample_frame_index"]
+        if file_type == "image":
+            video_value = self.image_processer(file_path)
+            video_value = video_value.transpose(0, 1)
+            transforms_after_resize = self.image_transforms_after_resize
+        elif file_type == "video":
             vframes = self.video_reader(file_path)
-            start_frame_idx = sample.get("start_frame_idx", 0)
-            clip_total_frames = sample.get("num_frames", -1)
-            resolution_crop = tuple(sample.get("crop", (None, None, None, None)))
-            video = self.video_processer(
-                vframes,
-                predefine_num_frames=len(frame_indice),
-                start_frame_idx=start_frame_idx,
-                clip_total_frames=clip_total_frames,
-                resolution_crop=resolution_crop
-            )
-            video = video.permute(1, 0, 2, 3)
-            inpaint_cond_data = self.mask_processor(video, mask_type_ratio_dict=self.mask_type_ratio_dict_video)
-            mask, masked_video = inpaint_cond_data['mask'], inpaint_cond_data['masked_pixel_values']
+            video_value = self.video_processer(vframes=vframes, **sample)
+            if self.vid_img_fusion_by_splicing:
+                video_value = self.get_vid_img_fusion(video_value)
+            video_value = video_value.permute(1, 0, 2, 3)
+            transforms_after_resize = self.video_transforms_after_resize
+        
+        inpaint_cond_data = self.mask_processor(video_value, mask_type_ratio_dict=self.mask_type_ratio_dict_video)
+        mask, masked_video = inpaint_cond_data['mask'], inpaint_cond_data['masked_pixel_values']
 
-            video = self.video_transforms_after_resize(video)  # T C H W -> T C H W
-            masked_video = self.video_transforms_after_resize(masked_video)  # T C H W -> T C H W
+        video_value = transforms_after_resize(video_value) # T C H W -> T C H W
+        masked_video = transforms_after_resize(masked_video)  # T C H W -> T C H W
 
-            video = torch.cat([video, masked_video, mask], dim=1)  # T 2C+1 H W
+        video_value = torch.cat([video_value, masked_video, mask], dim=1)  # T 2C+1 H W
 
-            video = video.transpose(0, 1)  # T C H W -> C T H W
+        video_value = video_value.transpose(0, 1)  # T C H W -> C T H W
 
-            examples[VIDEO] = video
-        elif file_type == "image":
-            image = self.image_processer(file_path)
-            image = image.transpose(0, 1)
-            inpaint_cond_data = self.mask_processor(image, mask_type_ratio_dict=self.mask_type_ratio_dict_image)
-            mask, masked_image = inpaint_cond_data['mask'], inpaint_cond_data['masked_pixel_values']
+        examples[VIDEO] = video_value
 
-            image = self.image_transforms_after_resize(image)
-            masked_image = self.image_transforms_after_resize(masked_image)
+        # get text tokens
+        if (isinstance(texts, list) or isinstance(texts, tuple)) and len(texts) > 1:
+            texts = random.choice(texts)
 
-            image = torch.cat([image, masked_image, mask], dim=1)  # [1 2C+1 H W]
-
-            image = image.transpose(0, 1)  # [1 C H W] -> [C 1 H W]
-            examples[VIDEO] = image
-
-        text = sample["cap"]
-        if not isinstance(text, list):
-            text = [text]
-        text = [random.choice(text)]
         if self.use_aesthetic:
             if sample.get('aesthetic', None) is not None or sample.get('aes', None) is not None:
                 aes = sample.get('aesthetic', None) or sample.get('aes', None)
                 if file_type == "video":
-                    text = [add_aesthetic_notice_video(text[0], aes)]
+                    texts = add_aesthetic_notice_video(texts, aes)
                 elif file_type == "image":
-                    text = [add_aesthetic_notice_image(text[0], aes)]
-        prompt_ids, prompt_mask = self.get_text_processer(text)
-        examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
+                    texts = add_aesthetic_notice_image(texts, aes)
 
+        if self.use_text_processer:
+            prompt_ids, prompt_mask = self.get_text_processer(texts)
+            examples[PROMPT_IDS], examples[PROMPT_MASK] = (
+                prompt_ids,
+                prompt_mask,
+            )
+        
         # for feature extract, trace source file name
         examples[FILE_INFO] = file_path
+
         return examples

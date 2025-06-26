@@ -279,14 +279,21 @@ class TextProcesser:
 
     def __call__(self, texts):
         if self.enable_text_preprocessing:
-            texts_info = [
-                TextProcesser.text_preprocessing(
-                    text,
+            if isinstance(texts, tuple) or isinstance(texts, list):
+                texts_info = [
+                    TextProcesser.text_preprocessing(
+                        text,
+                        self.use_clean_caption,
+                        text_preprocess_methods=self.text_preprocess_methods
+                    )
+                    for text in texts
+                ]
+            else:
+                texts_info = TextProcesser.text_preprocessing(
+                    texts,
                     self.use_clean_caption,
                     text_preprocess_methods=self.text_preprocess_methods
                 )
-                for text in texts
-            ]
             texts_info = texts_info if random.random() > self.cfg else [""]
         else:
             texts_info = texts

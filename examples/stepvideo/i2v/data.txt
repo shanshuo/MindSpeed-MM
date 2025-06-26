@@ -1,1 +1,0 @@
-./stepvideo/sora_featuers/,./stepvideo/sora_featuers/data.jsonl

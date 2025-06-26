@@ -1,7 +1,6 @@
 {
     "dataset_param": {
         "dataset_type": "t2v",
-        "use_feature_data": false,
         "basic_parameters": {
             "data_path": "./examples/wan2.1/feature_extract/data.txt",
             "data_storage_mode": "combine"
@@ -117,7 +116,7 @@
     "dataloader_param": {
         "dataloader_mode": "sampler",
         "sampler_type": "LengthGroupedSampler",
-        "shuffle": false,
+        "shuffle": true,
         "drop_last": true,
         "pin_memory": true,
         "group_frame": false,

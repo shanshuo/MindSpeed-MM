@@ -82,13 +82,7 @@ class WanTextVideoDataset(T2VDataset):
             raise AssertionError(f"file {file_path} do not exist!")
 
         vframes = self.video_reader(file_path)
-        start_frame_idx = sample.get("start_frame_idx", 0)
-        frame_indice = sample["sample_frame_index"]
-        video = self.video_processer(
-            vframes,
-            predefine_num_frames=len(frame_indice),
-            start_frame_idx=start_frame_idx,
-        )
+        video = self.video_processer(vframes=vframes, **sample)
 
         if self.task == "i2v":
             first_frame = video[:, 0, :, :] # c t h w 
@@ -203,7 +197,7 @@ def extract_feature():
                     })
                 elif data_storage_mode == "sorafeatured":
                     data_info.update({
-                        'path': f"features/{pt_name}"
+                        FILE_INFO: f"features/{pt_name}"
                     })
                 json_file.write(json.dumps(data_info) + '\n')
     
@@ -270,9 +264,9 @@ def extract_feature():
                     prompt_masks_i = prompt_mask[i]
                 
                 data_to_save = {
-                    "latents": latent_i,
-                    "prompt": prompts_i,
-                    "prompt_mask": prompt_masks_i
+                    VIDEO: latent_i,
+                    PROMPT_IDS: prompts_i,
+                    PROMPT_MASK: prompt_masks_i
                 }
 
                 if latents_dict:

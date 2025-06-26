@@ -58,7 +58,7 @@ class FeatureDataset(MMBaseDataset):
         
         # Extract video features
         examples[VIDEO] = feature_data.pop(VIDEO, None)
-        
+
         # Extract text prompt IDs and masks
         examples[PROMPT_IDS] = feature_data.pop(PROMPT_IDS, None)
         examples[PROMPT_MASK] = feature_data.pop(PROMPT_MASK, None)

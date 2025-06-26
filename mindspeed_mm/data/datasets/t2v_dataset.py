@@ -12,9 +12,8 @@ import sys
 import torch
 import numpy as np
 from megatron.core import mpu
+
 from mindspeed_mm.data.data_utils.utils import map_target_fps
-
-
 from mindspeed_mm.data.data_utils.constants import (
     CAPTIONS,
     FILE_INFO,
@@ -62,7 +61,6 @@ class T2VDataset(MMBaseDataset):
         vid_img_process(dict): some data preprocessing parameters
         use_text_processer(bool): whether text preprocessing
         tokenizer_config(dict or list(dict)): the config of tokenizer or a list of configs for multi tokenizers
-        use_feature_data(bool): use vae feature instead of raw video data or use text feature instead of raw text.
         vid_img_fusion_by_splicing(bool):  videos and images are fused by splicing
         use_img_num(int): the number of fused images
         use_img_from_vid(bool): sampling some images from video
@@ -78,7 +76,6 @@ class T2VDataset(MMBaseDataset):
         use_clean_caption: bool = True,
         support_chinese: bool = False,
         tokenizer_config: Optional[Union[dict, List[dict]]] = None,
-        use_feature_data: bool = False,
         vid_img_fusion_by_splicing: bool = False,
         use_img_num: int = 0,
         use_img_from_vid: bool = True,
@@ -87,7 +84,6 @@ class T2VDataset(MMBaseDataset):
         super().__init__(**basic_param)
         self.use_text_processer = use_text_processer
         self.enable_text_preprocessing = enable_text_preprocessing
-        self.use_feature_data = use_feature_data
         self.vid_img_fusion_by_splicing = vid_img_fusion_by_splicing
         self.use_img_num = use_img_num
         self.use_img_from_vid = use_img_from_vid
@@ -137,22 +133,14 @@ class T2VDataset(MMBaseDataset):
                 support_chinese=support_chinese,
                 cfg=self.cfg,
             )
-        
-        # Feature usage flags
-        self.use_text_feature = basic_param.get("use_text_feature", False)
-        self.use_video_feature = basic_param.get("use_video_feature", False)
 
         # Thread pool configuration for data loading
         max_workers = kwargs.get("max_workers", 1)
         self.executor = ThreadPoolExecutor(max_workers=max_workers)
         self.timeout = kwargs.get("timeout", 60)
 
-         # Data validation for specific storage modes
-        if self.data_storage_mode == "combine" or self.data_storage_mode == "sorafeatured":
-            if basic_param.get("skip_define_frame_index", False):
-                return
-
-            self.data_samples = self.video_processer.select_valid_data(self.data_samples)
+         # Data validation
+        self.data_samples = self.video_processer.select_valid_data(self.data_samples)
 
     def __getitem__(self, index):
         try:
@@ -176,172 +164,77 @@ class T2VDataset(MMBaseDataset):
         
         if self.data_storage_mode == "standard":
             sample = self.data_samples[index]
-            if self.use_feature_data:
-                path, texts_path = sample[FILE_INFO], sample[CAPTIONS]
-                if self.data_folder:
-                    path = os.path.join(self.data_folder, path)
-                    texts_path = os.path.join(self.data_folder, texts_path)
-                video_value = self.get_data_from_feature_data(path)
-                texts = self.get_data_from_feature_data(texts_path)
-                if "image_latent" in sample:
-                    image_latent_path = sample["image_latent"]
-                    if self.data_folder:
-                        image_latent_path = os.path.join(self.data_folder, image_latent_path)
-                    examples.update(self.get_data_from_feature_data(image_latent_path))
-                examples[VIDEO] = video_value
-                examples[TEXT] = texts
-                examples[PROMPT_IDS] = texts
-                examples[PROMPT_MASK] = texts
-            else:
-                path, texts = sample[FILE_INFO], sample[CAPTIONS]
-                if self.data_folder:
-                    path = os.path.join(self.data_folder, path)
-                examples[TEXT] = texts
-                video_value = (
-                    self.get_vid_img_fusion(path)
-                    if self.vid_img_fusion_by_splicing
-                    else self.get_value_from_vid_or_img(path)
-                )
-                examples[VIDEO] = video_value
-                if FILE_REJECTED_INFO in sample.keys():
-                    video_rejected_path = os.path.join(self.data_folder, sample[FILE_REJECTED_INFO])
-                    video_rejected_value = (
-                        self.get_vid_img_fusion(video_rejected_path)
-                        if self.vid_img_fusion_by_splicing
-                        else self.get_value_from_vid_or_img(video_rejected_path)
-                    )
-                    examples[VIDEO_REJECTED] = video_rejected_value
-                    examples[SCORE] = sample[SCORE]
-                    examples[SCORE_REJECTED] = sample[SCORE_REJECTED]
-                if self.use_text_processer:
-                    prompt_ids, prompt_mask = self.get_text_processer(texts)
-                    examples[PROMPT_IDS], examples[PROMPT_MASK] = (
-                        prompt_ids,
-                        prompt_mask,
-                    )
-            # for feature extract, trace source file name
-            examples[FILE_INFO] = sample[FILE_INFO]
+            file_path, texts = sample[FILE_INFO], sample[CAPTIONS]
+            if self.data_folder:
+                file_path = os.path.join(self.data_folder, file_path)
 
-        elif self.data_storage_mode == "sorafeatured":
-            sample = self.data_samples[index]
-            
-            if self.use_video_feature:
-                video_path = sample['path']
-                if self.data_folder:
-                    video_path = os.path.join(self.data_folder, video_path)
-                video_value = self.get_data_from_feature_data(video_path)
-                examples[VIDEO] = video_value['latents']
-                if 'video_mask' in video_value.keys():
-                    examples[VIDEO_MASK] = video_value['video_mask']
-                
-                # update extra info, and avoid critical key values from being overwritten
-                for key in SORA_MODEL_PROTECTED_KEYS:
-                    video_value.pop(key, None)
-                examples.update(video_value)
-                
-                file_type = 'video' 
-            else:
-                examples, file_type = self.get_video_data(examples, index)
-                
-            if self.use_text_feature:
-                texts_path = sample['path']
-                if self.data_folder:
-                    texts_path = os.path.join(self.data_folder, texts_path)
-                texts_value = self.get_data_from_feature_data(texts_path)
-                examples[PROMPT_IDS] = texts_value['prompt']
-                examples[PROMPT_MASK] = texts_value['prompt_mask']
-            else:
-                examples = self.get_text_data(examples, sample, file_type)
-                
         elif self.data_storage_mode == "combine":
-            examples = self.get_merge_data(examples, index)
+            sample = self.data_samples[index]
+            file_path = sample["path"]
+            texts = sample["cap"]
+
         else:
             raise NotImplementedError(
                 f"Not support now: data_storage_mode={self.data_storage_mode}."
             )
+        
+        # Generic media processing pipeline
+        file_type = self.get_type(file_path)
+        
+        # Image/video processing
+        if file_type == "image":
+            video_value = self.image_processer(file_path)
+        elif file_type == "video":
+            vframes = self.video_reader(file_path)
+            video_value = self.video_processer(vframes=vframes, **sample)
+            if self.vid_img_fusion_by_splicing:
+                video_value = self.get_vid_img_fusion(video_value)
+        examples[VIDEO] = video_value
+
+        # Text processing
+        if isinstance(texts, (list, tuple)) and len(texts) > 1:
+            texts = random.choice(texts)  # Random selection from multiple options
+        
+        # Handle aesthetic scoring
+        if self.use_aesthetic:
+            aes = sample.get('aesthetic') or sample.get('aes')
+            if aes is not None:
+                if file_type == "video":
+                    texts = add_aesthetic_notice_video(texts, aes)
+                elif file_type == "image":
+                    texts = add_aesthetic_notice_image(texts, aes)
+
+        # Text tokenization
+        if self.use_text_processer:
+            prompt_ids, prompt_mask = self.get_text_processer(texts)
+            examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
+
+        # DPO (Direct Preference Optimization) handling
+        if FILE_REJECTED_INFO in sample.keys():
+            rejected_video_path = os.path.join(self.data_folder, sample[FILE_REJECTED_INFO])
+
+            rejected_file_type = self.get_type(rejected_video_path)
+            if rejected_file_type == "image":
+                rejected_video_value = self.image_processer(rejected_video_path)
+            elif rejected_file_type == "video":
+                rejected_vframes = self.video_reader(rejected_video_path)
+                rejected_video_value = self.video_processer(vframes=rejected_vframes, **sample)
+                if self.vid_img_fusion_by_splicing:
+                    rejected_video_value = self.get_vid_img_fusion(rejected_video_value)
+
+            examples[VIDEO_REJECTED] = rejected_video_value
+            examples[SCORE] = sample[SCORE]
+            examples[SCORE_REJECTED] = sample[SCORE_REJECTED]
+
+        # for feature extract, trace source file name
+        examples[FILE_INFO] = file_path
+
         return examples
 
     def get_data_from_feature_data(self, feature_path):
         if feature_path.endswith(".pt"):
             return torch.load(feature_path, map_location=torch.device('cpu'))
         raise NotImplementedError("Not implemented.")
-
-    def get_video_data(self, examples, index):
-        sample = self.data_samples[index]
-        file_path = sample["path"]
-        if not os.path.exists(file_path):
-            raise AssertionError(f"file {file_path} do not exist!")
-        file_type = self.get_type(file_path)
-        if file_type == "video":
-            frame_indice = sample["sample_frame_index"]
-            vframes = self.video_reader(file_path)
-            video = self.video_processer(
-                vframes,
-                predefine_num_frames=len(frame_indice),
-            )
-            examples[VIDEO] = video
-        elif file_type == "image":
-            image = self.image_processer(file_path)
-            examples[VIDEO] = image
-        return examples, file_type
-    
-    def get_text_data(self, examples, sample, file_type='video'):
-        text = sample["cap"]
-        if not isinstance(text, list):
-            text = [text]
-        text = [random.choice(text)]
-        if self.use_aesthetic:
-            if sample.get('aesthetic', None) is not None or sample.get('aes', None) is not None:
-                aes = sample.get('aesthetic', None) or sample.get('aes', None)
-                if file_type == "video":
-                    text = [add_aesthetic_notice_video(text[0], aes)]
-                elif file_type == "image":
-                    text = [add_aesthetic_notice_image(text[0], aes)]
-        prompt_ids, prompt_mask = self.get_text_processer(text)
-        examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
-        return examples
-        
-    def get_merge_data(self, examples, index):
-        sample = self.data_samples[index]
-        file_path = sample["path"]
-        if not os.path.exists(file_path):
-            raise AssertionError(f"file {file_path} do not exist!")
-        file_type = self.get_type(file_path)
-        if file_type == "video":
-            frame_indice = sample["sample_frame_index"]
-            vframes = self.video_reader(file_path)
-            start_frame_idx = sample.get("start_frame_idx", 0)
-            clip_total_frames = sample.get("num_frames", -1)
-            resolution_crop = tuple(sample.get("crop", (None, None, None, None)))
-            video = self.video_processer(
-                vframes,
-                predefine_num_frames=len(frame_indice),
-                start_frame_idx=start_frame_idx,
-                clip_total_frames=clip_total_frames,
-                resolution_crop=resolution_crop
-            )
-            examples[VIDEO] = video
-        elif file_type == "image":
-            image = self.image_processer(file_path)
-            examples[VIDEO] = image
-
-        text = sample["cap"]
-        if not isinstance(text, list):
-            text = [text]
-        text = [random.choice(text)]
-        if self.use_aesthetic:
-            if sample.get('aesthetic', None) is not None or sample.get('aes', None) is not None:
-                aes = sample.get('aesthetic', None) or sample.get('aes', None)
-                if file_type == "video":
-                    text = [add_aesthetic_notice_video(text[0], aes)]
-                elif file_type == "image":
-                    text = [add_aesthetic_notice_image(text[0], aes)]
-        prompt_ids, prompt_mask = self.get_text_processer(text)
-        examples[PROMPT_IDS], examples[PROMPT_MASK] = prompt_ids, prompt_mask
-
-        # for feature extract, trace source file name
-        examples[FILE_INFO] = file_path
-        return examples
 
     def get_value_from_vid_or_img(self, path):
         file_type = self.get_type(path)
@@ -352,9 +245,7 @@ class T2VDataset(MMBaseDataset):
             video_value = self.image_processer(path)
         return video_value
 
-    def get_vid_img_fusion(self, path):
-        vframes = self.video_reader(path)
-        video_value = self.video_processer(vframes=vframes)
+    def get_vid_img_fusion(self, video_value):
         if self.use_img_num != 0 and self.use_img_from_vid:
             select_image_idx = np.linspace(
                 0, self.num_frames - 1, self.use_img_num, dtype=int
@@ -407,7 +298,6 @@ class DynamicVideoTextDataset(MMBaseDataset):
         vid_img_process(dict): some data preprocessing parameters
         use_text_processer(bool): whether text preprocessing
         tokenizer_config(dict): the config of tokenizer
-        use_feature_data(bool): use vae feature instead of raw video data or use text feature instead of raw text.
         vid_img_fusion_by_splicing(bool):  videos and images are fused by splicing
         use_img_num(int): the number of fused images
         use_img_from_vid(bool): sampling some images from video
@@ -421,7 +311,6 @@ class DynamicVideoTextDataset(MMBaseDataset):
         enable_text_preprocessing: bool = True,
         use_clean_caption: bool = True,
         tokenizer_config: Union[dict, None] = None,
-        use_feature_data: bool = False,
         vid_img_fusion_by_splicing: bool = False,
         use_img_num: int = 0,
         use_img_from_vid: bool = True,
@@ -432,7 +321,6 @@ class DynamicVideoTextDataset(MMBaseDataset):
     ):
         super().__init__(**basic_param)
         self.use_text_processer = use_text_processer
-        self.use_feature_data = use_feature_data
         self.vid_img_fusion_by_splicing = vid_img_fusion_by_splicing
         self.use_img_num = use_img_num
         self.use_img_from_vid = use_img_from_vid

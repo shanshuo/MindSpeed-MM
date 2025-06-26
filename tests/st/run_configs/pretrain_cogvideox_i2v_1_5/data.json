@@ -1,7 +1,6 @@
 {
 	"dataset_param": {
 		"dataset_type": "t2v",
-		"use_feature_data": false,
 		"basic_parameters": {
 			"data_path": "/home/ci_resource/data/cogvideox1_0/data.jsonl",
 			"data_folder": "/home/ci_resource/data/cogvideox1_0/",

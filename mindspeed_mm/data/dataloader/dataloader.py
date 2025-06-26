@@ -175,13 +175,18 @@ def prepare_sampler_dataloader(
         sample_sizes = []
         for data_sample in dataset.data_samples:
             sample_num_frames.append(data_sample["sample_num_frames"])
-            sample_sizes.append(data_sample["sample_size"])
+            if data_sample.get("sample_size", None):
+                sample_size = data_sample["sample_size"]
+            else:
+                sample_size = f'{len(data_sample["sample_frame_index"])}x{data_sample["resolution"]["sample_height"]}x{data_sample["resolution"]["sample_width"]}'
+            sample_sizes.append(sample_size)
         sampler = (
             LengthGroupedSampler(
                 batch_size,
                 world_size=process_group.size(),
                 num_replicas=process_group.size(),
                 rank=process_group.rank(),
+                shuffle=shuffle,
                 gradient_accumulation_size=gradient_accumulation_size,
                 initial_global_step=initial_global_step_for_sampler,
                 lengths=sample_num_frames if not group_data else sample_sizes,
