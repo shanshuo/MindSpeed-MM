@@ -504,28 +504,32 @@ class Qwen2VLViT(MultiModalModule):
             rotary_pos_emb = rotary_pos_emb[window_index, :, :]
             rotary_pos_emb = rotary_pos_emb.reshape(seq_len, -1)
 
-            window_mask = torch.full(
-                [1, seq_len, seq_len], torch.finfo(pixel_values.dtype).min, device=pixel_values.device,
-                dtype=torch.bool
-            )
-            for i in range(1, len(cu_window_seqlens)):
-                window_mask[..., cu_window_seqlens[i - 1]: cu_window_seqlens[i], cu_window_seqlens[i - 1]: cu_window_seqlens[i]] = 0
+            if not get_args().use_flash_attn:
+                window_mask = torch.full(
+                    [1, seq_len, seq_len], torch.finfo(pixel_values.dtype).min, device=pixel_values.device,
+                    dtype=torch.bool
+                )
+                for i in range(1, len(cu_window_seqlens)):
+                    window_mask[..., cu_window_seqlens[i - 1]: cu_window_seqlens[i], cu_window_seqlens[i - 1]: cu_window_seqlens[i]] = 0
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
             dim=0, dtype=torch.int32
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
 
-        attention_mask = torch.full(
-            [1, seq_len, seq_len], torch.finfo(pixel_values.dtype).min, device=pixel_values.device,
-            dtype=torch.bool
-        )
-        for i in range(1, len(cu_seqlens)):
-            attention_mask[..., cu_seqlens[i - 1]: cu_seqlens[i], cu_seqlens[i - 1]: cu_seqlens[i]] = 0
         if get_args().use_flash_attn:
             if set_actual_seq_len is None:
                 raise AssertionError("Please check the commit id of your MindSpeed")
             set_actual_seq_len(tuple(cu_seqlens[1:].cpu().numpy().tolist()))
+            attention_mask = None
+            window_mask = None
+        else:
+            attention_mask = torch.full(
+                [1, seq_len, seq_len], torch.finfo(pixel_values.dtype).min, device=pixel_values.device,
+                dtype=torch.bool
+            )
+            for i in range(1, len(cu_seqlens)):
+                attention_mask[..., cu_seqlens[i - 1]: cu_seqlens[i], cu_seqlens[i - 1]: cu_seqlens[i]] = 0
             
         if get_args().sequence_parallel:
             hidden_states = scatter_to_sequence_parallel_region(hidden_states)
