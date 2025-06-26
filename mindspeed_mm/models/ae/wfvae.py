@@ -73,7 +73,8 @@ class Encoder(MultiModalModule):
             l1_downsample_wavelet: str = "HaarWaveletTransform2D",
             l2_dowmsample_block: str = "Spatial2xTime2x3DDownsample",
             l2_downsample_wavelet: str = "HaarWaveletTransform3D",
-            enable_vae_cp: bool = False
+            enable_vae_cp: bool = False,
+            training: bool = False
     ) -> None:
         super().__init__(config=None)
         self.activation = nn.SiLU()
@@ -164,14 +165,18 @@ class Encoder(MultiModalModule):
         self.conv_out = WfCausalConv3d(
             base_channels * 4, latent_dim * 2, kernel_size=3, stride=1, padding=1, parallel_input=False
         )
-
-        self.wavelet_tranform_in = model_name_to_cls(l2_downsample_wavelet)()
+        if not training:
+            self.wavelet_tranform_in = model_name_to_cls(l2_downsample_wavelet)()
         self.wavelet_transform_l1 = model_name_to_cls(l1_downsample_wavelet)()
         self.wavelet_transform_l2 = model_name_to_cls(l2_downsample_wavelet)()
 
     def forward(self, coeffs):
-        coeffs = split_tensor(coeffs, get_context_parallel_group(), get_context_parallel_rank(), first_padding=3)
-        coeffs = self.wavelet_tranform_in(coeffs)
+        if not self.training:
+            coeffs = split_tensor(coeffs, get_context_parallel_group(), get_context_parallel_rank(), first_padding=3)
+            coeffs = self.wavelet_tranform_in(coeffs)
+        else:
+            wt = HaarWaveletTransform3D().to(coeffs.device, dtype=coeffs.dtype)
+            coeffs = wt(coeffs)
         l1_coeffs = coeffs[:, :3]
         l1_coeffs = self.wavelet_transform_l1(l1_coeffs)
         l1 = self.connect_l1(l1_coeffs)
@@ -209,7 +214,8 @@ class Decoder(MultiModalModule):
             l1_upsample_wavelet: str = "InverseHaarWaveletTransform2D",
             l2_upsample_block: str = "Spatial2xTime2x3DUpsample",
             l2_upsample_wavelet: str = "InverseHaarWaveletTransform3D",
-            enable_vae_cp: bool = False
+            enable_vae_cp: bool = False,
+            training: bool = False
     ) -> None:
         super().__init__(config=None)
         self.energy_flow_hidden_size = energy_flow_hidden_size
@@ -336,7 +342,8 @@ class Decoder(MultiModalModule):
         self.norm_out = normalize(base_channels, norm_type=norm_type)
         self.conv_out = Conv2d(base_channels, 24, kernel_size=3, stride=1, padding=1)
 
-        self.inverse_wavelet_transform_out = model_name_to_cls(l2_upsample_wavelet)()
+        if not training:
+            self.inverse_wavelet_transform_out = model_name_to_cls(l2_upsample_wavelet)()
         self.inverse_wavelet_transform_l1 = model_name_to_cls(l1_upsample_wavelet)()
         self.inverse_wavelet_transform_l2 = model_name_to_cls(l2_upsample_wavelet)()
 
@@ -358,7 +365,13 @@ class Decoder(MultiModalModule):
         h = self.activation(h)
         h = self.conv_out(h)
         h[:, :3] = h[:, :3] + l1
-        dec = self.inverse_wavelet_transform_out(h)
+        
+        if not self.training:
+            dec = self.inverse_wavelet_transform_out(h)
+        else:
+            wt = InverseHaarWaveletTransform3D().to(h.device, dtype=h.dtype)
+            dec = wt(h)
+
         return dec
 
 
@@ -428,7 +441,8 @@ class WFVAE(MultiModalModule):
             l1_downsample_wavelet=l1_downsample_wavelet,
             l2_dowmsample_block=l2_dowmsample_block,
             l2_downsample_wavelet=l2_downsample_wavelet,
-            enable_vae_cp=self.enable_vae_cp
+            enable_vae_cp=self.enable_vae_cp,
+            training=kwargs.get("training", False)
         )
         self.decoder = Decoder(
             latent_dim=latent_dim,
@@ -444,7 +458,8 @@ class WFVAE(MultiModalModule):
             l1_upsample_block=l1_upsample_block,
             l1_upsample_wavelet=l1_upsample_wavelet,
             l2_upsample_block=l2_upsample_block,
-            l2_upsample_wavelet=l2_upsample_wavelet
+            l2_upsample_wavelet=l2_upsample_wavelet,
+            training=kwargs.get("training", False)
         )
         self.set_parameters(dtype, scale, shift)
         self.configure_cache_offset(l1_dowmsample_block)
