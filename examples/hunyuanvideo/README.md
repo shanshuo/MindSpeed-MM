@@ -264,8 +264,7 @@ bash examples/hunyuanvideo/feature_extract/feature_extraction.sh
 
 | 配置文件                                                   |      修改字段       | 修改说明                                            |
 | ---------------------------------------------------------- | :-----------------: | :-------------------------------------------------- |
-| examples/hunyuanvideo/{task_name}/data.txt                 |      文件内容       | 提取后的特征保存路径                                |
-| examples/hunyuanvideo/{task_name}/feature_data.json        |   from_pretrained   | 修改为下载的权重所对应路径（包括VAE、Text Encoder） |
+| examples/hunyuanvideo/{task_name}/feature_data.json        | basic_parameters   | 数据集路径，`data_path`和`data_folder`分别配置提取后的特征的文件路径和目录 |
 | examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |    NPUS_PER_NODE    | 每个节点的卡数                                      |
 | examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |       NNODES        | 节点数量                                            |
 | examples/hunyuanvideo/{task_name}/pretrain_hunyuanvideo.sh |      LOAD_PATH      | 权重转换后的预训练权重路径                          |

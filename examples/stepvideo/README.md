@@ -267,10 +267,7 @@ stepvideo训练阶段的启动文件为shell脚本，主要分为如下2个：
 
 | 配置文件                                                   |      修改字段       | 修改说明                                            |
 | ---------------------------------------------------------- | :-----------------: | :-------------------------------------------------- |
-| examples/stepvideo/{task_name}/data.txt                    |      文件内容       | 提取后的特征保存路径                                |
-| examples/stepvideo/{task_name}/data_static_resolution.json |  tokenizer_config  | 配置两种分词器路径`"from_pretrained": "/model_path/step_llm/step1_chat_tokenizer.model"`,及`"from_pretrained": "/model_path/hunyuan_clip/tokenizer"`|
-| examples/stepvideo/{task_name}/pretrain_*_model.json       |  text_encoder  | 配置两种文本编译器路径`"from_pretrained": "./weights/step_llm/"`及`"from_pretrained": "./weights/hunyuan_clip/clip_text_encoder"` |
-| examples/stepvideo/{task_name}/pretrain_*_model.json       |       ae       | 配置VAE模型路径`"from_pretrained": "./weights/vae/vae_v2.safetensors"`       |
+| examples/stepvideo/{task_name}/data_static_resolution.json |  basic_parameters  | 数据集路径，`data_path`和`data_folder`分别配置提取后的特征的文件路径和目录 |
 | examples/stepvideo/{task_name}/pretrain_*.sh        |    NPUS_PER_NODE    | 每个节点的卡数                                      |
 | examples/stepvideo/{task_name}/pretrain_*.sh        |       NNODES        | 节点数量                                            |
 | examples/stepvideo/{task_name}/pretrain_*.sh        |      LOAD_PATH      | 权重转换后的预训练权重路径                          |
