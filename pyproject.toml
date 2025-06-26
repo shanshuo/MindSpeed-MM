@@ -29,7 +29,7 @@ dependencies = [
     "imageio-ffmpeg",
     "peft==0.7.1",
     "pydantic>=2.10.4",
-    "jsonargparse[all]>=4.35.0",
+    "jsonargparse[all]>=4.40.0",
     "gpytorch"
 ]
 
