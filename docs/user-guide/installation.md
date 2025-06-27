@@ -7,6 +7,7 @@ MindSpeed MM支持Atlas 800T A2等昇腾训练硬件形态。软件版本配套�
 |MindSpeed MM版本 | MindSpeed版本             | Megatron版本      | PyTorch版本   | torch_npu版本 | CANN版本  | Python版本                               |
 |--------------|-------------------------|-----------------|------------- |-------------|---------|----------------------------------------|
 |master（主线） | 2.0.0_core_r0.8.0           | Core 0.8.0      |   2.1.0 | 在研版本        | 在研版本    | Python3.8, Python3.10|
+|2.1.0（商用） | 2.1.0_core_r0.8.0         | Core 0.8.0      |   2.1.0     | 在研版本       | 在研版本    | Python3.8, Python3.10|
 |2.0.0（商用） | 2.0.0_core_r0.8.0         | Core 0.8.0      |   2.1.0     | 7.0.0       | 8.1.RC1    | Python3.8, Python3.10|
 |1.0.0（商用） | 1.0.0_core_r0.6.0         | Core 0.6.0      |   2.1.0     | 6.0.0       | 8.0.0    | Python3.8, Python3.10 |
 
@@ -14,38 +15,40 @@ MindSpeed MM支持Atlas 800T A2等昇腾训练硬件形态。软件版本配套�
 
 ### 1. 模型开发时推荐使用配套的环境版本
 
-<table border="0">
+<table>
   <tr>
-    <th>软件</th>
+    <th>依赖软件</th>
     <th>版本</th>
-    <th>安装指南参考</th>
   </tr>
   <tr>
-    <td> Python </td>
-    <td> 3.8 / 3.10 </td>
+    <td>昇腾NPU驱动</td>
+    <td rowspan="2">在研版本</td>
+  <tr>
+    <td>昇腾NPU固件</td>
   </tr>
   <tr>
-    <td> Driver </td>
-    <td> AscendHDK 25.0.RC1 </td>
-    <td rowspan="2">《<a href="https://www.hiascend.com/document/detail/zh/canncommercial/81RC1/softwareinst/instg/instg_0003.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit">驱动固件安装指南</a> 》</td>
+    <td>Toolkit（开发套件）</td>
+      <td rowspan="3">在研版本</td>
   </tr>
   <tr>
-    <td> Firmware </td>
-    <td> AscendHDK 25.0.RC1 </td>
+    <td>Kernel（算子包）</td>
   </tr>
   <tr>
-    <td> CANN </td>
-    <td> CANN 8.1.RC1 </td>
-    <td>《<a href="https://www.hiascend.com/document/detail/zh/canncommercial/81RC1/softwareinst/instg/instg_0003.html">CANN 软件安装指南</a> 》</td>
+    <td>NNAL（Ascend Transformer Boost加速库）</td>
   </tr>
   <tr>
-    <td> Torch </td>
-    <td> 2.1.0 </td>
-    <td rowspan="2">《<a href="https://www.hiascend.com/document/detail/zh/Pytorch/700/configandinstg/instg/insg_0004.html">Ascend Extension for PyTorch 配置与安装</a> 》</td>
   </tr>
   <tr>
-    <td> Torch_npu </td>
-    <td> release v7.0.0 </td>
+    <td>Python</td>
+    <td><a href="https://gitee.com/ascend/pytorch#pytorch%E4%B8%8Epython%E7%89%88%E6%9C%AC%E9%85%8D%E5%A5%97%E8%A1%A8">PT配套版本</a></td>
+  </tr>
+  <tr>
+    <td>PyTorch</td>
+    <td>2.1,2.6</td>
+  </tr>
+  <tr>
+    <td>torch_npu插件</td>
+    <td>在研版本</td>
   </tr>
 </table>
 

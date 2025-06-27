@@ -23,9 +23,9 @@ MindSpeed MM是面向大规模分布式训练的昇腾多模态大模型套件�
 * [Jun. 05, 2025]: 🚀 MindSpeed MM支持Qwen2.5Omni-7B模型 【Prototype】
 * [Jun. 05, 2025]: 🚀 MindSpeed MM支持OpenSoraPlan 1.5模型
 * [Apr. 03, 2025]: 🚀 MindSpeed MM支持Qwen2.5VL-32B模型 【Prototype】
-* [Mar. 27, 2025]: 🚀 MindSpeed MM支持Wan2.1-1.3B/14B模型 【Prototype】
+* [Mar. 27, 2025]: 🚀 MindSpeed MM支持Wan2.1-1.3B/14B模型
 * [Mar. 26, 2025]: 🚀 MindSpeed MM支持Qwen2.5VL-3B/7B/72B模型 【Prototype】
-* [Feb. 20, 2025]: 🚀 MindSpeed MM支持InternVL2.5-78B模型 【Prototype】
+* [Feb. 20, 2025]: 🚀 MindSpeed MM支持InternVL2.5-78B模型
 * [Feb. 18, 2025]: 🚀 MindSpeed MM支持HunyuanVideo模型
 * [Feb. 17, 2025]: 🔥 MindSpeed MM支持Mindspeed-Core & Megatron 0.8.0版本
 * [Feb. 15, 2025]: 🚀 MindSpeed MM支持Sana模型
@@ -130,10 +130,10 @@ MindSpeed MM是面向大规模分布式训练的昇腾多模态大模型套件�
 |       模型 \ 特性       | [TP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/tensor-parallel.md) | [TP-SP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/sequence-parallel.md) | [VPP](docs/features/virtual_pipeline_parallel.md) | [PP](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/pipeline-parallel.md) | CP | [Distributed Optimizer](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/distributed-optimizer.md) | [Recomputation](https://gitee.com/ascend/MindSpeed/blob/master/docs/features/recomputation.md) | [LoRA](./docs/features/lora_finetune.md) |
 |:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
 | OpenSoraPlan1.5-T2V | ✔ | ✔ |  |  |  |  | ✔ |  |
-|       Wan2.1        |  |  |  |  | CP (Ulysses) | ✔ | ✔ | Prototype |
+|       Wan2.1        |  |  |  |  | CP (Ulysses) | ✔ | ✔ | ✔ |
 |    HunyuanVideo     | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
-|   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | Prototype |
-|   CogVideoX系列-I2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | Prototype |
+|   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | ✔ |
+|   CogVideoX系列-I2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | ✔ |
 |     Opensora1.2     |  |  |  |                                                                                         | DSP | ✔ | ✔ |  |
 | OpensoraPlan1.3-T2V | ✔ | ✔ | ✔ |        ✔                                                                                 | CP (Ulysses) | ✔ | ✔ |  |
 | OpensoraPlan1.3-I2V | ✔ | ✔ | ✔ |          ✔                                                                               | CP (Ulysses) | ✔ | ✔ |  |
@@ -224,7 +224,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.918 (SPS) </td>
       <td> 1.04 (SPS) </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-1.3B-Diffusers">1.3B</a></td>
@@ -234,7 +234,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.954 (SPS) </td>
       <td> 1.042 (SPS) </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers">14B</a></td>
@@ -244,7 +244,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.160 (SPS) </td>
       <td> 0.160 (SPS) </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-T2V-14B-Diffusers">14B</a></td>
@@ -254,7 +254,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.179 (SPS) </td>
       <td> 0.174 (SPS) </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     </tr>
       <td rowspan="3"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/wan2.1">Wan2.1-I2V</a></td>
@@ -265,7 +265,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.76 (SPS) </td>
       <td>  / </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-720P-Diffusers">14B</a></td>
@@ -275,7 +275,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.130 (SPS) </td>
       <td> / </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://huggingface.co/Wan-AI/Wan2.1-I2V-14B-720P-Diffusers">14B</a></td>
@@ -285,7 +285,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.179 (SPS) </td>
       <td> 0.173 (SPS) </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     </tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/hunyuanvideo">HunyuanVideo</a></td>
@@ -405,7 +405,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 2.89 (SPS) </td>
       <td> 3.03 (SPS) </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td rowspan="2"><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/cogvideox">CogVideoX 1.5-I2V</a></td>
@@ -426,7 +426,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 3.44 (SPS) </td>
       <td> 3.92 (SPS) </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/qihoo_t2x">Qihoo-T2X</a></td>
