@@ -19,6 +19,7 @@ MindSpeed MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 # 🔥🔥🔥Latest News
 
+* [Jun. 25, 2025]: 🚀 MindSpeed MM支持HiDream-I1模型 【Prototype】
 * [Jun. 05, 2025]: 🚀 MindSpeed MM支持Qwen2.5Omni-7B模型 【Prototype】
 * [Jun. 05, 2025]: 🚀 MindSpeed MM支持OpenSoraPlan 1.5模型
 * [Apr. 03, 2025]: 🚀 MindSpeed MM支持Qwen2.5VL-32B模型 【Prototype】
@@ -202,7 +203,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="31"> 多模态生成 </td>
+      <td rowspan="32"> 多模态生成 </td>
       </tr>
       <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/blob/master/examples/opensoraplan1.5/">OpenSoraPlan1.5</a></td>
@@ -512,6 +513,17 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 32.8 (FPS) </td>
       <td> / </td>
       <td>【Pass】</td>
+    </tr>
+    <tr>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/hidream">HiDream</a></td>
+      <td><a href="https://github.com/huggingface/diffusers/blob/main/examples/dreambooth">17B</a></td>
+      <td> Lora微调 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> 18.37 (FPS) </td>
+      <td> 19.61 (FPS) </td>
+      <td> / </td>
+      <td>【Test】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/diffusers/kolors">Kolors</a></td>
