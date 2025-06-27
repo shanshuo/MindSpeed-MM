@@ -13,7 +13,8 @@
         "norm_type": "aelayernorm",
         "t_interpolation": "trilinear",
         "use_tiling": false,
-        "connect_res_layer_num": 1
+        "connect_res_layer_num": 1,
+        "training": true
     },
     "discriminator": {
         "model_id": "LPIPSWithDiscriminator3D",
