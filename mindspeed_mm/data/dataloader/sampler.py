@@ -58,7 +58,7 @@ def split_to_even_chunks(indices, lengths, num_chunks, batch_size):
     return pad_chunks
 
 
-def split_data_to_even_chunks(megabatch, lengths, world_size, batch_size):
+def split_data_to_even_chunks(megabatch, lengths, world_size, batch_size, shuffle=True):
     """
     Split a list of indices into `chunks` chunks of roughly equal lengths.
     """
@@ -74,9 +74,16 @@ def split_data_to_even_chunks(megabatch, lengths, world_size, batch_size):
             if batch_size <= len(chunk):
                 raise AssertionError("batch_size must greater than len_chunk !")
             if len(chunk) != 0:  # [[1, 2], [3]] -> [[1, 2], [3, 3]]
-                chunk = chunk + [random.choice(chunk) for _ in range(batch_size - len(chunk))]
-            else:
-                chunk = random.choice(pad_chunks)  # [[1], []] -> [[1], [1]]
+                if shuffle:
+                    chunk = chunk + [random.choice(chunk) for _ in range(batch_size - len(chunk))]
+                else:
+                    chunk = chunk + [chunk[0] for _ in range(batch_size - len(chunk))]
+            else: # [[1], []] -> [[1], [1]]
+                if shuffle:
+                    chunk = random.choice(pad_chunks)
+                else:
+                    chunk = pad_chunks[0]
+
         pad_chunks.append(chunk)
     return pad_chunks
 
@@ -95,9 +102,9 @@ def group_frame_and_resolution_fun(indices):
     raise NotImplementedError
 
 
-def last_group_frame_fun(shuffled_megabatches, lengths):
-    re_shuffled_megabatches = []
-    for megabatch in shuffled_megabatches:
+def last_group_frame_fun(megabatches, lengths, shuffle=True):
+    re_megabatches = []
+    for megabatch in megabatches:
         re_megabatch = []
         for batch in megabatch:
             if len(batch) == 0:
@@ -113,14 +120,22 @@ def last_group_frame_fun(shuffled_megabatches, lengths):
                     for idx, length in idx_length_dict.items()
                     if length == pick_length
                 ]
-                random_select_batch = [
-                    random.choice(candidate_batch)
-                    for i in range(len(len_each_batch) - len(candidate_batch))
-                ]
+
+                if shuffle:
+                    random_select_batch = [
+                        random.choice(candidate_batch)
+                        for _ in range(len(len_each_batch) - len(candidate_batch))
+                    ]
+                else:
+                    random_select_batch = [
+                        candidate_batch[0]
+                        for _ in range(len(len_each_batch) - len(candidate_batch))
+                    ]
+
                 batch = candidate_batch + random_select_batch
             re_megabatch.append(batch)
-        re_shuffled_megabatches.append(re_megabatch)
-    return re_shuffled_megabatches
+        re_megabatches.append(re_megabatch)
+    return re_megabatches
 
 
 def last_group_resolution_fun(indices):
@@ -188,7 +203,7 @@ def get_length_grouped_indices(
     return out_list
 
 
-def group_data_fun(lengths, generator=None):
+def group_data_fun(lengths, generator=None, shuffle=True):
     # counter is decrease order
     counter = Counter(lengths)  # counter {'1x256x256': 3, ''}   lengths ['1x256x256', '1x256x256', '1x256x256', ...]
     grouped_indices = defaultdict(list)
@@ -199,11 +214,19 @@ def group_data_fun(lengths, generator=None):
     sorted_indices = [grouped_indices[item] for (item, _) in sorted(counter.items(), key=lambda x: x[1], reverse=True)]
     
     # shuffle in each group
-    shuffle_sorted_indices = []
-    for indice in sorted_indices:
-        shuffle_idx = torch.randperm(len(indice), generator=generator).tolist()
-        shuffle_sorted_indices.extend([indice[idx] for idx in shuffle_idx])
-    return shuffle_sorted_indices
+    if shuffle:
+        shuffle_sorted_indices = []
+        for indice in sorted_indices:
+            shuffle_idx = torch.randperm(len(indice), generator=generator).tolist()
+            shuffle_sorted_indices.extend([indice[idx] for idx in shuffle_idx])
+        
+        return shuffle_sorted_indices
+    else:
+        unshuffle_sorted_indices = []
+        for indice in sorted_indices:
+            unshuffle_sorted_indices.extend(indice)
+        
+        return unshuffle_sorted_indices
 
 
 def get_length_grouped_data_indices(
@@ -214,7 +237,8 @@ def get_length_grouped_data_indices(
         initial_global_step, 
         generator=None, 
         group_data=False, 
-        seed=42):
+        seed=42,
+        shuffle=True):
     # We need to use torch for the random part as a distributed sampler will set the random seed for torch.
     if generator is None:
         if world_size == 1:
@@ -223,27 +247,33 @@ def get_length_grouped_data_indices(
             generator = torch.Generator()  # every rank will generate a fixed order but random index
     
     if group_data:
-        indices = group_data_fun(lengths, generator)
+        indices = group_data_fun(lengths, generator, shuffle)
     else:
-        indices = torch.randperm(len(lengths), generator=generator).tolist()
+        if shuffle:
+            indices = torch.randperm(len(lengths), generator=generator).tolist()
+        else:
+            indices = list(range(len(lengths)))
     
     megabatch_size = world_size * batch_size
     megabatches = [indices[i: i + megabatch_size] for i in range(0, len(lengths), megabatch_size)]
 
-    megabatches = [split_data_to_even_chunks(megabatch, lengths, world_size, batch_size) for megabatch in megabatches]
+    megabatches = [split_data_to_even_chunks(megabatch, lengths, world_size, batch_size, shuffle) for megabatch in megabatches]
 
-    indices_mega = torch.randperm(len(megabatches), generator=generator).tolist()
+    if shuffle:
+        indices_mega = torch.randperm(len(megabatches), generator=generator).tolist()
+    else:
+        indices_mega = list(range(len(megabatches)))
 
-    shuffled_megabatches = [megabatches[i] for i in indices_mega]
+    megabatches = [megabatches[i] for i in indices_mega]
 
     if group_data:
-        shuffled_megabatches = last_group_frame_fun(shuffled_megabatches, lengths)
+        megabatches = last_group_frame_fun(megabatches, lengths, shuffle)
     
     initial_global_step = initial_global_step * gradient_accumulation_size
-    shuffled_megabatches = shuffled_megabatches[initial_global_step:]
+    megabatches = megabatches[initial_global_step:]
 
     out_list = []
-    for megabatch in shuffled_megabatches:
+    for megabatch in megabatches:
         for batch in megabatch:
             for i in batch:
                 out_list.append(i)
@@ -262,6 +292,7 @@ class LengthGroupedSampler(DistributedSampler):
         world_size: int,
         num_replicas: Optional[int] = None,
         rank: Optional[int] = None,
+        shuffle: bool = True,
         gradient_accumulation_size: int = 1, 
         initial_global_step: int = 0, 
         lengths: Optional[List[int]] = None,
@@ -279,6 +310,7 @@ class LengthGroupedSampler(DistributedSampler):
             raise ValueError("world_size must be provided.")
         self.batch_size = batch_size
         self.world_size = world_size
+        self.shuffle = shuffle
         self.initial_global_step = initial_global_step
         self.gradient_accumulation_size = gradient_accumulation_size
         self.lengths = lengths
@@ -312,6 +344,7 @@ class LengthGroupedSampler(DistributedSampler):
                 self.initial_global_step,
                 group_data=self.group_data,
                 generator=self.generator,
+                shuffle=self.shuffle
             )
 
         # start sampling from the consumed samples point to continue training from where it left off

@@ -355,29 +355,46 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
     def __call__(
         self,
         vframes,
-        predefine_num_frames=13,
+        sample_num_frames=13,
         start_frame_idx=0,
-        clip_total_frames=-1,
-        resolution_crop=(None, None, None, None),
+        num_frames=-1,
+        crop=(None, None, None, None),
         **kwargs
     ):
-        """Process video with temporal speed adjustment and spatial validation"""
-        total_frames = vframes.get_len() if clip_total_frames == -1 else clip_total_frames
-        fps = vframes.get_video_fps() if vframes.get_video_fps() > 0 else 30.0
-        s_x, e_x, s_y, e_y = resolution_crop
+        """Process video frames with temporal speed adjustment and spatial validation.
+    
+        Args:
+            vframes: Video frames container object with frame access methods
+            sample_num_frames: Expected number of output frames for validation
+            start_frame_idx: Starting index for frame sampling
+            num_frames: Total available frames (-1 = auto-detect from vframes)
+            crop: Spatial crop coordinates (start_x, end_x, start_y, end_y)
         
-        # Frame interval calculation
+        Returns:
+            torch.Tensor: Processed video tensor in CTHW format
+        
+        Raises:
+            IndexError: When video is too short for required processing
+            ValueError: When sampled frames mismatch predefined count
+            AssertionError: When aspect ratio validation fails
+        """
+        # Frame count and FPS initialization
+        total_frames = vframes.get_len() if num_frames == -1 else num_frames
+        fps = vframes.get_video_fps() if vframes.get_video_fps() > 0 else 30.0
+        s_x, e_x, s_y, e_y = crop
+        
+        # Temporal sampling interval calculation
         if self.auto_interval:
             # resample in case high fps, such as 50/60/90/144 -> train_fps(e.g, 24)
             frame_interval = 1.0 if abs(fps - self.train_fps) < 0.1 else fps / self.train_fps
         else:
             frame_interval = self.frame_interval
         
-        # Temporal sampling
+        # Generate initial frame indices
         frame_indices = np.arange(start_frame_idx, start_frame_idx + total_frames, frame_interval).astype(int)
         frame_indices = frame_indices[frame_indices < start_frame_idx + total_frames]
         
-        # speed up
+        # speed up through temporal subsampling
         max_speed_factor = len(frame_indices) / self.num_frames
         if self.speed_factor > 1 and max_speed_factor > 1:
             speed_factor = min(self.speed_factor, max_speed_factor)
@@ -387,7 +404,7 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
             )
             frame_indices = frame_indices[speed_frame_idx]
 
-        #  too long video will be temporal-crop randomly
+        # Random temporal cropping for long sequences
         if len(frame_indices) > self.num_frames:
             begin_index, end_index = self.temporal_sample(len(frame_indices))
             frame_indices = frame_indices[begin_index:end_index]
@@ -403,9 +420,9 @@ class OpensoraplanVideoProcessor(AbstractVideoProcessor):
         frame_indices = frame_indices[:end_frame_idx]
 
         # Frame validation
-        if predefine_num_frames != len(frame_indices):
+        if sample_num_frames != len(frame_indices):
             raise ValueError(
-                f"predefine_num_frames ({predefine_num_frames}) is not equal with frame_indices ({len(frame_indices)})"
+                f"sample_num_frames ({sample_num_frames}) is not equal with frame_indices ({len(frame_indices)})"
             )
         if len(frame_indices) < self.num_frames and self.drop_short_ratio >= 1:
             raise IndexError(

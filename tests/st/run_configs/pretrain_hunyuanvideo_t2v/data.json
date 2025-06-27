@@ -1,12 +1,9 @@
 {
     "dataset_param": {
-        "dataset_type": "t2v",
-        "use_feature_data": true,
+        "dataset_type": "feature",
         "basic_parameters": {
-            "data_path": "/home/ci_resource/models/hunyuanvideo_t2v/data.txt",
-            "data_storage_mode": "sorafeatured",
-            "use_text_feature": true,
-            "use_video_feature": true
+            "data_path": "/home/ci_resource/data/hunyuanvideo_t2v/feature_data/data.jsonl",
+            "data_folder": "/home/ci_resource/data/hunyuanvideo_t2v/feature_data/"
         },
         "preprocess_parameters": {
             "video_processor_type": "OpensoraplanVideoProcessor",
@@ -69,7 +66,7 @@
     "dataloader_param": {
         "dataloader_mode": "sampler",
         "sampler_type": "LengthGroupedSampler",
-        "shuffle": false,
+        "shuffle": true,
         "drop_last": true,
         "pin_memory": true,
         "group_frame": false,
