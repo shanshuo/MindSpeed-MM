@@ -12,6 +12,7 @@ from megatron.core import mpu
 from megatron.training import get_args
 from mindspeed.megatron_adaptor import get_mindspeed_args
 from mindspeed.patch_utils import MindSpeedPatchesManager as pm
+from mindspeed.utils import get_actual_seq_len
 
 try: 
     from mindspeed.core.context_parallel.unaligned_cp.mapping import all_to_all
@@ -58,6 +59,11 @@ class UlyssesContextAttention(torch.nn.Module):
         """
 
         attention_mask = args[0]
+        if attention_mask is None:
+            act_seq_len = get_actual_seq_len()[-1]
+        else:
+            act_seq_len = attention_mask.shape[-1]
+
         act_seq_len = attention_mask.shape[-1]
         scatter_sizes_query = cal_split_sizes(query.shape[self.scatter_idx], dist.get_world_size(self.spg))
         scatter_sizes_key = cal_split_sizes(key.shape[self.scatter_idx], dist.get_world_size(self.spg))
