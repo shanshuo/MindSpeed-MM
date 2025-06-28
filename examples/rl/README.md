@@ -126,7 +126,9 @@ cd ..
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
 source /usr/local/Ascend/nnal/atb/set_env.sh
 cd vllm-ascend
+# 因为前面已经安装了对应的torch_npu版本，这里需要将vllm_ascend文件中的requirements.txt中的torch-npu==2.5.1注释
 python setup.py develop
+# vllm-ascend源码安装过程中遇到相关依赖包因网络问题安装不成功，可以先尝试pip install xxx安装对应失败的依赖包，再执行上一句命令
 cd ..
 
 # 在安装完VLLM及VLLM-ASCEND后，需检查torch及torch_npu版本，若版本被覆盖，需再次安装torch及torch_npu
@@ -149,7 +151,7 @@ export LD_PRELOAD="$LD_PRELOAD:/usr/lib/x86_64-linux-gnu/libjemalloc.so.2"
 ```
 ##### OpenEuler 操作系统
 
-执行如下命令重操作系统源安装jemalloc
+执行如下命令从操作系统源安装jemalloc
 ```shell
 yum install jemalloc
 ```
@@ -185,10 +187,10 @@ export LD_PRELOAD="$LD_PRELOAD:/usr/local/lib/libjemalloc.so.2"
 
 ```shell
 # 在线下载原始数据并预处理
-bash examples/rl/data_preprocess/geo3k.py --local_dir=./data/geo3k
+python examples/rl/data_preprocess/geo3k.py --local_dir=./data/geo3k
 
 # 基于本地原始数据集预处理
-bash examples/rl/data_preprocess/geo3k.py --local_dir=./data/geo3k --local_data=/path/geometry3k
+python examples/rl/data_preprocess/geo3k.py --local_dir=./data/geo3k --local_data=/path/geometry3k
 ```
 
 <a id="jump4"></a>
@@ -214,7 +216,7 @@ megatron_training:
     use_deter_comp: true # 是否开启确定性计算
 
 actor_config:
-    load: ckpt/hf_path/Qwen2.5-VL-3B-Instruct # 数据集路径
+    load: ckpt/mm_path/Qwen2.5-VL-3B-Instruct # megatron权重路径
     save: ./ckpt # 权重保存路径
   ```
 3. 根据使用机器的情况，修改`NNODES`、`NPUS_PER_NODE`配置， 例如单机 A2 可设置`NNODES`为 1 、`NPUS_PER_NODE`为8；
@@ -243,17 +245,13 @@ bash examples/rl/scripts/grpo_trainer_qwen25vl_3b.sh
 | `timing/resharding_to_infer`         | 权重转到推理mode耗时                                     |
 | `timing/adv`                         | 计算advantages耗时                                       |
 | `timing/non_overlap_reference_model` | reference model计算log_p耗时的未被掩盖时间               |
-| `timing/non_overlap_rule_reward`     | rule_reward耗时的未被掩盖时间                            |
-| `timing/non_overlap_reward_model`    | reward_model耗时的未被掩盖时间                           |
 | `timing/non_overlap_adv`             | advantages计算耗时的未被掩盖时间                         |
-| `timing/rule_reward`                 | rule reward打分耗时                                      |
-| `timing/reward_model`                | reward model打分耗时                                     |
 | `timing/ref_onload`                  | reference model计算logp过程中，onload耗时                |
 | `timing/ref_offload`                 | reference model计算logp过程中，offload耗时               |
 
 * 全共卡方案下总时间计算方式
 
-`timing/all` >= `timing/rollout` +`timing/old_log_p` + `timing/update`  +  `timing/reference` + `timing/reshard_to_train` + `timing/reshard_to_infer`  + `max(timing/non_overlap_rule_reward, timing/non_overlap_reference_model)`
+`timing/all` >= `timing/rollout` +`timing/old_log_p` + `timing/update`  +  `timing/reference_model` + `timing/resharding_to_train` + `timing/resharding_to_infer`  + `timing/non_overlap_reference_model`
 
 
 **其他指标**
@@ -266,7 +264,7 @@ bash examples/rl/scripts/grpo_trainer_qwen25vl_3b.sh
 | `actor/pg_clipfrac`                     | GRPO中裁剪机制生效的比例，反映了策略更新幅度的稳定性         |
 | `actor/ppo_kl`                          | PPO算法的实际 KL 散度                                        |
 | `grad_norm`                             | 梯度范数，表示当前反向传播中参数梯度的整体幅度               |
-| `grpo/{verifier_function}_rewards/mean` | 规则奖励打分的平均总奖励值                                   |
+| `grpo/rewards/mean`                     | 规则奖励打分的平均总奖励值                                   |
 | `grpo/lr`                               | 学习率，优化器当前使用的学习率                               |
 | `grpo/score/mean`                       | 开启奖励模型时的reward均值                                   |
 | `grpo/score/max`                        | 奖励模型及规则奖励对同一个样本的reward最大值                 |
