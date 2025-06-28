@@ -64,7 +64,6 @@ class UlyssesContextAttention(torch.nn.Module):
         else:
             act_seq_len = attention_mask.shape[-1]
 
-        act_seq_len = attention_mask.shape[-1]
         scatter_sizes_query = cal_split_sizes(query.shape[self.scatter_idx], dist.get_world_size(self.spg))
         scatter_sizes_key = cal_split_sizes(key.shape[self.scatter_idx], dist.get_world_size(self.spg))
         scatter_sizes_value = cal_split_sizes(value.shape[self.scatter_idx], dist.get_world_size(self.spg))
