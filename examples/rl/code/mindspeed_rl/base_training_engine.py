@@ -55,6 +55,7 @@ class BaseTrainingEngine(ABC):
             temperature: float = 1.0,
             role: str = None,
             micro_batch_size: int = 1,
+            reuse_image_embeds: bool = False,
             use_dynamic_bsz: bool = False,
             max_packing_token_size: bool = 4096,
             use_remove_padding: bool = False,
@@ -67,6 +68,7 @@ class BaseTrainingEngine(ABC):
             **kwargs):
         self.forward_backward_func = forward_backward_func
         self.micro_batch_size = micro_batch_size
+        self.reuse_image_embeds = reuse_image_embeds
         self.use_dynamic_bsz = use_dynamic_bsz
         self.max_packing_token_size = max_packing_token_size
         self.use_remove_padding = use_remove_padding
@@ -114,23 +116,38 @@ class BaseTrainingEngine(ABC):
     @staticmethod
     def _split_batches_with_dynamic_bsz(batch: Dict, max_packing_token: int) -> (List[Dict], List[List[int]]):
         seq_len_list = []
-        for prompt_len, response_len in zip(batch['prompt_length'], batch['response_length']):
-            seq_len_list.append(prompt_len.item() + response_len.item())
+        if is_multimodal():
+            for prompt_len, response_len in zip(batch['input_ids_length'], batch['response_length']):
+                seq_len_list.append(prompt_len.item() + response_len.item())
+        else:
+            for prompt_len, response_len in zip(batch['prompt_length'], batch['response_length']):
+                seq_len_list.append(prompt_len.item() + response_len.item())
         partitions = rearrange_micro_batches(seq_len_list, max_packing_token)
         batches = []
         for key, tensors in batch.items():
-            for batch_idx, partition in enumerate(partitions):
-                if batch_idx >= len(batches):
-                    batches.append({})
-                batches[batch_idx][key] = tensors[partition]
+            if isinstance(tensors, torch.Tensor):
+                for batch_idx, partition in enumerate(partitions):
+                    if batch_idx >= len(batches):
+                        batches.append({})
+                    batches[batch_idx][key] = tensors[partition]
+            elif isinstance(tensors, List):
+                for batch_idx, partition in enumerate(partitions):
+                    if batch_idx >= len(batches):
+                        batches.append({})
+                    batches[batch_idx][key] = torch.concat([tensors[p] for p in partition])
         return batches, partitions
 
-    def _forward_backward_batch(self, batch: Dict[str, torch.Tensor], forward_only: bool = False):
-        if self.use_dynamic_bsz:
-            batches, indices = self._split_batches_with_dynamic_bsz(batch, self.max_packing_token_size)
+    def _forward_backward_batch(self, batch: Dict[str, torch.Tensor], forward_only: bool = False, compute_vit_only: bool = False):
+        if not compute_vit_only and self.use_dynamic_bsz:
+            if is_multimodal():
+                split_sizes = self.max_packing_token_size[0] if forward_only else self.max_packing_token_size[1]
+            else:
+                split_sizes = self.max_packing_token_size
+            batches, indices = self._split_batches_with_dynamic_bsz(batch, split_sizes)
         else:
             batches = self._split_batches(batch, batch_size=self.micro_batch_size,
                                           shuffle_mini_batch=self.shuffle_mini_batch)
+
         n_micro_batch = len(batches)
         batch_size = batch['input_ids'].shape[0]
         seq_len = batches[0]['input_ids'].shape[1]
@@ -143,15 +160,15 @@ class BaseTrainingEngine(ABC):
         def forward_step(batch_iter, model):
             cp_size = get_parallel_state().get_context_parallel_world_size()
             if is_multimodal():
-                process_batch, seqlens_in_batch, cu_seqlens_padded = self._get_mulitmodal_forward_batch_info(batch_iter)
+                process_batch, seqlens_in_batch, cu_seqlens_padded = self._get_mulitmodal_forward_batch_info(batch_iter, compute_vit_only)
                 output = model(**process_batch)
-                if post_process:
+                if post_process and not compute_vit_only:
                     output = postprocess_packed_seqs(output=output['logits'],
                                                      seqlens_in_batch=seqlens_in_batch,
                                                      cu_seqlens_padded=cu_seqlens_padded,
-                                                     seq_len=seq_len,
-                                                     return_tensor=True)
-                    output.div_(self.temperature)
+                                                     seq_len=seq_len)
+                    for item in output:
+                        item.div_(self.temperature)
             elif self.use_remove_padding:
                 input_ids, position_ids, process_batch, seqlens_in_batch, cu_seqlens_padded = self._get_forward_batch_info(batch_iter)
                 self.set_actual_seq_len(cu_seqlens_padded.tolist())
@@ -195,7 +212,7 @@ class BaseTrainingEngine(ABC):
         )
 
         # Reverse the batch index to be the same outside
-        if self.use_dynamic_bsz and forward_only and post_process:
+        if not compute_vit_only and self.use_dynamic_bsz and forward_only and post_process:
             losses_reduced_list = torch.cat(losses_reduced, dim=0)
             indices = list(itertools.chain.from_iterable(indices))
             revert_indices = get_reverse_idx(indices)
@@ -237,8 +254,14 @@ class BaseTrainingEngine(ABC):
 
         return input_ids, attention_mask, position_ids, batch
 
-    def _get_mulitmodal_forward_batch_info(self, batch_iter):
+    def _get_mulitmodal_forward_batch_info(self, batch_iter, compute_vit_only: bool = False):
         batch = next(batch_iter)
+
+        if compute_vit_only:
+            batch['vit_only'] = True
+            batch['batch'] = batch
+            return batch, None, None
+
         input_ids = batch['input_ids']
         batch_size = input_ids.size(0)
 
@@ -270,6 +293,7 @@ class BaseTrainingEngine(ABC):
         batch['input_ids'] = input_ids_rmpad
         batch['position_ids'] = position_ids_rmpad
         batch['attention_mask'] = None
+        batch['llm_only'] = self.reuse_image_embeds
         return batch, seqlens_in_batch, cu_seqlens_padded
 
     def post_process_forward_backward_output(self, output: [torch.Tensor],
@@ -282,7 +306,7 @@ class BaseTrainingEngine(ABC):
         """
         raise NotImplementedError("Subclasses must implement this method.")
 
-    def forward(self, data: Dict) -> torch.Tensor:
+    def forward(self, data: Dict, compute_vit_only: bool = False) -> torch.Tensor:
         """
         模型前向计算
         :param data: 前向计算数据
@@ -296,7 +320,7 @@ class BaseTrainingEngine(ABC):
         for model_module in self.model:
             model_module.eval()
         with torch.no_grad():
-            output = self._forward_backward_batch(data, forward_only=True)
+            output = self._forward_backward_batch(data, forward_only=True, compute_vit_only=compute_vit_only)
             return self.post_process_forward_backward_output(output=output, batch=data)
 
     def update(self, data: Dict, kl_ctrl=None) -> Dict:
@@ -335,7 +359,7 @@ class BaseTrainingEngine(ABC):
 
                 for metric in metric_micro_batch:
                     append_to_dict(metrics, metric)  # append the metric from this micro-batch to global metrics.
-
+        torch.cuda.empty_cache()
         grad_norm = sum(grad_norm_list) / len(grad_norm_list)
         metrics["grad_norm"] = grad_norm_list
         return metrics

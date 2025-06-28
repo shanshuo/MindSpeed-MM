@@ -67,6 +67,8 @@ class VLLMInferEngine(BaseInferEngine):
             trust_remote_code: bool = True,
             load_format: str = "megatron",
             enforce_eager: bool = False,
+            limit_mm_image_per_prompt: int = 1,
+            limit_mm_video_per_prompt: int = 0,
             **kwargs
     ):
         """
@@ -164,6 +166,13 @@ class VLLMInferEngine(BaseInferEngine):
 
         if load_format == "megatron":
             update_megatron_weight_loader()
+        
+        limit_mm_per_prompt_dict = {}
+        if is_multimodal():
+            if limit_mm_image_per_prompt > 0:
+                limit_mm_per_prompt_dict['image'] = limit_mm_image_per_prompt
+            if limit_mm_video_per_prompt > 0:
+                limit_mm_per_prompt_dict['video'] = limit_mm_video_per_prompt
 
         # Initialize the LLM engine
         self.llm = LLM(
@@ -181,6 +190,7 @@ class VLLMInferEngine(BaseInferEngine):
             max_num_seqs=max_num_seqs,
             max_model_len=max_model_len,
             seed=self.sampling_params.seed,
+            limit_mm_per_prompt=limit_mm_per_prompt_dict,
             additional_config={
                 'expert_tensor_parallel_size': infer_expert_tensor_parallel_size,
                 'enable_graph_mode': int(os.environ.get('VLLM_ENABLE_GRAPH_MODE', '0')),
@@ -330,10 +340,24 @@ class VLLMInferEngine(BaseInferEngine):
         self.init_cache_engine()
         if is_multimodal():
             images = kwargs.pop("extra_info")
-            prompts = [
-                {"prompt_token_ids": prompt, "multi_modal_data": {"image": image}}
-                for prompt, image in zip(idx_list, images['image'])
-            ]
+            prompts = []
+            if "vit_embeds" in images:
+                for prompt, image_embeds, grid_thw in zip(idx_list, images['vit_embeds'], images['image_grid_thw']):
+                    prompt_data = {
+                        "prompt_token_ids": prompt,
+                        "multi_modal_data": {
+                            "image_embeds": image_embeds, 
+                            "image_grid_thw": grid_thw
+                        }
+                    }
+                    prompts.append(prompt_data)
+            else:
+                for prompt, image in zip(idx_list, images['image']):
+                    prompt_data = {
+                        "prompt_token_ids": prompt, 
+                        "multi_modal_data": {"image": image}
+                    }
+                    prompts.append(prompt_data)
             idx_list = None
         else:
             prompts = None

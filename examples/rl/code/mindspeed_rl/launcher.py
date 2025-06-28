@@ -34,9 +34,12 @@ from mindspeed_rl.config_cls.mindstudio_config import ProfilerConfig, MsprobeCon
 from mindspeed_rl.utils.tokenizer import BaseTokenizer
 from mindspeed_rl.workers.base_worker import BaseWorker
 from mindspeed_rl.workers.actor_hybrid_worker import ActorHybridWorker
+from mindspeed_rl.workers.mm_actor_hybrid_worker import MultiModalActorHybridWorker
 from mindspeed_rl.workers.reference_woker import ReferenceWorker
 from mindspeed_rl.workers.reward_woker import RewardWorker
 from mindspeed_rl.workers.integrated_worker import IntegratedWorker
+from mindspeed_rl.workers.mm_integrated_worker import MultiModalIntegratedWorker
+from mindspeed_rl.workers.vit_worker import VitWorker
 
 
 def get_rl_resource_by_worker_type(rl_config: RLConfig, worker: Type[BaseWorker]):
@@ -52,6 +55,15 @@ def get_rl_resource_by_worker_type(rl_config: RLConfig, worker: Type[BaseWorker]
     elif (worker.__ray_actor_class__.__name__ ==
           ReferenceWorker.__ray_actor_class__.__name__):
         return rl_config.reference_resource
+    elif (worker.__ray_actor_class__.__name__ ==
+          MultiModalActorHybridWorker.__ray_actor_class__.__name__):
+        return rl_config.actor_resource
+    elif (worker.__ray_actor_class__.__name__ ==
+          MultiModalIntegratedWorker.__ray_actor_class__.__name__):
+        return rl_config.actor_resource
+    elif (worker.__ray_actor_class__.__name__ ==
+          VitWorker.__ray_actor_class__.__name__):
+        return rl_config.vit_resource
     else:
         return None
 
@@ -104,6 +116,14 @@ def construct_placement_groups(num_npus, num_cpus, num_devices_per_node, num_nod
         placement_groups.append(placement_group)
 
     return placement_groups
+
+
+def construct_colocate_placement_groups(rl_config) \
+        -> List[PlacementGroup]:
+    num_npus = get_npu_deployment(rl_config, ActorHybridWorker)
+    num_deivces_per_node, num_nodes = get_device_information(num_npus)
+    return construct_placement_groups(num_npus, rl_config.num_cpus_for_placement_group,
+                                      num_deivces_per_node, num_nodes)
 
 
 @dataclass
@@ -282,6 +302,12 @@ class RayActorGroup:
     def compute_rm_score(self, blocking=False):
         for actor in self.actor_handlers:
             self.temp_actor_ref_objs.append(actor.compute_rm_score.remote())
+        if blocking:
+            ray.get(self.temp_actor_ref_objs)
+
+    def compute_image_embeds(self, blocking=False):
+        for actor in self.actor_handlers:
+            self.temp_actor_ref_objs.append(actor.compute_image_embeds.remote())
         if blocking:
             ray.get(self.temp_actor_ref_objs)
 

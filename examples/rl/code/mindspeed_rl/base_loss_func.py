@@ -63,7 +63,7 @@ class BaseLossFunc(ABC):
         for i in range(batch_size):
             # 提取单个样本的output和batch
             single_output = output[i].unsqueeze(0)
-            single_batch = {key: value[i].unsqueeze(0) for key, value in batch.items()}
+            single_batch = {key: value[i].unsqueeze(0) for key, value in batch.items() if key in ['responses', 'prompt_length', 'response_length']}
             # 逐条计算log_probs
             response, logits = self._get_compute_log_probs_input(single_output, single_batch)
             single_log_probs = compute_log_probs(logits, response)

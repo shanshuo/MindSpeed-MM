@@ -19,6 +19,7 @@ class RayBaseTrainer(object):
     def __init__(self,
                  actor_worker: RayActorGroup = None,
                  ref_worker: RayActorGroup = None,
+                 vit_worker: RayActorGroup = None,
                  reward_list: List[Union[RayActorGroup, RuleReward]] = None,
                  train_iters: int = 1,
                  save_interval: int = 1,
@@ -43,6 +44,7 @@ class RayBaseTrainer(object):
 
         self.actor_worker = actor_worker
         self.ref_worker = ref_worker
+        self.vit_worker = vit_worker
         self.reward_list = reward_list
         self.train_iters = train_iters
         self.save_interval = save_interval

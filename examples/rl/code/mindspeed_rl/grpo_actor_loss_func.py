@@ -55,11 +55,18 @@ class GRPOActorLossFunc(BaseLossFunc):
         :param actual_micro_batch_size: 配置的微批量大小。
         :return: 损失值和统计信息。
         """
+        if isinstance(output, dict) and 'vit_embeds' in output:
+            return output['vit_embeds']
         # compute log probs
         if forward_only:
             log_probs = super().compute_log_probs(output=output, batch=batch)
             return log_probs
-        log_probs, entropy = super().compute_log_probs(output=output, batch=batch, update=True)
+
+        if self.entropy_coeff == 0:
+            log_probs = super().compute_log_probs(output=output, batch=batch)
+            entropy = None
+        else:
+            log_probs, entropy = super().compute_log_probs(output=output, batch=batch, update=True)
 
         response_mask, old_log_prob, advantages, ref_log_prob = self._get_policy_loss_input(batch=batch)
         # compute policy loss
@@ -93,7 +100,7 @@ class GRPOActorLossFunc(BaseLossFunc):
             'actor/pg_clipfrac': pg_clipfrac.detach().item(),
             'actor/ppo_kl': ppo_kl.detach().item(),
             'actor/kl_loss': kl_loss.detach().item(),
-            'actor/entropy': entropy_loss.detach().item()
+            'actor/entropy': entropy_loss.detach().item() if self.entropy_coeff != 0 else 0
         }
         return policy_loss, stats
 
@@ -130,7 +137,10 @@ class GRPOActorLossFunc(BaseLossFunc):
         ratio = torch.exp(negative_approx_kl)
         ppo_kl = F.masked_mean(-negative_approx_kl, eos_mask)
 
-        entropy_loss = F.masked_mean(entropy, eos_mask)
+        if entropy_coeff == 0:
+            entropy_loss = 0
+        else:
+            entropy_loss = F.masked_mean(entropy, eos_mask)
 
         pg_losses = -advantages * ratio
         pg_losses2 = -advantages * torch.clamp(ratio, 1.0 - cliprange, 1.0 + cliprange)

@@ -290,6 +290,7 @@ class GRPOTransferDock(TransferDock):
         ]
         self.experience_consumers = [
             "trainer",
+            "actor_image_embeds",
             "actor_rollout",
             "actor_log_prob",
             "ref_log_prob",

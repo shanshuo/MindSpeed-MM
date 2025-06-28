@@ -62,6 +62,7 @@ class RLConfig(BaseConfig):
         self.rule_reward = True
         self.beta = 0.1
         self.actor_resource = {"num_npus": None}
+        self.vit_resource = {"num_npus": None}
         self.reference_resource = None
         self.reward_resource = None
         self.num_samples_per_step = 1
@@ -100,22 +101,27 @@ class RLConfig(BaseConfig):
         self.use_integrated_worker = True
         self.ref_forward_micro_batch_size = None
         self.actor_forward_micro_batch_size = None
+        self.vit_forward_micro_batch_size = None
 
         self.actor_rollout_dispatch_size = None
         self.actor_logprob_dispatch_size = None
+        self.actor_image_embeds_dispatch_size = None
         self.ref_dispatch_size = None
         self.reward_dispatch_size = None
         self.adv_dispatch_size = None
         self.actor_update_dispatch_size = None
+        self.colocate_actor_and_vit = False
 
         self.is_multimodal = False
         self.use_remove_padding = False
+        self.reuse_image_embeds = False
 
         self.n_samples_per_prompt = config_dict.get('n_samples_per_prompt', 1)
         self.mini_batch_size = 1
 
         self.use_dynamic_bsz = False
         self.max_packing_token_size = 4096
+        self.shuffle_minibatch = False
 
         if config_dict.get("actor_resource") is not None:
             for key, _ in config_dict["actor_resource"].items():

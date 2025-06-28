@@ -8,6 +8,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Dict
 import sys
+from functools import partial
 
 import hydra
 import ray
@@ -29,11 +30,13 @@ from mindspeed_rl.config_cls.mindstudio_config import ProfilerConfig, MsprobeCon
 from mindspeed_rl.datasets.prompt_dataset import PromptDataset
 from mindspeed_rl.datasets.dataloader import PromptDataLoader
 from mindspeed_rl.workers.rule_reward import RuleReward
-from mindspeed_rl.trainer.grpo_trainer_hybrid import RayGRPOTrainer
-from mindspeed_rl.workers.actor_hybrid_worker import ActorHybridWorker
+from mindspeed_rl.trainer.mm_grpo_trainer_hybrid import RayMMGRPOTrainer
+from mindspeed_rl.workers.mm_actor_hybrid_worker import MultiModalActorHybridWorker
 from mindspeed_rl.workers.reference_woker import ReferenceWorker
 from mindspeed_rl.workers.reward_woker import RewardWorker
-from mindspeed_rl.workers.integrated_worker import IntegratedWorker
+from mindspeed_rl.workers.mm_integrated_worker import MultiModalIntegratedWorker
+from mindspeed_rl.workers.vit_worker import VitWorker
+from mindspeed_rl.workers.scheduler.launcher import construct_colocate_placement_groups
 
 
 cur_file_dir = Path(__file__).absolute().parent.parent
@@ -42,12 +45,18 @@ logger = Loggers("grpo_train")
 
 @ray.remote
 def train(config):
-    actor_config, ref_config, reward_config, rl_config, generate_config, profiler_config, msprobe_config = parse_training_config(config).values()
+    actor_config, ref_config, reward_config, vit_config, rl_config, generate_config, profiler_config, msprobe_config = parse_training_config(config).values()
     if hasattr(config['megatron_training'], "ai_framework") and config['megatron_training']['ai_framework'] == "mindspore":
         from mindspeed_rl.workers.scheduler.launcher_ms import RayActorGroupMs as RayActorGroup
     else:
         from mindspeed_rl.workers.scheduler.launcher import RayActorGroup
+    
+    if rl_config.colocate_actor_and_vit:
+        pgs = construct_colocate_placement_groups(rl_config)
+    else:
+        pgs = None
 
+ 
     MsProbe.config_init(msprobe_config)
     MsProbe.save_configs({
         'actor': eval(str(actor_config.dict())),
@@ -63,12 +72,13 @@ def train(config):
     logger.info('start async initializing ray actor groups')
 
     reward_list = []
+    vit_worker = None
 
     from pretrain_vlm import model_provider
     if rl_config.use_integrated_worker:
         integrated_worker = RayActorGroup(
-            worker=IntegratedWorker,
-            placement_group=None,
+            worker=MultiModalIntegratedWorker,
+            placement_group=pgs,
             megatron_config=actor_config,
             rl_config=rl_config,
             generate_config=generate_config,
@@ -84,9 +94,22 @@ def train(config):
         actor_worker = integrated_worker
         reference_worker = integrated_worker
 
+        if rl_config.colocate_actor_and_vit:
+            vit_worker = RayActorGroup(
+                worker=VitWorker,
+                placement_group=pgs,
+                megatron_config=vit_config,
+                rl_config=rl_config,
+                model_provider=partial(model_provider, modules=['image_encoder']),
+                tokenizer=tokenizer,
+                initialize_func=initialize_megatron,
+                get_megatron_module=get_megatron_module,
+                global_batch_size=actor_config.global_batch_size * rl_config.n_samples_per_prompt
+            ).initialize()
+
     else:
         actor_worker = RayActorGroup(
-            worker=ActorHybridWorker,
+            worker=MultiModalActorHybridWorker,
             placement_group=None,
             megatron_config=actor_config,
             rl_config=rl_config,
@@ -158,13 +181,16 @@ def train(config):
     logger.info('after dataloader is built')
 
     reference_worker.wait_all_ref_objs_run_over()
+    if rl_config.colocate_actor_and_vit:
+        vit_worker.wait_all_ref_objs_run_over()
     for reward in reward_list:
         if hasattr(reward, 'wait_all_ref_objs_run_over'):
             reward.wait_all_ref_objs_run_over()
 
-    trainer = RayGRPOTrainer(
+    trainer = RayMMGRPOTrainer(
         actor_worker,
         reference_worker,
+        vit_worker,
         reward_list,
         tokenizer=tokenizer,
         global_batch_size=actor_config.global_batch_size,
@@ -207,9 +233,15 @@ def parse_training_config(config: Dict):
 
         reward_config = MegatronConfig({**config.get("megatron_training"), **config.get("reward_config")},
                                        config.get('model'))
+    
+    vit_config = None
+    if rl_config.colocate_actor_and_vit:
+        vit_config = MegatronConfig({**config.get("megatron_training"), **config.get("vit_config")},
+                                    config.get('model'))
+
     generate_config = GenerateConfig(config.get("generate_config"))
 
-    validate_rl_args(actor_config, ref_config, reward_config, rl_config, generate_config)
+    validate_rl_args(actor_config, ref_config, reward_config, vit_config, rl_config, generate_config)
 
     profiler_config = {}
     profiler_config.update({
@@ -229,6 +261,7 @@ def parse_training_config(config: Dict):
         "actor_config": actor_config,
         "ref_config": ref_config,
         "reward_config": reward_config,
+        "vit_config": vit_config,
         "rl_config": rl_config,
         "generate_config": generate_config,
         "profiler_config": profiler_config,

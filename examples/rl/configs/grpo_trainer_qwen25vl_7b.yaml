@@ -2,7 +2,7 @@ model: /path/MindSpeed-MM/configs/model/qwen2.5vl_7b.json # 模型配置文件�
 
 megatron_training:
   model: qwen2.5vl_7b
-  use_fused_rmsnorm: false
+  use_fused_rmsnorm: true
   normalization: RMSNorm
   use_mcore_models: true
   sequence_parallel: false
@@ -10,7 +10,7 @@ megatron_training:
   no_masked_softmax_fusion: true
   attention_softmax_in_fp32: true
   no_gradient_accumulation_fusion: true
-  use_fused_swiglu: false
+  use_fused_swiglu: true
   swiglu: true
   use_fused_rotary_pos_emb: true
   position_embedding_type: rope
@@ -18,7 +18,7 @@ megatron_training:
   use_distributed_optimizer: true
   tokenizer_type: PretrainedFromHF
   tokenizer_name_or_path: /path/Qwen2.5-VL-7B-Instruct # 原始权重绝对路径
-  global_batch_size: 256
+  global_batch_size: 512
   seq_length: 1024
   save_interval: 50
   train_iters: 1000
@@ -34,7 +34,7 @@ megatron_training:
   split: 100,0,0
   no_shuffle: true
   seed: 1234
-  use_deter_comp: true # 是否开启确定性计算
+  use_deter_comp: false # 是否开启确定性计算
 
 actor_config:
   model: qwen2.5vl_7b
@@ -65,13 +65,14 @@ rl_config:
   blocking: true
   gamma: 1.0
   lam: 0.95
-  actor_forward_micro_batch_size: 1
-  ref_forward_micro_batch_size: 1
+  use_dynamic_bsz: true
+  max_packing_token_size: [55000, 8000]
+  vit_forward_micro_batch_size: 64
   reward_dispatch_size: 5
   adv_dispatch_size: 5
-  actor_rollout_dispatch_size: 160
-  # actor_update_dispatch_size: 160
-  actor_logprob_dispatch_size: 40
+  actor_rollout_dispatch_size: 320
+  actor_update_dispatch_size: 320
+  actor_logprob_dispatch_size: 320
   adv_estimator: group_norm
   kl_penalty: low_var_kl
   kl_ctrl_type: fixed
@@ -88,6 +89,7 @@ rl_config:
   verifier_weight: [1.0]
   num_cpus_for_local_task: 1.0
   use_tensorboard: false
+  reuse_image_embeds: true
   actor_resource:
     num_npus: 8
 
@@ -104,7 +106,7 @@ generate_config:
   infer_expert_parallel_size: 1
 
   # vllm 模型相关设置
-  max_num_seqs: 32
+  max_num_seqs: 64
   max_model_len: 3072 # prompt_length + response_length
   dtype: "bfloat16"
   gpu_memory_utilization: 0.8
