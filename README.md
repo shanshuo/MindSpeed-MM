@@ -130,7 +130,7 @@ MindSpeed MM是面向大规模分布式训练的昇腾多模态大模型套件�
 |:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
 | OpenSoraPlan1.5-T2V | ✔ | ✔ |  |  |  |  | ✔ |  |
 |       Wan2.1        |  |  |  |  | CP (Ulysses) | ✔ | ✔ | Prototype |
-|    HunyuanVideo     | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ |  |
+|    HunyuanVideo     | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | ✔ |
 |   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | Prototype |
 |   CogVideoX系列-I2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | Prototype |
 |     Opensora1.2     |  |  |  |                                                                                         | DSP | ✔ | ✔ |  |
@@ -202,7 +202,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
   </thead>
   <tbody>
     <tr>
-      <td rowspan="31"> 多模态生成 </td>
+      <td rowspan="32"> 多模态生成 </td>
       </tr>
       <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/blob/2.1.0/examples/opensoraplan1.5/">OpenSoraPlan1.5</a></td>
@@ -287,7 +287,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Test】</td>
     </tr>
     </tr>
-      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/2.1.0/examples/hunyuanvideo">HunyuanVideo</a></td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/2.1.0/examples/hunyuanvideo">HunyuanVideo-T2V</a></td>
       <td><a href="https://huggingface.co/tencent/HunyuanVideo">13B</a></td>
       <td> 预训练 </td>
       <td> 1x8</td>
@@ -295,7 +295,18 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> 0.171 (SPS) </td>
       <td> 0.181 (SPS) </td>
       <td> / </td>
-      <td>【Test】</td>
+      <td>【Pass】</td>
+    </tr>
+	</tr>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/2.1.0/examples/hunyuanvideo">HunyuanVideo-I2V</a></td>
+      <td><a href="https://huggingface.co/tencent/HunyuanVideo-I2V">13B</a></td>
+      <td> 预训练 </td>
+      <td> 1x8</td>
+      <td> BF16 </td>
+      <td> 0.164 (SPS) </td>
+      <td> 0.202 (SPS) </td>
+      <td> / </td>
+      <td>【Pass】</td>
     </tr>
     <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/2.1.0/examples/opensora1.0">OpenSora 1.0</a></td>
@@ -674,6 +685,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
     </tr>
     </tbody>
 </table>
+
 
 ---
 
