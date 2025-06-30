@@ -36,7 +36,7 @@
 <a id="jump1"></a>
 ## 环境安装
 
-MindSpeed-MM MindSpore后端的依赖配套如下表，安装步骤参考[基础安装指导](../../docs/mindspore/install_guide.md)。
+MindSpeed-MM MindSpore后端的依赖配套如下表，安装步骤参考[基础安装指导](../../../docs/mindspore/install_guide.md)。
 
 | 依赖软件         |                                                              |
 | ---------------- | ------------------------------------------------------------ |
@@ -65,6 +65,7 @@ git clone https://gitee.com/ascend/MindSpeed-Core-MS.git
 
 # 使用MindSpeed-Core-MS内部脚本自动拉取相关代码仓并一键适配、提供配置环境
 cd MindSpeed-Core-MS
+pip install -r requirements.txt
 source auto_convert_mm.sh
 
 # 替换MindSpeed中的文件
