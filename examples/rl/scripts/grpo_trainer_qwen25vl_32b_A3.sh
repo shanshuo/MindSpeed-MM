@@ -28,7 +28,7 @@ export HCCL_SOCKET_IFNAME="Your SOCKET IFNAME"
 # 使能 jemalloc（以OpenEuler系统为例）
 # export LD_PRELOAD="$LD_PRELOAD:/usr/local/lib/libjemalloc.so.2"
 
-NNODES=2
+NNODES=1
 NPUS_PER_NODE=16
 #修改为对应主节点IP(必填项)
 MASTER_ADDR="xxx.xxx.xxx.xxx"

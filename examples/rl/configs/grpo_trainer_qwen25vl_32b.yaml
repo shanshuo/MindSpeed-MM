@@ -2,7 +2,7 @@ model: /path/MindSpeed-MM/configs/model/qwen2.5vl_32b.json # 模型配置文件�
 
 megatron_training:
   model: qwen2.5vl_32b
-  use_fused_rmsnorm: false
+  use_fused_rmsnorm: true
   normalization: RMSNorm
   use_mcore_models: true
   sequence_parallel: false
@@ -10,7 +10,7 @@ megatron_training:
   no_masked_softmax_fusion: true
   attention_softmax_in_fp32: true
   no_gradient_accumulation_fusion: true
-  use_fused_swiglu: false
+  use_fused_swiglu: true
   swiglu: true
   use_fused_rotary_pos_emb: true
   position_embedding_type: rope
@@ -34,13 +34,13 @@ megatron_training:
   split: 100,0,0
   no_shuffle: true
   seed: 1234
-  use_deter_comp: true # 是否开启确定性计算
+  use_deter_comp: false # 是否开启确定性计算
 
 actor_config:
   model: qwen2.5vl_32b
   micro_batch_size: 1
   tensor_model_parallel_size: 8
-  pipeline_model_parallel_size: 4
+  pipeline_model_parallel_size: 2
   lr: 1e-6
   lr_decay_style: constant
   min_lr: 0.0
@@ -56,6 +56,15 @@ actor_config:
   no_load_rng: true
   num_workers: 8
 
+vit_config:
+  model: qwen2.5vl_32b
+  tensor_model_parallel_size: 1
+  pipeline_model_parallel_size: 1
+  micro_batch_size: 16
+  load: /path/qwen2_5_vl_32b_vit_tp1pp1 # 视觉模型megatron格式的权重路径
+  no_load_optim: true
+  no_load_rng: true
+
 rl_config:
   # 环境变量地址（相对路径）
   runtime_env_path: MindSpeed-MM/examples/rl/envs/runtime_env.yaml
@@ -65,13 +74,12 @@ rl_config:
   blocking: true
   gamma: 1.0
   lam: 0.95
+  use_dynamic_bsz: true
+  max_packing_token_size: [90000, 4000]
   actor_forward_micro_batch_size: 1
   ref_forward_micro_batch_size: 1
   reward_dispatch_size: 5
   adv_dispatch_size: 5
-  actor_rollout_dispatch_size: 40
-  # actor_update_dispatch_size: 40
-  actor_logprob_dispatch_size: 160
   adv_estimator: group_norm
   kl_penalty: low_var_kl
   kl_ctrl_type: fixed
@@ -88,8 +96,12 @@ rl_config:
   verifier_weight: [1.0]
   num_cpus_for_local_task: 1.0
   use_tensorboard: false
+  reuse_image_embeds: true
+  colocate_actor_and_vit: true
   actor_resource:
-    num_npus: 32
+    num_npus: 16
+  vit_resource:
+    num_npus: 16
 
 generate_config:
   enforce_eager: true
@@ -99,7 +111,7 @@ generate_config:
   offload_train_param: true
 
   # 推理时的并行配置
-  infer_tensor_parallel_size: 8
+  infer_tensor_parallel_size: 2
   infer_pipeline_parallel_size: 1
   infer_expert_parallel_size: 1
 
@@ -107,7 +119,7 @@ generate_config:
   max_num_seqs: 32
   max_model_len: 3072 # prompt_length + response_length
   dtype: "bfloat16"
-  gpu_memory_utilization: 0.8
+  gpu_memory_utilization: 0.9
 
   # 采样配置
   sampling_config:

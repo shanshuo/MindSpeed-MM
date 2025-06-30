@@ -8,7 +8,7 @@
         "vision_encoder": {
             "model_id": "qwen2vit",
             "num_layers": 32,
-            "pipeline_num_layers": [32, 0, 0, 0],
+            "pipeline_num_layers": [32, 0],
             "hidden_size": 1280,
             "ffn_hidden_size": 3456,
             "intermediate_size": 3456,
@@ -59,7 +59,7 @@
     "text_decoder": {
         "model_id": "qwen2_5_lm",
         "num_layers": 64,
-        "pipeline_num_layers": [15, 17, 17, 15],
+        "pipeline_num_layers": [32, 32],
         "hidden_size": 5120,
         "ffn_hidden_size": 27648,
         "num_attention_heads": 40,
@@ -88,7 +88,10 @@
         "params_dtype": "bf16",
         "bf16": true,
         "parallel_output": true,
-        "use_remove_padding": true
+        "use_remove_padding": true,
+        "recompute_granularity": "full",
+        "recompute_method": "uniform",
+        "recompute_num_layers": 1
     },
     "text_encoder": null,
     "video_encoder": null

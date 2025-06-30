@@ -46,5 +46,9 @@ cp examples/rl/code/mindspeed_rl/mm_integrated_worker.py mindspeed_rl/workers/mm
 cp examples/rl/code/mindspeed_rl/launcher.py mindspeed_rl/workers/scheduler/launcher.py
 cp examples/rl/code/mindspeed_rl/vit_worker.py mindspeed_rl/workers/vit_worker.py
 
+# random files
+cp examples/rl/code/mindspeed_rl/megatron_random.py megatron/core/tensor_parallel/random.py
+cp examples/rl/code/mindspeed_rl/mindspeed_random.py mindspeed/core/tensor_parallel/random.py
+
 echo "All performance files copied successfully!"
-echo "Total files copied: 23"
+echo "Total files copied: 25"

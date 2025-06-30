@@ -206,7 +206,8 @@ python examples/rl/data_preprocess/geo3k.py --local_dir=./data/geo3k --local_dat
 
 以 Qwen2.5VL 3B 模型为例,在启动训练之前，需要修改[ 启动脚本 ](../../examples/rl/scripts/grpo_trainer_qwen25vl_3b.sh)的配置：
 1. 根据实际安装路径设置 jemalloc 环境变量，用于更好管理内存，避免长跑过程中内存 OOM ，例如：export LD_PRELOAD="$LD_PRELOAD:/usr/local/lib/libjemalloc.so.2"
-2. 修改 DEFAULT_YAML 为指定的 yaml，目前已支持的配置文件放置在`examples/rl/configs`文件夹下，具体参数说明可见 [配置文件参数介绍](https://gitee.com/ascend/MindSpeed-RL/blob/2.1.0/docs/features/grpo_yaml.md)
+2. 可参考 [单卡多进程介绍](../../docs/features/integrated_worker.md)，进行actor与vit的共卡配置
+3. 修改 DEFAULT_YAML 为指定的 yaml，目前已支持的配置文件放置在`examples/rl/configs`文件夹下，具体参数说明可见 [配置文件参数介绍](https://gitee.com/ascend/MindSpeed-RL/blob/2.1.0/docs/features/grpo_yaml.md)
 需要注意配置以下参数：
   ```yaml
 model: examples/rl/model/qwen2.5vl_3b.json
@@ -218,9 +219,13 @@ megatron_training:
 actor_config:
     load: ckpt/mm_path/Qwen2.5-VL-3B-Instruct # megatron权重路径
     save: ./ckpt # 权重保存路径
+
+# 在colocate_actor_and_vit为True时，需设置如下vit_config权重路径
+vit_config:
+    load: ckpt/mm_path/Qwen2.5-VL-3B-Vit-Instruct # 视觉模型megatron格式的权重路径，
   ```
-3. 根据使用机器的情况，修改`NNODES`、`NPUS_PER_NODE`配置， 例如单机 A2 可设置`NNODES`为 1 、`NPUS_PER_NODE`为8；
-4. 如果是单机，需要保证`MASTER_ADDR`与`CURRENT_IP`一致，如果为多机，需要保证各个机器的`MASTER_ADDR`一致，`CURRENT_IP`为各个节点的 IP (需要注意的是`MASTER_ADDR`与`CURRENT_IP`不能设置为`localhost`)；
+4. 根据使用机器的情况，修改`NNODES`、`NPUS_PER_NODE`配置， 例如单机 A2 可设置`NNODES`为 1 、`NPUS_PER_NODE`为8；
+5. 如果是单机，需要保证`MASTER_ADDR`与`CURRENT_IP`一致，如果为多机，需要保证各个机器的`MASTER_ADDR`一致，`CURRENT_IP`为各个节点的 IP (需要注意的是`MASTER_ADDR`与`CURRENT_IP`不能设置为`localhost`)；
 
 ```bash
 #上述注意点修改完毕后，可启动脚本开启训练

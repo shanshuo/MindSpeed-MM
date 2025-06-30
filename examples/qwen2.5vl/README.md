@@ -150,9 +150,19 @@ mm-convert  Qwen2_5_VLConverter hf_to_mm \
   --cfg.parallel_config.vit_pp_layers [[32,0,0,0,0,0,0,0]] \
   --cfg.parallel_config.tp_size 2
 
+# 32B单独转换vit权重
+mm-convert  Qwen2_5_VLConverter hf_to_mm \
+  --cfg.mm_dir "ckpt/mm_path/Qwen2.5-VL-32B-Vit-Instruct" \
+  --cfg.hf_config.hf_dir "ckpt/hf_path/Qwen2.5-VL-32B-Instruct" \
+  --cfg.save_vit_only True \
+  --cfg.parallel_config.llm_pp_layers [[64]] \
+  --cfg.parallel_config.vit_pp_layers [[32]] \
+  --cfg.parallel_config.tp_size 1
+
 # 其中：
 # mm_dir: 转换后保存目录
 # hf_dir: huggingface权重目录
+# save_vit_only: 是否只转换vit权重
 # llm_pp_layers: llm在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
 # vit_pp_layers: vit在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
 # tp_size: tp并行数量，注意要和微调启动脚本中的配置一致
