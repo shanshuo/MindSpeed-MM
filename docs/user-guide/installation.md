@@ -6,7 +6,7 @@ MindSpeed MM支持Atlas 800T A2等昇腾训练硬件形态。软件版本配套�
 
 |MindSpeed MM版本 | MindSpeed版本             | Megatron版本      | PyTorch版本   | torch_npu版本 | CANN版本  | Python版本                               |
 |--------------|-------------------------|-----------------|------------- |-------------|---------|----------------------------------------|
-|master（主线） | 2.0.0_core_r0.8.0           | Core 0.8.0      |   2.1.0 | 在研版本        | 在研版本    | Python3.8, Python3.10|
+|master（主线） | core_r0.8.0           | Core 0.8.0      |   2.1.0 | 在研版本        | 在研版本    | Python3.8, Python3.10|
 |2.1.0（商用） | 2.1.0_core_r0.8.0         | Core 0.8.0      |   2.1.0     | 在研版本       | 在研版本    | Python3.8, Python3.10|
 |2.0.0（商用） | 2.0.0_core_r0.8.0         | Core 0.8.0      |   2.1.0     | 7.0.0       | 8.1.RC1    | Python3.8, Python3.10|
 |1.0.0（商用） | 1.0.0_core_r0.6.0         | Core 0.6.0      |   2.1.0     | 6.0.0       | 8.0.0    | Python3.8, Python3.10 |
@@ -57,8 +57,8 @@ MindSpeed MM支持Atlas 800T A2等昇腾训练硬件形态。软件版本配套�
 下载[驱动固件](https://www.hiascend.com/hardware/firmware-drivers/community?product=4&model=26&cann=8.0.RC3.beta1&driver=1.0.27.alpha)，请根据系统和硬件产品型号选择对应版本的`driver`和`firmware`。参考[安装NPU驱动固件](https://www.hiascend.com/document/detail/zh/canncommercial/81RC1/softwareinst/instg/instg_0003.html?Mode=PmIns&OS=Ubuntu&Software=cannToolKit)或执行以下命令安装：
 
 ```shell
-bash Ascend-hdk-*-npu-firmware_*.run --full
 bash Ascend-hdk-*-npu-driver_*.run --full --force
+bash Ascend-hdk-*-npu-firmware_*.run --full
 ```
 
 ### 3. CANN安装
