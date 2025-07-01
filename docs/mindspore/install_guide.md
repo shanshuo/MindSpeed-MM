@@ -29,7 +29,7 @@
   </tr>
   <tr>
     <td> MindSpore </td>
-    <td> 2.6.0 </td>
+    <td> 2.7.0 </td>
     <td> 《<a href="https://www.mindspore.cn/install/">MindSpore安装</a>》</td>
   </tr>
 </table>
@@ -63,7 +63,7 @@ source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=0
 参考[MindSpore官方安装指导](https://www.mindspore.cn/install)，根据系统类型、CANN版本及Python版本选择匹配的对应的安装命令进行安装，安装前请确保网络畅通。或执行以下命令安装：
 
 ```shell
-pip install mindspore==2.6.0
+pip install mindspore==2.7.0
 ```
 
 ## 代码一键适配
@@ -73,6 +73,7 @@ MindSpeed-Core-MS提供了代码、环境的一键适配功能，执行以下命
 ```shell
 git clone https://gitee.com/ascend/MindSpeed-Core-MS.git -b master
 cd MindSpeed-Core-MS
+pip install -r requirements.txt
 source auto_convert_mm.sh
 cd MindSpeed-MM
 ```
