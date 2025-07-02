@@ -298,7 +298,7 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td> / </td>
       <td>【Pass】</td>
     </tr>
-	</tr>
+ </tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/hunyuanvideo">HunyuanVideo-I2V</a></td>
       <td><a href="https://huggingface.co/tencent/HunyuanVideo-I2V">13B</a></td>
       <td> 预训练 </td>
@@ -836,6 +836,7 @@ MindSpeed MM已发布版本维护策略：
 
 | **MindSpeed MM版本** | **维护策略** | **当前状态** | **发布时间**   | **后续状态**         | **EOL日期** |
 |-----------------|-----------|--------|------------|-----------------------|-----------|
+| 2.1.0             |  常规版本  | 维护   | 2025/06/30 | 预计2025/12/30起无维护  |
 | 2.0.0             |  常规版本  | 维护   | 2025/03/30 | 预计2025/09/30起无维护  |
 | 1.0.0             |  常规版本  | 维护   | 2024/12/30 | 预计2025/06/30起无维护  |           |
 | 1.0.RC3             |  常规版本  | 维护   | 2024/09/30 | 预计2025/03/30起无维护  |           |
