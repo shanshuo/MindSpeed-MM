@@ -6,17 +6,20 @@ from mindspeed_mm.models.common.module import MultiModalModule
 from .projectors.deepseekvl_mlp import create_deepseekvl_mlp
 from .projectors.internvl_mlp import InternVLMLP
 from .projectors.multimodal_projector import MultimodalProjector
+from .projectors.glm_mlp import GlmMLP
 from .vision_encoders.clip_vit_model import CLIPViT
 from .vision_encoders.internvit_model import InternViT
 from .vision_encoders.qwen2vl_vit_model import Qwen2VLViT
 from .vision_encoders.siglip_vit_model import create_siglip_vit
+from .vision_encoders.glm4v_vl_vit_model import GlmViT
 
 VISION_ENCODER_MAPPINGS = {
     "clip": CLIPViT,
     "InternViT": InternViT,
     "qwen2vit": Qwen2VLViT,
     "qwen2_5_vit": Qwen2VLViT,
-    "SigLip": create_siglip_vit
+    "SigLip": create_siglip_vit,
+    "glm4v_vit": GlmViT,
 }
 
 VISION_PROJECTION_MAPPINGS = {
@@ -24,6 +27,7 @@ VISION_PROJECTION_MAPPINGS = {
     "InternVLMLP": InternVLMLP,
     "lnmlp": MultimodalProjector,
     "DeepSeekVL2MLP": create_deepseekvl_mlp,
+    "GlmMLP": GlmMLP,
 }
 
 

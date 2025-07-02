@@ -29,7 +29,7 @@ class Qwen2VlPipeline(GenerationMixin):
         self.min_pixels = infer_config.min_pixels if hasattr(infer_config, "min_pixels") else None
         self.max_pixels = infer_config.max_pixels if hasattr(infer_config, "max_pixels") else None
 
-    def __call__(self, prompt=None, images=None, videos=None, return_ids=False):
+    def __call__(self, prompt=None, images=None, videos=None, return_ids=False, skip_special_tokens=True):
         if images:
             if isinstance(images, list):
                 image = images[0]
@@ -55,7 +55,7 @@ class Qwen2VlPipeline(GenerationMixin):
         if inputs is None:
             inputs = {'input_ids': self.tokenizer(prompt, return_tensors="pt").input_ids.to(self.infer_config.device)}
 
-        streamer = None if return_ids else TextStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
+        streamer = None if return_ids else TextStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=skip_special_tokens)
 
         generated_ids = self.generate(**inputs,
                                       do_sample=True if self.generation_config.temperature > 0 else False,
@@ -70,7 +70,7 @@ class Qwen2VlPipeline(GenerationMixin):
                 for input_ids, output_ids in zip(inputs['input_ids'], generated_ids)
             ]
             out = self.image_processor.tokenizer.batch_decode(
-                generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+                generated_ids, skip_special_tokens=skip_special_tokens, clean_up_tokenization_spaces=False
             )
             response = out[0]
             return response

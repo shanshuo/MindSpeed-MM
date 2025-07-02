@@ -78,6 +78,7 @@ class Qwen2VLRotaryEmbedding_llm(Qwen2VLRotaryEmbedding):
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
+
     @torch.no_grad()
     def forward(self, x_device, x_dtype, position_ids):
         if "dynamic" in self.rope_type:

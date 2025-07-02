@@ -21,7 +21,7 @@ from mindspeed.core.context_parallel.unaligned_cp.mapping import cal_split_sizes
 from mindspeed.utils import set_actual_seq_len
 from mindspeed_mm.models.vision.vision_encoders.qwen2vl_vit_model import Qwen2VLRotaryEmbedding_llm
 from mindspeed_mm.utils.utils import ensure_valid
-
+from mindspeed_mm.models.vision.vision_encoders.glm4v_vl_vit_model import GlmTransformerBlock
 
 
 class MMGPTModel(LanguageModule):
@@ -104,12 +104,20 @@ class MMGPTModel(LanguageModule):
             )
 
         # Transformer.
-        self.decoder = TransformerBlock(
-            config=self.config,
-            spec=transformer_layer_spec,
-            pre_process=self.pre_process,
-            post_process=self.post_process,
-        )
+        if getattr(config, 'model_id', None) == "glm4v_lm":
+            self.decoder = GlmTransformerBlock(
+                config=self.config,
+                spec=transformer_layer_spec,
+                pre_process=self.pre_process,
+                post_process=self.post_process,
+            )
+        else:
+            self.decoder = TransformerBlock(
+                config=self.config,
+                spec=transformer_layer_spec,
+                pre_process=self.pre_process,
+                post_process=self.post_process,
+            )
 
         # Output
         if post_process:
