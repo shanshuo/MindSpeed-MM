@@ -80,6 +80,9 @@ rl_config:
   ref_forward_micro_batch_size: 1
   reward_dispatch_size: 5
   adv_dispatch_size: 5
+  actor_rollout_dispatch_size: 320
+  actor_update_dispatch_size: 320
+  actor_logprob_dispatch_size: 320
   adv_estimator: group_norm
   kl_penalty: low_var_kl
   kl_ctrl_type: fixed

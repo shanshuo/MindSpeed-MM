@@ -151,13 +151,7 @@ class MultiModalActorHybridWorkerBase(BaseWorker):
         experience_columns = ['responses', 'advantages', 'old_log_prob',
                              'ref_log_prob', 'input_ids', 'response_length', 'prompt_length', 'attention_mask', 'position_ids', 'input_ids_length']
 
-        if self.rl_config.use_integrated_worker:
-            experience_count = (
-                self.megatron_config.global_batch_size //
-                self.parallel_state.get_data_parallel_world_size()
-            )
-        else:
-            experience_count = self.rl_config.actor_update_dispatch_size
+        experience_count = self.rl_config.actor_update_dispatch_size
 
         if skip_actor_log_prob:
             experience_columns.remove('old_log_prob')
