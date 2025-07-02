@@ -7,12 +7,15 @@ def process_in_cpu_wrapper(func):
     """
     def wrapper(*args, **kwargs):
         # set device to CPU
+        from mindspore.common.api import _pynative_executor
+        _pynative_executor.sync()
         mindspore.set_context(device_target="CPU")
  
         # process dataset
         result = func(*args, **kwargs)
 
         #set device to Ascend
+        _pynative_executor.sync()
         mindspore.set_context(device_target="Ascend")
         
         return result

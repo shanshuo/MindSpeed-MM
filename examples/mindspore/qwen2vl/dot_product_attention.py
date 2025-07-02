@@ -9,7 +9,9 @@ import torch
 import torch.nn.functional as F
 import torch_npu
 from torch import Tensor
+from megatron.core import parallel_state, tensor_parallel
 from megatron.core.fusions.fused_softmax import FusedScaleMaskSoftmax
+from megatron.core.packed_seq_params import PackedSeqParams
 from megatron.core.transformer import TransformerConfig
 from megatron.core.transformer.dot_product_attention import DotProductAttention
 from megatron.core.transformer.enums import AttnMaskType
@@ -138,7 +140,7 @@ def dot_product_attention_forward_wrapper(fn):
             attention_mask = get_attention_mask()
         if get_args().use_flash_attn:
             return dot_product_attention_forward(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
-        return fn(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
+        return dot_product_attention_forward_no_fa(self, query, key, value, attention_mask, attn_mask_type, packed_seq_params)
 
     return wrapper
 
@@ -234,8 +236,8 @@ def dot_product_attention_forward(
                 scale=1.0 / math.sqrt(query.shape[-1]),
                 keep_prob=1,
                 input_layout='TND',
-                actual_seq_qlen=tuple(cu_seq_lens[1:].cpu().numpy().tolist()),
-                actual_seq_kvlen=tuple(cu_seq_lens[1:].cpu().numpy().tolist()),
+                actual_seq_qlen=tuple(cu_seq_lens.numpy()[1:].tolist()),
+                actual_seq_kvlen=tuple(cu_seq_lens.numpy()[1:].tolist()),
                 pre_tockens=2147483647,
                 next_tockens=0)[0]
             attn_output = _pad_input(attn_output_unpad, indices_q, bsz, seq_length)
@@ -253,6 +255,125 @@ def dot_product_attention_forward(
                 atten_mask=attention_mask_npu)[0]
             attn_output = rearrange(attn_output, 'b s h d -> s b (h d)', s=seq_length, b=bsz)
         return attn_output
+
+
+def dot_product_attention_forward_no_fa(
+    self,
+    query: Tensor,
+    key: Tensor,
+    value: Tensor,
+    attention_mask: Tensor,
+    attn_mask_type: AttnMaskType = None,
+    packed_seq_params: PackedSeqParams = None,
+):
+    if packed_seq_params is not None:
+        raise AssertionError("Packed sequence is not supported by DotProductAttention. Please use TEDotProductAttention instead.")
+
+    # ===================================
+    # Raw attention scores. [b, n/p, s, s]
+    # ===================================
+
+    # expand the key and value [sk, b, ng, hn] -> [sk, b, np, hn]
+    # This is a noop for normal attention where ng == np. When using group query attention this
+    # creates a view that has the keys and values virtually repeated along their dimension to
+    # match the number of queries.
+
+    # attn_mask_type is not used.
+    if self.num_attention_heads_per_partition // self.num_query_groups_per_partition > 1:
+        key = key.repeat_interleave(
+            self.num_attention_heads_per_partition // self.num_query_groups_per_partition, dim=2
+        )
+        value = value.repeat_interleave(
+            self.num_attention_heads_per_partition // self.num_query_groups_per_partition, dim=2
+        )
+
+    query_shape = query.shape
+    key_shape = key.shape
+    # output size [b, np, sq, sk]
+    output_size = (
+        query_shape[1],
+        query_shape[2],
+        query_shape[0],
+        key_shape[0],
+    )
+
+    # [sq, b, np, hn] -> [sq, b * np, hn]
+    # This will be a simple view when doing normal attention, but in group query attention
+    # the key and value tensors are repeated to match the queries so you can't use simple strides
+    # to extract the queries.
+    query = query.reshape(output_size[2], output_size[0] * output_size[1], -1)
+    # [sk, b, np, hn] -> [sk, b * np, hn]
+    key = key.view(output_size[3], output_size[0] * output_size[1], -1)
+
+    # preallocting input tensor: [b * np, sq, sk]
+    matmul_input_buffer = parallel_state.get_global_memory_buffer().get_tensor(
+        (output_size[0] * output_size[1], output_size[2], output_size[3]), query.dtype, "mpu",
+    )
+
+    # Raw attention scores. [b * np, sq, sk]
+    matmul_result = torch.baddbmm(
+        matmul_input_buffer,
+        query.transpose(0, 1),  # [b * np, sq, hn]
+        key.transpose(0, 1).transpose(1, 2),  # [b * np, hn, sk]
+        beta=0.0,
+        alpha=(1.0 / self.norm_factor),
+    )
+
+    # change view to [b, np, sq, sk]
+    attention_scores = matmul_result.view(*output_size)
+
+    # ===========================
+    # Attention probs and dropout
+    # ===========================
+
+    # attention scores and attention mask [b, np, sq, sk]
+    attention_probs: Tensor = self.scale_mask_softmax(attention_scores, attention_mask)
+
+    # This is actually dropping out entire tokens to attend to, which might
+    # seem a bit unusual, but is taken from the original Transformer paper.
+
+    if not self.config.sequence_parallel:
+        with tensor_parallel.get_cuda_rng_tracker().fork():
+            attention_probs = self.attention_dropout(attention_probs)
+    else:
+        attention_probs = self.attention_dropout(attention_probs)
+
+    # =========================
+    # Context layer. [sq, b, hp]
+    # =========================
+
+    # value -> context layer.
+    # [sk, b, np, hn] --> [b, np, sq, hn]
+
+    value_shape = value.shape
+    # context layer shape: [b, np, sq, hn]
+    output_size = (
+        value_shape[1],
+        value_shape[2],
+        query_shape[0],
+        value_shape[3],
+    )
+
+    # change view [sk, b * np, hn]
+    value = value.view(value_shape[0], output_size[0] * output_size[1], -1)
+
+    # change view [b * np, sq, sk]
+    attention_probs = attention_probs.view(output_size[0] * output_size[1], output_size[2], -1)
+
+    # matmul shape is [b * np, sq, hn]
+    context = torch.bmm(attention_probs, value.transpose(0, 1))
+
+    # change view [b, np, sq, hn]
+    context = context.view(*output_size)
+
+    # [b, np, sq, hn] --> [sq, b, np, hn]
+    context = context.permute(2, 0, 1, 3).contiguous()
+
+    # [sq, b, np, hn] --> [sq, b, hp]
+    new_context_shape = context.shape[:-2] + (self.hidden_size_per_partition,)
+    context = context.view(*new_context_shape)
+
+    return context
 
 
 def _unpad_input(
