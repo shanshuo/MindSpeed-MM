@@ -19,9 +19,11 @@ MindSpeed MM是面向大规模分布式训练的昇腾多模态大模型套件�
 
 # 🔥🔥🔥Latest News
 
+* [Jul. 02, 2025]: ⚡ MindSpeed MM **0Day**支持GLM-4.1V模型 【Prototype】
+* [Jun. 30, 2025]: 🌴 MindSpeed MM版本2.1.0发布
 * [Jun. 25, 2025]: 🚀 MindSpeed MM支持HiDream-I1模型 【Prototype】
 * [Jun. 05, 2025]: 🚀 MindSpeed MM支持Qwen2.5Omni-7B模型 【Prototype】
-* [Jun. 05, 2025]: 🚀 MindSpeed MM支持OpenSoraPlan 1.5模型
+* [Jun. 05, 2025]: 🤝 MindSpeed MM**原生支持**OpenSoraPlan 1.5模型
 * [Apr. 03, 2025]: 🚀 MindSpeed MM支持Qwen2.5VL-32B模型 【Prototype】
 * [Mar. 27, 2025]: 🚀 MindSpeed MM支持Wan2.1-1.3B/14B模型
 * [Mar. 26, 2025]: 🚀 MindSpeed MM支持Qwen2.5VL-3B/7B/72B模型 【Prototype】
@@ -30,13 +32,13 @@ MindSpeed MM是面向大规模分布式训练的昇腾多模态大模型套件�
 * [Feb. 17, 2025]: 🔥 MindSpeed MM支持Mindspeed-Core & Megatron 0.8.0版本
 * [Feb. 15, 2025]: 🚀 MindSpeed MM支持Sana模型
 * [Jan. 24, 2025]: 🚀 MindSpeed MM支持CogVideoX 1.5模型
-* [Dec. 30, 2024]: 🔥 MindSpeed MM版本1.0.0发布
-* [Dec. 16, 2024]: 🚀 MindSpeed MM支持Qihoo-T2X模型
+* [Dec. 30, 2024]: 🌴 MindSpeed MM版本1.0.0发布
+* [Dec. 16, 2024]: 🤝 MindSpeed MM**原生支持**Qihoo-T2X模型
 * [Dec. 03, 2024]: 🚀 MindSpeed MM支持SD3.5模型
 * [Nov. 30, 2024]: 🎉 MindSpeed MM支持多模态理解测评
 * [Nov. 22, 2024]: 🚀 MindSpeed MM支持CogVideoX模型
 * [Nov. 06, 2024]: 🚀 MindSpeed MM支持FLUX模型
-* [Oct. 30, 2024]: 🚀 MindSpeed MM支持OpenSoraPlan 1.3模型
+* [Oct. 30, 2024]: 🤝 MindSpeed MM**原生支持**OpenSoraPlan 1.3模型
 * [Oct. 21, 2024]: 🚀 MindSpeed MM支持InternVL2、以及Qwen2VL模型
 * [Oct. 16, 2024]: 🌱 MindSpeed MM首版本1.0.RC3发布
 
@@ -131,23 +133,24 @@ MindSpeed MM是面向大规模分布式训练的昇腾多模态大模型套件�
 |:-------------------:|:------:|:------:|:------:|:---------------------------------------------------------------------------------------:|:------:|:------:|:------:|:------:|
 | OpenSoraPlan1.5-T2V | ✔ | ✔ |  |  |  |  | ✔ |  |
 |       Wan2.1        |  |  |  |  | CP (Ulysses) | ✔ | ✔ | ✔ |
-|    HunyuanVideo     | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | ✔ |
-|   CogVideoX系列-T2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | ✔ |
-|   CogVideoX系列-I2V   | ✔ | ✔ |  |                                                                                         | CP (Ulysses) | ✔ | ✔ | ✔ |
-|     Opensora1.2     |  |  |  |                                                                                         | DSP | ✔ | ✔ |  |
-| OpensoraPlan1.3-T2V | ✔ | ✔ | ✔ |        ✔                                                                                 | CP (Ulysses) | ✔ | ✔ |  |
-| OpensoraPlan1.3-I2V | ✔ | ✔ | ✔ |          ✔                                                                               | CP (Ulysses) | ✔ | ✔ |  |
-|    InternVL2-2B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-|    InternVL2-8B     |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-|    InternVL2-26B    |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-|    InternVL2-76B    |  |  | ✔ |                                            ✔                                            |  | ✔ | ✔ |  |
-|     Qwen2VL-2B      |  |  |  |                                                                                        |  | ✔ | ✔ | ✔ |
-|     Qwen2VL-7B      | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
-|     Qwen2VL-72B     | ✔ |  |  |                                            ✔                                            |  | ✔ | ✔ | ✔ |
-|    Qwen2.5VL-3B     |  |  |  |                                                                                        |  | ✔ |  |  |
-|    Qwen2.5VL-7B     | ✔ |  |  |                                            ✔                                            |  | ✔ |  |  |
-|    Qwen2.5VL-32B    | ✔ |  |  |                                            ✔                                            |  | ✔ |  |  |
-|    Qwen2.5VL-72B    | ✔ |  |  |                                            ✔                                            |  | ✔ |  |  |
+|    HunyuanVideo     | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ | ✔ |
+|   CogVideoX系列-T2V   | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ | ✔ |
+|   CogVideoX系列-I2V   | ✔ | ✔ |  |  | CP (Ulysses) | ✔ | ✔ | ✔ |
+|     Opensora1.2     |  |  |  |  | DSP | ✔ | ✔ |  |
+| OpensoraPlan1.3-T2V | ✔ | ✔ | ✔ | ✔ | CP (Ulysses) | ✔ | ✔ |  |
+| OpensoraPlan1.3-I2V | ✔ | ✔ | ✔ | ✔ | CP (Ulysses) | ✔ | ✔ |  |
+|      GLM-4.1V       |  |  |  | ✔ |  | ✔ | ✔ |  |
+|    InternVL2-2B     |  |  | ✔ | ✔ |  | ✔ | ✔ |  |
+|    InternVL2-8B     |  |  | ✔ | ✔ |  | ✔ | ✔ |  |
+|    InternVL2-26B    |  |  | ✔ | ✔ |  | ✔ | ✔ |  |
+|    InternVL2-76B    |  |  | ✔ | ✔ |  | ✔ | ✔ |  |
+|     Qwen2VL-2B      |  |  |  |  |  | ✔ | ✔ | ✔ |
+|     Qwen2VL-7B      | ✔ |  |  | ✔ |  | ✔ | ✔ | ✔ |
+|     Qwen2VL-72B     | ✔ |  |  | ✔ |  | ✔ | ✔ | ✔ |
+|    Qwen2.5VL-3B     |  |  |  |  |  | ✔ |  |  |
+|    Qwen2.5VL-7B     | ✔ |  |  | ✔  |  | ✔ |  |  |
+|    Qwen2.5VL-32B    | ✔ |  |  | ✔ |  | ✔ |  |  |
+|    Qwen2.5VL-72B    | ✔ |  |  | ✔ |  | ✔ |  |  |
 
 备注：
 
@@ -548,7 +551,18 @@ Samples per Second 为 (SPS); Frames per Second 为 (FPS); Tokens per Second 为
       <td>【Test】</td>
     </tr>
     <tr>
-      <td rowspan="13"> 多模态理解 </td>
+      <td rowspan="14"> 多模态理解 </td>
+      <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/glm4.1v">GLM-4.1V</a></td>
+      <td><a href="https://github.com/THUDM/GLM-4.1V-Thinking">9B</a></td>
+      <td> 微调 </td>
+      <td> 1x8 </td>
+      <td> BF16 </td>
+      <td> / </td>
+      <td> / </td>
+      <td> / </td>
+      <td>【Test】</td>
+    </tr>
+    <tr>
       <td><a href="https://gitee.com/ascend/MindSpeed-MM/tree/master/examples/llava1.5">LLaVA 1.5</a></td>
       <td><a href="https://github.com/haotian-liu/LLaVA">7B</a></td>
       <td> 全参微调 </td>
@@ -858,6 +872,7 @@ MindSpeed MM已发布版本维护策略：
 5. [基于昇腾MindSpeed MM玩转Wan2.1视频生成SOTA模型](https://mp.weixin.qq.com/s/g2ShV2F6YpoVAniw6CBN_w)
 6. [多模态理解SOTA模型开箱即用，MindSpeed MM支持Qwen2.5-VL最佳实践](https://mp.weixin.qq.com/s/ac7RUWw79stunwQIyC-ykQ)
 7. [联创首发-基于昇腾MindSpeed MM玩转Open-Sora Plan V1.5模型](https://mp.weixin.qq.com/s/3cgO8yqrOIEHYqW69VQQcQ)
+8. [开源即支持！基于昇腾MindSpeed MM玩转GLM-4.1V-Thinking多模态理解最新模型](https://mp.weixin.qq.com/s/FLgCfBVG7pOzNHji2uwcDg)
 
 ---
 

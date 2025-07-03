@@ -122,9 +122,9 @@ pip install decord==0.6.0
 
 ```shell
 mm-convert WanConverter hf_to_mm \
-	--cfg.source_path <./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/> \
-	--cfg.target_path --target_path <./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
-	--cfg.target_parallel_config.pp_layers <pp_layers>
+ --cfg.source_path <./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/> \
+ --cfg.target_path <./weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
+ --cfg.target_parallel_config.pp_layers <pp_layers>
 ```
 
 权重转换脚本的参数说明如下：
@@ -133,7 +133,7 @@ mm-convert WanConverter hf_to_mm \
 | :---------------- | :----------------------- | :----------------------------------------------------------- |
 | --cfg.source_path | 原始权重路径             | /                                                            |
 | --cfg.target_path | 转换或切分后权重保存路径 | /                                                            |
-| --pp_vpp_layers   | PP/VPP层数               | 开启PP时, 使用PP和VPP需要指定各stage的层数并转换, 默认为`[]`，即不使用 |
+| --pp_layers   | PP/VPP层数               | 开启PP时, 使用PP和VPP需要指定各stage的层数并转换, 默认为`[]`，即不使用 |
 
 如需转回Hugging Face格式，需运行权重转换脚本：
 
@@ -141,9 +141,9 @@ mm-convert WanConverter hf_to_mm \
 
 ```shell
 mm-convert WanConverter mm_to_hf \
-	--cfg.source_path <path for your saved weight/> \
-	--cfg.target_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
-	--cfg.hf_path <weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
+ --cfg.source_path <path for your saved weight/> \
+ --cfg.target_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
+ --cfg.hf_path <weights/Wan-AI/Wan2.1-{T2V/I2V/FLF2v}-{1.3/14}B-Diffusers/transformer/>
 ```
 
 权重转换脚本的参数说明如下：
@@ -275,8 +275,8 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
     ```bash
     source /usr/local/Ascend/ascend-toolkit/set_env.sh
     mm-converter WanConverter layerzero_to_mm \
-    	--cfg.source_path <./save_ckpt/wan2.1/iter_000xxxx/> \
-    	--cfg.target_path --target_path <./save_ckpt/wan2.1_megatron_ckpt/iter_000xxxx/>
+     --cfg.source_path <./save_ckpt/wan2.1/iter_000xxxx/> \
+     --cfg.target_path --target_path <./save_ckpt/wan2.1_megatron_ckpt/iter_000xxxx/>
     ```
 
 - PP：流水线并行
@@ -330,7 +330,7 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 
       ```bash
       GPT_ARGS="
-       --recompute-granularity full \
+          --recompute-granularity full \
           --recompute-method block \
           --recompute-num-layers 0 \
           --recompute-skip-core-attention \
@@ -373,11 +373,11 @@ bash examples/wan2.1/{model_size}/{task}/finetune_lora.sh
 
 ```bash
 mm-convert WanConverter merge_lora_to_base \
-	--cfg.source_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> \
-	--cfg.target_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer_merge/> \
-	--cfg.lora_path <lora_save_path> \
-	--lora_alpha 64 \
-	--lora_rank 64
+ --cfg.source_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer/> \
+ --cfg.target_path <./converted_weights/Wan-AI/Wan2.1-{T2V/I2V}-{1.3/14}B-Diffusers/transformer_merge/> \
+ --cfg.lora_path <lora_save_path> \
+ --lora_alpha 64 \
+ --lora_rank 64
 ```
 
 ## 推理
