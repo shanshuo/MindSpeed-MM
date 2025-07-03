@@ -311,7 +311,7 @@ def get_megatron_module():
 
 def initialize_megatron(
         extra_args_provider=None,
-        args_defaults={},
+        args_defaults=None,
         ignore_unknown_args=True,
         allow_no_cuda=False,
         skip_mpu_initialization=False,
@@ -325,6 +325,7 @@ def initialize_megatron(
     Returns a function to finalize distributed env initialization
     (optionally, only when args.lazy_mpu_init == True)
     """
+    args_defaults = {} if args_defaults is None else args_defaults
     origin_sys_argv = sys.argv
     sys.argv = [sys.argv[0]]
     parse_args_from_config(config)
