@@ -14,6 +14,7 @@
 - [权重下载及转换](#jump2)
   - [权重下载](#jump2.1)
   - [权重转换hf2mm](#jump2.2)
+  - [权重转化mm2hf](#jump2.3)
 - [数据集准备及处理](#jump3)
   - [数据集下载](#jump3.1)
   - [混合数据集处理](#jump3.2)  
@@ -22,6 +23,8 @@
   - [准备工作](#jump4.1)
   - [配置参数](#jump4.2)
   - [启动微调](#jump4.3)
+- [特性使用介绍](#jump7)
+  - [lora微调](#jump7.1)
 - [环境变量声明](#jump8)
 - [注意事项](#jump9)
 
@@ -150,6 +153,8 @@ mm-convert  Qwen2_5_OmniConverter hf_to_mm \
 # audio_pp_layers: audio在每个卡上切分的层数，注意要和model.json中配置的pipeline_num_layers一致
 # tp_size: tp并行数量，注意要和微调启动脚本中的配置一致
 ```
+
+<a id="jump2.3"></a>
 #### 3. 权重转换(mm2hf)
 
 MindSpeed MM修改了部分原始网络的结构名称，在微调后，如果需要将权重转回huggingface格式，可使用`mm-convert`权重转换工具对微调后的权重进行转换，将权重名称修改为与原始网络一致。
@@ -392,7 +397,13 @@ WORLD_SIZE=$(($NPUS_PER_NODE * $NNODES))
 bash examples/qwen2.5omni/finetune_qwen2_5_omni_7b.sh
 ```
 
+---
+<a id="jump7"></a>
+## 特性使用介绍
 
+<a id="jump7.1"></a>
+### lora微调
+LoRA为框架通用能力，当前功能已支持，可参考[LoRA特性文档](https://gitee.com/ascend/MindSpeed-MM/blob/master/docs/features/lora_finetune.md)。
 
 <a id="jump8"></a>
 ## 环境变量声明
