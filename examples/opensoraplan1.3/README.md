@@ -5,6 +5,9 @@
 
 ## 目录
 
+- [版本说明](#版本说明)
+  - [参考实现](#参考实现)
+  - [变更记录](#变更记录)
 - [环境安装](#jump1)
   - [仓库拉取](#jump1.1)
   - [环境搭建](#jump1.2)
@@ -26,6 +29,17 @@
 - [特性使用介绍](#jump6)
   - [DistTrain](#jump6.1)
 - [环境变量声明](#jump7)
+
+## 版本说明
+#### 参考实现
+```
+url=https://github.com/PKU-YuanGroup/Open-Sora-Plan.git
+commit_id=4b14d58
+```
+
+#### 变更记录
+
+2024.10.30: 首次发布OpenSoraPlan1.3
 
 ---
 <a id="jump1"></a>

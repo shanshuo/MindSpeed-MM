@@ -9,6 +9,9 @@
 
 ## 目录
 
+- [版本说明](#版本说明)
+  - [参考实现](#参考实现)
+  - [变更记录](#变更记录)
 - [环境安装](#jump1)
   - [仓库拉取](#jump1.1)
   - [环境搭建](#jump1.2)
@@ -36,6 +39,20 @@
   - [启动评测](#jump7.3)
 - [环境变量声明](#jump8)
 - [注意事项](#jump9)
+
+## 版本说明
+#### 参考实现
+```
+url=https://github.com/hiyouga/LLaMA-Factory.git
+commit_id=e8c1979
+# transformers版本
+url=https://github.com/huggingface/transformers.git
+commit_id=fa56dcc
+```
+
+#### 变更记录
+
+2025.06.05: 参考Qwen3作为语言模块，Qwen2.5ViT或InternViT作为视觉模块，基于Qwen2.5-VL实现
 
 ---
 <a id="jump1"></a>
