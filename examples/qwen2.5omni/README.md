@@ -5,6 +5,9 @@
 
 ## 目录
 
+- [版本说明](#版本说明)
+  - [参考实现](#参考实现)
+  - [变更记录](#变更记录)
 - [环境安装](#jump1)
   - [仓库拉取](#jump1.1)
   - [环境搭建](#jump1.2)
@@ -21,6 +24,20 @@
   - [启动微调](#jump4.3)
 - [环境变量声明](#jump8)
 - [注意事项](#jump9)
+
+## 版本说明
+#### 参考实现
+```
+url=https://github.com/hiyouga/LLaMA-Factory.git
+commit_id=52f2565
+# transformers版本
+url=https://github.com/huggingface/transformers.git
+commit_id=7bb619d
+```
+
+#### 变更记录
+
+2025.06.05: 首次支持Qwen2.5-Omni模型
 
 ---
 ## 模型介绍
