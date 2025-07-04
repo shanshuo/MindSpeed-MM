@@ -272,6 +272,8 @@ class VideoDitSparse(MultiModalModule):
         else:
             embedded_timestep = kwargs['embedded_timestep']
             batch_size, c, frames, h, w = kwargs['batch_size'], kwargs['c'], kwargs['frames'], kwargs['h'], kwargs['w']
+            if mpu.get_context_parallel_world_size() > 1:
+                frames //= mpu.get_context_parallel_world_size()
 
         # 1. mask converting
         frames = ((frames - 1) // self.patch_size_t + 1) if frames % 2 == 1 else frames // self.patch_size_t  # patchfy
