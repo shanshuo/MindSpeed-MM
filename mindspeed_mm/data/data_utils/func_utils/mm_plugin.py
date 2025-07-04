@@ -1,3 +1,5 @@
+# Copyright 2025 HuggingFace Inc. and the LlamaFactory team.
+
 import inspect
 import math
 import os
@@ -191,14 +193,14 @@ class MMPluginMixin:
         r"""Regularizes videos to avoid error. Including reading, resizing and converting."""
         results = []
         for video in videos:
-            container = av.open(video, "r")
-            video_stream = next(stream for stream in container.streams if stream.type == "video")
-            sample_indices = self._get_video_sample_indices(video_stream, **kwargs)
-            frames: List[ImageObject] = []
-            container.seek(0)
-            for frame_idx, frame in enumerate(container.decode(video_stream)):
-                if frame_idx in sample_indices:
-                    frames.append(frame.to_image())
+            with av.open(video, "r") as container:
+                video_stream = next(stream for stream in container.streams if stream.type == "video")
+                sample_indices = self._get_video_sample_indices(video_stream, **kwargs)
+                frames: List[ImageObject] = []
+                container.seek(0)
+                for frame_idx, frame in enumerate(container.decode(video_stream)):
+                    if frame_idx in sample_indices:
+                        frames.append(frame.to_image())
 
             frames = self._regularize_images(frames, **kwargs)["images"]
             results.append(frames)
