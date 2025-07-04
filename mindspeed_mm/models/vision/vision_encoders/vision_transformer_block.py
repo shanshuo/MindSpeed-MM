@@ -63,70 +63,29 @@ class VisionTransformerBlock(TransformerBlock):
             inp=hidden_states, requires_grad=True, keep_graph=True,
         )
 
-        if self.config.sequence_parallel:
-            rng_context = tensor_parallel.get_cuda_rng_tracker().fork()
-        else:
-            rng_context = nullcontext()
-
-        if self.config.fp8:
-            import transformer_engine  # To keep out TE dependency when not training in fp8
-
-            if self.config.fp8 == "e4m3":
-                fp8_format = transformer_engine.common.recipe.Format.E4M3
-            elif self.config.fp8 == "hybrid":
-                fp8_format = transformer_engine.common.recipe.Format.HYBRID
-            else:
-                raise ValueError("E4M3 and HYBRID are the only supported FP8 formats.")
-
-            fp8_recipe = transformer_engine.common.recipe.DelayedScaling(
-                margin=self.config.fp8_margin,
-                interval=self.config.fp8_interval,
-                fp8_format=fp8_format,
-                amax_compute_algo=self.config.fp8_amax_compute_algo,
-                amax_history_len=self.config.fp8_amax_history_len,
-                override_linear_precision=(False, False, not self.config.fp8_wgrad),
-            )
-            fp8_group = None
-            if parallel_state.model_parallel_is_initialized():
-                fp8_group = parallel_state.get_amax_reduction_group(with_context_parallel=True)
-            fp8_context = transformer_engine.pytorch.fp8_autocast(
-                enabled=True, fp8_recipe=fp8_recipe, fp8_group=fp8_group
+        # Forward pass.
+        if self.config.recompute_granularity == 'full' and self.training:
+            hidden_states = self._checkpointed_forward(
+                hidden_states=hidden_states,
+                attention_mask=attention_mask,
+                context=context,
+                context_mask=context_mask,
+                rotary_pos_emb=rotary_pos_emb,
+                packed_seq_params=packed_seq_params,
             )
         else:
-            fp8_context = nullcontext()
-        encoder_states = ()
-        with rng_context and fp8_context:
-            # Forward pass.
-            if self.config.recompute_granularity == 'full' and self.training:
-                hidden_states = self._checkpointed_forward(
-                    hidden_states=hidden_states,
-                    attention_mask=attention_mask,
-                    context=context,
-                    context_mask=context_mask,
-                    rotary_pos_emb=rotary_pos_emb,
-                    packed_seq_params=packed_seq_params,
-                )
-            else:
-                for layer in self.layers:
-                    with self.offload_context:
-                        hidden_states, context = layer(
-                            hidden_states=hidden_states,
-                            attention_mask=attention_mask,
-                            context=context,
-                            context_mask=context_mask,
-                            rotary_pos_emb=rotary_pos_emb,
-                            inference_params=inference_params,
-                            packed_seq_params=packed_seq_params,
-                        )
+            for layer in self.layers:
+                with self.offload_context:
+                    hidden_states, context = layer(
+                        hidden_states=hidden_states,
+                        attention_mask=attention_mask,
+                        context=context,
+                        context_mask=context_mask,
+                        rotary_pos_emb=rotary_pos_emb,
+                        inference_params=inference_params,
+                        packed_seq_params=packed_seq_params,
+                    )
 
-                    if (
-                        torch.is_grad_enabled()
-                        and self.config.cpu_offloading
-                        and self.group_prefetch_offload_commit_async is not None
-                    ):
-                        hidden_states = self.group_prefetch_offload_commit_async(hidden_states)
-                    encoder_states = encoder_states + (hidden_states,)
-                hidden_states = encoder_states[-2]
         # Final layer norm.
         if self.post_process and self.post_layer_norm:
             hidden_states = self.final_layernorm(hidden_states)

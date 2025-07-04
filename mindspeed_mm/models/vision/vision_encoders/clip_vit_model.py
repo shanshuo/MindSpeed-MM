@@ -8,6 +8,7 @@ from megatron.core.transformer.enums import ModelType
 from megatron.core.transformer.spec_utils import ModuleSpec, build_module
 from megatron.core.transformer.transformer_block import TransformerBlock
 from megatron.core.transformer.transformer_config import TransformerConfig
+from megatron.training import get_args
 
 from mindspeed_mm.models.common.module import MultiModalModule
 from mindspeed_mm.utils.utils import get_device
@@ -46,6 +47,7 @@ class CLIPViT(MultiModalModule):
         self.patch_size = config.patch_size
         self.img_h = config.image_size
         self.img_w = config.image_size
+        self.use_flash_attn = getattr(get_args(), "use_flash_attn", False)
 
         if self.img_h % self.patch_size != 0:
             raise AssertionError("patch_size shoule be an exact divisor of img_height")
@@ -136,7 +138,7 @@ class CLIPViT(MultiModalModule):
         x = self.ln_pre(x)
         # contiguous() call required as 'permute' can sparsify the tensor and this breaks pipelining
         x = x.permute(1, 0, 2).contiguous()  # [b, s, h] -> [s, b, h],
-        if attention_mask is None:
+        if attention_mask is None and not self.use_flash_attn:
             attention_mask = torch.ones(
                 1, 1, self.seq_length, self.seq_length
             ).to(self.device)  # [1, 1, s, s]

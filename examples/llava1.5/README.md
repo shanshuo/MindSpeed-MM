@@ -123,9 +123,10 @@ MindSpeed-MM修改了部分原始网络的结构名称，因此需要使用如�
     # 安装依赖（加载原始权重需要依赖openai-clip库）
     pip install git+https://github.com/openai/CLIP.git
 
+    # llava模型构建时会将clipvit的最后一层剔除，如在其他场景需要转换完整vit权重，请增加--no-drop-last-layer传参
     python examples/llava1.5/clip_converter.py \
       --download-root {dir_to_model}/ViT-L-14-336px.pt \
-      --output {target_dir}
+      --output {target_dir} \
   ```
 
   其中{dir_to_model}为下载模型权重所在的路径，转换后权重将保存在{target_dir}/converted_clip.pt。

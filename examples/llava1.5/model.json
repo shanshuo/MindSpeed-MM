@@ -35,7 +35,7 @@
     "image_encoder": {
         "vision_encoder": {
             "model_id": "clip",
-            "num_layers": 24,
+            "num_layers": 23,
             "hidden_size": 1024,
             "num_attention_heads": 16,
             "num_query_groups": 16,

@@ -6,7 +6,7 @@ import clip
 import torch
 
 
-def convert(download_root, output_path, tensor_parallel_size, use_te_layernorm_linear):
+def convert(download_root, output_path, tensor_parallel_size, use_te_layernorm_linear, drop_last_layer):
     device = "cpu"
 
     model, _ = clip.load(download_root, device=device)
@@ -18,6 +18,7 @@ def convert(download_root, output_path, tensor_parallel_size, use_te_layernorm_l
     kv_channels = 64
     hidden_dim = 1024
     num_heads = 16
+    num_layers = 24
     indices = []
     for i in range(num_heads):
         lb = i * kv_channels
@@ -33,6 +34,10 @@ def convert(download_root, output_path, tensor_parallel_size, use_te_layernorm_l
         if "visual" not in name:
             continue
 
+        # Skip last ViT layer
+        if drop_last_layer and f"{num_layers - 1}" in name:
+            continue
+        
         # Skip final layers not used in our model.
         if name == "visual.proj" or "ln_post" in name:
             continue
@@ -139,9 +144,12 @@ python examples/llava1.5/clip_converter.py \
     parser.add_argument(
         "--output", type=str, required=True, help="output directory for megatron state dict file(s)"
     )
+    parser.add_argument(
+        "--no-drop-last-layer", action="store_true", default=False, help="whether to drop last layer of clip vit"
+    )
 
     args = parser.parse_args()
 
-    convert(args.download_root, args.output, 1, False)
+    convert(args.download_root, args.output, 1, False, not args.no_drop_last_layer)
 
     print("all weights have been converted.")
