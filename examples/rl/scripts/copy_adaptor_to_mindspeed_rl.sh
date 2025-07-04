@@ -3,7 +3,29 @@
 # Copy all performance files from MindSpeed MM to MindSpeed RL
 # This script should be run from MindSpeed MM root directory
 
-echo "Copying performance files from MindSpeed MM to MindSpeed RL..."
+echo "Copying performance files from MindSpeed MM to MindSpeed RL/MindSpeed/Megatron"
+echo "[Warning] Some files will be overwritten in MindSpeed RL/MindSpeed/Megatron"
+
+while true
+do
+    read -r -p "Are You Sure? [Y/n] " input
+
+    case $input in
+        [yY][eE][sS]|[yY])
+            echo "Copying ..."
+            break
+            ;;
+
+        [nN][oO]|[nN])
+            echo "Exit"
+            exit 1
+            ;;
+
+        *)
+            echo "Invalid input..."
+            ;;
+    esac
+done
 
 # Config files
 cp examples/rl/code/mindspeed_rl/rl_config.py mindspeed_rl/config_cls/rl_config.py
