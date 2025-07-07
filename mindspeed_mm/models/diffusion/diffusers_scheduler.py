@@ -251,9 +251,6 @@ class DiffusersScheduler:
 
                 with torch.no_grad():
                     noise_pred = model(timestep=current_timestep, **model_kwargs)
-                
-                if isinstance(noise_pred, tuple) or isinstance(noise_pred, list):
-                    noise_pred = noise_pred[0]
 
                 if isinstance(noise_pred, tuple) or isinstance(noise_pred, list):
                     noise_pred = noise_pred[0]
