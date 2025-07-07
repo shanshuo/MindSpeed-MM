@@ -3,7 +3,8 @@ from typing import Optional
 import os
 import copy
 
-import mindspeed.megatron_adaptor
+import torch
+import mindspeed.megatron_adaptor # noqa
 
 from checkpoint.common.converter import Converter
 from checkpoint.sora_model.convert_utils.cfg import ConvertConfig, ParallelConfig
@@ -17,7 +18,8 @@ from checkpoint.sora_model.convert_utils.save_load_utils import (
 from checkpoint.sora_model.convert_utils.utils import (
     flip_mapping,
     replace_name,
-    check_method_support
+    check_method_support,
+    check_parallel_config_support
 )
 from checkpoint.sora_model.convert_utils.tp_patterns import TP_PARTTERN_MAPPING
 
@@ -119,6 +121,7 @@ class SoraModelConverter(Converter):
         cfg: ConvertConfig,
         lora_rank: int = 8,
         lora_alpha: int = 16,
+        use_npu: bool = True
     ):
         source_state_dicts = load_from_mm(cfg.source_path)
         source_state_dict = self._mm_merge(source_state_dicts)
@@ -131,15 +134,25 @@ class SoraModelConverter(Converter):
         if lora_rank == 0:
             raise ValueError(f"LoRA rank can not be 0")
 
+        if use_npu:
+            source_state_dict = {k: v.npu() if isinstance(v, torch.Tensor) else v for k, v in source_state_dict.items()}
+            lora_state_dict = {k: v.npu() if isinstance(v, torch.Tensor) else v for k, v in source_state_dict.items()}
+
         lora_merged_state_dict = lora_merge_to_base(
             source_state_dict,
             lora_state_dict,
             self.lora_target_modules,
             scaling=float(lora_alpha) / float(lora_rank)
         )
+
+        if use_npu:
+            torch.npu.empty_cache()
+            lora_merged_state_dict = {k: v.cpu() if isinstance(v, torch.Tensor) else v for k, v in lora_merged_state_dict.items()}
+
         state_dicts = self._mm_split(lora_merged_state_dict, cfg.target_parallel_config)
         save_as_mm(cfg.target_path, state_dicts)
 
+    @check_parallel_config_support
     def _mm_split(
         self,
         state_dict: dict,
@@ -169,9 +182,12 @@ class SoraModelConverter(Converter):
                     continue
                 state_dict[new_key] = state_dict.pop(old_key)
         
-        if str_replace_mapping:
-            names = list(state_dict.keys())
-            for name in names:
+        names = list(state_dict.keys())
+        for name in names:
+            if "_extra_state" in name:
+                state_dict.pop(name)
+                continue
+            if str_replace_mapping:
                 weight = state_dict.pop(name)
                 name = replace_name(name, str_replace_mapping)
                 state_dict[name] = weight
@@ -262,7 +278,7 @@ class SoraModelConverter(Converter):
             is_first = vpp_rank == 0
             is_last = vpp_rank == len(pp_sizes_flat) - 1
             start_layer = sum(pp_sizes_flat[:vpp_rank])
-            end_layer = sum(pp_sizes_flat[:vpp_rank + 1]) + sum(pp_sizes_flat[vpp_rank])
+            end_layer = sum(pp_sizes_flat[:vpp_rank]) + pp_sizes_flat[vpp_rank]
 
             for tp_rank, state_dict in enumerate(state_dicts):
                 pp_tp_param = dict()

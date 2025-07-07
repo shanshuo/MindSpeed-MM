@@ -130,7 +130,7 @@ class OpenSoraPlanConverter(SoraModelConverter):
         
         elif self.version == "v1.5":
             self._supported_methods = ["source_to_mm", "resplit"]
-            self.hf_to_mm_str_replace_mapping = {
+            self.str_replace_mapping = {
                 "attn1.norm_q": "attn1.norm_proj_q",
                 "attn1.norm_k": "attn1.norm_proj_k",
                 "attn1.to_q": "attn1.proj_q",
