@@ -263,7 +263,7 @@ def _unpad_input(
         query_length: int,
 ):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    indices = torch.nonzero(attention_mask.flatten().bool(), as_tuple=False).flatten()
     max_seqlen_in_batch = seqlens_in_batch.max().item()
     cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
     batch_size, kv_seq_len, num_key_value_heads, head_dim = key_state.shape

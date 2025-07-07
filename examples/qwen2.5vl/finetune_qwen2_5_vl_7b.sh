@@ -1,5 +1,6 @@
 #!/bin/bash
 source /usr/local/Ascend/ascend-toolkit/set_env.sh
+source /usr/local/Ascend/nnal/atb/set_env.sh
 # 该变量只用于规避megatron对其校验，对npu无效
 export CUDA_DEVICE_MAX_CONNECTIONS=1
 export ASCEND_SLOG_PRINT_TO_STDOUT=0
@@ -27,10 +28,10 @@ LOAD_PATH="ckpt/mm_path/Qwen2.5-VL-7B-Instruct"
 SAVE_PATH="save_dir"
 
 TP=1
-PP=4
+PP=2
 CP=1
 MBS=1
-GRAD_ACC_STEP=96
+GRAD_ACC_STEP=48
 DP=$(($WORLD_SIZE/$TP/$PP/$CP))
 GBS=$(($MBS*$GRAD_ACC_STEP*$DP))
 
@@ -65,7 +66,6 @@ GPT_ARGS="
     --clip-grad 0.0 \
     --adam-beta1 0.9 \
     --adam-beta2 0.999 \
-    --no-gradient-accumulation-fusion \
     --seed 42 \
     --bf16 \
     --load $LOAD_PATH \

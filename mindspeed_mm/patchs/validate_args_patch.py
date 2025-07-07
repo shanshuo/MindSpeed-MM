@@ -43,6 +43,11 @@ def validate_args(args, defaults=None):
             args.mm.model.text_decoder.sequence_parallel = safe_getattr(args.mm.model.text_decoder, 'sequence_parallel', args.sequence_parallel)
             args.mm.model.text_decoder.expert_model_parallel_size = safe_getattr(args.mm.model.text_decoder, 'expert_model_parallel_size', args.expert_model_parallel_size)
 
+    # use args to fill model.json
+    if hasattr(args.mm.model, 'text_decoder'):
+        args.mm.model.text_decoder.gradient_accumulation_fusion = safe_getattr(args.mm.model.text_decoder, 'gradient_accumulation_fusion', args.gradient_accumulation_fusion)
+        args.mm.model.image_encoder.vision_encoder.gradient_accumulation_fusion = safe_getattr(args.mm.model.image_encoder.vision_encoder, 'gradient_accumulation_fusion', args.gradient_accumulation_fusion)
+
     # use model.json to fill predictor arg
     if hasattr(args.mm.model, 'predictor'):
         if hasattr(args.mm.model.predictor, 'mm_single_blocks_depth') and hasattr(args.mm.model.predictor, 'mm_double_blocks_depth'):
