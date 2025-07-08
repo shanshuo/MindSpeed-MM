@@ -18,7 +18,7 @@ from mindspeed_mm.data.datasets.t2v_dataset import DynamicVideoTextDataset
 from mindspeed_mm.data.data_utils.bucket import Bucket
 from mindspeed_mm.data.data_utils.aspect_ratio import get_num_pixels, get_resolution_with_aspect_ratio
 from mindspeed_mm.data.data_utils.utils import format_numel_str
-from mindspeed_mm.data.dataloader.bucket_manager import BucketManager_qwen2vl, BucketManager_internvl2
+from mindspeed_mm.data.dataloader.bucket_manager import BucketManager_qwen2vl, BucketManager_internvl2, BucketManager
 
 
 def split_to_even_chunks(indices, lengths, num_chunks, batch_size):
@@ -537,76 +537,86 @@ class BucketBatchSampler(BaseRandomBatchSampler):
         if isinstance(self.dataset, RandomSeedDataset):
             self.dataset.set_epoch(self.epoch)
 
+        dataset_param = self.data_config.dataset_param
+        dataloader_param = self.data_config.dataloader_param
+        model_name = dataloader_param.collate_param.model_name
+        priority_mode = getattr(dataloader_param, 'priority_mode', 'data_bucketing_img')
+        preprocess_parameters = self.data_config.dataset_param.preprocess_parameters
+
         bucket_manager = None
         if self.bucket_manager is None:
             start_time = time.time()
-            dataset_param = self.data_config.dataset_param
-            dataloader_param = self.data_config.dataloader_param
-            model_name = dataloader_param.collate_param.model_name
-            priority_mode = getattr(dataloader_param, 'priority_mode', 'data_bucketing_img')
-            preprocess_parameters = self.data_config.dataset_param.preprocess_parameters
-            if model_name == "qwen2vl":
-                image_resolution = preprocess_parameters.image_resolution
-                image_size = int(math.sqrt(image_resolution))
-                processor = AutoProcessor.from_pretrained(preprocess_parameters.model_name_or_path, local_files_only=True)
-                attributes = ["patch_size", "merge_size", "min_pixels", "max_pixels"]
-                values = {}
-                for attr in attributes:
-                    values[attr] = getattr(processor.image_processor, attr, -1)
-                    if values[attr] == -1:
-                        raise AttributeError(f"Error: '{attr}' not found in processor.image_processor. Please check your configuration.")
-                patch_size = values.get("patch_size", None)
-                merge_size = values.get("merge_size", None)
-                min_pixels = values.get("min_pixels", None)
-                max_pixels = values.get("max_pixels", None)
+            if self.rank == 0:
+                if model_name == "qwen2vl":
+                    image_max_pixels = preprocess_parameters.image_max_pixels
+                    image_size = int(math.sqrt(image_max_pixels))
+                    processor = AutoProcessor.from_pretrained(preprocess_parameters.model_name_or_path, local_files_only=True)
+                    attributes = ["patch_size", "merge_size", "min_pixels", "max_pixels"]
+                    values = {}
+                    for attr in attributes:
+                        values[attr] = getattr(processor.image_processor, attr, -1)
+                        if values[attr] == -1:
+                            raise AttributeError(f"Error: '{attr}' not found in processor.image_processor. Please check your configuration.")
+                    patch_size = values.get("patch_size", None)
+                    merge_size = values.get("merge_size", None)
+                    min_pixels = values.get("min_pixels", None)
+                    max_pixels = values.get("max_pixels", None)
 
-                if any(v is None for v in [patch_size, merge_size, min_pixels, max_pixels]):
-                    raise KeyError("One or more required keys are missing from the 'values' dictionary.")
+                    if any(v is None for v in [patch_size, merge_size, min_pixels, max_pixels]):
+                        raise KeyError("One or more required keys are missing from the 'values' dictionary.")
 
-                bucket_manager = BucketManager_qwen2vl(
-                    image_size=image_size,
-                    patch_size=patch_size,
-                    merge_size=merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
-                    batch_size=self.micro_batch_size,
-                    sharding=self.data_sharding,
-                    num_replicas=self.num_replicas,
-                    keep_remainder=True,
-                    rank=self.rank,
-                    global_batch_size=self.global_batch_size,
-                    priority_mode=priority_mode
-                )
-            elif model_name == "internvl":
-                min_dynamic_patch = dataset_param.min_dynamic_patch
-                max_dynamic_patch = dataset_param.max_dynamic_patch
-                image_size = dataset_param.image_size
-                bucket_manager = BucketManager_internvl2(
-                    image_size=image_size,
-                    min_num=min_dynamic_patch,
-                    max_num=max_dynamic_patch,
-                    batch_size=self.micro_batch_size,
-                    sharding=self.data_sharding,
-                    num_replicas=self.num_replicas,
-                    keep_remainder=True,
-                    rank=self.rank,
-                    global_batch_size=self.global_batch_size,
-                    priority_mode=priority_mode
-                )
-            bucket_manager.group_by_bucket(self.dataset)
-            end_time = time.time()
-            print(f"create BucketManager & group_by_bucket cost: {end_time - start_time} seconds")
-            self.bucket_manager = bucket_manager
+                    bucket_manager = BucketManager_qwen2vl(
+                        image_size=image_size,
+                        patch_size=patch_size,
+                        merge_size=merge_size,
+                        min_pixels=min_pixels,
+                        max_pixels=max_pixels,
+                        batch_size=self.micro_batch_size,
+                        sharding=self.data_sharding,
+                        num_replicas=self.num_replicas,
+                        keep_remainder=True,
+                        rank=self.rank,
+                        global_batch_size=self.global_batch_size,
+                        priority_mode=priority_mode
+                    )
+                elif model_name == "internvl":
+                    min_dynamic_patch = dataset_param.min_dynamic_patch
+                    max_dynamic_patch = dataset_param.max_dynamic_patch
+                    image_size = dataset_param.image_size
+                    bucket_manager = BucketManager_internvl2(
+                        image_size=image_size,
+                        min_num=min_dynamic_patch,
+                        max_num=max_dynamic_patch,
+                        batch_size=self.micro_batch_size,
+                        sharding=self.data_sharding,
+                        num_replicas=self.num_replicas,
+                        keep_remainder=True,
+                        rank=self.rank,
+                        global_batch_size=self.global_batch_size,
+                        priority_mode=priority_mode
+                    )
+                bucket_manager.group_by_bucket(self.dataset)
+                end_time = time.time()
+                print(f"create BucketManager & group_by_bucket cost: {end_time - start_time} seconds")
+                self.bucket_manager = bucket_manager
+            else:
+                self.bucket_manager = None
         else:
             bucket_manager = self.bucket_manager
 
         # data sharding and random sampling
-        if bucket_manager.priority_mode == "data_bucketing_img":
-            if self.data_sharding:
+        if priority_mode == "data_bucketing_img":
+            if self.rank == 0:
                 if self.shuffle:
                     idx_range_total = bucket_manager.generate_index(shuffle=True, seed=self.epoch)
                 else:
                     idx_range_total = bucket_manager.generate_index(shuffle=False)
+                idx_range_total_b = [idx_range_total]
+            else:
+                idx_range_total_b = [None]
+            dist.broadcast_object_list(idx_range_total_b, src=0)
+            idx_range_total = idx_range_total_b[0]
+            if self.data_sharding:
                 bucket_size = (len(idx_range_total) // self.micro_batch_times_data_parallel_size) * self.micro_batch_size
                 bucket_offset = current_epoch_samples // self.num_replicas
                 start_idx = self.rank * bucket_size
@@ -614,14 +624,16 @@ class BucketBatchSampler(BaseRandomBatchSampler):
                 idx_range = [x for x in idx_range_bucket[bucket_offset:]]
             else:
                 full_bucket_offset = current_epoch_samples
-                if self.shuffle:
-                    idx_range_total = bucket_manager.generate_index(shuffle=True, seed=self.epoch)
-                else:
-                    idx_range_total = bucket_manager.generate_index(shuffle=False)
                 idx_range_active = idx_range_total[full_bucket_offset:]
                 idx_range = idx_range_active[self.rank::self.num_replicas]
 
-        elif bucket_manager.priority_mode == "data_reordering_img":
+        elif priority_mode == "data_reordering_img":
+            if self.rank == 0:
+                final_results_dict_b = [bucket_manager.final_results_dict]
+            else:
+                final_results_dict_b = [None]
+            dist.broadcast_object_list(final_results_dict_b, src=0)
+            final_results_dict = final_results_dict_b[0]
             if self.data_sharding:
                 bucket_size = (self.total_samples // self.micro_batch_times_data_parallel_size) \
                             * self.micro_batch_size
@@ -648,7 +660,7 @@ class BucketBatchSampler(BaseRandomBatchSampler):
 
                 idx_range_active = idx_range_total[full_bucket_offset:]
                 idx_range = idx_range_active[self.rank::self.num_replicas]
-            idx_range = bucket_manager.generate_index_by_gbs(idx_range, bucket_manager.final_results_dict)
+            idx_range = BucketManager.generate_index_by_gbs(idx_range, final_results_dict, self.global_batch_size, self.num_replicas)
 
         batch = []
         # Last batch if not complete will be dropped.

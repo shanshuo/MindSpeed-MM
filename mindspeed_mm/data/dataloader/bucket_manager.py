@@ -237,13 +237,14 @@ class BucketManager:
         
         return handler(condataset)
 
-    def generate_index_by_gbs(self, idx_range_active, final_results_dict):
+    @staticmethod
+    def generate_index_by_gbs(idx_range, final_results_dict, global_batch_size, num_replicas):
         # 存储排序后的索引
         sorted_indices = []
 
-        sort_batch_size = int(self.global_batch_size / self.num_replicas)
-        for i in range(0, len(idx_range_active), sort_batch_size):
-            batch_indices = idx_range_active[i:i + sort_batch_size]
+        sort_batch_size = int(global_batch_size / num_replicas)
+        for i in range(0, len(idx_range), sort_batch_size):
+            batch_indices = idx_range[i:i + sort_batch_size]
 
             # 根据 batch_indices 从 result_dict 中取出对应的值并组合成元组 (idx, value)
             batch_data = [(idx, final_results_dict.get(idx)) for idx in batch_indices]
@@ -413,8 +414,8 @@ class BucketManager_qwen2vl(BucketManager):
         sample = datasets[idx]
         image_path = sample['images']
         if image_path is None:
-            return None
-        return image_path[0]
+            return []
+        return image_path
 
     def calculated_w_h(self, width, height):
         image_resolution = self.image_size ** 2
@@ -447,26 +448,45 @@ class BucketManager_qwen2vl(BucketManager):
 
     def process_bucket_data(self, idx, condataset):
         full_image_path = self.get_img_fullpath(idx, condataset)
-        try:
-            width, height = self.load_image_and_get_dimensions(full_image_path)
-            width_patch = width / self.patch_size
-            height_patch = height / self.patch_size
-            return idx, width, height, width_patch, height_patch
-        except Exception as e:
-            print(f"Error processing sample {idx}: {e}")
-            return idx, None, None, None, None
+        infos = []
+        total_tokens = 0
+        for image_path in full_image_path:
+            try:
+                width, height = self.load_image_and_get_dimensions(image_path)
+                width_patch = width / self.patch_size
+                height_patch = height / self.patch_size
+                tokens = width_patch * height_patch
+                total_tokens += tokens
+                infos.append({
+                    'path': image_path,
+                    'width': width,
+                    'height': height,
+                    'width_patch': width_patch,
+                    'height_patch': height_patch,
+                    'tokens': tokens
+                })
+            except Exception as e:
+                print(f"Error processing sample {idx}, image {image_path}: {e}")
+                infos.append({
+                    'path': image_path,
+                    'tokens': 0
+                })
+        return idx, total_tokens, infos
 
     def process_calculate_images_token(self, idx, condataset):
         full_image_path = self.get_img_fullpath(idx, condataset)
         result_dict = {}
-        try:
-            width, height = self.load_image_and_get_dimensions(full_image_path)
-            width_patch = width / self.patch_size
-            height_patch = height / self.patch_size
-            result_dict[idx] = width_patch * height_patch
-        except Exception as e:
-            print(f"Error processing sample {idx}: {e}")
-            result_dict[idx] = None
+        total_tokens = 0
+        for path in full_image_path:
+            try:
+                width, height = self.load_image_and_get_dimensions(path)
+                width_patch = width / self.patch_size
+                height_patch = height / self.patch_size
+                tokens = width_patch * height_patch
+                total_tokens += tokens
+            except Exception as e:
+                print(f"Error processing sample {idx}: {e}")
+        result_dict[idx] = total_tokens
         return result_dict
 
     def create_sorting_dictionary(self, dataset):
@@ -474,7 +494,6 @@ class BucketManager_qwen2vl(BucketManager):
         self.processes_num = self.suggest_thread_count(dataset)
         with Pool(processes=self.processes_num) as pool:
             results = pool.starmap(self.process_calculate_images_token, [(idx, dataset) for idx in indices])
-        
         # 合并所有返回的字典
         for result in results:
             self.final_results_dict.update(result)
@@ -488,17 +507,13 @@ class BucketManager_qwen2vl(BucketManager):
         with Pool(processes=self.processes_num) as pool:
             results = pool.starmap(self.process_bucket_data, [(idx, condataset) for idx in indices])
 
-        for idx, width, height, width_patch, height_patch in results:
-            if width is None or height is None:
-                continue  
-            
-            image_tokens = width_patch * height_patch
+        for idx, total_tokens, _ in results:
             bfind = False
             for bucket in self.buckets:
-                if image_tokens > bucket.bucket_range[0] and image_tokens <= bucket.bucket_range[1]:
+                if total_tokens >= bucket.bucket_range[0] and total_tokens < bucket.bucket_range[1]:
                     group_id = idx // group_length
                     bucket.add_sample(group_id, idx)
-                    self.image_info[idx] = (width, height)
+                    self.image_info[idx] = total_tokens
                     self.bucket_info[idx] = bucket.bucket_range
                     bfind = True
                     break
@@ -508,7 +523,7 @@ class BucketManager_qwen2vl(BucketManager):
                 last_bucket = self.buckets[-1]
                 group_id = idx // group_length
                 last_bucket.add_sample(group_id, idx)
-                self.image_info[idx] = (width, height)
+                self.image_info[idx] = total_tokens
                 self.bucket_info[idx] = last_bucket.bucket_range
 
         self.total_packages = self.create_package_list()
@@ -584,8 +599,6 @@ class BucketManager_internvl2(BucketManager):
         return os.path.join(datasets[dataset_idx].data_folder, image_path)
 
     def load_image_and_get_dimensions(self, image_fullpath):
-        if not os.path.exists(image_fullpath):
-            return None
         try:
             with Image.open(image_fullpath) as img:
                 return img.size
