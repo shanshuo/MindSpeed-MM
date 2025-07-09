@@ -52,7 +52,7 @@ from tqdm import tqdm
 
 from checkpoint.common.constant import LATEST_TXT, MEGATRON_CKPT_NAME
 from checkpoint.common.types import STATE_DICT_T, VPP_LAYER_NUM_T
-from checkpoint.vlm_model.config import ConvertVppMMConfig
+from checkpoint.vlm_model.config import ConvertVppMMConfig, get_first_available
 from checkpoint.vlm_model.operator import Operator, TieOp, TP_PATTERN_T
 
 
@@ -60,10 +60,12 @@ from checkpoint.vlm_model.operator import Operator, TieOp, TP_PATTERN_T
 class PPStageSchema:
     """When splitting different modules such as vit/lm/audio, the corresponding weight names are different,
     and it is necessary to distinguish between the first and last layers and the middle layer
+    all_layer: The weights included in all layers
     """
     firsts: List[str]
     lasts: List[str]
     middle: str
+    all_layer: List[str] = None
 
 
 text_schema = PPStageSchema(
@@ -131,6 +133,11 @@ def partition_state_dict_by_pp(state_dict: STATE_DICT_T,
                     new_weight_name = ".".join([modality_stage.middle[:-1], str(new_layer_num), *remains])
                     if int(raw_layer_num) in range(modality_pp_range.start[pp_rank], modality_pp_range.end[pp_rank]):
                         pp_weight[new_weight_name] = weight_value
+                # 该模态所有卡都包含的权重
+                if modality_stage.all_layer:
+                    for name_start in modality_stage.all_layer:
+                        if weight_name.startswith(name_start):
+                            pp_weight[weight_name] = weight_value
         pp_weights.append(pp_weight)
     return pp_weights
 
@@ -290,10 +297,13 @@ def convert_hf_to_mm(convert_config: ConvertVppMMConfig, config: Any, ops: List[
                      stages: List[PPStageSchema]):
     parallel_config = convert_config.parallel_config
     llm_config = convert_config.llm_hf_config
-    num_experts = getattr(config, 'num_experts', 0)
+    num_experts = getattr(config, 'num_experts', getattr(getattr(config, 'language_config', None), 'n_routed_experts', 0))
     # 校验tp切分数
-    num_key_value_heads = config.num_key_value_heads if hasattr(config,
-                                                                'num_key_value_heads') else config.thinker_config.text_config.num_key_value_heads
+    num_key_value_heads = get_first_available(config, [
+            ([], 'num_key_value_heads'), # qwenvl
+            (['thinker_config', "text_config"], 'num_key_value_heads'), # qwen-omni
+            (['language_config'], 'num_key_value_heads'),  # deepseekvl2
+            (['llm_config'], 'num_key_value_heads')])  # intervl
     if num_key_value_heads % parallel_config.tp_size != 0:
         raise ValueError(
             f"Number of key-value heads ({num_key_value_heads}) must be divisible by TP size ({parallel_config.tp_size})"
@@ -305,7 +315,7 @@ def convert_hf_to_mm(convert_config: ConvertVppMMConfig, config: Any, ops: List[
     if llm_config is not None:
         llm_state_dict = load_from_hf(llm_config.hf_dir)
         state_dict = merge_llm_weights_to_state_dict(state_dict, llm_state_dict)
-        num_experts = getattr(llm_config.config, 'num_experts', 0)
+        num_experts = getattr(llm_config.config, 'num_experts', getattr(llm_config.config, 'n_routed_experts', 0))
 
     if convert_config.save_vit_only:
         # 如果只保存vit权重，则过滤掉非vit的权重

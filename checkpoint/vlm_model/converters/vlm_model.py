@@ -2,9 +2,8 @@ import os
 
 from checkpoint.common.constant import SAFE_MODE
 from checkpoint.common.converter import Converter
-from checkpoint.vlm_model.config import ConvertHFConfig, ConvertResplitConfig, ConvertMMConfig, ConvertVppMMConfig, \
-    ConvertVppHFConfig
-from checkpoint.vlm_model.converters import internvl2_hf_to_mm, deepseekvl_hf_to_mm
+from checkpoint.vlm_model.config import ConvertResplitConfig, ConvertVppMMConfig, ConvertVppHFConfig
+from checkpoint.vlm_model.converters import internvl2_hf_to_mm
 
 
 class InternVLConverter(Converter):
@@ -24,27 +23,6 @@ class InternVLConverter(Converter):
         internvl2_mm_to_hf.main(cfg)
         # 安全管控权限
         os.chmod(cfg.save_hf_dir, SAFE_MODE)
-
-    @staticmethod
-    def resplit(cfg: ConvertResplitConfig):
-        """mindspeed-mm模型权重重新切分"""
-        pass
-
-
-class DeepSeekVLConverter(Converter):
-    """DeepSeekVL模型转换工具"""
-
-    @staticmethod
-    def hf_to_mm(cfg: ConvertMMConfig):
-        """huggingface模型转换mindspeed-mm模型权重"""
-        deepseekvl_hf_to_mm.main(cfg)
-        # 安全管控权限
-        os.chmod(cfg.mm_dir, SAFE_MODE)
-
-    @staticmethod
-    def mm_to_hf(cfg: ConvertHFConfig):
-        """mindspeed-mm模型转换huggingface模型权重"""
-        pass
 
     @staticmethod
     def resplit(cfg: ConvertResplitConfig):

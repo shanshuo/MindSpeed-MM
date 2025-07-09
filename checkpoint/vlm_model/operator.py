@@ -30,7 +30,7 @@ def concated_qkv_to_interleaved(qkv: Tensor, num_key_value_heads: int, split_siz
 
 def merge_to_interleaved_qkv(q: Tensor, k: Tensor, v: Tensor, group: int) -> Tensor:
     """原顺序: q=[nq1,nq2,nq3,...], k=[k1,k2,k3,...], v=[v1,v2,v3,...]
-    转换后顺序: qkv = [nq1,k1,v1,nq1,k2,v2,nq3,k3,v3,...]
+    转换后顺序: qkv = [nq1,k1,v1,nq2,k2,v2,nq3,k3,v3,...]
     这里nq1，group query attention时，多个q共享一个k/v， k1/v1即一个key head对应的head_dim维度
     """
     qkv_chunks = [torch.chunk(x, chunks=group, dim=0) for x in [q, k, v]]
@@ -191,8 +191,13 @@ class MergeOp(Operator):
     def apply(self, weights: STATE_DICT_T):
         layer_num = get_layer_num(self.raw_names[0], weights.keys())
         for num in range(layer_num):
-            merged_tensor = self.merge([weights.pop(name.replace(DIGIT_FMT, str(num))) for name in self.raw_names])
-            weights[self.new_name.replace(DIGIT_FMT, str(num))] = merged_tensor
+            tensors = [weights.pop(name.replace(DIGIT_FMT, str(num)))
+                       for name in self.raw_names
+                       if name.replace(DIGIT_FMT, str(num)) in weights.keys()]
+            # deepseekvl2模型第一层为dense层, 索引非0开始
+            if tensors:
+                merged_tensor = self.merge(tensors)
+                weights[self.new_name.replace(DIGIT_FMT, str(num))] = merged_tensor
 
     def revert(self, weights: STATE_DICT_T) -> None:
         """反向操作：拆分合并后的权重并恢复原始键"""
@@ -220,16 +225,31 @@ class UpGateMergeOp(MergeOp):
         return list(torch.chunk(tensor, chunks=2, dim=0))
 
 
+class QKVDirectMergeOp(MergeOp):
+    """qkv中权重合并逻辑，从transformers的q1q2/k1k2/v1v2（或q1q2/k1k2v1v2）独立小矩阵到megatron的linear_qkv一个大矩阵是q1q2k1k2v1v2直接拼接的"""
+
+    def merge(self, tensors: List[Tensor]) -> Tensor:
+        return torch.concat(tensors, dim=0)
+
+    def split(self, tensor: Tensor) -> List[Tensor]:
+        raise NotImplementedError("The method has not yet been implemented")
+
+
 class ExpertUpGateMergeOp(UpGateMergeOp):
     def apply(self, weights: STATE_DICT_T):
         layer_num, expert_num = get_layer_and_expert_num(self.raw_names[0], weights.keys())
+
+        def replace_layer_expert(name, id_layer, id_expert):
+            return name.replace(DIGIT_FMT, str(id_layer), 1).replace(DIGIT_FMT, str(id_expert), 1)
+
         for layer_id in range(layer_num):
             for expert_id in range(expert_num):
-                merged_tensor = self.merge(
-                    [weights.pop(name.replace(DIGIT_FMT, str(layer_id), 1).replace(DIGIT_FMT, str(expert_id), 1))
-                     for name in self.raw_names])
-                weights[self.new_name.replace(DIGIT_FMT, str(layer_id), 1).replace(DIGIT_FMT, str(expert_id),
-                                                                                   1)] = merged_tensor
+                tensors = [weights.pop(replace_layer_expert(name, layer_id, expert_id))
+                           for name in self.raw_names
+                           if replace_layer_expert(name, layer_id, expert_id) in weights.keys()]
+                if tensors:
+                    merged_tensor = self.merge(tensors)
+                    weights[replace_layer_expert(self.new_name, layer_id, expert_id)] = merged_tensor
 
 
 class QKVMergeOp(MergeOp):
