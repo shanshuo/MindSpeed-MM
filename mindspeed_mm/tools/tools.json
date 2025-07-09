@@ -29,6 +29,6 @@
         "max_entries": null
     },
     "sorafeature":{
-        "save_path": "./extracted_feature"
+        "save_path": "./sora_features"
     }
 }

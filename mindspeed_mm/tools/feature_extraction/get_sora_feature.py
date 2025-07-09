@@ -11,6 +11,7 @@ from megatron.core import mpu
 from megatron.training import get_args, print_rank_0
 from megatron.training.initialize import initialize_megatron, set_jit_fusion_options
 from numpy import save
+from tqdm import tqdm
 
 from mindspeed_mm.configs.config import merge_mm_args, mm_extra_args_provider
 from mindspeed_mm.data import build_mm_dataloader, build_mm_dataset
@@ -133,7 +134,7 @@ class FeatureExtractor:
     
     def extract_all(self):
         """Main method to extract features from all data samples"""
-        start_time = time.time()
+
         total_samples = len(self.dataset)
         print_rank_0(f"Starting feature extraction. Total samples: {total_samples}")
         
@@ -145,7 +146,7 @@ class FeatureExtractor:
         
         try:
             # Process all batches in the dataloader
-            for batch_idx, batch in enumerate(self.dataloader):
+            for _, batch in tqdm(enumerate(self.dataloader)):
                 # Extract features from current batch
                 file_names, latents, latents_dict, prompt, prompt_mask = self._extract_single(batch)
                 batch_size = latents.shape[0]
@@ -161,16 +162,6 @@ class FeatureExtractor:
                         sample_idx=i,
                         latents_dict=latents_dict
                     )
-                
-                # Calculate elapsed time
-                elapsed = time.time() - start_time
-                
-                # Log progress
-                print_rank_0(
-                    f"Processed batch {batch_idx+1}/{len(self.dataloader)} | "
-                    f"Elapsed: {elapsed:.1f}s | "
-                    f"Files {file_names}"
-                )
                 
                 # Update profiler if enabled
                 if profiler:

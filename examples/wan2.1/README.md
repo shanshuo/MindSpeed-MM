@@ -238,6 +238,7 @@ mm-convert WanConverter mm_to_hf \
 | examples/wan2.1/feature_extract/data.json              | max_height, max_width | 最大的长宽，超过则centercrop到最大分辨率            |
 | examples/wan2.1/feature_extract/data.json              |    from_pretrained    | 修改为下载的tokenizer的权重所对应的路径            |
 | examples/wan2.1/feature_extract/feature_extraction.sh  |     NPUS_PER_NODE     | 卡数                                                |
+| examples/wan2.1/feature_extract/feature_extraction.sh  |     MM_MODEL          | 修改为目标task的的模型文件路径，如model_t2v.json    |
 | examples/wan2.1/feature_extract/model_{task}.json      |    from_pretrained    | 修改为下载的权重所对应路径（包括vae,  text_encoder） |
 | mindspeed_mm/tools/tools.json                          |       save_path       | 提取后的特征保存路径                                |
 

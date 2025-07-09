@@ -10,12 +10,7 @@
         },
         "norm_latents": true,
         "norm_mode": "channel_specified_shift_scale",
-        "do_sample": false,
-        "i2v_processor": {
-            "processor_id": "wan_i2v_processor",
-            "image_encoder": "Wan2.1-I2V-14B-Diffusers/image_encoder",
-            "i2v_vae_encode_tiling": false
-        }     
+        "do_sample": false
     },
     "text_encoder": {
         "model_id": "UMT5",

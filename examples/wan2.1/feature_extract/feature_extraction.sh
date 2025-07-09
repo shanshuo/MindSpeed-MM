@@ -24,7 +24,7 @@ MBS=1
 GBS=$(($WORLD_SIZE*$MBS/$CP))
 
 MM_DATA="./examples/wan2.1/feature_extract/data.json"
-MM_MODEL="./examples/wan2.1/feature_extract/model.json"
+MM_MODEL="./examples/wan2.1/feature_extract/model_t2v.json"
 MM_TOOL="./mindspeed_mm/tools/tools.json"
 
 DISTRIBUTED_ARGS="
