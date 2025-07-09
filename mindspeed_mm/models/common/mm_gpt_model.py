@@ -210,7 +210,7 @@ class MMGPTModel(LanguageModule):
             # decoder will get hidden_states from encoder.input_tensor
             decoder_input = None
             
-        if mpu.get_context_parallel_world_size() > 1:
+        if mpu.get_context_parallel_world_size() > 1 and get_args().context_parallel_algo == "ulysses_cp_algo":
             split_gather_sizes = cal_split_sizes(decoder_input.shape[0], mpu.get_context_parallel_world_size())
             decoder_input = split_forward_gather_backward(decoder_input, mpu.get_context_parallel_group(), 0, 
                                                         split_gather_sizes, "down")
@@ -255,7 +255,7 @@ class MMGPTModel(LanguageModule):
             **(extra_block_kwargs or {}),
         )
         
-        if mpu.get_context_parallel_world_size() > 1:
+        if mpu.get_context_parallel_world_size() > 1 and get_args().context_parallel_algo == "ulysses_cp_algo":
             hidden_states = gather_forward_split_backward(hidden_states, mpu.get_context_parallel_group(), 0, 
                                                         split_gather_sizes, "up")
 
