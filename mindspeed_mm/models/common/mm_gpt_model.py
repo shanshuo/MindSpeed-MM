@@ -19,6 +19,7 @@ from megatron.training import get_args
 
 from mindspeed.core.context_parallel.unaligned_cp.mapping import cal_split_sizes, split_forward_gather_backward, gather_forward_split_backward
 from mindspeed.utils import set_actual_seq_len
+from mindspeed_mm.models.common.embeddings.rope import DynamicRotaryEmbedding
 from mindspeed_mm.models.vision.vision_encoders.qwen2vl_vit_model import Qwen2VLRotaryEmbedding_llm
 from mindspeed_mm.utils.utils import ensure_valid
 from mindspeed_mm.models.vision.vision_encoders.glm4v_vl_vit_model import GlmTransformerBlock
@@ -95,14 +96,25 @@ class MMGPTModel(LanguageModule):
                 raise AssertionError('mrope section should be provided for mrope!')
             self.rotary_pos_emb = Qwen2VLRotaryEmbedding_llm(config=config)
         elif self.position_embedding_type == 'rope':
-            self.rotary_pos_emb = RotaryEmbedding(
-                kv_channels=self.config.kv_channels,
-                rotary_percent=rotary_percent,
-                rotary_interleaved=self.config.rotary_interleaved,
-                seq_len_interpolation_factor=seq_len_interpolation_factor,
-                rotary_base=rotary_base,
-            )
-
+            if getattr(self.config, "rope_scaling", None) is None:
+                self.rotary_pos_emb = RotaryEmbedding(
+                    kv_channels=self.config.kv_channels,
+                    rotary_percent=rotary_percent,
+                    rotary_interleaved=self.config.rotary_interleaved,
+                    seq_len_interpolation_factor=seq_len_interpolation_factor,
+                    rotary_base=rotary_base,
+                )
+            elif self.config.rope_scaling.type == 'dynamic':
+                self.rotary_pos_emb = DynamicRotaryEmbedding(
+                    config=self.config,
+                    kv_channels=self.config.kv_channels,
+                    rotary_percent=rotary_percent,
+                    rotary_interleaved=self.config.rotary_interleaved,
+                    seq_len_interpolation_factor=seq_len_interpolation_factor,
+                    rotary_base=rotary_base,
+                )
+            else:
+                raise AssertionError(f'Unsupported rope scaling type: {self.config.rope_scaling.type}')
         # Transformer.
         if getattr(config, 'model_id', None) == "glm4v_lm":
             self.decoder = GlmTransformerBlock(

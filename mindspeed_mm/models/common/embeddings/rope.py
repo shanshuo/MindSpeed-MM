@@ -2,6 +2,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from megatron.core.models.common.embeddings.rotary_pos_embedding import RotaryEmbedding
+
 
 class PositionGetter3D:
 
@@ -96,3 +98,35 @@ class RoPE3D(nn.Module):
         x = self.apply_rope1d(x, poses[2], cos_x, sin_x)
         tokens = torch.cat((t, y, x), dim=-1)
         return tokens
+    
+
+class DynamicRotaryEmbedding(RotaryEmbedding):
+    def __init_(self,
+                config,
+                kv_channels,
+                rotary_percent,
+                rotary_interleaved=False,
+                seq_len_interpolation_factor=None,
+                rotary_base=10000,
+                use_cpu_initialization=False,
+                seq_len=None
+            ):
+        super().__init__(
+            kv_channels=kv_channels,
+            rotary_percent=rotary_percent,
+            rotary_interleaved=rotary_interleaved,
+            seq_len_interpolation_factor=seq_len_interpolation_factor,
+            rotary_base=rotary_base,
+        )
+        dim = kv_channels
+        if rotary_percent < 1.0:
+            dim = int(dim * rotary_percent)
+        
+        max_position_embeddings = config.max_position_embeddings
+        factor = config.rope_scaling.get("factor", 1.0)
+
+        seq_len = seq_len if seq_len is not None and seq_len > max_position_embeddings else max_position_embeddings
+        device = "cpu" if use_cpu_initialization else torch.cuda.current_device()
+
+        rotary_base = rotary_base * ((factor * seq_len / max_position_embeddings) - (factor - 1)) ** (dim / (dim - 2))
+        self.inv_freq = 1.0 / (rotary_base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
