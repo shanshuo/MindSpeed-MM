@@ -479,6 +479,14 @@ Copyright Notice included in the software:
 Copyright 2024 neonbjb/tortoise-tts
 
 Software Notice
+Software Qwen2-VL
+License: Apache License 2.0
+For the full text of the license, please go to the above.
+
+Copyright Notice included in the software:
+Copyright 2024 QwenLM/Qwen2-VL
+
+Software Notice
 Software Qwen2.5-VL
 License: Apache License 2.0
 For the full text of the license, please go to the above.

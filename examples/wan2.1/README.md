@@ -33,15 +33,18 @@
   - [环境变量声明](#环境变量声明)
 
 ## 版本说明
+
 #### 参考实现
 
 T2V I2V LoRA微调任务
+
 ```
 url=https://github.com/modelscope/DiffSynth-Studio.git
 commit_id=03ea278
 ```
 
 FLF2V推理
+
 ```
 url=https://github.com/huggingface/diffusers.git
 commit_id=f8d4a1e
@@ -348,7 +351,7 @@ bash examples/wan2.1/feature_extract/feature_extraction.sh
 
   - 选择性重计算
 
-    - 在`exmaples/wan2.1/{model_size}/{task}/pretrain.sh`中，添加参数`--recompute-skip-core-attention`和`--recompute-num-layers-skip-core-attention x`可以开启选择性重计算，其中`--recompute-num-layers-skip-core-attention`后的数字表示跳过self attention计算的层数，`--recompute-full-layers`后的数字表示全重计算的层数，建议调小`recompute-full-layers`的同时增大`recompute-num-layers-skip-core-attention`直至显存打满。
+    - 在`exmaples/wan2.1/{model_size}/{task}/pretrain.sh`中，添加参数`--recompute-skip-core-attention`和`--recompute-num-layers-skip-core-attention x`可以开启选择性重计算，其中`--recompute-num-layers-skip-core-attention`后的数字表示跳过self attention计算的层数，`--recompute-num-layers`后的数字表示全重计算的层数，建议调小`recompute-num-layers`的同时增大`recompute-num-layers-skip-core-attention`直至显存打满。
 
       ```bash
       GPT_ARGS="
