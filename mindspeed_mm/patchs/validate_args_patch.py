@@ -39,14 +39,6 @@ def validate_args(args, defaults=None):
             args.num_experts = safe_getattr(args.mm.model.text_decoder, 'num_moe_experts', args.num_experts)
             args.n_shared_experts = safe_getattr(args.mm.model.text_decoder, 'n_shared_experts', args.n_shared_experts)
             args.mm.model.text_decoder.moe_token_dispatcher_type = safe_getattr(args.mm.model.text_decoder, 'moe_token_dispatcher_type', args.moe_token_dispatcher_type)
-            args.mm.model.text_decoder.tensor_model_parallel_size = safe_getattr(args.mm.model.text_decoder, 'tensor_model_parallel_size', args.tensor_model_parallel_size)
-            args.mm.model.text_decoder.sequence_parallel = safe_getattr(args.mm.model.text_decoder, 'sequence_parallel', args.sequence_parallel)
-            args.mm.model.text_decoder.expert_model_parallel_size = safe_getattr(args.mm.model.text_decoder, 'expert_model_parallel_size', args.expert_model_parallel_size)
-
-    # use args to fill model.json
-    if hasattr(args.mm.model, 'text_decoder'):
-        args.mm.model.text_decoder.gradient_accumulation_fusion = safe_getattr(args.mm.model.text_decoder, 'gradient_accumulation_fusion', args.gradient_accumulation_fusion)
-        args.mm.model.image_encoder.vision_encoder.gradient_accumulation_fusion = safe_getattr(args.mm.model.image_encoder.vision_encoder, 'gradient_accumulation_fusion', args.gradient_accumulation_fusion)
 
     # use model.json to fill predictor arg
     if hasattr(args.mm.model, 'predictor'):

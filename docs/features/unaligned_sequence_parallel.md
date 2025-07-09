@@ -12,14 +12,9 @@ Sequence Parallel主要作用与TransformerLayer中的Dropout和LayerNorm模块�
 
 ## 使用方法
 (当前仅支持qwen2vl)
-1. examples/qwen2vl/model_72b.json中的image_encoder.vision_encoder添加sequence_parallel,tensor_parallel,variable_seq_lengths三个选项，并设置为true，添加tensor_model_parallel_size选项，设置为实际的tp值；
-
-2. examples/qwen2vl/model_72b.json中的text_decoder添加的选项和上一条相同；
-
-3. examples/qwen2vl/finetune_qwen2vl_72b.sh中的GPT_ARGS添加  
+1. examples/qwen2vl/finetune_qwen2vl_72b.sh中开启`TP`并在GPT_ARGS中添加如下参数  
 ```shell
     --sequence-parallel
-    --unaligned-linear 
+    # add only if unaligned SP is required
+    --unaligned-linear
 ```
-并保证该shell脚本中的tp值与上两条中的tp值保持一致。
-

@@ -64,7 +64,6 @@
     },
     "vision_projector": {
       "model_id": "mlp",
-      "num_attention_heads": 1,
       "num_layers": 2,
       "gated_linear_unit": false,
       "bias_activation_fusion": false,
