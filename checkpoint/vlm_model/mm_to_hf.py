@@ -116,6 +116,8 @@ def rename_pp_parameter(param_name: str,
     # 定义模式列表：正则表达式和对应的偏移量
     patterns = [
         (r'^image_encoder\.encoder\.blocks\.layers\.(\d+)', vit_offset),
+        # Internvl系列模型的VitTransformerBlock被命名为encoder
+        (r'^image_encoder\.encoder\.encoder\.layers\.(\d+)', vit_offset),
         (r'^text_decoder\.decoder\.layers\.(\d+)', llm_offset),
         (r'^audio_encoder\.encoder\.blocks\.layers\.(\d+)', audio_offset)
     ]

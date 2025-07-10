@@ -401,16 +401,16 @@ mm-convert  InternVLConverter mm_to_hf \
   --cfg.save_hf_dir "ckpt/mm_to_hf/InternVL2-8B" \
   --cfg.mm_dir "ckpt/mm_path/InternVL2-8B" \
   --cfg.hf_config.hf_dir "raw_ckpt/InternVL2-8B" \
-  --cfg.parallel_config.llm_pp_layers [[6,9,9,8]] \
-  --cfg.parallel_config.vit_pp_layers [[24,0,0,0]] \
+  --cfg.parallel_config.llm_pp_layers [6,9,9,8] \
+  --cfg.parallel_config.vit_pp_layers [24,0,0,0] \
   --cfg.trust_remote_code True
 
 # 其中：
 # save_hf_dir: mm微调后转换回hf模型格式的目录
 # mm_dir: 微调后保存的权重目录
 # hf_dir: huggingface权重目录
-# llm_pp_layers: llm在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
-# vit_pp_layers: vit在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致
+# llm_pp_layers: llm在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致(vpp切分的转换功能待补齐)
+# vit_pp_layers: vit在每个卡上切分的层数，注意要和微调时model.json中配置的pipeline_num_layers一致(vpp切分的转换功能待补齐)
 # trust_remote_code: 为保证代码安全，配置trust_remote_code默认为False，用户需要设置为True，并且确保自己下载的模型和数据的安全性
 ```
 
